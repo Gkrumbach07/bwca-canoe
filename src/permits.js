@@ -2,8 +2,12 @@
 // the unit and permits move time: every overnight trip needs a paid permit for one entry point and one entry day,
 // bought at an outfitter's permit desk (permit-desk.js) from a calendar of what is left. Buying one for a later day
 // skips to it (one bunkhouse card however many nights). Day use is free and automatic: a push-off with no permit for
-// that landing and that day is a day trip, and still out after dark it is a ranger's fine, paid at a counter before the
-// next permit is sold. A PMA permit allows camping off the designated sites in one primitive management area (pma.js).
+// that landing and that day is a day trip, and still out after dark a ranger stops you: when the trip ends (the tally,
+// a push-off taken back, an evacuation) a ticket is written, $20 (r2 tickets, the owner 2026-11-05: "when you come back,
+// it gives you a ticket ... goes into your task list ... you can pay it if you have the money"). It sits on the journal's
+// Tasks page as its own paper (a Forest Service violation notice, flyers.js ticketHtml) and is paid from there, anywhere,
+// with the money in hand (payTicket); nothing pays it by itself. While one is open (or a fine is still to be written on
+// the trip under way) the desk sells no overnight or PMA permit, money or not; day use stays free. A PMA permit allows camping off the designated sites in one primitive management area (pma.js).
 // Every permit is one flat price, every day of the year (the owner's call 2026-11-05): the busy months are dear only in
 // what is left, through the quotas and BOOK, never in dollars. The first permit is free (stream C's onboarding grants
 // it). Quetico per-night permits: not yet.
@@ -28,10 +32,12 @@
 //   permits.buy({ ep, abs, kind = 'overnight', pma = null, at }) → { ok, permit, why, words, skip (a Promise when it skips) }
 //   permits.grant({ ep, abs, kind = 'overnight', pma = null, from, why }) → permit (free)
 //   permits.held() → [permit] · permits.forTrip(ep, abs) → permit | null · permits.use(permit)
-//   permits.owed() → dollars · permits.payFines() → bool · permits.fines → [{ n, why, abs, paid }]
+//   permits.owed() → dollars (every unpaid fine, written up or not: the desk's gate) · permits.fines → [{ id, n, why, abs,
+//     ep, place, issued, paid, paidOn }] · permits.tickets() → the open ones written up (the journal's) · permits.issue()
+//     → n written (trip.js close / takeBack) · permits.payTicket(id) → { ok, why, words } · permits.payFines() → bool (all)
 //   permits.skipTo(abs, { landing }) → Promise<bool>
 //   permits.pmas() · permits.pmaAt(x, z) · permits.allowsOffsite(x, z)
-//   permits.on('bought' | 'used' | 'lapsed' | 'fine' | 'paid' | 'skip', fn) → off
+//   permits.on('bought' | 'used' | 'lapsed' | 'fine' | 'ticket' | 'paid' | 'skip', fn) → off
 //   permits.update(dt) each frame (main.js gl-a): the lapses and the day-use fine
 import { save } from './save.js';
 import { QUOTA, PARTIES, FILL, WEEKDAY } from './parties.js';
@@ -100,6 +106,13 @@ export class Permits {
     const b = blank(d.season || sid), arr = (a) => (Array.isArray(a) ? a.filter((x) => x && typeof x === 'object') : []);
     this.s = { ...b, ...d, v: V, held: arr(d.held), used: arr(d.used), fines: arr(d.fines), lapsed: arr(d.lapsed), told: d.told && typeof d.told === 'object' ? d.told : {} };
     if (!Number.isFinite(this.s.nextId)) this.s.nextId = 1 + this.s.held.length + this.s.used.length;
+    // r2 tickets: a save from before tickets kept a fine owed at a counter; an unpaid one is an open ticket now (it was
+    // written when it was given), a paid one stays paid
+    for (const f of this.s.fines) {
+      if (typeof f.issued !== 'boolean') f.issued = true;
+      if (!f.id) f.id = `F${this.s.nextId++}`;
+      if (!Number.isFinite(f.n)) f.n = PRICES.fine;
+    }
   }
   write() { save.write(NS, this.s); }
   serialize() { return this.s; }
@@ -192,14 +205,47 @@ export class Permits {
     this.write();
     return true;
   }
-  owed() { return this.s.fines.filter((f) => !f.paid).reduce((s, f) => s + (f.n || 0), 0); }
+  owed() { return this.visiting ? 0 : this.s.fines.filter((f) => !f.paid).reduce((s, f) => s + (f.n || 0), 0); }
+  // --- tickets (r2) ----------------------------------------------------------------------------------------------------
+  // a co-op guest on a visit: their own season's tickets are theirs, kept at home (every save of theirs is frozen while
+  // they visit, coop.js), so none is shown, paid or gated on the host's trip
+  get visiting() { const g = typeof window !== 'undefined' ? window.__game : null, c = g && g.coop; return !!(c && c.role === 'guest'); }
+  // the open tickets: written up when the trip ended, not paid
+  tickets() { return this.visiting ? [] : this.s.fines.filter((f) => f.issued && !f.paid); }
+  ticket(id) { return this.s.fines.find((f) => f.id === id) || null; }
+  // the trip is over (trip.js close, takeBack): every fine given on it is written up as a ticket
+  issue() {
+    const fresh = this.s.fines.filter((f) => !f.paid && !f.issued);
+    if (!fresh.length) return 0;
+    for (const f of fresh) { f.issued = true; f.issuedOn = this.today; }
+    this.write();
+    for (const f of fresh) this.emit('ticket', f);
+    return fresh.length;
+  }
+  get money() { const pr = this.t.profile; return pr && typeof pr.money === 'number' ? pr.money : 0; }
+  // paid from the book (or the desk), anywhere, with the money in hand: → { ok, why, words }
+  payTicket(id) {
+    const f = this.ticket(id);
+    if (!f || f.paid) return { ok: false, why: 'none', words: 'Already paid.' };
+    if (this.visiting) return { ok: false, why: 'away', words: 'Not on a friend’s trip.' };
+    const pr = this.t.profile, n = f.n || 0;
+    if (!this.sandbox && n > 0 && (!pr || this.money < n || !pr.spend(n, "a ranger's ticket"))) return { ok: false, why: 'money', words: `$${n}. You have $${Math.max(0, Math.floor(this.money))}.` };
+    f.paid = true; f.issued = true; f.paidOn = this.today;
+    this.write();
+    if (this.t.outfitter && typeof this.t.outfitter.save === 'function') this.t.outfitter.save();
+    this.emit('paid', { n, id: f.id, ticket: f });
+    return { ok: true, words: `Paid: $${n}.` };
+  }
+  // every one at once (the desk's button; the tests): → bool
   payFines() {
     const n = this.owed(); if (!n) return true;
     const pr = this.t.profile;
-    if (!this.sandbox && (!pr || !pr.spend(n, `a ranger's fine${n > PRICES.fine ? 's' : ''}`))) return false;
-    for (const f of this.s.fines) if (!f.paid) { f.paid = true; f.paidOn = this.today; }
+    if (!this.sandbox && (!pr || this.money < n || !pr.spend(n, `a ranger's ticket${n > PRICES.fine ? 's' : ''}`))) return false;
+    const was = this.s.fines.filter((f) => !f.paid);
+    for (const f of was) { f.paid = true; f.issued = true; f.paidOn = this.today; }
     this.write();
-    this.emit('paid', { n });
+    if (this.t.outfitter && typeof this.t.outfitter.save === 'function') this.t.outfitter.save();
+    this.emit('paid', { n, ids: was.map((f) => f.id) });
     return true;
   }
   pmas() { return PMAS.slice(); }
@@ -227,7 +273,7 @@ export class Permits {
   // why a permit can't be sold, in a word (null: it can)
   refusal({ ep, abs, kind = 'overnight', pma = null }) {
     const tr = this.t.trip;
-    if (this.owed() > 0) return 'fines';
+    if (this.owed() > 0) return 'ticket'; // (day use needs no permit, so it stays open: the way to earn the money)
     if (abs < this.today) return 'past';
     if (abs > this.today && tr && tr.active) return 'trip'; // a later day skips to it: only between trips
     if (abs > this.today && this.grouped) return 'group';
@@ -241,7 +287,7 @@ export class Permits {
   }
   words(why, { price = 0 } = {}) {
     return {
-      fines: `There's a fine to settle first: $${this.owed()}.`,
+      ticket: 'An unpaid ticket. Pay it first.',
       past: 'That day is gone.',
       trip: 'Not while a trip is under way: come in first.',
       group: 'The group goes together: ask them first.',
@@ -272,6 +318,9 @@ export class Permits {
     return { ok: true, permit, skip, words: `${KINDS[permit.kind]} permit, entry point ${ep} (${e ? e.place || e.name : ''}), ${dateWords(abs)}.` };
   }
   grant({ ep, abs = this.today, kind = 'overnight', pma = null, from = null, why = null } = {}) {
+    // r2 tickets: a keeper's gift is not a sale, so it is not gated; the free first permit is, should a ticket somehow be
+    // open before it (it can't be: there is no trip before the first one)
+    if ((why || 'gift') === 'first' && this.owed() > 0) return null;
     if (kind === 'pma' && !pma) { const n = this.pmasNear(from ?? ep, 1)[0]; pma = n ? n.id : null; }
     const permit = this.make({ ep, abs, kind, pma, from: from ?? ep, price: 0, why: why || 'gift' });
     if (this.t.trip && typeof this.t.trip.log === 'function') this.t.trip.log('permit', { id: permit.id, kind: permit.kind, ep: permit.ep, abs: permit.abs, price: 0, granted: why || true });
@@ -353,7 +402,7 @@ export class Permits {
   }
   // the hour day use ends on the trip's day: sunset + DUSK
   duskOf() { const d = this.t.day, ss = d ? d.sunriseSunset : null; return (ss && Number.isFinite(ss.set) ? ss.set : 20.5) + DUSK; }
-  // a day-use trip still out after dark: one fine a trip, logged, and one line
+  // a day-use trip still out after dark: one fine a trip, logged, and one line; the ticket is written when it ends (issue)
   checkDusk() {
     const tr = this.t.trip, d = this.t.day, s = tr && tr.state, p = this.t.player || (tr && tr.player);
     if (!tr || !tr.active || !tr.adventure || !s || !s.dayUse || s.grandfathered || s.fined || !d) return false;
@@ -367,18 +416,23 @@ export class Permits {
   }
   fine(why = 'dayuse', n = PRICES.fine) {
     const tr = this.t.trip, s = tr && tr.state;
-    const f = { id: `F${this.s.nextId++}`, n, why, abs: this.today, paid: false, trip: s ? s.id : null };
+    // where it was: the lake you were on, else the landing you left
+    const p = this.t.player || (tr && tr.player), w = this.t.world;
+    let place = '';
+    try { const id = p && w && typeof w.lakeIdAt === 'function' ? w.lakeIdAt(p.x, p.z) : 0; place = (id > 0 && typeof w.lakeName === 'function' && w.lakeName(id)) || ''; } catch { place = ''; }
+    if (!place && s && s.from != null) { const e = this.entry(s.from); place = e ? e.place || e.name || '' : ''; }
+    const f = { id: `F${this.s.nextId++}`, n, why, abs: this.today, ep: s && s.from != null ? s.from : null, place, issued: false, paid: false, trip: s ? s.id : null };
     this.s.fines.push(f); if (this.s.fines.length > KEEP_FINES) this.s.fines.splice(0, this.s.fines.length - KEEP_FINES);
     if (s) s.fined = true;
     this.write();
     if (tr && typeof tr.log === 'function') tr.log('fine', { n, why, id: f.id });
     const hud = this.t.hud;
-    if (hud && typeof hud.note === 'function') hud.note(`A ranger's canoe pulls alongside: day use ends at dark. $${n}, at the counter.`, 8);
+    if (hud && typeof hud.note === 'function') hud.note(`A ranger's canoe pulls alongside: day use ends at dark. A $${n} ticket, written when you come in.`, 8);
     this.emit('fine', f);
     if (this.t.outfitter && typeof this.t.outfitter.save === 'function') this.t.outfitter.save();
     return true;
   }
 
   // for the console and the tests
-  stats() { return { held: this.s.held.length, used: this.s.used.length, owed: this.owed(), fines: this.s.fines.length, season: this.s.season }; }
+  stats() { return { held: this.s.held.length, used: this.s.used.length, owed: this.owed(), fines: this.s.fines.length, tickets: this.tickets().length, season: this.s.season }; }
 }

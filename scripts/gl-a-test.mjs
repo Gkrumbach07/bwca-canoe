@@ -3,8 +3,8 @@
 //   1. what is left: a July Saturday at Moose Lake (25) ≤ 3, a mid-September Tuesday ≥ 80 % of the quota, an ice day closed
 //   2. prices: one flat $6 for either kind, any day of the year (the owner's call 2026-11-05)
 //   3. at a counter: buy today (paid, held); buy today + 5: the skip (the clock that day at 07:00, rested, no trip)
-//   4. a push-off with the permit (trip.state.permit, not day use); with none: day use, past dusk one fine, the desk
-//      refuses until it is paid
+//   4. a push-off with the permit (trip.state.permit, not day use); with none: day use, past dusk one fine, written up
+//      as a ticket when the trip comes in (r2), and the desk refuses until it is paid (r2-tickets-test.mjs: the rest)
 //   5. grant: a $0 permit
 //   6. an old save (a v3 core, a trip under way) boots: the trip goes on, grandfathered, never fined
 //   7. a PMA permit: off-site camping inside its polygon only (camp.offsiteOk: the tent pitches there), not on another trip; 7″ the real twelve from the
@@ -208,9 +208,9 @@ try {
     g.profile.earn(60, 'the test');
     const m1 = g.profile.money, paid = P.payFines(), m2 = g.profile.money;
     const r2 = P.buy({ ep: home, abs: P.today, at: home });
-    return { refused: !r1.ok && r1.why === 'fines', words: r1.words, paid, cost: m1 - m2, owed: P.owed(), after: r2.ok || r2.why, m0 };
+    return { refused: !r1.ok && r1.why === 'ticket', words: r1.words, paid, cost: m1 - m2, owed: P.owed(), after: r2.ok || r2.why, m0 };
   }, HOME);
-  result('4d buy is refused until the fine is paid; payFines spends it, and the desk sells again', refuse.refused && refuse.paid && refuse.cost === 20 && refuse.owed === 0 && (refuse.after === true || refuse.after === 'full'), refuse);
+  result('4d buy is refused until the ticket is paid; payFines spends it, and the desk sells again', refuse.refused && refuse.paid && refuse.cost === 20 && refuse.owed === 0 && (refuse.after === true || refuse.after === 'full'), refuse);
 
   // --- 5: grant ------------------------------------------------------------------------------------------------------------------
   const gr = await page.evaluate((home) => {

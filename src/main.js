@@ -1041,11 +1041,13 @@ async function main() {
   // time: permits.js keeps what you hold (bwca-canoe:permits, per season), the calendar (each entry point's real quota
   // less the parties booked), the prices, the fines and the skip to a permit's day; permit-desk.js is its section of
   // the counter. A push-off takes the permit for that landing today (trip.js start), else it is day use, and still out
-  // after dark is a ranger's fine (permits.update). pma.js: the primitive areas a PMA permit camps off-site in.
+  // after dark is a ranger's fine (permits.update), a ticket in the book when the trip ends: paid from the journal's
+  // Tasks page (journal.permits), and till then the desk sells no overnight permit. pma.js: the primitive areas.
   {
     const permits = new Permits({ world, day, profile, trip, outfitter, energy, veil, hud, parties, player });
     permits.attach();
     trip.permits = permits;
+    journal.permits = permits; // r2: the tickets on the Tasks page
     const permitDesk = new PermitDesk({ permits, outfitter, world, day, profile });
     // stream B's counter sections (the join: the claims-hook fallback dropped, B's addDesk is there)
     outfitter.addDesk('permits', { order: 10, html: (l) => permitDesk.section(l.ep), act: (a, id, ev) => permitDesk.act(a, id, ev) });
@@ -1061,7 +1063,7 @@ async function main() {
     }
     // the moment (hints.js): once a season, near sunset on a day-use trip; and no "make camp" on one
     const dayUseNow = () => { const s = trip.state; return trip.active && trip.adventure && !!s.dayUse && !s.grandfathered && !s.fined; };
-    if (!MOMENTS.some((m) => m.id === 'dayuse')) MOMENTS.unshift({ id: 'dayuse', prio: 2, recur: 'once', text: 'Day use: out by dark, or a ranger fines you. Overnight needs a permit.' });
+    if (!MOMENTS.some((m) => m.id === 'dayuse')) MOMENTS.unshift({ id: 'dayuse', prio: 2, recur: 'once', text: 'Day use: out by dark, or a ranger writes you a ticket. Overnight needs a permit.' });
     const dueA = hints.due.bind(hints);
     hints.due = (id, rec) => {
       if (id === 'dayuse') { const ss = day.sunriseSunset, set = ss && Number.isFinite(ss.set) ? ss.set : 20.5; return dayUseNow() && day.hours >= set - 0.75 && day.hours < permits.duskOf(); }

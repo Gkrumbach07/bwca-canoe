@@ -11,7 +11,10 @@
 // nothing tells you which key does what; a page with nothing on it is a blank page with its heading.
 //   Tasks   the notices you took, folded into the book: their titles in a pencilled checklist on the right (a box, half
 //           a box, a tick; crossed out when paid), and the one picked unfolded on the left as the paper it was
-//           (flyers.js: a café's guest check, a LOST poster, a Forest Service form, a visitor's scrap of notebook)
+//           (flyers.js: a café's guest check, a LOST poster, a Forest Service form, a visitor's scrap of notebook).
+//           A ranger's ticket (r2, permits.js tickets) heads the list, drawn as the ticket it is (no deadline, no pay):
+//           Pay $20 on it when the money is in hand (a right-click on its line pays it too), else what is missing; paid,
+//           it is stamped and gone
 //   Fish    your own fishing log on the right, a line a fish (date, time, water, weather, fish, size, lure; a star by
 //           your biggest of each), and tucked into the left page the outfitter's fold-out pamphlet: open it for the
 //           fish of these lakes, pick one for its panel
@@ -24,7 +27,8 @@ import { PackSide } from './inv-ui.js';
 import { KINDS } from './tasks.js'; // fb3 C: a notice's kind, for its progress and its label
 import { itemDef } from './items.js';
 import { fishPicture } from './fish-portrait.js';
-import { flyerHtml } from './flyers.js';
+import { flyerHtml, ticketHtml, ticketWhy } from './flyers.js';
+import { dateWords } from './permits.js';
 import './paper.css';
 import './flyers.css';
 import './fishbook.css';
@@ -44,6 +48,7 @@ export class Journal {
     this.taskSel = null; this.tripSel = null; this.printSel = null; // what is picked on each tab
     this.pam = null; // the fish pamphlet: null folded in the page, 'open', or a species' panel
     this.shownFlyer = null; this.logEnd = true; // (the flyer unfolds once when picked; the log opens at its last line)
+    this.permits = null; this.stamped = null; // r2: the tickets (permits.js), and one just paid ({ f, t }: its stamp, then gone)
     // the book: a tab for each side on its top edge, the journal's spread and the pack's mat
     this.el.classList.add('book');
     this.el.setAttribute('aria-label', 'The book: the pack, the journal and the map');
@@ -63,12 +68,20 @@ export class Journal {
       if (pm) { const v = pm.dataset.pam; this.pam = v === 'fold' ? null : v; this.render(true); return; }
       if (this.tab === 'fish' && this.pam && e.target.closest('.pp-page.left') && !e.target.closest('.pam')) { this.pam = null; this.render(true); return; }
       // a pick on the right page: its page on the left, scrolled to the top
+      const pay = e.target.closest('[data-pay-ticket]'); if (pay) { this.payTicket(pay.dataset.payTicket); return; }
       const pick = e.target.closest('[data-task], [data-trip], [data-print]');
       if (pick) {
         if (pick.dataset.task) this.taskSel = pick.dataset.task; else if (pick.dataset.trip) this.tripSel = pick.dataset.trip; else this.printSel = Number(pick.dataset.print);
         this.render(true); const sc = this.jEl.querySelector('.pp-page.left .pp-scroll'); if (sc) sc.scrollTop = 0; return;
       }
       const close = e.target.closest('[data-close]'); if (close) this.close();
+    });
+    // r2: a ticket's line, right-clicked, pays it (as its Pay button does)
+    this.el.addEventListener('contextmenu', (e) => {
+      const row = e.target.closest('[data-task^="ticket:"]'); if (!row) return;
+      e.preventDefault();
+      this.taskSel = row.dataset.task;
+      this.payTicket(row.dataset.task.slice(7));
     });
     // fb4 B (decision 4; the owner, 2026-10-25: "It should just be one key, I, to get into the inventory. You can switch
     // over to your journal"): I opens the book at the pack and closes it from either side; Esc closes it; the tabs on its
@@ -175,7 +188,7 @@ export class Journal {
     return [this.tab, this.page, this.taskSel, this.pam, this.tripSel, this.printSel, f ? f.logVersion : 0,
       ts ? ts.active.map((t) => `${t.id}${t.status}${t.got || 0}${(t.cooler || []).length}`).join() : '', ts ? (ts.claimed || []).length : 0, this.dayN,
       c ? `${c.mode}${c.active}${c.book.trips.length}` : '', this.photos ? this.photos.version : 0, R ? R.version : '',
-      typeof this.notes === 'function' ? (this.notes() || []).length : 0].join('|');
+      typeof this.notes === 'function' ? (this.notes() || []).length : 0, this.ticketSig()].join('|');
   }
 
   render(force) {
@@ -200,6 +213,24 @@ export class Journal {
     return [['tasks', 'Tasks', '#5f7046'], ['fish', 'Fish', '#3f6273'], ...(this.record || this.core ? [['trips', 'Trips', '#8a5a34']] : []), ...(this.photos ? [['photos', 'Photos', '#74495a']] : [])];
   }
 
+  // --- r2: the ranger's tickets (permits.js) ----------------------------------------------------------------------------
+  tickets() { const P = this.permits; try { return P && typeof P.tickets === 'function' ? P.tickets() : []; } catch { return []; } }
+  get purse() { const P = this.permits; return P ? Math.floor(P.money || 0) : 0; }
+  get stampOn() { const s = this.stamped; return s && performance.now() - s.t < STAMP_MS ? s : null; }
+  ticketSig() { const k = this.tickets(), s = this.stampOn; return `${k.map((f) => f.id).join(',')}:${k.length ? this.purse : ''}:${s ? s.f.id : ''}`; }
+  // Pay: the money taken (permits.payTicket), the stamp comes down on it, and a moment later it is gone from the list
+  payTicket(id) {
+    const P = this.permits; if (!P) return false;
+    const f = P.ticket(id); if (!f || f.paid) return false;
+    const r = P.payTicket(id);
+    if (r.ok) { this.stamped = { f: { ...f }, t: performance.now() }; this.taskSel = `ticket:${id}`; }
+    else if (this.hud && typeof this.hud.note === 'function') this.hud.note(r.words, 4);
+    this.render(true);
+    if (r.ok) setTimeout(() => { if (this.open && this.side === 'journal') this.render(true); }, STAMP_MS + 60);
+    return r.ok;
+  }
+  ticketPaper(f) { return { key: `ticket:${f.id}`, t: { id: `ticket:${f.id}`, ticket: f, title: 'A ranger’s ticket', kind: 'ticket' } }; }
+
   // --- Tasks: the notices folded into the book ------------------------------------------------------------------------
   // The owner (2026-10-31): "you might have a little entry thing where you have all your tasks right there and you press
   // on one, it unfolds the flyer and you can see it on the left ... You don't need to have all the information of the
@@ -212,7 +243,11 @@ export class Journal {
     let notes = [];
     try { notes = typeof this.notes === 'function' ? this.notes() || [] : []; } catch { notes = []; }
     // the papers in the book: the notices taken (on the go, then done) and a find noted for the ranger
+    // r2: the open tickets first (and the one just paid, while its stamp comes down)
+    const stamp = this.stampOn, open = this.tickets();
+    const tickets = [...(stamp && !open.some((f) => f.id === stamp.f.id) ? [stamp.f] : []), ...open];
     const papers = [
+      ...tickets.map((f) => this.ticketPaper(f)),
       ...all.filter((t) => t.status !== 'done').map((t) => ({ key: String(t.id), t })),
       ...notes.map((n, i) => ({ key: `note:${i}`, t: { id: `note${i}`, note: true, title: n.title, text: n.words, kind: 'note' } })),
       ...all.filter((t) => t.status === 'done').map((t) => ({ key: String(t.id), t })),
@@ -225,7 +260,14 @@ export class Journal {
       const n = ts.daysLeft(t); if (n == null) return '';
       return n <= 0 ? 'last day' : n === 1 ? 'one day left' : `${word(n)} days left`;
     };
+    const purse = this.purse;
     const line = ({ key, t }) => {
+      if (t.ticket) {
+        const f = t.ticket, n = f.n || 0, paid = !!(stamp && stamp.f.id === f.id), short = !paid && purse < n;
+        return `<button type="button" class="pp-todo ticket${paid ? ' paidnow' : ''}${key === this.taskSel ? ' on' : ''}" data-task="${esc(key)}"><span class="pp-tk" aria-hidden="true"></span>
+        <span class="t">${paid ? `<s>${esc(t.title)}</s>` : esc(t.title)}</span><span class="pay">$${n}</span>
+        <span class="st">${paid ? 'paid' : `${esc(ticketWhy(f).toLowerCase())}${short ? ` · <b class="due last">you have $${purse}</b>` : ''}`}</span></button>`;
+      }
       const st = t.note ? { cls: 'taken', words: '' } : this.taskState(t), due = dueW(t);
       const box = st.cls === 'done' ? 'pp-box done' : st.cls === 'half' ? 'pp-box half' : 'pp-box';
       return `<button type="button" class="pp-todo ${st.cls}${key === this.taskSel ? ' on' : ''}" data-task="${esc(key)}"><span class="${box}" aria-hidden="true"></span>
@@ -242,6 +284,16 @@ export class Journal {
         ${n ? `<div class="pp-todo sum"><span class="t">$${earned} from the boards, ${word(n)} ${plural(n, 'notice')} paid</span></div>` : ''}</div>`;
     const p = papers.find((q) => q.key === this.taskSel);
     let left = '';
+    if (p && p.t.ticket) {
+      const f = p.t.ticket, n = f.n || 0, paid = !!(stamp && stamp.f.id === f.id), fresh = this.shownFlyer !== p.key;
+      this.shownFlyer = p.key;
+      const slip = ticketHtml(f, { date: dateWords(f.abs), paid, fresh: paid }).replace('class="fl ', `class="fl${fresh && !paid ? ' unfold' : ''} `);
+      const act = paid ? '' : purse >= n
+        ? `<p class="pp-tkpay"><button type="button" class="stamp" data-pay-ticket="${esc(f.id)}">Pay $${n}</button></p>`
+        : `<p class="pp-hand pp-margin pp-tkshort">$${n} — you have $${purse}.</p>`;
+      left = `<div class="pp-scroll pp-flyer">${slip}${act}</div>`;
+      return { left, right, leftLabel: 'A ranger’s ticket', rightCls: 'tasks' };
+    }
     if (p) {
       const t = p.t, st = t.note ? null : this.taskState(t), fresh = this.shownFlyer !== p.key;
       this.shownFlyer = p.key;
@@ -399,6 +451,7 @@ const PAM = {
 // --- helpers -------------------------------------------------------------------------------------------------------
 const MI = 0.621371; // miles a km
 const up = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
+const STAMP_MS = 1500; // r2: a paid ticket's stamp on the page, then it is gone
 const fmtMi = (m) => (m < 10 ? m.toFixed(1) : String(Math.round(m)));
 // the log's own short hand: "10/31", "6:40p", "18½" 2¼ lb", "walleye", "laker"
 const slashDate = (y, doy) => { const d = new Date(y, 0, doy); return `${d.getMonth() + 1}/${d.getDate()}`; };
