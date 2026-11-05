@@ -1789,14 +1789,19 @@ const STAIR_LOW = 0.75;   // a deck no higher than this over the ground at its f
 const RAIL_H = 0.92;      // a rail's (and a flight's side wall's) height over what it stands on, for the walker and the camera
 // The porch across the front (look.porch) or a stoop at the door, at the floor's height less 4 cm, and its steps down to
 // the ground: as many even risers (at most STEP_RISE) as it takes to meet the lowest ground across the flight's width at
-// its foot. A low deck (STAIR_LOW) has its steps across the whole of its front; a high one has a flight 1.5 m wide
+// its foot. A low deck (STAIR_LOW) and a porch have their steps across the whole of the front; a high stoop has a flight 2.3 m wide
 // centred on the door, rails round the deck, and the flight's sides walled (a handrail) wherever a tread stands more
 // than a step over the ground beside it, so the walker can neither step off its side nor be offered a climb onto it:
 // he walks round to its foot (fb2 C, the owner: "going upstairs I kind of have to press space to climb"). g(a, b): the
 // ground in the store's frame. Returns { deck: [a0, a1, b0, b1], treads: [{ a0, a1, b0, b1, y }], walls: [{ a0, a1,
 // b0, b1, top }], posts: [[a, b]], rails, bench, foot } for the walker.
+// The game-loop play: walking straight up from the dock ran into the porch beside a 1.5 m flight centred on the door, and
+// a dock off to one side of the store brings a walker up to the porch's front at a slant. A porch's steps run across its
+// whole front, high or low, and a stoop is as wide as its 2.3 m flight (the door in its middle).
+const STOOP_HW = 1.15; // a stoop's flight, half its width
 function porchAndSteps(b, porch, g, look, rng, occ) {
-  const ys = -0.04, d = porch ? 1.8 : 1.2, a0 = porch ? -ST.hW - 0.1 : DOOR.a - 0.85, a1 = porch ? ST.hW + 0.1 : DOOR.a + 0.85, s0 = ST.hD, s1 = ST.hD + d;
+  const fw = porch ? ST.hW + 0.1 : STOOP_HW, sa = porch ? 0 : DOOR.a;
+  const ys = -0.04, d = porch ? 1.8 : 1.2, a0 = sa - fw - (porch ? 0 : 0.1), a1 = sa + fw + (porch ? 0 : 0.1), s0 = ST.hD, s1 = ST.hD + d;
   const out = { deck: [a0, a1, s0, s1], treads: [], walls: [], posts: [] }, deck = C(0x8f8576), frameC = C(0x6a6255);
   // the deck: planks across, on a rim joist; posts down to the ground under its front edge
   for (let s = s0 + 0.005; s < s1 - 0.02;) {
@@ -1808,7 +1813,7 @@ function porchAndSteps(b, porch, g, look, rng, occ) {
   sbox(b, a0, a1, ys - 0.2, ys - 0.035, s1 - 0.04, s1, TILE.WOOD, frameC, { grain: 'x' });
   for (const a of [a0, a1 - 0.04]) sbox(b, a, a + 0.04, ys - 0.2, ys - 0.035, s0, s1, TILE.WOOD, frameC, { grain: 'z' });
   occ.push(sobb(a0, a1, ys - 0.2, ys, s0, s1));
-  const postsA = porch ? [-ST.hW - 0.02, -1.3, 0.8, ST.hW + 0.02] : [a0 + 0.08, a1 - 0.08];
+  const postsA = porch ? [-ST.hW - 0.02, -2.1, 2.1, ST.hW + 0.02] : [a0 + 0.08, a1 - 0.08]; // (a porch's middle two clear of the door's line)
   let gmin = Infinity;
   for (const a of postsA) {
     const pb = s1 - 0.1, gy = g(a, pb) - 0.3; gmin = Math.min(gmin, gy + 0.3);
@@ -1852,7 +1857,7 @@ function porchAndSteps(b, porch, g, look, rng, occ) {
   // and does not hold him off the one between; across the whole front of a low deck, else a flight centred on the door
   const run = STEP_RUN;
   const high = ys - Math.min(g(a0 + 0.1, s1 - 0.1), g(DOOR.a, s1 - 0.1), g(a1 - 0.1, s1 - 0.1)), low = high <= STAIR_LOW;
-  const ca = low ? (a0 + a1) / 2 : DOOR.a, sw = low ? (a1 - a0) / 2 : porch ? 0.75 : 0.7;
+  const ca = low ? (a0 + a1) / 2 : sa, sw = low ? (a1 - a0) / 2 : fw;
   const gLow = (c) => Math.min(g(ca - sw + 0.12, c), g(ca, c), g(ca + sw - 0.12, c)); // the lowest ground across the flight
   let rises = 1, rh = ys - gLow(s1 + 0.25);
   for (let n = 1; n <= 32; n++) { rises = n; rh = (ys - gLow(s1 + (n - 1) * run + 0.25)) / n; if (rh <= STEP_RISE) break; }
@@ -2253,7 +2258,7 @@ function* buildStore(ctx, F, rng, ep, group, pieces, dock, site) {
     // wc C: the porch bench under the front window (porchAndSteps out.bench: a0, a1, c0, c1 in the store's frame, its seat
     // 0.46 over the floor), two spots facing out to the yard, in c.layout.seats's shape (player.js sitAt)
     seats: pr.bench ? [0.3, 0.7].map((u, i) => ({ kind: 'bench', id: `porch:${i}`, ...W2(pr.bench[0] + (pr.bench[1] - pr.bench[0]) * u, (pr.bench[2] + pr.bench[3]) / 2), y: floorY + 0.46, heading: heading(0, 1), ax: X.x, az: X.z })) : [],
-    stairs: { low: pr.low, width: +pr.width.toFixed(2), treads: pr.treads.length, rise: pr.treads.length ? +(pr.treads[0].y - (pr.treads[1] ? pr.treads[1].y : pr.treads[0].y - 0.15)).toFixed(3) : 0, walled: pr.walls.filter((w) => w.r).length }, // fb2 C
+    stairs: { low: pr.low, a: +pr.ca.toFixed(3), foot: +pr.foot.toFixed(3), width: +pr.width.toFixed(2), treads: pr.treads.length, rise: pr.treads.length ? +(pr.treads[0].y - (pr.treads[1] ? pr.treads[1].y : pr.treads[0].y - 0.15)).toFixed(3) : 0, walled: pr.walls.filter((w) => w.r).length }, // fb2 C
     // fb2 C: what E opens in the store, as boxes for the pointer (pointer.js: centre x, y, z, half sizes hx along the
     // store's a, hy up, hz along its b, turned `heading`): the whole of each shelf unit, so it opens from either side
     hot: [
