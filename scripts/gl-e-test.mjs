@@ -8,12 +8,14 @@
 // 3  Over 20 game minutes a visitor's activity changes at least twice; a fresh page (same season) gives the same
 //    sequence; talked to, they face you and their activity clock pauses, then resumes.
 // 4  A party coming out names only lakes in its stays, and a wind-bound day only when windDay says so.
+// 5b At a trailhead's lot (stream B's trailheadLayout; a stand-in here) the parties load and unload.
 // 6  No generated name is Walt or Eino; the cedar-minnow arc reads Leif.
+// 8  An old save's people (v1) loads as v2 with met {}; met is pruned a week after a party's trip ends.
 // 7  (--perf) frame time in a busy store (Moose Lake, a July Saturday) against origin/main, alternating.
 import { launch, openGame, seasonAt, step, log, APP } from './gl-e-lib.mjs';
 
 const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i > 0 ? process.argv[i + 1] : d; };
-const ONLY = new Set(String(arg('only', '1,2,3,4,6')).split(',').map(Number));
+const ONLY = new Set(String(arg('only', '1,2,3,4,5,6,8')).split(',').map(Number));
 const PERF = process.argv.includes('--perf');
 const YEAR = 2026, DOY = 192, EP = 25, H0 = 7.75; // Saturday 11 July 2026
 const results = [];
@@ -99,8 +101,12 @@ try {
   // --- 3b: talked to, they stop and face you; their clock pauses, then resumes ---------------------------------------
   if (ONLY.has(3) && pick) {
     const t0 = await A.evaluate(({ key }) => {
-      const g = window.__game, N = g.npcs, v = N.find(key); N.talkTo(v, 0);
-      return { talking: g.dialogue.talking, clock: g.smart.clock, a: g.smart.activityOf(`${key}#0`) };
+      const g = window.__game, N = g.npcs, v = N.find(key), f = v.figs[0], p = g.player;
+      // (the moment: a party member a step away in the store, none met yet)
+      if (g.outfitter.visit && g.outfitter.visit.L && g.outfitter.visit.L.inside(f.x, f.z)) { p.x = f.x + 1.2; p.z = f.z; g.step(1 / 30, 2); }
+      const moment = g.hints.due('storeparty', {});
+      N.talkTo(v, 0);
+      return { talking: g.dialogue.talking, clock: g.smart.clock, a: g.smart.activityOf(`${key}#0`), moment, afterMet: N.partyHere() };
     }, { key: pick.key });
     await minutes(A, 10);
     const t1 = await A.evaluate(({ key }) => {
@@ -111,6 +117,7 @@ try {
     await minutes(A, 3);
     const t2 = await A.evaluate(({ key }) => { const g = window.__game; return { a: g.smart.activityOf(`${key}#0`), clock: g.smart.clock }; }, { key: pick.key });
     const same = t0.a && t1.a && t0.a.act === t1.a.act && t0.a.obj === t1.a.obj;
+    check('3 the moment: a party in the store, none met: once, then never', t0.moment === true && t0.afterMet === false, { moment: t0.moment, afterMet: t0.afterMet });
     check('3 talked to: they face you, the activity clock pauses, then resumes', t0.talking && t1.talking && same && t1.a.paused && t1.off < 0.6 && !t1.walking && t2.a && !t2.a.paused && t2.a.until > t1.clock, { t0, t1, t2 });
   }
 
@@ -207,6 +214,21 @@ try {
       return { parties, lines, winds, bad: bad.slice(0, 12), nBad: bad.length };
     }, { year: YEAR });
     check('4 a party coming out names only its stays\' lakes; wind-bound only when windDay says so', r4.parties > 20 && r4.lines > 20 && !r4.nBad, r4);
+  }
+
+  // --- 8: an old save (people v1, no met) loads; the moment for the first party in a store -------------------------
+  if (ONLY.has(8)) {
+    const r8 = await A.evaluate(async () => {
+      const g = window.__game, N = g.npcs, { save } = await import('/src/save.js'), keep = JSON.parse(JSON.stringify(N.s));
+      save.write('people', { v: 1, talked: { 'keeper:25': 3 }, tasks: {}, paid: {}, gifts: {}, names: {}, told: [], chat: {}, asked: {}, arcs: { 25: { b: 1, at: 5 } } });
+      const s1 = N.load(), v1 = JSON.parse(JSON.stringify(s1));
+      N.s = s1; N.s.met['x-1-0'] = { abs: N.today - 20, ep: 25, where: 'Moose Lake', exit: N.today - 10, told: null }; N.s.met['x-2-0'] = { abs: N.today, ep: 25, where: 'Moose Lake', exit: N.today + 3, told: null };
+      N.pruneMet(); N.write();
+      const s2 = N.load();
+      N.s = keep; N.write();
+      return { v1: { v: v1.v, met: v1.met, talked: v1.talked['keeper:25'], arcs: v1.arcs[25] }, after: { v: s2.v, met: Object.keys(s2.met) } };
+    });
+    check('8 an old people save (v1) loads as v2 with met {}; met is pruned a week after a trip ends', r8.v1.v === 2 && JSON.stringify(r8.v1.met) === '{}' && r8.v1.talked === 3 && r8.v1.arcs && r8.after.met.join() === 'x-2-0', r8);
   }
 
   // --- 6: the story's names are reserved ----------------------------------------------------------------------------

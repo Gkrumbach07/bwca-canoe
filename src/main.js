@@ -1043,6 +1043,11 @@ async function main() {
     parties.attach({ weather });
     npcs.attachParties({ parties, moves, ground: (x, z) => tiles.groundAt(x, z) });
     Object.assign(window.__game, { smart: npcs.smart, grounding: npcs.grounding });
+    // a moment, once: the first time a party going in or coming out is in the store with you and you have met none yet
+    const storeParty = { id: 'storeparty', prio: 1, recur: 'once', text: 'Going in or just out, they know the water. E to talk.' };
+    if (!MOMENTS.some((q) => q.id === storeParty.id)) MOMENTS.push(storeParty);
+    const dueE = hints.due.bind(hints);
+    hints.due = (id, rec) => (id === storeParty.id ? npcs.partyHere() : dueE(id, rec));
   }
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
 

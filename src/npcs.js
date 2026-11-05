@@ -1502,6 +1502,12 @@ export class People {
     return ev;
   }
   nameLists() { return nameLists(); } // (gl-e: the tests)
+  // the 'storeparty' moment (main.js): in a store, a party member drawn within a few metres, none met yet, not talking
+  partyHere() {
+    const o = this.outfitter, p = this.player;
+    if (!o || !o.visit || !o.visit.inside || Object.keys(this.s.met).length || (this.dialogue && this.dialogue.talking)) return false;
+    return this.bodies.some((b) => { const f = b.who && !b.lent && b.who.person.inParty ? b.who.person.figs[b.who.fig] : null; return !!f && Math.hypot(f.x - p.x, f.z - p.z) < 5; });
+  }
   // gl-e (scripts/gl-ground-lint.mjs): every line the people at store ep could say now, after grounding, as the pickers
   // see them: [{ src, text }]. raw: outfitters.js's keeper lines as written (read only), before any grounding
   lintLines(ep, { raw = false } = {}) {
