@@ -106,6 +106,8 @@ import { whiteWater } from './rapids.js'; // d1 rapids
 import { bonk } from './audio-voices.js'; // d1 rapids
 import { loadBurns, setBurnDate, burnStats, burnLook, eventsAt } from './burns.js'; // the real burns
 import { BurnNotes } from './burn-notes.js'; // the real burns
+import { Permits } from './permits.js'; // gl-a: permits
+import { PermitDesk } from './permit-desk.js'; // gl-a: the permit desk
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -1030,6 +1032,46 @@ async function main() {
   window.__game.autoWatch = autoWatch;
   loadingEl.classList.add('done');
   setTimeout(() => { loadingEl.style.display = 'none'; }, 900);
+  // gl-a: permits (the game-loop round, stream A; docs/build/game-loop-brief.md). Trips are the unit and permits move
+  // time: permits.js keeps what you hold (bwca-canoe:permits, per season), the calendar (each entry point's real quota
+  // less the parties booked), the prices, the fines and the skip to a permit's day; permit-desk.js is its section of
+  // the counter. A push-off takes the permit for that landing today (trip.js start), else it is day use, and still out
+  // after dark is a ranger's fine (permits.update). pma.js: the primitive areas a PMA permit camps off-site in.
+  {
+    const permits = new Permits({ world, day, profile, trip, outfitter, energy, veil, hud, parties, player });
+    permits.attach();
+    trip.permits = permits;
+    const permitDesk = new PermitDesk({ permits, outfitter, world, day, profile });
+    if (typeof outfitter.addDesk === 'function') {
+      // stream B's counter sections
+      outfitter.addDesk('permits', { order: 10, html: (l) => permitDesk.section(l.ep), act: (a, id, ev) => permitDesk.act(a, id, ev) });
+    } else {
+      // without it: the counter's claims hook and its buttons, wrapped (as the uniques' "Report a find" above)
+      const claimsA = outfitter.claimsSection.bind(outfitter), actA = outfitter.act.bind(outfitter);
+      outfitter.claimsSection = (a) => permitDesk.section(a.ep) + claimsA(a);
+      outfitter.act = (act, id, ev) => (typeof act === 'string' && act.startsWith('permit-') ? permitDesk.act(act, id, ev) : actA(act, id, ev));
+    }
+    { const tu = trip.update.bind(trip); trip.update = (dt) => { tu(dt); try { permits.update(dt); } catch (e) { if (!permits.warned) { permits.warned = true; console.warn('permits', e); } } }; }
+    // the push-off's title over the water says a day trip is one (outfitter.start shows it just after trip.start)
+    {
+      const startA = outfitter.start.bind(outfitter);
+      outfitter.start = (...a) => {
+        const place = hud.showPlace;
+        hud.showPlace = (t, lake, sub, ...r) => place.call(hud, t, lake, trip.adventure && trip.state.dayUse ? 'Day use: out by dark' : sub, ...r);
+        try { return startA(...a); } finally { hud.showPlace = place; }
+      };
+    }
+    // the moment (hints.js): once a season, near sunset on a day-use trip; and no "make camp" on one
+    const dayUseNow = () => { const s = trip.state; return trip.active && trip.adventure && !!s.dayUse && !s.grandfathered && !s.fined; };
+    if (!MOMENTS.some((m) => m.id === 'dayuse')) MOMENTS.unshift({ id: 'dayuse', prio: 2, recur: 'once', text: 'Day use: out by dark, or a ranger fines you. Overnight needs a permit.' });
+    const dueA = hints.due.bind(hints);
+    hints.due = (id, rec) => {
+      if (id === 'dayuse') { const ss = day.sunriseSunset, set = ss && Number.isFinite(ss.set) ? ss.set : 20.5; return dayUseNow() && day.hours >= set - 0.75 && day.hours < permits.duskOf(); }
+      if ((id === 'evening' || id === 'dusk') && dayUseNow()) return false;
+      return dueA(id, rec);
+    };
+    Object.assign(window.__game, { permits, permitDesk });
+  }
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
 
   // fb3 join: a NaN never freezes the game. Once (the join's test aimed at an undefined point: the heading was NaN for a few
