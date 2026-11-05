@@ -53,7 +53,7 @@ async function openGame(b, query = '') {
   page.on('pageerror', (e) => log(`[${b.name}] pageerror`, e.message));
   page.on('console', (m) => { if (m.type() === 'error' || /coop/i.test(m.text())) log(`[${b.name}] ${m.type()}`, m.text().slice(0, 300)); });
   await page.goto(`${APP}/?relay=${encodeURIComponent(RELAY)}${query}`);
-  await page.waitForFunction(() => window.__game && window.__game.coop && window.__game.title && window.__game.coopGive, null, { timeout: 240000, polling: 500 });
+  await page.waitForFunction(() => window.__game && window.__game.coop && window.__game.title && window.__game.coopGive && typeof window.__game.step === 'function', null, { timeout: 240000, polling: 500 });
   log(`[${b.name}] game loaded`);
   return page;
 }
@@ -281,7 +281,7 @@ await B.evaluate(() => window.__game.profile.spend(3, 'test'));
 const keepSig = await B.evaluate(invSig), keepMoney = await B.evaluate(() => window.__game.profile.money);
 await B.evaluate(() => window.__game.coop.leave());
 await sleep(800);
-await B.waitForFunction(() => window.__game && window.__game.coop && window.__game.title, null, { timeout: 240000, polling: 500 });
+await B.waitForFunction(() => window.__game && window.__game.coop && window.__game.title && typeof window.__game.step === 'function', null, { timeout: 240000, polling: 500 });
 await sleep(2500);
 const after = season(await B.evaluate(dump));
 const changed = [...new Set([...Object.keys(before), ...Object.keys(after)])].filter((k) => before[k] !== after[k]);
