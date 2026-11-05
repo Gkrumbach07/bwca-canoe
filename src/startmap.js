@@ -17,6 +17,7 @@
 //   homesOf(world) → [{ ep, name, place, x, z, kind, country, gentle, reach: [eps], lakes: [names], keeper: { name, line } }]
 import * as OF from './outfitters.js';
 import { outfitterName } from './outfitter.js';
+import { sketchPmas } from './map-render.js'; // r2: the primitive areas' outlines
 
 const PAD = 0.07;             // the margin round the pins, a share of the span
 const COUNTRY_OF_KIND = { lodge: 'big water', 'trout camp': 'big water', 'river post': 'rivers', 'bait shop': 'gentle' };
@@ -177,6 +178,8 @@ export class StartMap {
       ctx.imageSmoothingEnabled = true;
       try { ctx.drawImage(wv.canvas, (left - wv.x0) / wv.mPerPx, (top - wv.z0) / wv.mPerPx, v.cw / v.s / wv.mPerPx, v.ch / v.s / wv.mPerPx, 0, 0, v.cw, v.ch); } catch { /* off the picture */ }
     }
+    // the primitive areas, a fine pale dash (public, as on every map: map-render.js)
+    sketchPmas(ctx, (x) => this.toScreen(x, 0).x, (z) => this.toScreen(0, z).y, { stroke: 'rgba(243, 236, 221, .55)', width: 1, dash: [3, 2] });
     // every entry point, a faint dot (the ones no outfitter stands on: trailheads, with B)
     const on = new Set(this.homes.map((h) => h.ep));
     ctx.fillStyle = 'rgba(243, 236, 221, .45)';

@@ -93,6 +93,7 @@ import { bugs } from './bugs.js'; // cons C
 import { record } from './record.js'; // round A-A
 import { slots } from './save.js'; // round A-D
 import { migrateSeason } from './migrate.js'; // d2 join
+import { migratePmas } from './migrate-pma.js'; // r2: the old saves' primitive areas
 import { kv } from './store.js';
 import { CULL } from './tiles.js'; // round A-C
 import { AutoWatch, prewarmPasses } from './quality.js'; // round A-C
@@ -123,6 +124,7 @@ async function main() {
   // d2 join: a season made on another map release carried to this one's lake, site and trail numbers, before anything
   // reads it (migrate.js)
   await migrateSeason(world.meta, kv); // (the saves' store: store.js)
+  const pmaMigrated = migratePmas(kv, { meta: world.meta }); // r2: a season's primitive areas from the old made-up table to the real twelve, once
   // d1 names: the official names on the world's records before the tiles build (the trail signs read them): the sites'
   // USFS numbers, the portages' trails, rods and classes, the place names (names.js; the rest of it below)
   const named = await names.attach(world).catch((e) => { console.warn('d1 names', e); return null; });
@@ -1068,7 +1070,15 @@ async function main() {
       if ((id === 'evening' || id === 'dusk') && dayUseNow()) return false;
       return dueA(id, rec);
     };
-    Object.assign(window.__game, { permits, permitDesk });
+    // r2: the maps pick out a primitive area: the one chosen at the desk while the counter is open, else the one the
+    // trip under way's permit is for (map-render.js paintPmas focus)
+    const pmaFocus = () => {
+      const f = permitDesk.focusPma(); if (f) return f;
+      const s = trip.state, p = trip.active && s ? s.permit : null;
+      return p && p.kind === 'pma' && p.pma ? p.pma : null;
+    };
+    hud.pmaFocusFn = pmaFocus; outfitter.pmaFocusFn = pmaFocus;
+    Object.assign(window.__game, { permits, permitDesk, pmaMigrated });
   }
   // gl-b: outfitters, drives, pickups, roads (the game-loop round, stream B). Fourteen outfitters on entry points
   // (outfitters.js OUTFITTERS), the other forty-one trailheads (trailhead.js: a lot, a permit box, the sign); the truck

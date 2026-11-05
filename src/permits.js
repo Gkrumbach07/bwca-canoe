@@ -19,8 +19,10 @@
 // Good for a push-off at `ep` on day `abs` only (the trip then lasts as long as you like: the real rule); unused, it
 // lapses after that day with a line at the desk next time and no refund.
 //
-// Saved per season in `bwca-canoe:permits` { v: 1, season, held: [], used: [], fines: [], lapsed: [], nextId, told };
-// missing, or another season's, is a blank one.
+// Saved per season in `bwca-canoe:permits` { v: 1, season, pmaSet, held: [], used: [], fines: [], lapsed: [], nextId, told,
+// redrawn? }; missing, or another season's, is a blank one. pmaSet: the primitive areas' table its ids are from (2: the
+// real twelve; an older season's are carried over by migrate-pma.js, which leaves `redrawn`: the held permits it changed,
+// a line each at the desk, takeRedrawn).
 //
 //   permits.available(ep, abs) → { quota, booked, held, left, closed, mine } (booked + held ≤ quota; mine: you hold one)
 //   permits.calendar(ep, fromAbs, days = 28) → [{ abs, left, quota, price, closed, mine }]
@@ -39,6 +41,7 @@ import { seasonAt } from './season.js';
 import { absDay, dateOfAbs } from './trip.js';
 import { shortDate, weekdayOf, plural, word } from './hud.js';
 import { PMAS, pmaAt as pmaAtXZ, pmaById } from './pma.js';
+import { PMA_SET } from './migrate-pma.js'; // r2: the primitive areas' table a season's ids are from (the old saves)
 
 const NS = 'permits';
 const V = 1;
@@ -63,7 +66,7 @@ export const PRICES = {
 export const BOOK = [[0, 0], [0.25, 0.04], [0.45, 0.3], [0.7, 0.92], [0.9, 1]];
 export const KINDS = { overnight: 'Overnight', pma: 'Primitive area' };
 
-const blank = (season = null) => ({ v: V, season, held: [], used: [], fines: [], lapsed: [], nextId: 1, told: {} });
+const blank = (season = null) => ({ v: V, season, pmaSet: PMA_SET, held: [], used: [], fines: [], lapsed: [], nextId: 1, told: {} });
 const curve = (T, x) => {
   if (x <= T[0][0]) return T[0][1];
   for (let i = 1; i < T.length; i++) if (x <= T[i][0]) { const a = T[i - 1], b = T[i]; return a[1] + ((b[1] - a[1]) * (x - a[0])) / (b[0] - a[0]); }
@@ -345,6 +348,12 @@ export class Permits {
     return gone.length;
   }
   // the lapsed permits the desk has yet to mention (and forgets them once said)
+  // r2: the held permits the redrawn primitive areas changed (migrate-pma.js), each once: [{ ep, abs, to (a name | null) }]
+  takeRedrawn() {
+    const r = Array.isArray(this.s.redrawn) ? this.s.redrawn : []; if (!r.length) return [];
+    delete this.s.redrawn; this.write();
+    return r;
+  }
   takeLapsed() {
     const ids = this.s.lapsed; if (!ids.length) return [];
     const out = this.s.used.filter((p) => ids.includes(p.id));

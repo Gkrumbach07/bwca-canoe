@@ -9,6 +9,7 @@
 //
 //   const desk = new PermitDesk({ permits, outfitter, world, day, profile })
 //   desk.section(ep) → html      desk.act(act, id, ev) → bool (data-act="permit-*"; true when it was the desk's)
+//   desk.focusPma() → the primitive area chosen at the open counter's desk, or null (the maps pick it out)
 import { esc, plural, word } from './hud.js';
 import { KINDS, dateWords } from './permits.js';
 import { dateOfAbs } from './trip.js';
@@ -54,6 +55,8 @@ export class PermitDesk {
     if (P.sandbox) return '';
     at = Number(at);
     const today = P.today, rows = [];
+    // r2: an old season's permits, its primitive areas redrawn (migrate-pma.js)
+    for (const r of typeof P.takeRedrawn === 'function' ? P.takeRedrawn() : []) rows.push(`<p class="soft lapsed">The Forest Service redrew the primitive areas. Your permit for entry point ${r.ep}, ${esc(dateWords(r.abs, { weekday: false }))}, ${r.to ? `is for the ${esc(r.to)} now` : 'is an overnight one now'}.</p>`);
     for (const p of P.takeLapsed()) rows.push(`<p class="soft lapsed">Your permit for entry point ${p.ep}, ${esc(dateWords(p.abs, { weekday: false }))}, went unused.</p>`);
     const owed = P.owed();
     if (owed > 0) {
@@ -91,6 +94,13 @@ export class PermitDesk {
   }
   wrap(rows, at) {
     return `<div class="permitdesk" data-ep="${at}"><div class="lab">Permits</div>${rows.join('')}</div>`;
+  }
+  // r2: the primitive area picked at the desk (the counter open, a PMA permit chosen): the side map and the map table
+  // pick it out (counter-map.js, hud.js pmaFocus)
+  focusPma() {
+    const o = this.o, s = this.sel;
+    if (!o || !o.open || !o.at || !s || s.at !== o.at.ep || s.kind !== 'pma') return null;
+    return s.pma || null;
   }
   place(ep) { const e = this.permits.entry(ep); return e ? e.place || e.name : `entry point ${ep}`; }
   pmaName(id) { const a = this.permits.pmas().find((q) => q.id === id); return a ? a.name : id; }
