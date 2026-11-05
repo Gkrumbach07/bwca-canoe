@@ -3,8 +3,10 @@
 // bought at an outfitter's permit desk (permit-desk.js) from a calendar of what is left. Buying one for a later day
 // skips to it (one bunkhouse card however many nights). Day use is free and automatic: a push-off with no permit for
 // that landing and that day is a day trip, and still out after dark it is a ranger's fine, paid at a counter before the
-// next permit is sold. A PMA permit costs more and allows camping off the designated sites in one primitive management
-// area (pma.js). The first permit is free (stream C's onboarding grants it). Quetico per-night permits: not yet.
+// next permit is sold. A PMA permit allows camping off the designated sites in one primitive management area (pma.js).
+// Every permit is one flat price, every day of the year (the owner's call 2026-11-05): the busy months are dear only in
+// what is left, through the quotas and BOOK, never in dollars. The first permit is free (stream C's onboarding grants
+// it). Quetico per-night permits: not yet.
 //
 // What is left of a day: QUOTA[ep] (parties.js, recreation.gov's real daily quotas) less the parties booked in less the
 // permits you hold there that day. Booked: the share of the quota parties.js sends in that day before its render
@@ -22,7 +24,7 @@
 //
 //   permits.available(ep, abs) → { quota, booked, held, left, closed, mine } (booked + held ≤ quota; mine: you hold one)
 //   permits.calendar(ep, fromAbs, days = 28) → [{ abs, left, quota, price, closed, mine }]
-//   permits.price(kind, abs) → dollars
+//   permits.price(kind, abs) → dollars (PRICES: the same every day)
 //   permits.buy({ ep, abs, kind = 'overnight', pma = null, at }) → { ok, permit, why, words, skip (a Promise when it skips) }
 //   permits.grant({ ep, abs, kind = 'overnight', pma = null, from, why }) → permit (free)
 //   permits.held() → [permit] · permits.forTrip(ep, abs) → permit | null · permits.use(permit)
@@ -47,10 +49,11 @@ const KEEP_USED = 60;              // used and lapsed permits kept for the recor
 const KEEP_FINES = 30;
 const ICE_ELSE = { out: 120, in: 329 }; // a lake with no ice dates (season.js LOCAL_ICE's own defaults)
 
-// Tuning, in one table (the owner's call at the join): what a permit costs, and the ranger's fine.
+// Tuning, in one table: what a permit costs, and the ranger's fine. One flat price for either kind, any day of the year
+// (the owner's call 2026-11-05: scarcity in the busy months is how many are left, not the price).
 export const PRICES = {
-  overnight: { summer: 16, shoulder: 8 },   // June 1 – August 31; May and September–November
-  pma: { summer: 30, shoulder: 20 },
+  overnight: 6,
+  pma: 6,
   fine: 20,                                  // still out after dark on a day-use trip
 };
 // How full a day is booked, from the share of the quota the parties' schedule sends in that day (count / PARTIES.start
@@ -68,8 +71,6 @@ const curve = (T, x) => {
 };
 // parties.js fillOn, for the fallback with no schedule
 const fillOn = (doy) => curve(FILL, doy);
-const monthOf = (abs) => new Date(abs * 86400000).getUTCMonth(); // 0 = January
-export const isSummer = (abs) => { const m = monthOf(abs); return m >= 5 && m <= 7; };
 export const dateWords = (abs, { weekday = true } = {}) => { const { year, doy } = dateOfAbs(abs); return weekday ? `${weekdayOf(year, doy)} ${shortDate(year, doy)}` : shortDate(year, doy); };
 
 export class Permits {
@@ -159,8 +160,7 @@ export class Permits {
     return out;
   }
   price(kind = 'overnight', abs = this.today) {
-    const P = PRICES[kind] || PRICES.overnight;
-    return isSummer(abs) ? P.summer : P.shoulder;
+    return kind === 'pma' ? PRICES.pma : PRICES.overnight;
   }
 
   // --- what you hold ------------------------------------------------------------------------------------------------

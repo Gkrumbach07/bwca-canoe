@@ -1,7 +1,7 @@
 // Game-loop stream A's acceptance (docs/build/game-loop-brief.md, "Stream A: permits"): permits.js, permit-desk.js,
 // pma.js and the trip core's permit, in one headless Chromium against a running Vite.
 //   1. what is left: a July Saturday at Moose Lake (25) ≤ 3, a mid-September Tuesday ≥ 80 % of the quota, an ice day closed
-//   2. prices: July over May, a PMA over an overnight
+//   2. prices: one flat $6 for either kind, any day of the year (the owner's call 2026-11-05)
 //   3. at a counter: buy today (paid, held); buy today + 5: the skip (the clock that day at 07:00, rested, no trip)
 //   4. a push-off with the permit (trip.state.permit, not day use); with none: day use, past dusk one fine, the desk
 //      refuses until it is paid
@@ -101,7 +101,7 @@ try {
   result('1a a July Saturday at Moose Lake has ≤ 3 left', q.july.left <= 3, { left: q.july.left, quota: q.july.quota, booked: q.july.booked });
   result('1b a mid-September Tuesday at Moose Lake has ≥ 80 % of its quota left', q.sept.left >= 0.8 * q.sept.quota, { left: q.sept.left, quota: q.sept.quota });
   result('1c an ice day is closed', q.ice.closed && q.ice.left === 0 && q.iceSpring.closed, { jan: q.ice, apr10: q.iceSpring });
-  result('2 July over May; a PMA over an overnight', q.prices.july > q.prices.may && q.prices.pmaJuly > q.prices.july && q.prices.pmaMay > q.prices.may, q.prices);
+  result('2 one flat $6: July, May, September, a PMA alike', Object.values(q.prices).every((v) => v === 6), q.prices);
 
   // --- 8: the desk at the counter -----------------------------------------------------------------------------------------
   await page.evaluate(() => { const o = window.__game.outfitter; o.show(o.visit.landing, 'counter'); });
@@ -121,7 +121,7 @@ try {
   const pmaDesk = await page.evaluate(() => { const el = document.querySelector('#outfitter .permitdesk'); if (el) el.scrollIntoView({ block: 'start' }); return { pmaSelect: !!(el && el.querySelector('select[data-act="permit-pma"]')), buy: el ? el.querySelector('[data-act="permit-buy"]')?.textContent : null }; });
   await page.waitForTimeout(400);
   await shot(page, 'a-pma');
-  result('7′ the desk sells a primitive area permit: the area to pick, its price', pmaDesk.pmaSelect && /\$(20|30)/.test(pmaDesk.buy || ''), pmaDesk);
+  result('7′ the desk sells a primitive area permit: the area to pick, its price', pmaDesk.pmaSelect && /\$6\b/.test(pmaDesk.buy || ''), pmaDesk);
   await page.evaluate(() => { const o = window.__game.outfitter; o.act('permit-kind', 'overnight'); });
 
   // --- 3: buy today, then today + 5 (the skip) ------------------------------------------------------------------------------
