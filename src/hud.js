@@ -932,7 +932,8 @@ export class Hud {
   updatePrompt(ctx) {
     const { player, fishing } = ctx, e = this.el;
     const fu = fishing ? fishing.ui : null;
-    const p = player.prompt || (fu && fu.message ? { key: null, text: fu.message } : null);
+    const veiled = !!(this.veil && this.veil.cur); // a card on the veil (the bunk night, an evacuation) is the screen's
+    const p = veiled ? null : player.prompt || (fu && fu.message ? { key: null, text: fu.message } : null);
     this.el.air.classList.toggle('prompt', !!p); // the action line owns the bottom row: the journal lines lift
     if (!p) { e.prompt.classList.remove('show'); return; }
     const key = p.key ? `<kbd>${esc(p.key)}</kbd>` : '';
