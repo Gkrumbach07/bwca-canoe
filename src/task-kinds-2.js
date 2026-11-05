@@ -58,9 +58,9 @@ const onFoot = (p) => p.mode === 'walk' && !p.teleporting;
 const byDay = (T) => { const d = T.day; return !d || (d.hours >= 7 && d.hours <= 20.5); };
 // a campsite's ring: tight where you know it, else the part of the lake the notice names
 function siteRing(T, i, lakeId, feature, label = null) {
-  const s = T.world.campsites[i];
+  const s = T.world.campsites[i], f = s && s.fire ? s.fire : s; // round 2 markers: the ring where the fire ring is (world.js c.fire)
   if (!s) return null;
-  if (feature === 'island' || T.known(s.x, s.z)) return { x: s.x, z: s.z, r: TIGHT, label: label || SITE_LABEL[feature] || 'the campsite', tight: true };
+  if (feature === 'island' || T.known(s.x, s.z)) return { x: f.x, z: f.z, r: TIGHT, label: label || SITE_LABEL[feature] || 'the campsite', tight: true };
   return T.hintFor(lakeId, s, AREA_LABEL[feature] || null);
 }
 // campsites a band's notice may name (as task-kinds.js siteCands): [{ s, i, d, hops, lakeId }]
