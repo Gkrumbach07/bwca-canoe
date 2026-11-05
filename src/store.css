@@ -79,6 +79,7 @@
 #outfitter.paper.st-counter .sidemap .key i { display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px; border-radius: 50%; border: 1.3px solid var(--ink); font: 700 8.5px/1 var(--sc); font-style: normal; color: var(--ink); letter-spacing: 0; background: var(--paper-card); }
 #outfitter.paper.st-counter .sidemap .key .here i { border-color: var(--map-red); color: var(--map-red); font-size: 10px; }
 #outfitter.paper.st-counter .sidemap .key .new i { border-color: var(--map-red); color: var(--map-red); }
+#outfitter.paper.st-counter .sidemap .key .th i { border-radius: 1px; width: 14px; height: 14px; border-color: var(--ink-soft); color: var(--ink-soft); } /* (game-loop round: a trailhead) */
 #outfitter.paper.st-counter .sidemap .key .fare b { font: 600 17px/1 var(--pencil-font); color: var(--pencil); letter-spacing: 0; }
 
 /* the keeper's rate card: a ruled ledger page with a red margin */

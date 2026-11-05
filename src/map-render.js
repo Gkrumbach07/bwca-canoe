@@ -15,6 +15,7 @@
 // Shared by the HUD's map (hud.js), the book's map tab, the lake page's portrait (map-book.js) and anyone else who wants
 // a piece of the map on a canvas: drawRegion(canvas, world, view, opts) (below) draws a region with markers.
 import { BURNS, burnDate } from './burns.js';
+import { isOutfitter } from './outfitters.js'; // the game-loop round: an outfitter's dock, or a trailhead's sign
 
 export const FT = 0.3048;
 export const INK = {
@@ -683,7 +684,7 @@ export function drawRegion(canvas, world, view, opts = {}) {
   if (opts.burns) paintBurns(ctx, v, burnsInView(v, W, H), k);
   if (opts.boundary !== false) { if (BOUNDARY.ready) paintBoundary(ctx, v, k); else loadBoundary(); }
   if (opts.names !== false) paintLakeNames(ctx, world, v, W, H, { k, detail });
-  if (opts.docks !== false) for (const ep of world.entryPoints) { const [a, b] = toPx(ep.x, ep.z); if (a > -20 && b > -20 && a < W + 20 && b < H + 20) paintDock(ctx, a, b, k); }
+  if (opts.docks !== false) for (const ep of world.entryPoints) { const [a, b] = toPx(ep.x, ep.z); if (a > -20 && b > -20 && a < W + 20 && b < H + 20) paintEntry(ctx, a, b, k, ep.ep); }
   if (opts.route && opts.route.length > 1) {
     ctx.beginPath(); opts.route.forEach(([x, z], i) => { const [a, b] = toPx(x, z); if (i) ctx.lineTo(a, b); else ctx.moveTo(a, b); });
     ctx.strokeStyle = 'rgba(54, 46, 38, 0.86)'; ctx.lineWidth = 2 * k; ctx.lineCap = ctx.lineJoin = 'round'; ctx.setLineDash([6 * k, 4 * k]); ctx.stroke(); ctx.setLineDash([]);
@@ -817,6 +818,15 @@ export function paintDock(ctx, a, b, k = 1) {
   ctx.beginPath(); ctx.moveTo(-5.5, 3); ctx.lineTo(0, -1.5); ctx.lineTo(5.5, 3); ctx.closePath(); ctx.fill();
   ctx.restore();
 }
+// The game-loop round: a trailhead (no outfitter) is a small brown Forest Service sign on its post, an outfitter its dock
+export function paintTrailhead(ctx, a, b, k = 1) {
+  ctx.save(); ctx.translate(a, b); ctx.scale(k, k);
+  ctx.fillStyle = '#5e4630'; ctx.fillRect(-0.8, -2, 1.6, 9);
+  ctx.fillStyle = '#6b4f33'; ctx.fillRect(-4.5, -7.5, 9, 6);
+  ctx.strokeStyle = '#e8dcbc'; ctx.lineWidth = 0.9; ctx.strokeRect(-3.6, -6.6, 7.2, 4.2);
+  ctx.restore();
+}
+export function paintEntry(ctx, a, b, k = 1, ep = null) { if (ep != null && !isOutfitter(ep)) paintTrailhead(ctx, a, b, k); else paintDock(ctx, a, b, k); }
 // a marker for drawRegion's callers
 export function paintMarker(ctx, m, [a, b], k = 1) {
   const col = m.color || INK.red, r = (m.r || 5) * k;
