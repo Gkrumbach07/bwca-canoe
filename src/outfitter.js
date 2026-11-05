@@ -124,6 +124,16 @@ const HOT = {
 const SHELF_OF = { food: 'food', tackle: 'tackle', gear: 'gear', wall: 'lure' };
 const SHELF_LOOK = { food: 'shelf', tackle: 'shelf', gear: 'shelf', lure: 'pegs', map: 'table' };
 
+// the line for a push-off taken back (trip.js takeBack's report): no trip in the logbook, and what became of the permit
+export function takeBackWords(r, l = null) {
+  if (!r) return '';
+  const here = l && l.name ? ` at ${l.name}` : '';
+  const pm = r.permit;
+  const paper = pm ? (r.kept ? ' Your permit is still good today.' : ' Its day is gone, and the permit with it.') : '';
+  const fine = r.fined ? " The ranger's fine still stands." : '';
+  return `Back${here} without going anywhere: a short outing, not a trip, and nothing in the logbook.${paper}${fine}`;
+}
+
 export class Outfitter {
   // targets: { energy, tasks, hud, day, stats, onTeleport, trip (trip.js), veil (veil.js) }; the profile (profile.js),
   // the shop (shop.js) and the rides (stream C's rides.js) are set on it after (main.js)
@@ -494,11 +504,14 @@ export class Outfitter {
     this.hud.note(`Came in at ${l.name}: ${days} ${plural(days, 'day')} out from ${from}${kmW}. The trip is in your logbook.`, 6);
     this.save();
   }
-  // back at the landing the trip left without having gone anywhere: no trip after all
+  // back at the landing the trip left without having gone anywhere: no trip after all, said in one line there and then
+  // (the game-loop playthrough: it used to happen silently): a short outing, not a trip; the permit is in your pocket again
   takeBack(l) {
-    if (this.core && typeof this.core.takeBack === 'function') this.core.takeBack();
+    const r = this.core && typeof this.core.takeBack === 'function' ? this.core.takeBack() : null;
     this.trip = { active: false, ep: null, days: this.foodRoom, started: null, startAbs: 0, turnedIn: 0 };
     this.at = l;
+    const line = r ? takeBackWords(r, l) : '';
+    if (line) this.hud.note(line, 7);
     this.save();
   }
 
