@@ -134,6 +134,7 @@ const WALK_V = 1.15;                 // m/s (real) a person walks between things
 const WALK_SPEC = Object.freeze({ pose: 'walk' });
 const AISLE = { back: -1.7, front: 2.5 }; // the store's cross aisles (b, its own frame): behind the shelves and before them
 const DOOR_A = -0.25;                // the door (a)
+const ST_HD = 4.0;                   // the store's front wall (b): props.js ST.hD
 // what each wants to be at, by weight (smart.js ranks them each five minutes)
 const STORE_WANTS = {
   in: { browse: 3, pay: 1.1, read: 1.3, look: 1.4, wall: 0.8, warm: 0.3, rail: 0.4 },
@@ -328,8 +329,10 @@ const SPOTS = {
   counterEnd: { a: 2.2, b: -1.95, face: [-0.35, -0.94], pose: 'stand' },
   bench: { a: 1.45, b: 4.36, face: [0, 1], pose: 'sit', seat: 0.46, porch: true },
   bench2: { a: 2.1, b: 4.36, face: [0, 1], pose: 'sit', seat: 0.46, porch: true },
-  rail: { a: -2.1, b: 5.25, face: [0.2, 1], pose: 'stand', porch: true, y: -0.04 },
-  rail2: { a: -1.45, b: 5.3, face: [-0.35, 1], pose: 'stand', porch: true, y: -0.04 },
+  // (the game-loop play: the rail spots stood at the head of the steps; the porch's steps now run across its whole
+  // front, props.js porchAndSteps, so they lean on the rails at its two ends, looking out past them to the lake)
+  rail: { a: -2.75, b: 5.05, face: [-0.45, 1], pose: 'stand', porch: true, y: -0.04 },
+  rail2: { a: 2.75, b: 5.1, face: [0.45, 1], pose: 'stand', porch: true, y: -0.04 },
 };
 const PORCH_FALLBACK = { bench: 'chair', bench2: 'stove', rail: 'board', rail2: 'mid' };
 
@@ -1460,10 +1463,61 @@ export class People {
     // line off the end
     const berths = (L.dockBerths || []).map((q) => ({ x: q.deck.x, z: q.deck.z, y: q.deck.y, heading: Math.atan2(-(q.side.z - q.deck.z), q.side.x - q.deck.x), deck: true }));
     if (berths.length) { reg('load', berths); reg('unload', berths); }
-    const g = (q) => (q ? { x: q.x, z: q.z, y: this.groundAt(L, q.x, q.z), heading: L.dockHeading ?? 0, yard: true } : null);
-    const wait = [g(L.dockFoot), g(L.dockLand), g(L.stepsFoot)].filter(Boolean);
+    // (the game-loop play: a party of six stood on the porch and in the doorway, and the wait spots were the dock's foot,
+    // its land end and the foot of the steps: the way up from the dock to the door. They wait in the yard beside it.)
+    const wait = this.yardSpots(L);
     if (wait.length) reg('wait', wait);
     if (L.dockBerths && L.dockBerths[2]) { const q = L.dockBerths[2].deck; reg('fish', [{ x: q.x, z: q.z, y: q.y, heading: L.dockHeading ?? 0, deck: true }]); }
+  }
+  // the way from the dock up to the door (the store's frame): a lane down the middle of the flight to the dock's line
+  // and on to the water, and the porch between the flight's head and the door. Nobody of the store's stands in it.
+  laneOf(L) {
+    const st = L.stairs || {}, ca = Number.isFinite(st.a) ? st.a : DOOR_A, hw = Math.max(0.8, (st.width || 1.5) / 2);
+    const fr = this.frameOf(L), dock = L.dockLand ? fr.ab(L.dockLand.x, L.dockLand.z) : { a: ca, b: 12 };
+    return { ca, hw, fr, dock, foot: Number.isFinite(st.foot) ? st.foot : 6 };
+  }
+  inLane(L, x, z) {
+    const { ca, hw, fr, dock, foot } = this.laneOf(L), q = fr.ab(x, z), wh = Math.min(hw, 1.6); // (on the deck: the way to the door, not the whole porch)
+    // the flight (from the deck's front to its foot), and on the deck the way narrowing from the flight's head to the door
+    const deck = ST_HD + (L.look && L.look.porch ? 1.8 : 1.2);
+    if (q.b >= deck && q.b < foot + 0.4 && Math.abs(q.a - ca) < hw + 0.35) return true;
+    if (q.b > 3.6 && q.b < deck) { const t = clamp((q.b - ST_HD) / (deck - ST_HD), 0, 1), mid = DOOR_A + (ca - DOOR_A) * t, half = 0.6 + (wh - 0.6) * t; return Math.abs(q.a - mid) < half + 0.35; }
+    if (q.b >= foot && q.b < dock.b + 0.5) { const t = Math.min(1, (q.b - foot) / Math.max(1, dock.b - foot)), mid = ca + (dock.a - ca) * t, half = wh + (1 - wh) * t; return Math.abs(q.a - mid) < half + 0.35; } // (from the flight's foot to the dock: a path 3 m wide narrowing to the dock's 2)
+    return false;
+  }
+  // where people about the store stand to wait out of the way: the yard beside the foot of the steps and at the porch's
+  // ends, and along the store's sides; never in the lane (inLane)
+  yardSpots(L) {
+    if (!L.axes) return [];
+    const { ca, hw, fr, foot } = this.laneOf(L), out = [], face = Math.atan2(-(L.axes.b.z), L.axes.b.x); // (looking down to the lake)
+    const want = [[ca - hw - 1.3, foot + 0.4], [ca + hw + 1.3, foot + 0.4], [-4.0, 5.2], [4.0, 5.2], [ca - hw - 2.6, foot - 0.6], [ca + hw + 2.6, foot - 0.6], [-4.2, 2.4], [4.2, 2.4]];
+    for (const [a, b] of want) {
+      const w = fr.w(a, b), y = this.groundAt(L, w.x, w.z);
+      if (this.inLane(L, w.x, w.z) || !Number.isFinite(y)) continue;
+      out.push({ x: w.x, z: w.z, y, heading: face, yard: true });
+    }
+    return out;
+  }
+  // when the yard is full: a step out of the lane to whichever side of it is nearer
+  besideLane(L, f) {
+    const { fr } = this.laneOf(L), q = fr.ab(f.x, f.z);
+    for (let k = 1; k <= 12; k++) for (const s of [1, -1]) {
+      const a = q.a + s * k * 0.5, w = fr.w(a, q.b);
+      if (!this.inLane(L, w.x, w.z)) { const onDeck = q.b > 3.6 && q.b < ST_HD + (L.look && L.look.porch ? 1.8 : 1.2) && Math.abs(a) < 3.05, y = onDeck ? L.floorY - 0.04 : this.groundAt(L, w.x, w.z); return { x: w.x, z: w.z, y, heading: f.heading, yard: true }; }
+    }
+    return null;
+  }
+  // a yard spot nobody else stands at or is going to, the nearest to f
+  spareSpot(L, figs, f) {
+    let c = this.yardCache || (this.yardCache = new WeakMap()), list = c.get(L);
+    if (!list) { list = this.yardSpots(L); c.set(L, list); }
+    const busy = figs.map(([, g]) => g).filter((g) => g !== f).flatMap((g) => [g, g.goal].filter(Boolean));
+    let best = null, bd = Infinity;
+    for (const q of list) {
+      if (busy.some((g) => Math.hypot(g.x - q.x, g.z - q.z) < 0.7)) continue;
+      const d = Math.hypot(q.x - f.x, q.z - f.z); if (d < bd) { bd = d; best = q; }
+    }
+    return best;
   }
   groundAt(L, x, z) { let y = null; try { y = this.ground ? this.ground(x, z) : null; } catch { y = null; } return Number.isFinite(y) ? y : Number.isFinite(L.floorY) ? L.floorY - (L.site && L.site.rise ? L.site.rise : 0.6) : (this.world.heightAt ? this.world.heightAt(x, z) : 0); }
   // everyone at the store at something this step, and walking there
@@ -1496,6 +1550,11 @@ export class People {
           else f.path = this.route(L, f, goal);
           f.fresh = false;
         }
+      } else if (!f.path && L.axes && this.inLane(L, f.x, f.z)) { // nothing free, and standing in the way (come in at the
+        // door, say): out of the way to a spare spot in the yard (the game-loop play: six in the doorway and on the porch)
+        const q = this.spareSpot(L, figs, f) || this.besideLane(L, f);
+        if (q) { f.at = null; f.act = 'wait'; f.goal = { ...q, spec: { pose: 'stand', lean: 0.02 } }; if (snap) this.settle(f); else f.path = this.route(L, f, f.goal); }
+        f.fresh = false;
       } else if (f.fresh) { f.fresh = false; } // (nothing free: they stay where they stand)
       if (f.path && f.path.length) this.walkOn(f, dt);
     }
