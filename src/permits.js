@@ -356,6 +356,9 @@ export class Permits {
     const tr = this.t.trip, d = this.t.day, s = tr && tr.state, p = this.t.player || (tr && tr.player);
     if (!tr || !tr.active || !tr.adventure || !s || !s.dayUse || s.grandfathered || s.fined || !d) return false;
     if (tr.evacuating || (p && p.teleporting)) return false;
+    // a co-op guest's trip is the host's (coop-trip.js mirrors it): the ranger stops the host's canoe (the join's group permit)
+    const coop = typeof window !== 'undefined' && window.__game ? window.__game.coop : null;
+    if (coop && coop.role === 'guest' && this.grouped) return false;
     const since = s.since ? absDay(s.since.year, s.since.doy) : this.today;
     if (!(this.today > since || d.hours >= this.duskOf())) return false;
     return this.fine('dayuse');
