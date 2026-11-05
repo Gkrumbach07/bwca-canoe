@@ -154,7 +154,10 @@ function specFor(a, sl) {
   if (act === 'look') return { pose: 'counter', counter: 0.5, top: d.top || 0.82, lean: 0.24, pitch: 0.45 };
   if (act === 'browse') return { pose: 'browse', lean: 0.04, pitch: 0.12 };
   if (act === 'read' || act === 'wall') return { pose: 'stand', lean: 0.02, pitch: -0.06 };
-  if (act === 'load' || act === 'unload' || act === 'cook') return { pose: 'stoop' };
+  // (the game-loop play: the crews at a store's dock and a trailhead's lot stooped over nothing, no canoe drawn by them;
+  // they stoop only over a drawn canoe, a slot marked `canoe`, and otherwise stand by with an eye on the gear)
+  if (act === 'cook' || ((act === 'load' || act === 'unload') && sl.canoe)) return { pose: 'stoop' };
+  if (act === 'load' || act === 'unload') return { pose: 'stand', lean: 0.04, pitch: 0.18 };
   if (act === 'fish') return { pose: 'stand', lean: 0.05, hands: 'front', pitch: 0.25 };
   return { pose: 'stand', lean: 0.02 };
 }
@@ -428,7 +431,7 @@ function posePerson(body, spec, dt, sc = 1) {
   const walk = spec.pose === 'walk', stoop = spec.pose === 'stoop';
   const ph = walk ? (s.walk || 0) * (Math.PI / 0.72) : 0, swing = walk ? Math.sin(ph) : 0;
   const lean = (stoop ? 0.62 : walk ? 0.06 : spec.lean || 0.02) + 0.008 * br;
-  const pelvis = bodyQ(0.12 * yaw, 0.03 + lean * (stoop ? 0.55 : 0.3), 0), chest = bodyQ(0.35 * yaw + (walk ? 0.06 * swing : 0), lean, 0), head = bodyQ(yaw, pitch + 0.1 * lean + (spec.pitch || 0) - (stoop ? 0.35 : 0), 0);
+  const pelvis = bodyQ(0.12 * yaw, 0.03 + lean * (stoop ? 0.55 : 0.3), 0), chest = bodyQ(0.35 * yaw + (walk ? 0.06 * swing : 0), lean, 0), head = bodyQ(yaw, pitch + 0.1 * lean + (spec.pitch || 0) + (stoop ? 0.4 : 0), 0); // (stooping, the head down to the work: it was turned up, -0.35, and read as a face to the sky)
   const sway = spec.pose === 'counter' || walk ? 0 : 0.012 * Math.sin(s.shift);
   const bob = walk ? 0.022 * Math.abs(Math.cos(ph)) : stoop ? 0.07 : 0;
   P.setRoot(V(lean * 0.06 - (stoop ? 0.08 : 0), 0.925 - 0.02 + 0.05 - 0.004 * (0.5 + 0.5 * br) - (spec.pose === 'counter' ? 0.012 : 0) - bob, sway), pelvis);
