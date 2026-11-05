@@ -1,6 +1,6 @@
 // The new season as steps (the owner, 2026-11-01: "make the new season flow more of a wizard than all on one page"),
-// where the entry points stood beside the menu (title.js): where you start, when (a strip of the open-water months, any
-// month in Sandbox), then the season in a few lines and Start. One step at a time, Back and Next under it; ↑ ↓ move
+// where the entry points stood beside the menu (title.js): where you start (gl-c: a map of the outfitters, startmap.js,
+// not a list), when (a strip of the open-water months, any month in Sandbox), then the season in a few lines and Start. One step at a time, Back and Next under it; ↑ ↓ move
 // between the step's choices, Enter picks, Esc goes a step back. On the strip ← → move a day, Shift a week, Page Up and
 // Page Down a month, and a click or a drag picks the day under the pointer.
 //
@@ -16,14 +16,15 @@ import { FORAGE } from './forage.js';
 import { MONTHS, monthDay, dayOfYear, daysInYear } from './astro.js';
 import { longDate, shortDate } from './hud.js';
 import { START_MONEY } from './profile.js';
+import { StartMap, countryWords } from './startmap.js'; // gl-c: the start map
 
 const STEPS = ['home', 'date', 'sum'];
 const NAMES = { home: 'where you start', date: 'when', sum: 'ready' };
 const START_HOUR = 9;                 // a season begins at nine in the morning, at the store's door
 const OPEN = [4, 9];                  // the months a season can start in: May to October (Sandbox: any)
 const WAY = { adventure: 'Adventure: open trips, buy food, take notices', sandbox: 'Sandbox: the same lakes, with no limits' };
-// profile.js STARTER, in words
-const KIT_WORDS = 'an aluminium canoe, an ash paddle, a Duluth pack, an A-frame tent, water tablets, a jig, a Mepps and a dozen leeches';
+// items.js STARTER_KIT, in words (gl-c: no pack or tent of your own; the rentals are out, and the store sees to it)
+const KIT_WORDS = 'an aluminium canoe, an ash paddle, a food barrel, your sleeping bag, pad and clothes, a tarp, water tablets, a jig, a Mepps and a dozen leeches';
 const fahrenheit = (c) => Math.round(c * 9 / 5 + 32);
 const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
 
@@ -47,6 +48,9 @@ export class Wizard {
     this.pages = {};
     for (const s of STEPS) this.pages[s] = root.querySelector(`[data-step="${s}"]`);
     this.buildDate();
+    // gl-c: where you start, as a map of the outfitters (startmap.js); a pin picked is home, and on to the date
+    const holder = this.pages.home.querySelector('#start-map') || this.pages.home.appendChild(Object.assign(document.createElement('div'), { id: 'start-map' }));
+    this.map = new StartMap(holder, { world: title.world, onPick: (h) => this.choose(this.epOf(h.ep)) });
     this.sum = this.pages.sum.querySelector('.wsum');
     this.go = this.pages.sum.querySelector('#btn-start');
     this.navBack = root.querySelector('[data-w="back"]');
@@ -60,7 +64,7 @@ export class Wizard {
   open(mode = 'adventure', { home = null } = {}) {
     const was = this.mode;
     this.mode = mode === 'sandbox' ? 'sandbox' : 'adventure';
-    if (home) this.ep = home;
+    if (home) this.ep = this.homeFor(home);
     if (was !== this.mode || !this.inRange(this.start.doy)) { const g = nextGoodDate(); this.start = { year: g.year, doy: this.clamp(g.doy) }; }
     this.drawStrip();
     this.show(0);
@@ -74,6 +78,9 @@ export class Wizard {
     this.navNext.hidden = s === 'sum';
     this.navNext.disabled = s === 'home' && !this.ep;
     this.status.textContent = '';
+    this.root.classList.toggle('wmap', s === 'home');
+    if (this.t.el && this.t.el.shell) this.t.el.shell.classList.toggle('wizmap', s === 'home'); // (the band widens under the map)
+    if (s === 'home') this.map.open(this.ep ? this.ep.ep : null);
     this.markHome();
     if (s === 'date') this.setDate(this.start.doy);
     if (s === 'sum') this.writeSummary();
@@ -82,20 +89,28 @@ export class Wizard {
   next() { if (this.step === 0 && !this.ep) return; this.show(this.step + 1); }
   back() { if (this.step === 0) return false; this.show(this.step - 1); return true; }
   // an entry point picked: it is home, and on to the date
-  choose(ep) { this.ep = ep; this.show(1); }
-  markHome() {
-    for (const b of this.t.el.list.querySelectorAll('button')) b.classList.toggle('picked', !!this.ep && Number(b.dataset.ep) === this.ep.ep);
+  choose(ep) { if (!ep) return; this.ep = ep; this.show(1); }
+  // the world's entry point record for an outfitter's ep (title.newSeason teleports to it)
+  epOf(ep) { return this.t.world.entryPoints.find((e) => e.ep === Number(ep)) || null; }
+  // a home asked for (the season's own, or the default start): itself when an outfitter stands there, else the nearest
+  // outfitter's (gl-c: with stream B's fewer outfitters, an entry point may be a trailhead)
+  homeFor(ep) {
+    if (!ep) return null;
+    if (this.map.home(ep.ep)) return ep;
+    const h = this.map.nearestHome(ep.x, ep.z);
+    return h ? this.epOf(h.ep) || ep : ep;
   }
+  markHome() { this.map.mark(this.ep ? this.ep.ep : null); }
   focusFirst() {
     const s = STEPS[this.step];
-    if (s === 'home') { const b = this.t.el.list.querySelector('button.picked') || this.t.el.list.querySelector('small.home')?.parentElement || this.t.el.list.querySelector('button.current') || this.t.el.list.querySelector('button'); if (b) { b.focus(); b.scrollIntoView({ block: 'nearest' }); } }
+    if (s === 'home') this.map.focus(this.ep ? this.ep.ep : null);
     else if (s === 'date') this.cal.focus();
     else this.go.focus();
   }
   // the right column's items, top to bottom (title.js columns)
   focusables() {
     const s = STEPS[this.step], page = this.pages[s];
-    const inner = s === 'date' ? [this.cal] : [...page.querySelectorAll('button:not([disabled])')];
+    const inner = s === 'date' ? [this.cal] : s === 'home' ? [this.map.active].filter(Boolean) : [...page.querySelectorAll('button:not([disabled])')];
     return [...inner, ...[this.navBack, this.navNext].filter((b) => !b.hidden && !b.disabled)].filter((b) => b.offsetParent !== null);
   }
   busy(on) { for (const b of this.root.querySelectorAll('button')) b.disabled = on; if (!on) this.navNext.disabled = STEPS[this.step] === 'home' && !this.ep; }
@@ -206,8 +221,9 @@ export class Wizard {
     const w = bits.join(' · ');
     return w.charAt(0).toUpperCase() + w.slice(1);
   }
-  // a key on the strip; true when it was the strip's
+  // a key on the strip (or on the start map: its pins); true when it was the strip's
   key(ev) {
+    if (STEPS[this.step] === 'home') return this.map.key(ev);
     const day = { ArrowLeft: -1, ArrowRight: 1 }[ev.code];
     if (day) { ev.preventDefault(); this.setDate(this.start.doy + day * (ev.shiftKey ? 7 : 1)); return true; }
     if (ev.code === 'PageUp' || ev.code === 'PageDown') {
@@ -221,17 +237,22 @@ export class Wizard {
     return false;
   }
 
+  // "Loon Narrows Outfitters, Moose Lake, entry point 25"
+  homeWords(ep) { const h = this.map.home(ep.ep); return h ? `${h.name}, ${h.place}, entry point ${ep.ep}` : `${ep.name}, entry point ${ep.ep}`; }
+
   // --- the season in a few lines --------------------------------------------------------------------------------
   writeSummary() {
     const ep = this.ep, d = this.start;
     const rows = [
-      ['Home', ep ? `${ep.name}, entry point ${ep.ep}` : ''],
+      ['Home', ep ? this.homeWords(ep) : ''],
       ['Putting in', `${longDate(d.year, d.doy)}, ${d.year}, at ${START_HOUR} am`],
       ['', this.bringsWords(d.doy)],
       ['The way', WAY[this.mode]],
       ['To start', `$${START_MONEY} and the kit: ${KIT_WORDS}`],
     ];
     if (this.t.newIn) rows.push(['', 'The season under way is kept in its slot.']);
+    const h = ep ? this.map.home(ep.ep) : null;
+    if (h) rows.splice(1, 0, ['', countryWords(h.country)]);
     this.sum.replaceChildren(...rows.map(([k, v]) => { const r = el('div', k ? 'r' : 'r more'); r.append(el('span', 'k', k), el('span', 'v', v)); return r; }));
     this.go.textContent = this.mode === 'sandbox' ? 'Start the Sandbox' : 'Start the season';
   }

@@ -108,6 +108,9 @@ import { loadBurns, setBurnDate, burnStats, burnLook, eventsAt } from './burns.j
 import { BurnNotes } from './burn-notes.js'; // the real burns
 import { Permits } from './permits.js'; // gl-a: permits
 import { PermitDesk } from './permit-desk.js'; // gl-a: the permit desk
+import { story } from './story-hooks.js'; // gl-c: the story's event bus and saved state
+import { onboarding } from './onboarding.js'; // gl-c: the home counter's first visit, the old gear
+import { walt } from './walt.js'; // gl-c: the notebook in the old tent
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -1107,6 +1110,32 @@ async function main() {
       countryOf: (ep) => OF.countryOf(ep, world), roadKm: (a, b) => OF.roadKm(a, b, world), roadWay: (a, b) => OF.roadWay(a, b, world), premiumOf: OF.premiumOf, specialtyOf: OF.specialtyOf,
       outfitterHomes: () => OF.outfitterHomes(world), homeTurf: (ep) => OF.homeTurf(ep, world) };
     window.__game.trailhead = { trailheadLayout: TH.trailheadLayout, trailheadLayouts: TH.trailheadLayouts, trailheadAt: TH.trailheadAt, onTrailhead: TH.onTrailhead };
+  }
+  // gl-c: a new save and its first day (docs/build/game-loop-brief.md, stream C). The title's first step is a map of the
+  // outfitters (startmap.js in wizard.js). A season's first visit to the home counter opens the summer help's talk
+  // (onboarding.js): rentals are out, old gear from the back "if you're not going to need it", into the canoe at the dock,
+  // then the keeper's first permit (stream A's permits.grant, when there) and the counter. The first night in the old
+  // tent finds the notebook (walt.js, story-hooks.js); its Read is a paper of the story's pages. Old seasons are legacy.
+  {
+    story.attach({ profile });
+    onboarding.attach({ outfitter, profile, inventory, talk, hud, day, story, npcs, sheets, player, permits: () => (window.__game && window.__game.permits) || null });
+    walt.attach({ trip, camp, inventory, hud, veil, day, story, world, player });
+    const showC = outfitter.show.bind(outfitter);
+    onboarding.showCounter = (l) => showC(l, 'counter');
+    outfitter.show = (landing, tab = null, focus = null) => {
+      const t = tab || (outfitter.staged && outfitter.staged.tab) || 'counter';
+      if (landing && t === 'counter' && onboarding.pending(landing.ep) && !talk.talking) { outfitter.staged = null; if (onboarding.start(landing.ep)) return; }
+      return showC(landing, tab, focus);
+    };
+    const updC = outfitter.update.bind(outfitter);
+    outfitter.update = (dt) => { updC(dt); onboarding.update(dt); if (walt.paperOpen) player.input.paused = true; };
+    const verbC = inventory.verb.bind(inventory);
+    inventory.verb = (id, ref) => (id === 'read' ? walt.readVerb(ref) || verbC(id, ref) : verbC(id, ref)); // the notebook's Read
+    for (const m of walt.moments()) if (!MOMENTS.some((q) => q.id === m.id)) { const { due, ...rest } = m; void due; MOMENTS.push(rest); }
+    const waltM = new Map(walt.moments().map((m) => [m.id, m]));
+    const dueC = hints.due.bind(hints);
+    hints.due = (id, rec) => (waltM.has(id) ? waltM.get(id).due(rec) : dueC(id, rec)); // "The notebook: I, right-click it, Read."
+    Object.assign(window.__game, { story, onboarding, walt });
   }
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
 
