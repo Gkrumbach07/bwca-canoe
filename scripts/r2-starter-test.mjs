@@ -130,8 +130,8 @@ try {
     checks.push(c);
     log('  route', ep, JSON.stringify(c));
   }
-  result('1b every route: the site there, reached by water again with the same carries (150 rods at most in all), 0.8–7 km, a quiet site; a tent pad and a fire ring; afloat at its landing', checks.every((c) => c.pass), { bad: checks.filter((c) => !c.pass) });
-  result('1c most routes have no carry at all, and at most one where its water has a site past one short carry', checks.filter((c) => c.carries && !c.carries.length).length >= 10, { carries: checks.map((c) => [c.ep, c.carries]) });
+  if (ONLY !== 'seasons') result('1b every route: the site there, reached by water again with the same carries (150 rods at most in all), 0.8–7 km, a quiet site; a tent pad and a fire ring; afloat at its landing', checks.every((c) => c.pass), { bad: checks.filter((c) => !c.pass) });
+  if (ONLY !== 'seasons') result('1c most routes have no carry at all, and at most one where its water has a site past one short carry', checks.filter((c) => c.carries && !c.carries.length).length >= 10, { carries: checks.map((c) => [c.ep, c.carries]) });
 
   // --- 5 the start weather ---------------------------------------------------------------------------------------------
   const wx = await page.evaluate(() => {

@@ -13,8 +13,8 @@
 // latrine and tent pad (the 'starter' notice kind, task-kinds-2.js, the campsite check's own steps), $20, three days. It
 // is a suggestion: no marker, no nag, the player goes where they like; if they go elsewhere the notice just lapses (its
 // day passes like any notice's). Once per outfitter per season. The site is held for you while the suggestion stands
-// (parties.js mine: a party landing after it was suggested goes on to another site, as for a site you have left things
-// at), so the first night is not spoiled by a party camped there.
+// (parties.js mine, reaching back STARTER.clearH: the parties' sweep puts any party there, already camped or to come,
+// on another site, as for a site you have left things at), so the first night is not spoiled by a party camped there.
 //
 // The weather (weather.js GENTLE): the season's own seed (main.js), so a season can start grey or wet; over the first
 // trip (the start day and the two after, cut as the first trip with a night out ends) no thunderstorm and no wind that
@@ -41,6 +41,7 @@ export const STARTER = {
   gentleDays: 3,     // the start day and the two after: the first trip's kind weather, at most
   holdH: 72,         // game hours a suggested site is held for you from the suggestion (the notice's three days)
   noteH: 96,         // game hours the pencilled way stays on the map once its notice is gone (a suggestion not taken: this long)
+  clearH: 240,       // game hours before the suggestion the hold reaches back: a party camped there then goes elsewhere
 };
 const COMPASS = ['north', 'northeast', 'east', 'southeast', 'south', 'southwest', 'west', 'northwest'];
 const compass = (dx, dz) => COMPASS[Math.round((((Math.atan2(dx, -dz) * 180) / Math.PI + 360) % 360) / 45) % 8];
@@ -159,7 +160,9 @@ export class Starter {
     for (const k of Object.keys(this.state.offered)) {
       const ep = Number(k), r = this.route(ep), at = this.state.offered[k];
       if (!r || this.nowH - at > STARTER.holdH || !this.standing(ep)) continue;
-      out.push({ i: r.site, key: r.siteRec.key || `${Math.round(r.siteRec.x)}:${Math.round(r.siteRec.z)}`, since: at });
+      // (from before the suggestion: a party already camped there when it was made moves on too, out of sight, as the
+      // sweep is made again; the one who suggested it would not send you to a site with a party on it)
+      out.push({ i: r.site, key: r.siteRec.key || `${Math.round(r.siteRec.x)}:${Math.round(r.siteRec.z)}`, since: at - STARTER.clearH });
     }
     return out;
   }
