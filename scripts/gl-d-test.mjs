@@ -49,7 +49,7 @@ try {
   page.on('pageerror', (e) => { errors.push(e.message); log('pageerror', e.message); });
   page.on('console', (m) => { if (m.type() === 'error' || /gl-d|tasks\.on|record:/.test(m.text())) log(m.type(), m.text().slice(0, 300)); });
   await page.goto(APP);
-  await page.waitForFunction(() => window.__game && window.__game.title && window.__game.tasks, null, { timeout: 240000, polling: 500 });
+  await page.waitForFunction(() => window.__game && window.__game.title && window.__game.tasks && typeof window.__game.step === 'function', null, { timeout: 240000, polling: 500 });
   log('game loaded');
   const step = (n = 60) => page.evaluate(async (n) => { const g = window.__game; for (let k = 0; k < n; k += 600) { g.step(1 / 60, Math.min(600, n - k)); await new Promise((r) => setTimeout(r, 0)); } }, n);
   // a new Adventure season at Moose Lake (25), 10 July, in at the counter
@@ -58,6 +58,8 @@ try {
     const ep = g.world.entryPoints.find((e) => e.ep === 25);
     t.setPick('adventure');
     await t.newSeason(ep, { confirm: false, start: { year: 2026, doy: 191 } });
+    // (the join: the home counter's first-visit talk is stream C's, tested by gl-c-test; here it is over)
+    if (g.onboarding && g.onboarding.pending()) g.onboarding.finish(g.onboarding.home, false);
   });
   await page.waitForFunction(() => window.__game.title.state === 'game' && !window.__game.player.teleporting, null, { timeout: 120000, polling: 250 });
   await step(120);

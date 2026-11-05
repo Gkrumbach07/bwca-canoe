@@ -73,7 +73,7 @@ try {
   page.on('pageerror', (e) => log('pageerror', e.message));
   page.on('console', (m) => { if (m.type() === 'error') log('console', m.text().slice(0, 300)); });
   await page.goto(APP);
-  await page.waitForFunction(() => window.__game && window.__game.title && window.__game.trailhead && window.__game.outfitters, null, { timeout: 240000, polling: 500 });
+  await page.waitForFunction(() => window.__game && window.__game.title && window.__game.trailhead && window.__game.outfitters && typeof window.__game.step === 'function', null, { timeout: 240000, polling: 500 });
   await page.evaluate(HELPERS);
   log('game loaded');
 
@@ -255,7 +255,7 @@ try {
   });
   await page.waitForTimeout(1500); // (the store writes through to IndexedDB)
   await page.reload();
-  await page.waitForFunction(() => window.__game && window.__game.title && window.__game.trailhead, null, { timeout: 240000, polling: 500 });
+  await page.waitForFunction(() => window.__game && window.__game.title && window.__game.trailhead && typeof window.__game.step === 'function', null, { timeout: 240000, polling: 500 });
   await page.evaluate(HELPERS);
   const c7 = await page.evaluate(async () => {
     const g = window.__game, H = window.__glb, pr = g.profile;

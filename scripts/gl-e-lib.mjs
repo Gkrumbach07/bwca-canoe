@@ -30,7 +30,7 @@ export async function openGame(browser, { query = '', width = 1280, height = 800
   page.on('pageerror', (e) => log('pageerror', e.message));
   if (!quiet) page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') log(`console.${m.type()}`, m.text().slice(0, 300)); });
   await page.goto(`${APP}/${query}`);
-  await page.waitForFunction(() => window.__game && window.__game.title && window.__game.parties && window.__game.npcs, null, { timeout: 240000, polling: 500 });
+  await page.waitForFunction(() => window.__game && window.__game.title && window.__game.parties && window.__game.npcs && typeof window.__game.step === 'function', null, { timeout: 240000, polling: 500 });
   return page;
 }
 export const until = (page, fn, a, timeout = 60000) => page.waitForFunction(fn, a, { timeout, polling: 200 });
@@ -40,6 +40,8 @@ export async function seasonAt(page, { ep = 25, year = 2026, doy = 192, hours = 
     const g = window.__game, t = g.title, e = g.world.entryPoints.find((x) => x.ep === ep);
     t.setPick(mode);
     await t.newSeason(e, { confirm: false, start: { year, doy } });
+    // (the join: the home counter's first-visit talk is stream C's, tested by gl-c-test; here it is over)
+    if (g.onboarding && g.onboarding.pending()) g.onboarding.finish(g.onboarding.home, false);
   }, { ep, year, doy, mode });
   await until(page, () => window.__game.title.state === 'game' && !window.__game.player.teleporting, null, 180000);
   await page.evaluate(({ year, doy, hours }) => { const g = window.__game; if (g.outfitter.open) g.outfitter.hide(); g.day.setClock(year, doy, hours); }, { year, doy, hours });

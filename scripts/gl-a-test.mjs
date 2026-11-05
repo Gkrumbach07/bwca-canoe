@@ -41,7 +41,7 @@ page.on('pageerror', (e) => log('pageerror', e.message));
 page.on('console', (m) => { if (m.type() === 'error' || /permits/.test(m.text())) log(m.type(), m.text().slice(0, 300)); });
 const load = async () => {
   await page.goto(APP, { timeout: 180000 });
-  await page.waitForFunction(() => window.__game && window.__game.title && window.__game.permits, null, { timeout: 240000, polling: 500 });
+  await page.waitForFunction(() => window.__game && window.__game.title && window.__game.permits && typeof window.__game.step === 'function', null, { timeout: 240000, polling: 500 });
 };
 // a few frames of the game's own (the page's rAF runs too, headless)
 const frames = (n = 30, dt = 1 / 30) => page.evaluate(([n, dt]) => { for (let k = 0; k < n; k += 300) window.__game.step(dt, Math.min(300, n - k)); }, [n, dt]);
@@ -70,6 +70,8 @@ try {
     const g = window.__game, t = g.title, ep = g.world.entryPoints.find((e) => e.ep === home);
     t.setPick('adventure');
     await t.newSeason(ep, { confirm: false, start: { year: 2026, doy } });
+    // (the join: the home counter's first-visit talk is stream C's, tested by gl-c-test; here it is over)
+    if (g.onboarding && g.onboarding.pending()) g.onboarding.finish(g.onboarding.home, false);
   }, [HOME, START_DOY]);
   await until(page, () => window.__game.title.state === 'game' && !window.__game.player.teleporting && !!window.__game.outfitter.visit, null, 180000);
   await page.evaluate(() => { const o = window.__game.outfitter; if (o.open) o.hide(); });

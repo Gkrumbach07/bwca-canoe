@@ -58,7 +58,7 @@ async function openGame(name, init = null) {
   page.on('pageerror', (e) => { errors.push(`[${name}] ${e.message}`); log(`[${name}] pageerror`, e.message); });
   page.on('console', (m) => { if (m.type() === 'error') log(`[${name}] console.error`, m.text().slice(0, 300)); });
   await page.goto(APP, { timeout: 180000 });
-  await page.waitForFunction(() => window.__game && window.__game.title && window.__game.onboarding && window.__game.title.state === 'title', null, { timeout: 300000, polling: 500 });
+  await page.waitForFunction(() => window.__game && window.__game.title && window.__game.onboarding && window.__game.title.state === 'title' && typeof window.__game.step === 'function', null, { timeout: 300000, polling: 500 });
   log(`[${name}] loaded`);
   return { ctx, page };
 }
