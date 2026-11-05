@@ -422,6 +422,14 @@ export class Title {
     const at = start && Number.isFinite(start.year) && Number.isFinite(start.doy) ? start : null;
     if (at) { this.day.setClock(at.year, at.doy, START_HOUR); if (this.profile && this.profile.setStart) this.profile.setStart(at); }
     else { const now = new Date(); this.day.setClock(now.getFullYear(), dayOfYear(now), now.getHours() + now.getMinutes() / 60); }
+    // up since seven on the season's first morning. (The outfitter's newSeason reset the hours awake on the title's own
+    // clock, before the clock was set to the season's day: a July season begun in November read thousands of hours
+    // awake, and since the needs show between trips it began at the store's door with the bar at nothing and "No food
+    // and not much left in you".)
+    const en = this.outfitter && this.outfitter.energy;
+    // (saved again: a season begun into a slot is begun on a fresh page, whose outfitter.boot restores the energy from
+    // the save outfitter.newSeason wrote, after this)
+    if (en && Number.isFinite(en.now)) { en.awakeSince = en.now - Math.min(12, Math.max(0, this.day.hours - 7)); en.lastNow = en.now; if (this.outfitter.save) this.outfitter.save(); }
     this.day.running = true;
     if (this.chase.mode !== this.settings.get('camera')) this.chase.setMode(this.settings.get('camera'));
     this.close();
