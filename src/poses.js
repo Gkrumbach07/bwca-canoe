@@ -73,9 +73,126 @@ export function updateIdle(idle, dt, still) {
     if (idle.hold > 0 || !still) { idle.glanceYaw = 0; idle.glancePitch = 0; idle.hold = 0; idle.glanceT = 3 + Math.random() * 5; }
     else { idle.glanceYaw = (Math.random() * 2 - 1) * 0.75; idle.glancePitch = (Math.random() - 0.6) * 0.3; idle.hold = 1; idle.glanceT = 1.2 + Math.random() * 1.8; }
   }
-  const k = damp(still ? 3.2 : 6, dt);
-  idle.yaw += ((still ? idle.glanceYaw : 0) - idle.yaw) * k;
-  idle.pitch += ((still ? idle.glancePitch : 0) - idle.pitch) * k;
+  // r2 (NPC motion): idle.watch { yaw, pitch } (head angles in the body's frame), set by whoever drives the figure: what
+  // it looks at (you, near by; a store's keeper's customer) over the glance
+  const W = idle.watch, k = damp(W ? 4.5 : still ? 3.2 : 6, dt);
+  idle.yaw += ((W ? W.yaw : still ? idle.glanceYaw : 0) - idle.yaw) * k;
+  idle.pitch += ((W ? W.pitch : still ? idle.glancePitch : 0) - idle.pitch) * k;
+}
+
+// --- r2 (NPC motion): an idle with life, for the people the game drives (not the player) -------------------------------
+// The owner, 2026-11-05: "when they're not doing anything ... they're basically frozen ... their idle is very, very, very
+// idle." A body with body.life (makeLife(seed)) standing still shifts its weight from foot to foot every few seconds,
+// now and then takes a half step or turns a little where it stands (life.ox, oz, oh: the caller adds them to the
+// rig's place, the gait's settle steps take them), looks round with the chest as well as the head, and does something
+// with its hands: on the hips, in the pockets, arms crossed, a scratch of the head, a look at the watch, a stretch, a
+// swat at the bugs when they are out (LIFE_ENV.bugs, main.js), a crouch to check a pack. Each person's timing and
+// choices are their own (the seed). Walking, it all eases out.
+export const LIFE_ENV = { bugs: 0 };
+const GESTURES = [['hips', 3], ['pockets', 3], ['cross', 2.5], ['scratch', 1], ['watch', 0.8], ['stretch', 0.6], ['pack', 0.7], ['none', 4]];
+export function makeLife(seed = 1) {
+  let a = (seed * 2654435761) >>> 0 || 1;
+  const rnd = () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  return {
+    rnd, side: rnd() < 0.5 ? -1 : 1, shiftT: 1 + rnd() * 5, shift: 0, // the weight: on which foot, eased (shift -1..1)
+    g: null, gT: 2 + rnd() * 6, w: 0,                                  // the hands: the gesture under way and its weight
+    stepT: 6 + rnd() * 10, ox: 0, oz: 0, oh: 0, tx: 0, tz: 0, th: 0,   // the half step or the turn on the spot
+    lookT: 2 + rnd() * 4, look: 0, lookP: 0, crouch: 0, still: 0,
+    tempo: 0.8 + rnd() * 0.5,                                          // how restless they are
+  };
+}
+// a frame of it: still (standing, not at a job that holds the hands), dt real seconds
+export function lifeStep(L, dt, still, { hands = true } = {}) {
+  if (!L) return;
+  const r = L.rnd, tp = L.tempo;
+  L.still = still ? L.still + dt : 0;
+  // the weight from foot to foot
+  if ((L.shiftT -= dt * tp) <= 0) { L.side = -L.side; L.shiftT = 4 + r() * 6; }
+  L.shift += ((still ? L.side : 0) - L.shift) * damp(1.6, dt);
+  // the chest's own look round (the head's is the idle's glance)
+  if ((L.lookT -= dt * tp) <= 0) { const on = Math.abs(L.look) < 0.05 && r() < 0.6; L.look = on ? (r() * 2 - 1) * 0.5 : 0; L.lookP = on ? (r() - 0.5) * 0.12 : 0; L.lookT = on ? 1.5 + r() * 2.5 : 3 + r() * 5; }
+  // the hands
+  if (!still || !hands) { L.w = Math.max(0, L.w - dt * 2.5); if (L.w === 0) L.g = null; }
+  else {
+    if (L.g) {
+      L.g.t += dt;
+      const e = L.g.dur - L.g.t;
+      L.w = Math.min(1, L.w + dt * 2.2, Math.max(0, e * 1.6));
+      if (e <= 0) { L.g = null; L.w = 0; L.gT = 2 + r() * 7; }
+    } else if ((L.gT -= dt * tp) <= 0 && L.still > 1.2) {
+      const bugs = LIFE_ENV.bugs || 0;
+      let kind = 'none';
+      if (bugs > 0.25 && r() < 0.35 + 0.4 * bugs) kind = 'swat';
+      else { let sum = 0; for (const [, wt] of GESTURES) sum += wt; let x = r() * sum; for (const [k, wt] of GESTURES) { if ((x -= wt) <= 0) { kind = k; break; } } }
+      if (kind === 'none') L.gT = 2 + r() * 5;
+      else L.g = { kind, t: 0, dur: kind === 'swat' ? 1.2 + r() * 0.8 : kind === 'scratch' ? 1.6 + r() : kind === 'watch' ? 1.8 + r() : kind === 'stretch' ? 2.4 + r() : kind === 'pack' ? 3 + r() * 3 : 5 + r() * 9 };
+    }
+  }
+  L.crouch += ((L.g && L.g.kind === 'pack' ? L.w : 0) - L.crouch) * damp(4, dt);
+  // the half step or the turn where they stand: a new place a few dozen centimetres off, or a new facing, now and then
+  if (still && (L.stepT -= dt * tp) <= 0) {
+    L.stepT = 7 + r() * 12;
+    if (r() < 0.55) { const a = r() * Math.PI * 2, d = 0.12 + r() * 0.16; L.tx = Math.max(-0.3, Math.min(0.3, L.tx * 0.3 + Math.cos(a) * d)); L.tz = Math.max(-0.3, Math.min(0.3, L.tz * 0.3 + Math.sin(a) * d)); }
+    else L.th = Math.max(-0.6, Math.min(0.6, L.th * 0.3 + (r() * 2 - 1) * 0.55));
+  }
+  if (!still) { L.tx *= 1 - damp(2, dt); L.tz *= 1 - damp(2, dt); L.th *= 1 - damp(2, dt); }
+  // (eased, slower than a step: the feet's settle steps follow the rig there)
+  const k = damp(1.4, dt);
+  L.ox += (L.tx - L.ox) * k; L.oz += (L.tz - L.oz) * k; L.oh += (L.th - L.oh) * k;
+}
+// the hands at the gesture (figure space, the body already posed), weight L.w; the arms posed by the gait are blended
+// toward it bone by bone
+const ARM_BONES = ['armL', 'elbowL', 'foreL', 'twistL', 'handL', 'armR', 'elbowR', 'foreR', 'twistR', 'handR'];
+const _armQ = ARM_BONES.map(() => new THREE.Quaternion());
+export function snapArms(fig) { const b = fig.bones; ARM_BONES.forEach((n, i) => _armQ[i].copy(b[n].quaternion)); }
+export function blendArms(fig, w) { if (w >= 0.999) return; const b = fig.bones; ARM_BONES.forEach((n, i) => { const q = b[n].quaternion; q.copy(_armQ[i].slerp(q, w)); }); }
+export function lifeArms(body, L) {
+  if (!L || !L.g || L.w < 0.01) return;
+  const { P, J } = body, kind = L.g.kind, t = L.g.t, cq = J.chest.q;
+  const root = J.root.p, chest = J.chest.p, head = J.head.p;
+  snapArms(body.fig);
+  for (const [k, sg] of [['L', -1], ['R', 1]]) {
+    const sh = J['arm' + k].p;
+    let tgt = null, axis = V(1, 0, -sg * 0.15).applyQuaternion(cq), pole = V(sh.x - 0.3, sh.y - 0.25, sh.z + sg * 0.4), palm = V(0, 0, -sg);
+    if (kind === 'hips') { tgt = V(root.x - 0.02, root.y + 0.04, root.z + sg * 0.19); axis = V(0, -1, 0); pole = V(sh.x - 0.35, sh.y - 0.25, sh.z + sg * 0.55); palm = V(0, 0, -sg); }
+    else if (kind === 'pockets') { tgt = V(root.x + 0.07, root.y - 0.07, root.z + sg * 0.15); axis = V(0, -1, 0); pole = V(sh.x - 0.3, sh.y - 0.3, sh.z + sg * 0.3); }
+    else if (kind === 'cross') { tgt = V(chest.x + 0.2, chest.y - 0.13 + (k === 'L' ? 0.025 : 0), -sg * 0.09); axis = V(0, 0, -sg); pole = V(sh.x - 0.1, sh.y - 0.45, sh.z + sg * 0.25); palm = V(0, -1, 0); }
+    else if (kind === 'stretch') { const u = Math.sin(Math.PI * Math.min(1, t / L.g.dur)); tgt = V(chest.x + 0.02, head.y + 0.2 + 0.25 * u, sg * 0.16); axis = V(0, 0, -sg); pole = V(sh.x - 0.25, sh.y + 0.1, sh.z + sg * 0.4); palm = V(0, 1, 0); }
+    else if (kind === 'pack') { tgt = V(0.42, root.y - 0.55, sg * 0.16 + 0.04 * Math.sin(t * 3 + sg)); axis = V(0, 0, -sg); }
+    else if (kind === 'scratch' && k === 'R') { tgt = V(head.x - 0.03, head.y + 0.1 + 0.015 * Math.sin(t * 14), 0.07); axis = V(0, 0, -1); pole = V(sh.x - 0.05, sh.y - 0.15, sh.z + 0.5); palm = V(-1, 0, 0); }
+    else if (kind === 'watch' && k === 'L') { tgt = V(chest.x + 0.3, chest.y - 0.02, -0.02); axis = V(0, 0, 1); pole = V(sh.x - 0.1, sh.y - 0.35, sh.z - 0.3); palm = V(0, 1, 0); }
+    else if (kind === 'watch' && k === 'R') { tgt = V(chest.x + 0.24, chest.y - 0.08, 0.05); axis = V(0, -1, 0); }
+    else if (kind === 'swat' && k === 'R') { tgt = V(head.x + 0.22, head.y - 0.04 + 0.05 * Math.sin(t * 9), 0.12 + 0.16 * Math.sin(t * 11)); axis = V(0, 1, 0); pole = V(sh.x - 0.1, sh.y - 0.2, sh.z + 0.5); palm = V(-1, 0, 0); }
+    if (!tgt) continue;
+    P.arm(k, tgt, axis, pole, palm);
+  }
+  const w = L.w * L.w * (3 - 2 * L.w);
+  blendArms(body.fig, w);
+}
+// --- r2: a crossfade between two poses (a sit to a stand, a kneel in the hull from the step in over the gunwale): the
+// bones as they were when the pose changed, eased into the new one's over dur seconds (each frame after the new pose
+// is posed: fadeStep). The root's place is kept in the world (the figure may have moved frame: a person into a boat)
+export function poseSnap(fig, out = null) {
+  const b = fig.bones, o = out || { q: BONE_LIST.map(() => new THREE.Quaternion()), root: V(), t: 0, dur: 0.4, on: false };
+  BONE_LIST.forEach((n, i) => o.q[i].copy(b[n].quaternion));
+  fig.group.updateWorldMatrix(true, true); b.root.getWorldPosition(o.root);
+  o.t = 0; o.on = true;
+  return o;
+}
+const BONE_LIST = ['root', 'spine', 'chest', 'neck', 'head', 'clavL', 'armL', 'elbowL', 'foreL', 'twistL', 'handL', 'clavR', 'armR', 'elbowR', 'foreR', 'twistR', 'handR', 'thighL', 'kneeL', 'shinL', 'footL', 'toeL', 'thighR', 'kneeR', 'shinR', 'footR', 'toeR'];
+const _fv = V(), _fm = new THREE.Matrix4(), _fq = new THREE.Quaternion();
+export function fadeStep(fig, o, dt) {
+  if (!o || !o.on) return;
+  o.t += dt;
+  const u = Math.min(1, o.t / Math.max(1e-3, o.dur)), w = u * u * (3 - 2 * u);
+  if (u >= 1) { o.on = false; return; }
+  const b = fig.bones;
+  BONE_LIST.forEach((n, i) => { if (n === 'root') return; const q = b[n].quaternion; q.copy(_fq.copy(o.q[i]).slerp(q, w)); });
+  // the root: its turn eased from the old, its place from where it was in the world
+  const r = b.root;
+  r.quaternion.copy(_fq.copy(o.q[0]).slerp(r.quaternion, w));
+  const par = r.parent;
+  if (par) { par.updateWorldMatrix(true, false); _fv.copy(o.root).applyMatrix4(_fm.copy(par.matrixWorld).invert()); r.position.lerpVectors(_fv, r.position, w); }
 }
 
 // the figure's space and the rig's (the figure's matrix is kept current: placeFigure)
@@ -520,11 +637,16 @@ export function makeGait(body) {
       }
     } else if (!F.L.swing && !F.R.swing) {
       // standing: the foot furthest off its place under the hip (or turned from it) steps back to it, one at a time
+      // (r2: or with the ground under it moved: a finer tile come in, a spot moved, a floor given afresh; the owner,
+      // 2026-11-05, "sometimes I see them like embedded in the ground": the hips had sunk to reach feet left planted
+      // under the new ground. A small change steps; a big one is planted afresh where the foot stands)
       let worst = null, wv = 1;
       for (const k of ['L', 'R']) {
         const f = F[k], d = flatDist(f.pos, toWorld(restLocal(k), _v3)) / SETTLE.dist;
         const y = Math.abs(wrapPi(f.yaw - (h + (k === 'L' ? 0.08 : -0.08)))) / SETTLE.yaw;
-        const e = Math.max(d, y);
+        const gy = Math.abs(f.pos.y - ground(f.pos.x, f.pos.z));
+        if (gy > 0.25) { plantAt(f, f.pos, f.yaw); continue; }
+        const e = Math.max(d, y, gy / 0.035);
         if (e > wv) { wv = e; worst = k; }
       }
       if (worst) startSwing(F[worst], SETTLE.dur, SETTLE.clear);
@@ -599,7 +721,8 @@ export function makeGait(body) {
   // leaning back for the cast or into the fight (fz.lean), the head down to the lure (fz.look)
   function standingBody(dt, g, carry, fz = null) {
     const phi = g.phase, mw = g.mw, sp = g.sp * mw;
-    crouchK += ((carry || g.air ? 0 : state.crouch || 0) - crouchK) * damp(5, dt);
+    const life = body.life || null, lw = life ? 1 - mw : 0; // (r2: an idle with life, standing)
+    crouchK += ((carry || g.air ? 0 : Math.max(state.crouch || 0, life ? life.crouch : 0)) - crouchK) * damp(5, dt);
     const ck = ease(crouchK);
     const twoPi = Math.PI * 2;
     // in the air the ground is where the feet are (the rig rides the hop); otherwise the ground under the body
@@ -643,16 +766,19 @@ export function makeGait(body) {
     loco.hipY = Math.min(loco.hipY, cap + 0.008); // never past what the planted legs reach
     loco.hipW = loco.hipY + ry;
     // standing: the weight drifts slowly from foot to foot, the hips rolling a touch over the one that takes it
-    const swayZ = lerp(0.014 * Math.sin(idle.shift), -(0.024 * sp + 0.03 * mireK) * Math.sin(twoPi * (phi - 0.03)), mw);
-    const roll = lerp(-0.025 * Math.sin(idle.shift), (0.06 * sp + 0.07 * mireK) * Math.sin(twoPi * (phi - 0.03)), mw);
+    // (r2: with life the weight goes onto one foot and stays there a while, the hips out over it and rolled up on that side)
+    const still0 = life ? 0.045 * life.shift : 0.014 * Math.sin(idle.shift), roll0 = life ? -0.06 * life.shift : -0.025 * Math.sin(idle.shift);
+    const swayZ = lerp(still0, -(0.024 * sp + 0.03 * mireK) * Math.sin(twoPi * (phi - 0.03)), mw);
+    const roll = lerp(roll0, (0.06 * sp + 0.07 * mireK) * Math.sin(twoPi * (phi - 0.03)), mw);
     const pYaw = -0.11 * sp * Math.cos(twoPi * phi) * (g.backF ? -1 : 1);
     // the jog upright: a few degrees forward of the walk, no more
     const lean = (carry ? 0.1 : 0.03) + mw * (g.backF ? -0.05 : 0.045 * g.sp + 0.025 * g.hustle + 0.035 * g.jog + SLOPE.lean * smooth(0.05, SLOPE.full, loco.grade)) + 0.01 * Math.sin(idle.breath) + 0.07 * wadeK + 0.04 * mireK
-      + 0.12 * ease(state.land) + (g.air ? 0.06 : 0) + 0.1 * Math.sin(Math.PI * state.stagger) + 0.45 * ck;
+      + 0.12 * ease(state.land) + (g.air ? 0.06 : 0) + 0.1 * Math.sin(Math.PI * state.stagger) + 0.45 * ck + (state.lean || 0) * (1 - mw); // (r2: state.lean, a lean of its own standing: over a counter)
     const fy = fz ? 0.35 * (fz.yaw || 0) : 0, fl = fz ? 0.6 * (fz.lean || 0) : 0, fh = fz ? -0.18 * (fz.look || 0) : 0;
     const pelvis = bodyQ(yaw + pYaw + 0.25 * fy, 0.03 + lean * 0.3, roll);
-    const chest = bodyQ(-0.6 * pYaw + idle.yaw * 0.15 + fy, lean + fl, -0.4 * roll + 0.04 * g.mz * sp);
-    const head = bodyQ(idle.yaw * 0.85 + (fz ? 0.5 * (fz.yaw || 0) - 0.5 * fy : 0), (carry ? 0.22 : 0.02) - idle.pitch + 0.15 * lean + 0.2 * ck + fh, 0);
+    const ly = life ? lw * (life.look + 0.25 * idle.yaw) : 0, lp = life ? lw * life.lookP : 0;
+    const chest = bodyQ(-0.6 * pYaw + idle.yaw * 0.15 + fy + ly, lean + fl + lp, -0.4 * roll + 0.04 * g.mz * sp);
+    const head = bodyQ(idle.yaw * 0.85 + (fz ? 0.5 * (fz.yaw || 0) - 0.5 * fy : 0) - 0.5 * ly, (carry ? 0.22 : 0.02) - idle.pitch + 0.15 * lean + 0.2 * ck + fh + (life && life.g && life.g.kind === 'watch' ? 0.35 * life.w : 0) - (life && life.g && life.g.kind === 'stretch' ? 0.25 * life.w : 0), 0);
     const root = V(lean * 0.06, loco.hipY + ROOT_UP, swayZ);
     spine(P, root, pelvis, chest, head, { shrugL: 0.012 * Math.sin(idle.breath), shrugR: 0.012 * Math.sin(idle.breath) });
     // the legs to the feet, knees over the toes
@@ -695,10 +821,11 @@ export function makeGait(body) {
   // walking, jogging, a hop, a crouch, wading (moveKind 'wade'); the hands on the rod when fz (fishing.js's hands)
   function walk(dt, moveKind = null, fz = null) {
     updateIdle(idle, dt, state.walkSpeed < 0.2 && !fz);
+    if (body.life) lifeStep(body.life, dt, state.walkSpeed < 0.2 && !fz && !state.air, { hands: !body.handsBusy && !(state.crouch > 0.1) && !(state.held && (state.held.L || state.held.R)) });
     wadeK += ((moveKind === 'wade' ? 1 : 0) - wadeK) * damp(4, dt);
     const g = locomote(dt, false);
     standingBody(dt, g, false, fz);
-    if (fz) rodArms(body, fz); else swingArms(g);
+    if (fz) rodArms(body, fz); else { swingArms(g); if (body.life && !body.handsBusy) lifeArms(body, body.life); }
   }
 
   // the canoe overhead: the same feet under a heavier, shorter gait; the yoke's pads on the shoulders, the bow up a little
@@ -753,8 +880,8 @@ export function makeGait(body) {
 }
 
 // a pose body for a figure (figure.js buildFigure) standing in rig, posed from state (canoe.state's shape: newState)
-export function makeBody(fig, rig, state, { ground, terrain = null } = {}) {
-  return { fig, P: fig.poser, J: fig.joints, paddler: fig.group, rig, state, idle: makeIdle(), ground, terrain };
+export function makeBody(fig, rig, state, { ground, terrain = null, life = null } = {}) {
+  return { fig, P: fig.poser, J: fig.joints, paddler: fig.group, rig, state, idle: makeIdle(), ground, terrain, life, handsBusy: false };
 }
 // a fresh state of canoe.state's shape (canoe.js documents the fields)
 export function newState(over = {}) {
