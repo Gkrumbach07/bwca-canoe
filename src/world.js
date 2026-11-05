@@ -283,7 +283,7 @@ export class World extends GridQueries {
     for (const L of f.lakes || []) { const l = this.lakes[L.id - 1]; if (l) { l.displayName = L.displayName; lakes++; } }
     for (const q of f.portages || []) {
       const p = this.portages[q.i]; if (!p) continue;
-      if (q.renameOnly) { if (q.name) p.name = q.name; if (q.posted) p.posted = q.posted; portages++; continue; }
+      if (q.renameOnly) { if (q.name) { p.name = q.name; p.epName = true; } if (q.posted) p.posted = q.posted; portages++; continue; } // (epName: names.js's USFS table leaves the name alone)
       if (!q.pts || q.pts.length < 2 || !q.launch || q.launch.length < 2) continue;
       this.portages[q.i] = { name: q.name, lengthM: q.lengthM, rods: q.rods, posted: q.posted || null, pts: q.pts, launch: q.launch, ep: q.ep, was: { name: p.name, rods: p.rods } };
       portages++;
