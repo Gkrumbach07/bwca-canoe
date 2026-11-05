@@ -88,7 +88,9 @@ export function aboutHours(h) {
   return m < 60 ? `about ${m} min` : `about ${Math.floor(m / 60)} h${m % 60 ? ' ' + String(m % 60).padStart(2, '0') : ''}`;
 }
 // a thing's name in a prompt: "the Duluth pack #3", "the rod"
-const SHORT = { pack3: 'pack', pack4: 'big pack', barrel30: 'small barrel', barrel60: 'barrel', bucket: 'leech bucket', tacklebox: 'tackle box', mapcase: 'map case', stringer: 'stringer', rod: 'rod', rodmh: 'rod', ash: 'paddle', bentshaft: 'paddle', carbon: 'paddle', pile: 'things on the ground' };
+// (one name per thing, the game-loop play: a thing is called by its own name, as the book and the shop call it — never
+// "the small barrel" for the Blue barrel, 30 L; only a pile, which has no name of its own, is named here)
+const SHORT = { pile: 'things on the ground' };
 // (a hand's holder, stream B's 'inhand', is named by the thing in it: "the trail mix", not "the in your hand")
 // (a holder's thing, or a pile's one thing: fb4 join, "no room for the A-frame tent", not "the things on the ground")
 const short = (u) => { const g = u.obj.grid, e = (u.def.one || (u.id === 'pile' && g && g.length === 1)) && g && g[0], d = e && itemDef(e.id); return d ? lower(d.name) : SHORT[u.id] || lower(u.def.name); };

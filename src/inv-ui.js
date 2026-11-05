@@ -208,6 +208,10 @@ export function itemFor(it) {
   }
   return defineItem({ id: it.id, name: it.name, short: shortOf(it.name), kind: it.kind === 'lure' ? 'lure' : 'gear', w: 1, h: 1, kg: it.kg || 0.2, price: it.price || 0, icon: it.id, onYou: effectOnYou(it.effect) });
 }
+// a thing's label on its tile in a grid: its own name when that fits across the tile, the short form only on a tile too
+// narrow for it (the game-loop play: "Pot" on the tile and "Cook pot" over its grid read as two things; one name per thing)
+const NM_PX = 6.6; // px a letter of .ig-nm (700 10px small caps), with its spacing
+export const gridName = (d, w = 1) => { if (!d) return ''; const n = String(d.name || ''); return n && n.length * NM_PX <= w * CELL - 8 ? n : short(d); };
 export const shortOf = (name) => { const s = String(name || '').replace(/^(A|An|The) /, '').replace(/,.*$/, ''); const w = s.split(' '); return w.length > 2 ? w.slice(-2).join(' ') : s; };
 // the short name in an item's corner: its own, the stand-in's, else the last words of its name
 export const short = (d) => (d ? d.short || (LOCAL[d.id] && LOCAL[d.id].short) || (d.cooked && /^hot:/.test(d.id) && itemDef(d.cooked) ? `Hot ${lower(short(itemDef(d.cooked)))}` : shortOf(d.name)) : ''); // (a cooked meal: "Hot supper")
@@ -984,7 +988,7 @@ class Grid {
     it.dataset.uid = e.uid; it.dataset.id = e.id;
     const pic = iconAt(e.id, uw * CELL - 4, uh * CELL - 4); pic.className = `ig-pic${e.rot ? ' rot' : ''}`;
     it.appendChild(pic);
-    it.appendChild(mk('span', 'ig-nm', esc(short(d) || e.id)));
+    it.appendChild(mk('span', 'ig-nm', esc(gridName(d, w) || e.id)));
     const st = d ? d.stack || 1 : 1;
     if ((e.qty || 1) > 1 || st > 1) it.appendChild(mk('span', 'ig-qty', String(e.qty || 1)));
     if (e.data && Number.isFinite(e.data.length)) it.appendChild(mk('span', 'ig-qty ig-len', fmtIn(e.data.length))); // (tuning, the content join's leftover: a line above the raw or eat mark, not on it)
