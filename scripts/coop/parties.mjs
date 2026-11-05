@@ -150,7 +150,10 @@ try {
     await until(P, () => { const c = document.getElementById('coop-card'); return c && !c.hidden && document.getElementById('coop-code'); }, null, 60000);
     await P.fill('#coop-name', name);
     await P.click('#coop-go');
-    await until(P, () => window.__game.coop.role === 'guest' && window.__game.title.state === 'game' && !window.__game.player.teleporting, null, 300000);
+    try { await until(P, () => window.__game.coop.role === 'guest' && window.__game.title.state === 'game' && !window.__game.player.teleporting, null, 300000); } catch (e) {
+      log('the join did not settle', await P.evaluate(() => { const g = window.__game; return { role: g.coop.role, title: g.title.state, tp: g.player.teleporting, status: g.coop.status, err: (document.getElementById('coop-card') || {}).innerText }; }));
+      throw e;
+    }
     await until(P, () => window.__game.coopGive && window.__game.coopGive.mine, null, 300000);
     await P.evaluate(() => { const o = window.__game.outfitter; if (o.open) o.hide(); });
     guests.push({ P, name, own });
