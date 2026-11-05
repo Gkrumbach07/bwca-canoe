@@ -210,13 +210,15 @@ export class Trip {
     this.learn(ep);
     return this.close('completed', 'came in', ep);
   }
-  // back at the landing it left without having gone anywhere: no trip after all, and nothing in the logbook
+  // back at the landing it left without having gone anywhere: no trip after all, and nothing in the logbook.
+  // → false (no trip under way), else { permit (as it was used), kept (back in your pocket, still good), dayUse, fined }
   takeBack() {
     const s = this.state; if (!s.active) return false;
-    // the permit it took goes back in your pocket (still good today)
-    if (s.permit && this.permits && typeof this.permits.unuse === 'function') this.permits.unuse(s.permit.id);
+    // the permit it took goes back in your pocket (still good today; a day gone, it lapses)
+    const pm = s.permit, kept = !!(pm && this.permits && typeof this.permits.unuse === 'function' && this.permits.unuse(pm.id) && this.permits.held().some((p) => p.id === pm.id));
+    const out = { permit: pm ? { ...pm } : null, kept, dayUse: !!s.dayUse, fined: !!s.fined };
     s.active = false; s.camp = null; s.outcome = null; s.log = []; s.permit = null; s.dayUse = false; s.fined = false;
-    return true;
+    return out;
   }
   abandon() { return this.active ? this.close('abandoned', 'a new season begun', null) : null; }
   close(k, why, ep) {

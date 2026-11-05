@@ -50,6 +50,7 @@ const RANGE = 14000;         // metres from the landing, as the crow flies
 const BAND_KM = { local: 7000, medium: 9000 };
 const rangeOf = (band) => Math.min(RANGE, BAND_KM[band] ?? RANGE);
 const PICKUP = 4;            // metres within which E picks an item up
+const SPOT_R = 80;           // metres: no two notices send you within this of one place (spotTaken)
 const ARRIVE = 28;           // metres within which a survey point counts as reached
 const SLOTS = ['local', 'local', 'medium', 'far']; // the four pins on every board
 const BAND_HOPS = { item: { local: [0, 1], medium: [1, 2], far: [2, 4] }, survey: { local: [0, 1], medium: [1, 2], far: [2, 3] } };
@@ -253,7 +254,7 @@ registerKind('item', {
     const w = T.world, L = c.landing, [h0, h1] = BAND_HOPS.item[c.band], cands = [];
     w.campsites.forEach((s, i) => {
       const d = Math.hypot(s.x - L.x, s.z - L.z);
-      if (d > rangeOf(c.band) || T.used('item', i)) return;
+      if (d > rangeOf(c.band) || T.used('item', i) || (typeof T.siteOpen === 'function' && !T.siteOpen(s))) return;
       const r = c.reach.get(T.basinOf(T.lakeNear(s.x, s.z)));
       if (r && r.hops >= h0 && r.hops <= h1) cands.push({ s, i, d, hops: r.hops });
     });
@@ -592,6 +593,33 @@ export class Tasks {
     } catch { return null; }
   }
   used(kind, key) { for (const t of this.ads.values()) if (t.kind === kind && t.key === key) return true; return false; }
+  // (the game-loop playthrough: the locket's notice and the dry bag's both sent you to one NE Moose Lake site, and a party
+  // held it.) Where a notice sends you: its campsite, its spot or its target, { x, z, camp (the campsite, if one) } or null
+  spotOf(t) {
+    if (!t) return null;
+    const w = this.world, s = t.site;
+    const camp = typeof s === 'number' ? w.campsites[s] || null : null;
+    const at = camp || (s && Number.isFinite(s.x) && Number.isFinite(s.z) ? s : null) || (t.spot && Number.isFinite(t.spot.x) ? t.spot : null) || (t.target && Number.isFinite(t.target.x) ? t.target : null);
+    return at ? { x: at.x, z: at.z, camp } : null;
+  }
+  // another notice (on a pin, taken on, or done and not yet paid) already sends you within SPOT_R of (x, z)
+  spotTaken(x, z, except = null) {
+    for (const t of this.ads.values()) {
+      if (t === except || (except != null && t.id === except)) continue;
+      const q = this.spotOf(t);
+      if (q && Math.abs(q.x - x) < SPOT_R && Math.abs(q.z - z) < SPOT_R && Math.hypot(q.x - x, q.z - z) < SPOT_R) return true;
+    }
+    return false;
+  }
+  // a party holds the campsite today, or lands there later today (camp.js CampRegistry, parties.js)
+  partyHolds(site) {
+    const C = typeof window !== 'undefined' && window.__game ? window.__game.campsites : null;
+    if (!site || !C || typeof C.key !== 'function') return false;
+    const k = C.key(site), h = typeof C.holder === 'function' ? C.holder(k) : null;
+    return (h != null && String(h).startsWith('party:')) || !!(typeof C.spoken === 'function' && C.spoken(k));
+  }
+  // a campsite a new notice may send you to: no other notice there, and no party on it today
+  siteOpen(site) { return !!site && !this.spotTaken(site.x, site.z) && !this.partyHolds(site); }
   // The area a notice describes, for the map's ring: the part of the lake a spot is on (the bay, the arm, the stretch:
   // 400–700 m, the ring pushed out over the water so the spot sits inside it, off its middle), or without a spot the
   // lake's deep middle (a laker notice). Never the whole lake: a big lake gets its side named ("the northeast side").
@@ -614,7 +642,13 @@ export class Tasks {
   // the keeper's red pencil for a notice on the go (hud.js drawMap): { x, z, r, label, tight }. A known campsite or
   // landing is ringed tight and named; an unknown one by the area the notice describes; a lake-only notice by its
   // saved area (an old save's whole-lake hint is cut to 700 m).
+  // (the playthrough) a campsite a party holds today, or lands at later, is said so on the ring: the notice was written
+  // before they came
   targetOf(t) {
+    const r = this.ringOf(t), sp = r && t.status === 'open' ? this.spotOf(t) : null;
+    return sp && sp.camp && r.label && this.partyHolds(sp.camp) ? { ...r, label: `${r.label}: a party camps there today` } : r;
+  }
+  ringOf(t) {
     const own = KINDS[t.kind] && KINDS[t.kind].target; // content A: a kind's own ring (the Secchi station, the next lake of a route)
     if (own) { try { const r = own(this, t); if (r !== undefined) return r; } catch (e) { console.warn('the board: target', t.kind, e); } }
     const w = this.world, s = t.site;
@@ -711,6 +745,10 @@ export class Tasks {
     for (const kind of order) {
       const f = await kind.make(this, { ep, band, rng, landing, reach, board, turf: this.turfOf(ep) });
       if (!f) continue;
+      // never a second notice to one place, nor one to a campsite a party holds today (the kinds' own pickers mostly see
+      // to it; this catches the rest, a visitor's task written meanwhile among them)
+      const sp = this.spotOf(f);
+      if (sp && (this.spotTaken(sp.x, sp.z) || (sp.camp && this.partyHolds(sp.camp)))) continue;
       const t = { id: this.nextId++, kind: kind.key, from: ep, fromName: landing.name, band, status: 'offered', posted: this.today(), ...f };
       t.pay = kind.pay(t); t.clue = t.text;
       this.ads.set(t.id, t);

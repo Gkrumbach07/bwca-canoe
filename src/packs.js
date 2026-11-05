@@ -490,8 +490,20 @@ export class Packs {
       : { verb: 'Push it off', held: true, why: 'Too shallow to float it here', needs: [{ label: 'A hand’s depth of water under both ends', done: false }], next: `Shoulder it (${head ? 'E' : 'Q'}) and carry it along the shore to deeper water`, run: () => {} };
     // content join (the owner's call on the new-player review, 2026-10-25): at a trail head you landed to carry, so E is
     // Shoulder it and the push off is a held Q; everywhere else a held E pushes off and Q shoulders
-    if (head) return { e: shoulder, q: push, label: 'the canoe, beached' };
-    return { e: push, q: shoulder, label: 'the canoe, beached' };
+    const label = this.beachedWords(d);
+    if (head) return { e: shoulder, q: push, label };
+    return { e: push, q: shoulder, label };
+  }
+  // not afloat enough to get in, in words: 'the canoe, beached' only when an end rests on the ground; lying on the water
+  // all along (the reeds, a shallow flat: the game-loop playthrough's "beached" canoe floating among the cattails) it is
+  // in the shallows
+  beachedWords(d) { return this.onWater(d) ? 'the canoe, in the shallows' : 'the canoe, beached'; }
+  // the hull lying at d rests on the water at its bow, middle and stern (player.restHull's own test: the water's level
+  // over the ground there)
+  onWater(d) {
+    const w = this.world, h = d.heading || 0, fx = Math.cos(h), fz = -Math.sin(h);
+    const wet = (px, pz) => w.isReady(px, pz) && w.shoreAt(px, pz) < 0 && w.levelAt(px, pz) > w.heightAt(px, pz);
+    return wet(d.x, d.z) && wet(d.x + fx * END, d.z + fz * END) && wet(d.x - fx * END, d.z - fz * END);
   }
   // the canoe lying at d at a portage's end (the trail starts within 12 m of it: dropLaunch's test)
   atTrailHead(d) {

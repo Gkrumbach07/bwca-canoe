@@ -493,6 +493,7 @@ class Record {
       fish, seen: D ? D.seen.map((q) => ({ ...q })) : [], photos: D ? D.photos : this.printsIn(entry, end).length, photoOf: this.printsIn(entry, end).map((r) => r.kind).filter(Boolean).reverse(),
       bear: D && D.bear ? { ...D.bear } : null, // (a bear at camp, seen or not: the line's; seen, it is in seen too)
       notices, capsizes: log.filter((e) => e.k === 'capsize').length, evac: evac ? evac.why || 'spent' : null, partial: !!(D && D.partial) || !D,
+      fine: log.filter((e) => e.k === 'fine').reduce((a, e) => a + (Number(e.n) || 0), 0), // (the playthrough: a ranger's fine, said only at the counter)
       firsts: this.s.firsts.filter((f) => f.trip === s.id).map((f) => f.words),
     };
     c.line = this.lineOf(c);
@@ -519,6 +520,7 @@ class Record {
       total, purse0, purse1: purse1 != null ? purse1 : purse0 != null ? purse0 + total : null,
       km: c.km || 0, portages: portN, rods, inked, fish: F.n || 0, species: (F.sp || []).length, photos: c.photos || 0,
       firsts: (c.firsts || []).slice(), milestones: moved.slice(0, 2),
+      fine: c.fine || 0, // a ranger's fine on this trip: owed at a counter, not taken from the purse here
     };
   }
   // the season takes the trip's lakes, portages and campsites
@@ -931,6 +933,7 @@ class Record {
     const L = [];
     const line = (cls, lab, v, pay = 0) => L.push(`<li class="tl-l ${cls}${live ? '' : ' on'}"${pay ? ` data-pay="${pay}"` : ''}><span class="tl-k">${lab}</span><span class="tl-v">${v}</span></li>`);
     for (const n of T.pay || []) line('pay', `“${esc(n.title)}”`, `<span class="num">+${money(n.pay)}</span>`, n.pay);
+    if (T.fine) line('fine', 'A ranger’s fine: out after dark on day use', `<span class="num">${money(T.fine)}</span>, owed at a counter`);
     if (T.km >= 0.1) line('stat', 'Paddled', `<span class="num">${miles(T.km)}</span> mi`);
     if (T.portages) line('stat', cap(plural(T.portages, 'Portage')), `${word(T.portages)}${T.rods ? `, <span class="num">${T.rods}</span> rods` : ''}`);
     if (T.inked && T.inked.length) line('stat', 'New on the map', esc(T.inked.slice(0, 4).join(' · ') + (T.inked.length > 4 ? ` and ${word(T.inked.length - 4)} more` : '')));

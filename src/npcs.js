@@ -950,6 +950,12 @@ function doneRemark(t) {
 const statusWords = (t) => ({ fetch: `Any luck at ${t.toPlace}?`, npc: `Still got ${t.short || 'it'}? No rush.`, item: `Did you find the ${t.label}? It’s at the site, I’m sure of it.`, photo: 'Any luck with the picture?' }[t.kind] || 'No rush.');
 const aboutChoice = (t) => (t.kind === 'item' ? `About the ${t.label}…` : t.kind === 'photo' ? 'About the picture…' : `About ${t.short || 'the errand'}…`);
 
+// (the game-loop playthrough) a visitor's task that would send you where a notice already does, or to a campsite a party
+// holds today: not asked
+function spotClash(T, r) {
+  const sp = T && r && typeof T.spotOf === 'function' ? T.spotOf(r.fields) : null;
+  return !!(sp && (T.spotTaken(sp.x, sp.z) || (sp.camp && T.partyHolds(sp.camp))));
+}
 // What each one asks of you, and the words for it: make(people, person) → { kind, fields } | Promise of one | null
 const ASKS = {
   fetch(P, v, c) {
@@ -2119,7 +2125,7 @@ export class People {
     const job = this.prepare(v);
     const ready = () => {
       const r = job && job.result, k = r ? KINDS[r.kind] : null;
-      if (!r || !k) { v.hasTask = false; return { say: NO_TASK[v.arch] || 'No, I’m all right. Thanks, though.', choices: this.vChoices(v) }; }
+      if (!r || !k || spotClash(this.tasks, r)) { v.hasTask = false; return { say: NO_TASK[v.arch] || 'No, I’m all right. Thanks, though.', choices: this.vChoices(v) }; }
       let p = 0;
       try { p = k.pay({ kind: r.kind, from: v.ep, band: 'medium', ...r.fields }); } catch { p = 0; }
       return { say: `${r.ask}${p ? ` ${pay(p)}` : ''}`, choices: [
@@ -2735,6 +2741,8 @@ export class People {
     const T = this.tasks, k = KINDS[r.kind];
     T.board(v.ep); // the board kept first, so this is not pinned on it as an old save's notice would be
     if (!k) { v.hasTask = false; return null; }
+    // (the playthrough) not to a place a notice taken since already sends you, nor a campsite a party holds today
+    if (spotClash(T, r)) { v.hasTask = false; this.preparing.delete(v.key); return null; }
     const t = { id: T.nextId++, kind: r.kind, from: v.ep, fromName: T.landing(v.ep).name, band: 'medium', status: 'open', posted: T.today(), taken: T.today(), npc: v.key, npcName: v.name, ...r.fields };
     if (!t.sign) t.sign = v.name;
     t.pay = k.pay(t); t.clue = t.text;
