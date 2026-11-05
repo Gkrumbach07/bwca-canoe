@@ -12,8 +12,20 @@ import './flyers.css';
 // The board: notices pinned up at each outfitter, the tasks they set, and the money they pay.
 //
 // Every outfitter keeps its own cork board of four notices: two close by, one a day trip out, one far. One notice changes
-// each game day (a bare pin is filled first, else the oldest notice nobody took comes down), and nothing you take on
-// ever expires. A notice is one of the kinds in KINDS, a registry of { make, update, onEvent, pay }:
+// each game day (a bare pin is filled first, else the oldest notice nobody took comes down).
+//
+// gl-d, the trip-end tally (the game-loop round, 2026-11-05; docs/build/game-loop-brief.md stream D): you hold at most
+// LIMIT notices (take refuses a sixth with one line); each one taken has a deadline that fits it (KIND_DAYS: firewood in
+// 3 days, a route report in 14), and a day turn past it takes it back with a short line from whoever posted it ("Deb
+// got her walleye from the Hendersons."), no penalty, kept for the next tally and the journal (missed). Pay lands at
+// the trip's end, not at the board: settle({ ep, trip }) (record.js calls it as the trip ends) pays every notice done,
+// from any board, any kind, a visitor's too, before the tally counts it up; the fish a notice of the outfitter you came
+// in at still wants are handed over there by themselves (the smallest fitting first, as fishFor picks). A notice done
+// between trips (the berries at the counter, a fish handed over at the board) is paid there and then, in one line. The
+// board has no claim buttons; claim and turnIn stay as functions (co-op mirrors them).
+//
+//   tasks.LIMIT, tasks.held(), tasks.dueOf(t), tasks.daysLeft(t), tasks.settle({ ep, trip }) → { lines, missed, total },
+//   tasks.on('missed' | 'done' | 'settled' | 'paid', fn) → off, tasks.makeKind(kind, ep, band) (the console, the tests) A notice is one of the kinds in KINDS, a registry of { make, update, onEvent, pay }:
 // - fish for the café: any fish, a species, or a species of a size (lake trout only from water 18 m deep or more);
 // - a lost item at a campsite a few portages in (a small prop at the site's water edge; E picks it up);
 // - a portage to survey (walk it to its far landing, or find its landing).
@@ -47,6 +59,36 @@ const TROUT_WATER = 20;      // fishing.js bites lake trout only in lakes this d
 const LENGTH_SKEW = 1.7;     // fishing.js startBite: length = lerp(smallest, largest, random ^ 1.7)
 const SIZE_PCT = [0.6, 0.75]; // a size notice asks for a fish between these percentiles of the species' length
 const STANDING = 0.25;       // standing with an outfitter for each notice claimed there (profile.raise)
+// gl-d: notices held at once, and each kind's deadline in game days from the day it is taken (the owner's table,
+// docs/plans/campaigns.md "Board tasks"; the loon count's is its week)
+export const LIMIT = 5;
+export const KIND_DAYS = { fish: 3, lunch: 3, firewood: 3, berries: 5, item: 7, deadfall: 7, litter: 7, fetch: 7, npc: 7, survey: 10, secchi: 10,
+  creel: 10, campsite: 10, beaver: 10, colour: 10, report: 14, photo: 14, pma: 14, iceout: 5, lastcheck: 7, loons: 7 };
+const DAYS_ELSE = 7;
+const MISSED_KEEP = 30;      // the missed notices kept for the journal
+// a missed notice's line, by kind, from whoever posted it ({who}: the first word of the signature; {they}: someone else)
+const MISSED_WORDS = {
+  fish: ['{Who} got {her} {fish} from {they}.', '{Who} found {her} {fish} elsewhere: {they} brought one in.'],
+  lunch: ['The shore lunch went ahead with fish from {they}.'], iceout: ['The smokehouse got its lakers from {they}.'],
+  item: ['{Who} found it {themselves} in the end.', 'Somebody else brought it in.'],
+  survey: ['The trail crew walked it {themselves}.'], deadfall: ['The trail crew cleared it {themselves}.'], report: ['Word came down the route from {they}.'],
+  litter: ['A ranger packed the mess out.'], campsite: ['A ranger checked the site.'], lastcheck: ['The rangers made the last check {themselves}.'],
+  beaver: ['The dam report went in without you.'], pma: ['The survey crew walked the trail {themselves}.'],
+  secchi: ['The reading went in without you.'], loons: ['The count went in without your numbers.'], creel: ['The creel survey closed without you.'],
+  photo: ['They went with somebody else’s picture.'], colour: ['The magazine went with somebody else’s picture.'],
+  berries: ['The café found berries from {they}.'], firewood: ['Somebody else brought the wood in.'],
+  fetch: ['It came over on the road in the end.'], npc: ['{Who} found another way.'],
+};
+const THEY = ['the Hendersons', 'a party from Duluth', 'the Scouts', 'the Larsons', 'a couple from Iowa', 'a guide’s party'];
+const SHE = /^(Deb|Marge|Lorraine|Mrs|Ruth|Anna|Karen|Linda|Mary|Jean|Sue|Deborah|Ingrid|Elsa)/, HE = /^(Arnie|Hank|Bob|Jim|Olaf|Gus|Leif|Arvid|Mr)/;
+// gl-d: the kinds' own words (here and in the modules that wrote them before pay moved to the trip's end) said where a
+// notice is paid; they now say it pays when you come in
+const PAY_SAYS = [
+  [/\s*(?:[A-Z][^.]*?|They) pays? (?:for )?it at (?:their|its) (?:own )?counter, entry point \d+\./g, ' It pays when you come in.'],
+  [/\s*Claim it at the board\./g, ' It pays when you come in.'],
+];
+// (off a trip the pay follows at once, in its own line: then nothing is said of it)
+export function payWords(t, onTrip = true) { let s = String(t); for (const [re, w] of PAY_SAYS) s = s.replace(re, onTrip ? w : ''); return s.trim(); }
 const SPECIES_PAY = { perch: 12, crappie: 13, smallmouth: 14, pike: 15, walleye: 18, laketrout: 30 };
 const SIZE_PAY = 10;
 // The way out is paid as well as the work: lost items and surveys add this much a kilometre of the straight line from
@@ -261,8 +303,7 @@ registerKind('item', {
   use(T, t) {
     t.status = 'done'; T.removeProp(t.id);
     if (T.audio) T.audio.paddleDip();
-    const L = T.landing(t.from);
-    T.note(`You have the ${t.label}. Bring it back to ${L ? L.name : 'the outfitter'}, entry point ${t.from}.`);
+    T.note(`You have the ${t.label}. It pays when you come in.`); // gl-d: the tally pays it, wherever you come in
     T.changed(); T.boardChanged();
   },
   progress(t) { return `the ${t.label} is still out there`; },
@@ -309,8 +350,7 @@ registerKind('survey', {
     const p = T.player;
     if (t.target && Math.hypot(t.target.x - p.x, t.target.z - p.z) < ARRIVE) {
       t.status = 'done';
-      const L = T.landing(t.from);
-      T.note(`Noted. Tell ${L ? L.name : 'the outfitter'} what you saw: entry point ${t.from}.`);
+      T.note('Noted. It pays when you come in.'); // gl-d
       T.changed();
     }
   },
@@ -339,7 +379,125 @@ export class Tasks {
     this._graph = null;
     this.inReach = null;        // the notice whose E is offered this frame (kind.update sets it, before() acts on it)
     this.onNote = null; this.onChange = null; this.onBoard = null;
+    // gl-d: the notices gone past their day (kept for the tally and the journal), the listeners, the day last looked at
+    // for deadlines, and the notices already heard as done
+    this.missed = [];           // [{ id, kind, title, from, line, abs, told }]
+    this.handlers = new Map();
+    this.dueDay = null; this.doneSeen = new Set();
+    this.reachOf = null;        // gl-d: (ep) → [entry points] an outfitter serves (stream B's outfitters.js reachOf), when there is one
     injectCss();
+  }
+  // --- gl-d: listeners, held notices, deadlines ------------------------------------------------------------------------
+  on(evt, fn) { if (!this.handlers.has(evt)) this.handlers.set(evt, new Set()); this.handlers.get(evt).add(fn); return () => this.handlers.get(evt).delete(fn); }
+  emit(evt, data) { for (const fn of this.handlers.get(evt) || []) { try { fn(data, this); } catch (e) { console.warn('tasks.on', evt, e); } } }
+  get LIMIT() { return LIMIT; }
+  // the notices you hold: taken on and not yet paid (on the go or done), from any board or anyone
+  held() { return this.active; }
+  daysFor(t) { return KIND_DAYS[t && t.kind] ?? DAYS_ELSE; }
+  // the last day a notice may be done on (its taken day + its kind's days)
+  dueOf(t) { if (!t) return null; if (!Number.isFinite(t.due)) t.due = (Number.isFinite(t.taken) ? t.taken : this.today()) + this.daysFor(t); return t.due; }
+  daysLeft(t) { const d = this.dueOf(t); return d == null ? null : d - this.today(); }
+  // a co-op guest mirrors the host's notices: the host keeps their deadlines and their pay
+  get mirror() { const g = typeof window !== 'undefined' ? window.__game : null, c = g && g.coopTrip; return !!(c && c.mirroring); }
+  get tripActive() { const o = this.outfitter, g = typeof window !== 'undefined' ? window.__game : null, tr = (o && o.core) || (g && g.trip); return !!(tr && tr.active); } // (the trip core, trip.js)
+  // a notice whose day has gone: off the list, its prop lifted, a bare pin where it was, and its line kept
+  expire(today = this.today()) {
+    if (this.mirror) return [];
+    const gone = [];
+    for (const t of this.active) {
+      if (t.status !== 'open') continue;
+      if (this.dueOf(t) >= today) continue;
+      gone.push(t);
+    }
+    for (const t of gone) {
+      const k = KINDS[t.kind];
+      this.removeProp(t.id);
+      if (k && k.onDrop) { try { k.onDrop(this, t); } catch (e) { console.warn('the board: missed', t.kind, e); } }
+      this.ads.delete(t.id);
+      const b = this.boards[t.from]; if (b) { const i = b.slots.indexOf(t.id); if (i >= 0) b.slots[i] = null; }
+      const m = { id: t.id, kind: t.kind, title: t.title || 'A notice', from: t.from, npc: t.npc || null, line: this.missedLine(t), abs: today, told: false };
+      this.missed.push(m);
+      if (this.missed.length > MISSED_KEEP) this.missed.splice(0, this.missed.length - MISSED_KEEP);
+      this.note(`“${m.title}”: gone. ${m.line}`);
+      this.emit('missed', m);
+    }
+    if (gone.length) { this.changed(); this.boardChanged(); }
+    return gone;
+  }
+  // the line from whoever posted it: "Deb got her walleye from the Hendersons."
+  missedLine(t) {
+    const rng = mulberry32(((t.id * 2654435761) ^ 0x51ed) >>> 0);
+    const sign = String(t.npcName || t.sign || '').trim();
+    // who signed it, as it was signed ("Deb", "The smokehouse out back", "Mrs. Lindqvist", "Legion Post 248")
+    const who = sign ? cap(sign.split(',')[0].trim()) : t.npc ? 'They' : 'The counter';
+    const first = who.split(' ')[0];
+    const fish = t.species ? fishName(t.species) : 'fish';
+    const her = SHE.test(first) ? 'her' : HE.test(first) ? 'his' : 'their';
+    const line = pickR(rng, MISSED_WORDS[t.kind] || ['Somebody else saw to it.']);
+    return cap(fill(line.replace('{Who}', who).replace('{her}', her), { fish, they: pickR(rng, THEY), themselves: 'themselves' }));
+  }
+  // --- gl-d: pay at the trip's end --------------------------------------------------------------------------------------
+  // The tally's money: every notice done is paid (through the profile, as claim did), and a fish notice of the outfitter
+  // you came in at takes the fitting fish you have in reach first. Returns { lines, missed, total }; the money is in the
+  // purse before anything is drawn, so a reload in the middle of the tally loses nothing.
+  settle({ ep = null, trip = null } = {}) {
+    void trip;
+    if (this.mirror) return { lines: [], missed: [], total: 0 };
+    if (ep != null) for (const t of this.active) {
+      const k = KINDS[t.kind];
+      if (t.from !== ep || t.status !== 'open' || !k || !k.handsIn) continue;
+      const r = this.deliver(t);
+      if (r && r.n && (t.cooler || []).length >= (t.need || 1)) t.status = 'done';
+    }
+    const lines = [];
+    for (const t of this.active.filter((x) => x.status === 'done').sort((a, b) => a.id - b.id)) {
+      const pay = this.pay(t, t.from);
+      lines.push({ id: t.id, title: t.title || 'A notice', from: t.from, pay, kind: t.kind, npc: t.npc || null, npcName: t.npcName || null });
+      this.emit('paid', t);
+    }
+    const missed = this.missed.filter((m) => !m.told).map((m) => { m.told = true; return { id: m.id, title: m.title, line: m.line, kind: m.kind, from: m.from }; });
+    const total = lines.reduce((a, l) => a + l.pay, 0);
+    const out = { lines, missed, total };
+    if (lines.length || missed.length) { this.changed(); this.boardChanged(); }
+    this.emit('settled', out);
+    return out;
+  }
+  // a notice done between trips is paid where you are, in one line ("$12 for “Walleye wanted”.")
+  settleNow() {
+    if (this.mirror || this.tripActive) return null;
+    const done = this.active.filter((t) => t.status === 'done');
+    if (!done.length) return null;
+    const lines = done.map((t) => { const pay = this.pay(t, t.from); this.emit('paid', t); return { id: t.id, title: t.title || 'A notice', pay, from: t.from, kind: t.kind, npc: t.npc || null, npcName: t.npcName || null }; });
+    const total = lines.reduce((a, l) => a + l.pay, 0);
+    const words = lines.length === 1 ? `$${total} for “${lines[0].title}”.` : `$${total} for ${word(lines.length)} notices.`;
+    this.note(words);
+    this.changed(); this.boardChanged();
+    const out = { lines, missed: [], total, words, now: true };
+    this.emit('settled', out);
+    return out;
+  }
+  // a notice of one kind written for an outfitter's board (not pinned: the console's and the tests'), or null
+  async makeKind(kind, ep, band = 'medium') {
+    const K = KINDS[kind], landing = this.landing(ep);
+    if (!K || !landing) return null;
+    const b = this.boards[ep] || { slots: SLOTS.map(() => null), n: 0 };
+    const rng = mulberry32(((this.seed * 2654435761) ^ (ep * 40503) ^ (++b.n * 9973) ^ 0x9d) >>> 0);
+    const board = b.slots.map((id) => (id == null ? null : this.ads.get(id)));
+    const f = await K.make(this, { ep, band, rng, landing, reach: this.reach(landing.lake), board, turf: this.turfOf(ep) });
+    if (!f) return null;
+    const t = { id: this.nextId++, kind, from: ep, fromName: landing.name, band, status: 'offered', posted: this.today(), ...f };
+    t.pay = K.pay(t); t.clue = t.text;
+    this.ads.set(t.id, t);
+    return t;
+  }
+  // home turf (stream B's reach): the basins of the lakes of the entry points an outfitter serves, or null without it
+  turfOf(ep) {
+    if (typeof this.reachOf !== 'function') return null;
+    let eps = null; try { eps = this.reachOf(ep); } catch { eps = null; }
+    if (!Array.isArray(eps) || !eps.length) return null;
+    const out = new Set();
+    for (const e of [ep, ...eps]) { const L = this.world.entryPoints.find((x) => x.ep === Number(e)); if (L && L.lake) out.add(this.basinOf(L.lake)); }
+    return out.size ? out : null;
   }
   // the day cycle (for the board's day), the fishing (the stringer) and the outfitter (its landings and profile)
   attach({ day = null, fishing = null, outfitter = null } = {}) { if (day) this.day = day; if (fishing) this.fishing = fishing; if (outfitter) this.outfitter = outfitter; return this; }
@@ -347,7 +505,7 @@ export class Tasks {
   get money() { const p = this.profile; return p && typeof p.money === 'number' ? p.money : this.purse; }
   get kinds() { return KINDS; } // the registry, for the console and the tests
   has(key) { return this.unlocks.some((u) => u.key === key); }
-  note(t) { if (t && this.onNote) this.onNote(t); }
+  note(t) { if (t && this.onNote) this.onNote(payWords(t, this.tripActive)); }
   changed() { if (this.onChange) this.onChange(); }
   boardChanged() { if (this.onBoard) this.onBoard(); }
   today() { const d = this.day || (window.__game && window.__game.day); return d ? absDay(d.year, d.doy) : 0; }
@@ -551,7 +709,7 @@ export class Tasks {
     }
     if (!order.some((k) => k.key === 'fish') && KINDS.fish) order.push(KINDS.fish); // fish can always be asked for
     for (const kind of order) {
-      const f = await kind.make(this, { ep, band, rng, landing, reach, board });
+      const f = await kind.make(this, { ep, band, rng, landing, reach, board, turf: this.turfOf(ep) });
       if (!f) continue;
       const t = { id: this.nextId++, kind: kind.key, from: ep, fromName: landing.name, band, status: 'offered', posted: this.today(), ...f };
       t.pay = kind.pay(t); t.clue = t.text;
@@ -565,7 +723,8 @@ export class Tasks {
   take(id) {
     const t = this.ads.get(+id);
     if (!t || t.status !== 'offered') return false;
-    t.status = 'open'; t.taken = this.today();
+    if (this.active.length >= LIMIT) { this.note('You hold five. Let one go first.'); return false; } // gl-d
+    t.status = 'open'; t.taken = this.today(); t.due = t.taken + this.daysFor(t);
     const k = KINDS[t.kind];
     if (k && k.onTake) { try { k.onTake(this, t); } catch (e) { console.warn('the board: take', t.kind, e); } } // content A: a disk lent, a cooler set
     this.changed();
@@ -579,7 +738,7 @@ export class Tasks {
     this.removeProp(t.id);
     const k = KINDS[t.kind];
     if (k && k.onDrop) { try { k.onDrop(this, t); } catch (e) { console.warn('the board: drop', t.kind, e); } } // content A: its state back to the notice's
-    t.status = 'offered'; delete t.taken; if (t.cooler) t.cooler = [];
+    t.status = 'offered'; delete t.taken; delete t.due; if (t.cooler) t.cooler = [];
     const b = this.boards[t.from];
     if (!b || !b.slots.includes(t.id)) this.ads.delete(t.id); // not on a pin (an old save's task): gone
     this.changed();
@@ -645,24 +804,37 @@ export class Tasks {
     const list = words ? null : this.fishFor(t);
     if (!words && !list) words = `Nothing on you fits “${t.title}”.`;
     if (words) { this.note(words); return { ok: false, words }; }
-    const g = window.__game, inv = g && g.inventory, cooler = t.cooler || (t.cooler = []);
-    let n = 0;
-    for (const f of list) {
-      if (!inv || !inv.take(f.c.id, f.e.uid, 1)) break;
-      cooler.push({ species: f.species, cm: Math.round(f.cm), lake: f.e.data && f.e.data.lake ? this.lakeName(f.e.data.lake) || '' : '', day: this.today() });
-      n++;
-    }
+    const { n, given } = this.deliver(t, list);
     if (!n) { words = 'The fish would not come loose.'; this.note(words); return { ok: false, words }; }
-    const given = n === list.length ? list.words : `${word(n)} ${fishName(list[0].species)}`, need = t.need || 1;
+    const cooler = t.cooler || [], need = t.need || 1;
     if (cooler.length < need) {
       words = `You hand over the ${given}. ${cap(word(need - cooler.length))} more wanted.`;
       this.note(words); this.changed(); this.boardChanged();
       return { ok: true, pay: 0, words };
     }
     t.status = 'done';
-    const r = this.claim(t.id, ep);
-    if (r && r.ok) r.words = `You hand over the ${given}. ${r.words}`;
-    return r;
+    // gl-d: between trips the board pays it there, in one line (on a trip it would wait for the tally; at a counter you
+    // are never on one)
+    const pay = this.pay(t, ep);
+    this.emit('paid', t);
+    words = `You hand over the ${given}. $${pay} for “${t.title}”.`;
+    this.note(words);
+    this.emit('settled', { lines: [{ id: t.id, title: t.title, from: t.from, pay, kind: t.kind }], missed: [], total: pay, words, now: true });
+    this.changed(); this.boardChanged();
+    return { ok: true, pay, words };
+  }
+  // the fish a catch notice wants, out of your reach into its cooler (list: fishFor's, else looked for now): { n, given }
+  deliver(t, list = this.fishFor(t)) {
+    if (!list || !list.length) return { n: 0, given: '' };
+    const g = typeof window !== 'undefined' ? window.__game : null, inv = g && g.inventory, cooler = t.cooler || (t.cooler = []);
+    let n = 0;
+    for (const f of list) {
+      if (!inv || !inv.take(f.c.id, f.e.uid, 1)) break;
+      cooler.push({ species: f.species, cm: Math.round(f.cm), lake: f.e.data && f.e.data.lake ? this.lakeName(f.e.data.lake) || '' : '', day: this.today() });
+      n++;
+    }
+    if (n && inv && typeof inv.emit === 'function') { try { inv.emit('items'); } catch { /* the inventory's */ } }
+    return { n, given: n === list.length ? list.words : `${word(n)} ${fishName(list[0].species)}` };
   }
   pay(t, ep) {
     const pay = t.pay || 0, p = this.profile, k = KINDS[t.kind];
@@ -713,7 +885,7 @@ export class Tasks {
     for (const id of [...this.props.keys()]) this.removeProp(id);
     this.ads.clear(); this.boards = {}; this.filling.clear();
     this.tally = { item: 0, survey: 0, fish: 0 }; this.unlocks = [];
-    this.purse = 0; this.earned = 0; this.claimed = [];
+    this.purse = 0; this.earned = 0; this.claimed = []; this.missed = []; this.dueDay = null; this.doneSeen.clear();
     this.seed = (Date.now() & 0xffff) || 1;
     this.changed(); this.boardChanged();
   }
@@ -779,6 +951,13 @@ export class Tasks {
       const k = KINDS[t.kind];
       if (k && k.update) k.update(this, t, dt);
     }
+    // gl-d: a day turn takes back the notices past their day; a notice turned done is heard (the moment, the record),
+    // and one done between trips is paid there and then
+    const today = this.today();
+    if (today !== this.dueDay) { this.dueDay = today; this.expire(today); }
+    for (const t of this.active) if (t.status === 'done' && !this.doneSeen.has(t.id)) { this.doneSeen.add(t.id); this.emit('done', t); }
+    if (this.doneSeen.size > 200) for (const id of [...this.doneSeen]) if (!this.ads.has(id)) this.doneSeen.delete(id);
+    if (!this.tripActive && this.active.some((t) => t.status === 'done')) this.settleNow();
   }
   removeProp(id) {
     const t = this.ads.get(id), k = t && KINDS[t.kind];
@@ -811,9 +990,9 @@ export class Tasks {
       .sort((a, b) => (a.status === 'done' ? 0 : 1) - (b.status === 'done' ? 0 : 1) || (a.taken || 0) - (b.taken || 0) || a.id - b.id);
     const ready = pile.filter((t) => t.status === 'done'), offered = slots.filter((t) => t && t.status === 'offered').length;
     const sum = offered ? `${word(offered)} on offer · a new notice each morning` : writing ? 'the keeper is pinning up notices' : 'a new notice each morning';
-    const pileSum = pile.length ? [pile.length - ready.length ? `${word(pile.length - ready.length)} on the go` : '', ready.length ? `${word(ready.length)} to claim` : ''].filter(Boolean).join(' · ') : '';
-    // Claim all pays every finished notice this counter posted (turnIn): so it says, on the pile it pays
-    const all = ready.length > 1 ? `<button type="button" class="stamp" data-act="task" data-id="claimall">Claim all · $${ready.reduce((s, t) => s + t.pay, 0)}</button>` : '';
+    const pileSum = pile.length ? [pile.length - ready.length ? `${word(pile.length - ready.length)} on the go` : '', ready.length ? `${word(ready.length)} done` : ''].filter(Boolean).join(' · ') : '';
+    // (gl-d: no Claim all: a notice done is paid when you come in, on the trip's tally)
+    const all = this.active.length >= LIMIT ? '<span class="sum full">You hold five</span>' : '';
     const pins = slots.map((t, i) => this.notice(t, i, ep, writing, where)).join('');
     const cards = pile.map((t, i) => this.pileCard(t, i, ep, where, onPins.has(t.id))).join('');
     return `<section class="board cork two" aria-label="The board">
@@ -848,11 +1027,11 @@ export class Tasks {
     let say;
     if (t.status === 'done') {
       const dw = k.doneWords ? k.doneWords(t) : t.kind === 'fish' && k.progress ? k.progress(t) : ''; // content A: "Done · 4.4 m"
-      say = `Done${dw ? ` · ${dw}` : ''}`;
-      btns.push(`<button type="button" class="stamp small" data-act="task" data-id="claim:${t.id}">Claim · $${t.pay}</button>`);
+      say = `Done${dw ? ` · ${dw}` : ''} · paid when you come in`;
     } else {
       const f = this.fishFor(t); // a fish notice of this board's, its fish with you: hand it over here, and it is paid
-      say = `${t.npc ? `For ${t.npcName || 'a visitor'} · ` : ''}${t.taken ? `taken ${this.dayWords(t.taken)} · ` : ''}${f ? `the ${f.words} with you` : k.progress ? k.progress(t) : 'on the go'}`;
+      const left = this.daysLeft(t), due = left == null ? '' : left <= 0 ? 'last day · ' : `${word(left)} ${plural(left, 'day')} left · `;
+      say = `${t.npc ? `For ${t.npcName || 'a visitor'} · ` : ''}${due}${f ? `the ${f.words} with you` : k.progress ? k.progress(t) : 'on the go'}`;
       if (f) btns.push(`<button type="button" class="stamp small" data-act="task" data-id="give:${t.id}">Hand ${f.length > 1 ? 'them' : 'it'} over · $${t.pay}</button>`);
       if (pinned) btns.push(`<button type="button" class="stamp small quiet" data-act="task" data-id="drop:${t.id}">Let it go</button>`);
     }
@@ -923,8 +1102,8 @@ export class Tasks {
 
   // --- persistence -------------------------------------------------------------------------------------------
   serialize() {
-    return { v: 3, seed: this.seed, nextId: this.nextId, ads: [...this.ads.values()], boards: this.boards, purse: this.purse, earned: this.earned, claimed: this.claimed,
-      tally: this.tally, unlocks: this.unlocks.map((u) => u.key) };
+    return { v: 4, seed: this.seed, nextId: this.nextId, ads: [...this.ads.values()], boards: this.boards, purse: this.purse, earned: this.earned, claimed: this.claimed,
+      tally: this.tally, unlocks: this.unlocks.map((u) => u.key), missed: this.missed };
   }
   restore(d) {
     if (!d) return;
@@ -934,8 +1113,14 @@ export class Tasks {
     this.nextId = d.nextId || 1; this.seed = d.seed || this.seed;
     this.purse = d.purse || 0; this.earned = d.earned || 0; this.claimed = Array.isArray(d.claimed) ? d.claimed : [];
     this.ads = new Map(); this.boards = {}; this.filling.clear();
+    // gl-d (v4): the missed notices kept; a notice taken in an older save gets its deadline from today (never from the
+    // day it was taken: nothing expires the moment an old season loads); a kind no longer written (the rental canoe) is
+    // dropped with its pin
+    this.missed = Array.isArray(d.missed) ? d.missed.filter((m) => m && m.title) : [];
+    this.dueDay = null;
     if (d.v >= 3) {
       for (const t of d.ads || []) if (t && t.id != null && KINDS[t.kind]) this.ads.set(t.id, t);
+      if (!(d.v >= 4)) { const today = this.today(); for (const t of this.ads.values()) if ((t.status === 'open' || t.status === 'done') && !Number.isFinite(t.due)) t.due = today + this.daysFor(t); }
       for (const [ep, b] of Object.entries(d.boards || {})) {
         if (!b || !Array.isArray(b.slots)) continue;
         this.boards[ep] = { slots: SLOTS.map((_, i) => (b.slots[i] != null && this.ads.has(b.slots[i]) ? b.slots[i] : null)), day: b.day || 0, n: b.n || 0, pending: Array.isArray(b.pending) ? b.pending : [] };
@@ -943,6 +1128,7 @@ export class Tasks {
     } else {
       // an old save: the tasks under way are kept, claimable where they were posted; the old offers are gone
       for (const t of d.active || []) { const a = this.upgrade(t); if (a) { this.ads.set(a.id, a); this.nextId = Math.max(this.nextId, a.id + 1); } }
+      const today = this.today(); for (const t of this.ads.values()) if (!Number.isFinite(t.due)) t.due = today + this.daysFor(t);
     }
   }
   upgrade(t) {
@@ -1024,6 +1210,19 @@ const CSS = `
   #outfitter .board.cork .tk { transition: none; }
 }
 #journal .notice-list { display: flex; flex-direction: column; gap: 12px; }
+/* gl-d: the journal's Tasks: the days left on a notice, the missed ones crossed out; the Trips page's milestones */
+#journal .pp-todo .st .due { font-weight: 600; color: var(--pencil); }
+#journal .pp-todo .st .due.last { color: var(--map-red); }
+#journal .pp-todo.missed .t, #journal .pp-todo.missed .st { opacity: .7; }
+#journal .pp-box.gone { opacity: .5; }
+#journal .pp-miles { margin-top: 14px; padding: 0 30px 0 calc(var(--pp-margin, 40px) + 8px); }
+#journal .pp-miles .pp-sub { margin: 6px 0 2px; font: 700 12px/2 var(--sc); letter-spacing: .14em; text-transform: uppercase; color: var(--pp-brown, #6b4a2b); }
+#journal .pp-mile { display: grid; grid-template-columns: minmax(0, 1fr) 90px auto; gap: 10px; align-items: center; font: 500 19px/1.5 var(--pencil-font); color: var(--pencil); }
+#journal .pp-mile.done { grid-template-columns: auto minmax(0, 1fr); }
+#journal .pp-mile.done b { color: var(--map-red); font-weight: 600; }
+#journal .pp-mile i { display: block; height: 6px; border: 1px solid currentColor; border-radius: 2px; background: linear-gradient(90deg, currentColor var(--f, 0%), transparent var(--f, 0%)); opacity: .8; }
+#journal .pp-mile .n { font-size: 16px; white-space: nowrap; }
+#outfitter .board.cork .top .sum.full { margin-left: auto; color: var(--map-red); }
 #journal .todo .pay { font: 500 20px/1 var(--pencil-font); color: var(--pencil); margin-left: 6px; }
 `;
 let cssIn = false;

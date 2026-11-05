@@ -151,10 +151,9 @@ export class Journal {
   taskState(t) {
     const ts = this.tasks, k = KINDS[t.kind] || null;
     const at = (ep) => { const l = ts && ts.landing ? ts.landing(ep) : null; return l ? l.name : 'the outfitter'; };
-    if (t.status === 'done') {
-      const who = t.npc ? String(t.npcName || 'a visitor').split(' ')[0] : '';
-      return { cls: 'done', words: who ? `${who} pays it, or the counter at ${at(t.from)}` : `claim it at ${at(t.from)}` };
-    }
+    void at;
+    // gl-d: pay lands at the trip's end (tasks.js settle), wherever you come in
+    if (t.status === 'done') return { cls: 'done', words: 'paid when you come in' };
     // how far along: the kind's own fraction, else what is in the cooler or handed over against what is wanted
     let f = 0;
     if (k && typeof k.fraction === 'function') { const v = k.fraction(t); if (Number.isFinite(v)) f = v; }
@@ -220,17 +219,26 @@ export class Journal {
     ];
     if (this.focusTask != null) { this.taskSel = String(this.focusTask); this.focusTask = null; } // a notice picked on the map
     if (!papers.some((p) => p.key === this.taskSel)) this.taskSel = papers.length ? papers[0].key : null;
+    // gl-d: the days left on each one held (its kind's deadline, tasks.js KIND_DAYS), pencilled after its title
+    const dueW = (t) => {
+      if (t.note || t.status !== 'open' || !ts || typeof ts.daysLeft !== 'function') return '';
+      const n = ts.daysLeft(t); if (n == null) return '';
+      return n <= 0 ? 'last day' : n === 1 ? 'one day left' : `${word(n)} days left`;
+    };
     const line = ({ key, t }) => {
-      const st = t.note ? { cls: 'taken', words: '' } : this.taskState(t);
+      const st = t.note ? { cls: 'taken', words: '' } : this.taskState(t), due = dueW(t);
       const box = st.cls === 'done' ? 'pp-box done' : st.cls === 'half' ? 'pp-box half' : 'pp-box';
       return `<button type="button" class="pp-todo ${st.cls}${key === this.taskSel ? ' on' : ''}" data-task="${esc(key)}"><span class="${box}" aria-hidden="true"></span>
         <span class="t">${esc(t.title || t.clue || 'A notice')}</span>${t.pay ? `<span class="pay">$${t.pay}</span>` : ''}
-        ${st.words ? `<span class="st">${st.cls === 'done' ? 'done — ' : ''}${esc(st.words)}</span>` : ''}</button>`;
+        ${st.words || due ? `<span class="st">${due ? `<b class="due${due === 'last day' ? ' last' : ''}">${esc(due)}</b>${st.words ? ' · ' : ''}` : ''}${st.cls === 'done' ? 'done — ' : ''}${esc(st.words)}</span>` : ''}</button>`;
     };
+    // the notices that went past their day: crossed out, with the line from whoever posted them (the last few)
+    const missed = ts && Array.isArray(ts.missed) ? ts.missed.slice(-4) : [];
+    const gone = missed.map((m) => `<div class="pp-todo missed"><span class="pp-box gone" aria-hidden="true"></span><span class="t"><s>${esc(m.title)}</s></span><span class="st">${esc(m.line)}</span></div>`).join('');
     const paid = ts ? (ts.claimed || []).slice(-8) : [], earned = ts ? ts.earned || 0 : 0, n = ts ? (ts.claimed || []).length : 0;
     const claimed = paid.map((c) => `<div class="pp-todo claimed"><span class="pp-box done" aria-hidden="true"></span><span class="t">${esc(c.title)}</span><span class="pay">$${c.pay}</span></div>`).join('');
     const right = `<h2 class="pp-head" id="right-h">Tasks</h2>
-      <div class="pp-index pp-ruled pp-lines">${claimed}${papers.map(line).join('')}
+      <div class="pp-index pp-ruled pp-lines">${claimed}${gone}${papers.map(line).join('')}
         ${n ? `<div class="pp-todo sum"><span class="t">$${earned} from the boards, ${word(n)} ${plural(n, 'notice')} paid</span></div>` : ''}</div>`;
     const p = papers.find((q) => q.key === this.taskSel);
     let left = '';
@@ -316,8 +324,13 @@ export class Journal {
       const miles = trips.reduce((a, t) => a + (t.km || 0), 0) * MI;
       const list = trips.map((t) => `<button type="button" class="pp-entry${t.id === this.tripSel ? ' on' : ''}" data-trip="${esc(t.id)}"><span class="d">${t.entry && t.entry.year ? esc(shortDate(t.entry.year, t.entry.doy)) : ''}</span><span class="w">${esc(R.lineOf(t) || t.line || 'A trip')}</span><span class="n">${t.days || 1} ${plural(t.days || 1, 'day')}</span></button>`).join('');
       const tally = [v.nights ? `${word(v.nights)} ${plural(v.nights, 'night')} out` : '', miles >= 0.1 ? `${fmtMi(miles)} mi paddled` : ''].filter(Boolean).join(' · ');
+      // gl-d: the milestones (record.js milestones, milestones.js), pencilled under the trips: the titles earned, then
+      // how far along each other one is
+      const ms = v.milestones || [], earned = ms.filter((m) => m.done), going = ms.filter((m) => !m.done && m.n > 0);
+      const miles2 = ms.length ? `<div class="pp-miles"><h3 class="pp-sub">Milestones</h3>${earned.map((m) => `<div class="pp-mile done"><b>${esc(m.title)}</b><span>${esc(m.words)}</span></div>`).join('')}
+        ${going.map((m) => `<div class="pp-mile"><span>${esc(up(m.words))}</span><i style="--f:${Math.round((100 * m.n) / (m.of || 1))}%" aria-hidden="true"></i><span class="n">${m.n.toLocaleString('en-US')} of ${m.of.toLocaleString('en-US')}</span></div>`).join('')}</div>` : '';
       const right = `<div class="pp-headrow"><h2 class="pp-head" id="right-h">Trips</h2>${tally ? `<span class="pp-hand small">${tally}</span>` : ''}</div>
-        <div class="pp-index pp-ruled pp-lines">${list}</div>`;
+        <div class="pp-index pp-ruled pp-lines">${list}${miles2}</div>`;
       const c = this.tripSel ? R.tripById(this.tripSel) : null;
       return { left: c ? this.tripPage(c, R) : '', right, leftLabel: 'A trip' };
     }
