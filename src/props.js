@@ -4,7 +4,7 @@ import { mulberry32, hash2 } from './rng.js';
 import { surfaceAt, meshHeightAt } from './terrain-build.js';
 import { withoutRamps } from './ramps.js'; // round ramps
 import { rockGeometry, makeRockMaterial, makeToonMaterial } from './rocks.js';
-import { outfitterName, isOutfitter, trailheadName } from './outfitters.js'; // (the game-loop round: the fourteen outfitters, the rest trailheads)
+import { outfitterName, isOutfitter, trailheadName, outfitterProfile } from './outfitters.js'; // (the game-loop round: the fourteen outfitters, the rest trailheads)
 import { setTrailhead, LOT_R } from './trailhead.js';
 import { bedding, seatRock, ROCK_FOOT, ROCK_KIND, TRAIL } from './placement.js';
 import { RockShape } from './collide.js';
@@ -566,6 +566,8 @@ function* outfitterSteps(ctx, ep) {
   pieces.push(dock.geo);
   yield;
   yield* buildStore(c, plan.F, rng, ep, sub, pieces, dock, plan.site);
+  // the game-loop round: the kind of place it is, on a board at the foot of the dock, read from the water
+  { const kg = kindSign(c, plan, dock, ep, rng); if (kg) pieces.push(kg); }
   // round ramps 2: rock steps up the bank from the dock where the way to the door stays steep (world.js ep.steps): flat
   // slabs across the way on the drawn ground, to look at (the yard is walked graded)
   if (ep.steps) {
@@ -2322,6 +2324,36 @@ function buildRack(ctx, F, rng, ra, rb) {
   out.push(geo);
   for (const [k, g] of hulls.entries()) { occlude(g, occ.filter((o, i) => i !== occ.length - 2 + k), { ground: localGround(ctx), rays: 8, reach: 0.9, floor: 0.4 }); out.push(g); }
   return out;
+}
+
+// The game-loop round (each outfitter its own): a painted board on two posts beside the foot of the dock, facing the
+// water, saying what kind of place it is (a lodge's café and cabins, a river post's shuttles, a trout camp, live bait),
+// in the routed letters of the trail signs: part of the outfitter's own merged mesh, no draw call of its own.
+const KIND_SIGN = {
+  lodge: [['LODGE', 'CAFE - CABINS'], 0x3f5443],
+  'river post': [['RIVER POST', 'CANOES - SHUTTLES'], 0x6f6a60],
+  'trout camp': [['TROUT CAMP', 'CABINS - GUIDES'], 0x4f6272],
+  'bait shop': [['LIVE BAIT', 'LEECHES - CRAWLERS'], 0x8a3e2c],
+};
+function kindSign(ctx, plan, dock, ep, rng) {
+  const prof = outfitterProfile(ep.ep, ctx.world), K = prof && KIND_SIGN[prof.kind];
+  if (!K) return null;
+  const F = plan.F, a = -(dock.hw + 1.9), bb = (Number.isFinite(dock.foot) ? dock.foot : dock.back) - 1.4;
+  const [x, z] = F.W(a, bb);
+  if (ctx.tg.shoreAt(x, z) < 0.6) return null; // (no room on dry ground beside the dock)
+  const S = frame(ctx, x, z, plan.d), g = Math.min(S.G(-0.55, 0), S.G(0.55, 0)), top = g + 1.55, b = new PropBuilder();
+  for (const u of [-0.5, 0.5]) {
+    const gp = S.G(u, 0);
+    b.box(S.P(u, (gp - 0.35 + top) / 2, 0), S.X, S.Y, S.Z, 0.045, (top - gp + 0.35) / 2, 0.045, TILE.WOOD, tone(0x7f6851, rng, 0.05), { grain: 'y', endTile: TILE.END });
+    ctx.obstacles.push({ x: S.W(u, 0)[0], z: S.W(u, 0)[1], r: 0.12, low: true });
+  }
+  const by = top - 0.28, hw = 0.68, hh = 0.25, face = 0.07, col = tone(K[1], rng, 0.03);
+  b.box(S.P(0, by, face), S.X, S.Y, S.Z, hw, hh, 0.022, TILE.PAINT, col, { grain: 'x', skip: ['+z'] });
+  b.face([S.P(-hw, by + hh, face + 0.022), S.P(hw, by + hh, face + 0.022), S.P(hw, by - hh, face + 0.022), S.P(-hw, by - hh, face + 0.022)], TILE.PAINT, col, { ref: S.P(0, by, 0) });
+  routedLines(b, S, K[0], by + hh - 0.06, face + 0.024, 1.2, 0.13, S.P(0, by, 0));
+  const geo = b.build();
+  occlude(geo, [obb(S.P(0, by, face), S.X, S.Y, S.Z, hw, hh, 0.03)], { ground: localGround(ctx), rays: 8, reach: 0.6, floor: 0.35 });
+  return geo;
 }
 
 // --- the trailheads (game-loop round, stream B) ------------------------------------------------------------------
