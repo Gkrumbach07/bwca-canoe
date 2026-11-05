@@ -25,7 +25,7 @@ const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i > 0 ?
 const APP = process.env.APP || 'http://localhost:5183';
 const OUT = path.resolve(arg('out', path.join(process.env.TMPDIR || '/tmp', 'gl-c-out')));
 const SHOTS = arg('shots', null);
-const HOME = Number(arg('home', 30)); // Lake One: an outfitter with or without stream B (its host there is 25)
+const HOME = Number(arg('home', 31)); // Farm Lake: an outfitter with stream B (Ruth Aho's, moved from Lake One 30, a trailhead now)
 mkdirSync(OUT, { recursive: true });
 if (SHOTS) mkdirSync(SHOTS, { recursive: true });
 

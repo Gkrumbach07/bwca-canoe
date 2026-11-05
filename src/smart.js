@@ -46,9 +46,13 @@ export class Smart {
     this.held = new Map();     // person key -> the activity held while talked to
     this.memo = new Map();     // `${where}|${chunk}|${people}` -> the assignment
     this.n = 0;
+    this.nIn = new Map();      // where -> objects numbered there since its last clear
   }
   register(o) {
-    const id = o.id || `${o.where}:${o.act}:${this.n++}`;
+    // (the join: numbered within its place, so the same store's objects have the same ids whatever registered before it,
+    // on a reload and on every co-op client; clear(where) starts the count again)
+    const k = this.nIn.get(o.where) || 0; this.nIn.set(o.where, k + 1); this.n++;
+    const id = o.id || `${o.where}:${o.act}:${k}`;
     const obj = { ...o, id, slots: o.slots && o.slots.length ? o.slots : [{ x: o.x, z: o.z, y: o.y, heading: o.heading }] };
     if (this.objs.has(id)) this.unregister(id);
     this.objs.set(id, obj);
@@ -62,7 +66,7 @@ export class Smart {
     const l = this.byWhere.get(o.where); if (l) { const i = l.indexOf(o); if (i >= 0) l.splice(i, 1); if (!l.length) this.byWhere.delete(o.where); }
     this.memo.clear();
   }
-  clear(where) { for (const o of [...(this.byWhere.get(where) || [])]) this.unregister(o.id); }
+  clear(where) { for (const o of [...(this.byWhere.get(where) || [])]) this.unregister(o.id); this.nIn.delete(where); }
   at(where) { return (this.byWhere.get(where) || []).slice(); }
   get(id) { return this.objs.get(id) || null; }
   get clock() { const d = this.day; return d ? Math.round(Date.UTC(d.year, 0, d.doy) / 86400000) * 24 + d.hours : 0; }
