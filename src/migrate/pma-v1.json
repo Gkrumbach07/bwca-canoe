@@ -1,0 +1,18 @@
+{
+ "v": 1,
+ "note": "The made-up primitive areas pma-1..pma-12 meant before 4f5145d (gl-a, scripts/gl-a-pma.mjs), frozen for the old saves (src/migrate-pma.js): each id, its name, a point inside it and its desk entry point.",
+ "pmas": [
+  {"id":"pma-1","name":"Wolfpack Lake primitive area","centre":[-81564,-12047],"near":12},
+  {"id":"pma-2","name":"Wabang Lake primitive area","centre":[-62775,-17479],"near":16},
+  {"id":"pma-3","name":"Mule Lake primitive area","centre":[-61506,-6396],"near":16},
+  {"id":"pma-4","name":"Jackfish Lake primitive area","centre":[-39359,-4817],"near":6},
+  {"id":"pma-5","name":"Diana Lake primitive area","centre":[-14028,27851],"near":67},
+  {"id":"pma-6","name":"Starlight Lake primitive area","centre":[-8054,16093],"near":25},
+  {"id":"pma-7","name":"Hope Lake primitive area","centre":[-144,23597],"near":36},
+  {"id":"pma-8","name":"Holt Lake primitive area","centre":[11788,-4580],"near":51},
+  {"id":"pma-9","name":"Twinkle Lake primitive area","centre":[15894,10750],"near":51},
+  {"id":"pma-10","name":"Romp Lake primitive area","centre":[19370,19869],"near":38},
+  {"id":"pma-11","name":"Mass Lake primitive area","centre":[27199,8852],"near":51},
+  {"id":"pma-12","name":"State Lake primitive area","centre":[49434,12832],"near":49}
+ ]
+}

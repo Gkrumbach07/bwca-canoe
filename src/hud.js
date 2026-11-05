@@ -9,7 +9,7 @@ import { miles, fmtDepth, fmtFtIn, fmtIn, fmtLbOz, fmtF, fmtMphMs, fmtMphKmh, fm
 import { names } from './names.js'; // d1 names: the bays, points, islands, narrows, summits and named portages on the map
 import { KIND, FOREST, REGIME, WCLASS, HGM, nwiCode, wetRegime, wetBeaver, wetHgm, wclass1 } from './land.js'; // 2026-10-31: the land under you, in the developer rows
 import { GROUND } from './terrain-build.js';
-import { paintGround, paintBurns, burnsInView, burnWords, paintBoundary, loadBoundary, BOUNDARY, paintEntry, tileGeo, tileCache, INK, lakeAt, lodOf, SMALL_LAKE, paintCreeks } from './map-render.js'; // the map as vectors (the wetlands round: paintCreeks)
+import { paintGround, paintBurns, burnsInView, burnWords, paintBoundary, loadBoundary, BOUNDARY, paintPmas, paintPmaNames, paintEntry, tileGeo, tileCache, INK, lakeAt, lodOf, SMALL_LAKE, paintCreeks } from './map-render.js'; // the map as vectors (the wetlands round: paintCreeks)
 import './hud.css';
 const KIND_NAMES = Object.keys(KIND); // ground kind value -> its key (land.js KIND runs 0..13 in order)
 
@@ -230,7 +230,7 @@ export class Hud {
     this.mapCtx = this.canvas.getContext('2d');
     this.mode = 'hidden';            // hidden | glance | sheet | corner
     this.view = { cx: 0, cz: 0, span: GLANCE_SPAN };
-    this.layers = { lakes: true, portages: true, campsites: true, tasks: true, depths: true, notes: true, burns: true, boundary: true };
+    this.layers = { lakes: true, portages: true, campsites: true, tasks: true, depths: true, notes: true, burns: true, boundary: true, pmas: true };
     // polish B: the wind glyph on the compass rim comes in from the edge (the head inward, the wave at its base), so
     // turned to the side the wind comes from it points the way the wind goes (updateCompass)
     if (this.el.windArrow) {
@@ -1597,7 +1597,7 @@ export class Hud {
     const M = BASE_MARGIN, sh = this.sheetsOn, lay = this.layers, c = this.ctx || {};
     const ts = c.tasks, told = this.marks();
     const key = [W, H, v.span.toFixed(2), sh ? `${sh.view()}${sh.version}${sh.ownedSheets().length}` : 'open', Object.values(lay).join(''), explored.version, explored.lakeV,
-      ts && ts.active ? ts.active.map((t) => `${t.id}${t.status}`).join() : '', told.sig, this.table ? `${this.table.selected}${this.table.hover}` : '', this.mode, BOUNDARY.ready, this.focus ? this.focus.t : ''].join('|');
+      ts && ts.active ? ts.active.map((t) => `${t.id}${t.status}`).join() : '', told.sig, this.table ? `${this.table.selected}${this.table.hover}` : '', this.mode, BOUNDARY.ready, this.focus ? this.focus.t : '', this.pmaFocus || ''].join('|');
     let b = this.base;
     if (!b || b.W !== W + 2 * M || b.H !== H + 2 * M) {
       const cv = document.createElement('canvas'); cv.width = W + 2 * M; cv.height = H + 2 * M;
@@ -1628,6 +1628,9 @@ export class Hud {
     ctx.drawImage(this.grain, 0, 0);
     this.drawOverlays(ctx, W, H, { x0: v.cx - (W / 2) * mPerPx, z0: v.cz - (H / 2) * mPerPx, mPerPx }, W / 1040, player);
   }
+
+  // r2: the primitive area the maps pick out (main.js sets pmaFocusFn: the desk's choice, else the trip's permit)
+  get pmaFocus() { try { return typeof this.pmaFocusFn === 'function' ? this.pmaFocusFn() : null; } catch { return null; } }
 
   // The marks the map carries for you, from the book's map side when it is attached (map-book.js markSource): the
   // notices on the go and where each sends you ({ open }), the ones done and where they are paid ({ claim }), and the
@@ -1691,6 +1694,7 @@ export class Hud {
       // the burns by the season's date, and the wilderness's own edge
       if (lay.burns) paintBurns(ctx, v, burnsInView(v, W, H), k);
       if (lay.boundary) { if (BOUNDARY.path) paintBoundary(ctx, v, k); else loadBoundary(); }
+      if (lay.pmas) paintPmas(ctx, v, W, H, { k, focus: this.pmaFocus || null }); // r2: the primitive areas, public as the boundary is
       ctx.restore();
     }
     const told = this.marks();
@@ -1767,6 +1771,8 @@ export class Hud {
         }
         if (mid) this.drawPlaceNames(ctx, { toPx, inView, onMine, k, mPerPx, lettered });
       }
+      // r2: the primitive areas' names, small italics, off the lake names already lettered
+      if (lay.pmas) paintPmaNames(ctx, w, v, W, H, { k, lettered, onMine: clipped ? (x, z) => onMine(x, z, x, z) : null, focus: this.pmaFocus || null, paper: PAPER });
       // burn names, in the burn's own brown, once the view is close enough to letter them
       if (lay.burns && mPerPx < 45) {
         ctx.font = `italic 600 ${11.5 * k}px ${SERIF}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineWidth = 3 * k; ctx.strokeStyle = 'rgba(236, 228, 207, 0.9)';

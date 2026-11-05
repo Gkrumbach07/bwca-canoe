@@ -24,6 +24,7 @@ import { teaWord } from './water.js';
 import { eventsAt } from './burns.js';
 import { BURNS } from './burns.js';
 import { drawRegion, burnWords, inWilderness, loadBoundary, BOUNDARY, FT, INK, lakeAt, lakeBox } from './map-render.js';
+import { pmaAt } from './pma.js'; // r2: a lake in a primitive area says so
 import './map.css';
 
 const FISH = { walleye: 'Walleye', pike: 'Northern pike', smallmouth: 'Smallmouth bass', laketrout: 'Lake trout', perch: 'Yellow perch', crappie: 'Crappie' };
@@ -285,6 +286,7 @@ export class MapBook {
       ${row('notes', 'note', 'Pencilled in', 'what keepers and visitors marked for you')}
       ${row('burns', 'burn', 'Burns', 'fires and the 1999 blowdown, by the year')}
       ${row('boundary', 'bound', 'The wilderness', 'the Boundary Waters boundary')}
+      ${row('pmas', 'pma', 'Primitive areas', 'no campsites, no kept trails')}
       <div class="lab">Always</div>
       ${fixed('you', 'You', 'and the canoe where you left it')}
       ${fixed('paddled', 'Paddled', 'lakes you have been on, inked')}
@@ -352,7 +354,8 @@ export class MapBook {
     if (eps.length) rows.push(['Landings', eps.map((e) => `entry point ${e.ep}${e.name ? `, ${esc(e.name)}` : ''}`).join('<br>')]);
     const br = burnAt(L.cx, L.cz), burn = br ? `${burnWords(br)} nearby` : '';
     const inside = BOUNDARY.ready ? inWilderness(L.cx, L.cz) : null;
-    const yours = [explored.hasLake(id) ? 'paddled' : 'not paddled yet', inside === true ? 'inside the wilderness' : inside === false ? 'outside the wilderness' : '', burn].filter(Boolean).join(' · ');
+    const pa = pmaAt(L.cx, L.cz);
+    const yours = [explored.hasLake(id) ? 'paddled' : 'not paddled yet', pa ? `in the ${pa.name}` : inside === true ? 'inside the wilderness' : inside === false ? 'outside the wilderness' : '', burn].filter(Boolean).join(' · ');
     const sheet = sheetAt(L.cx, L.cz);
     this.lakeEl.innerHTML = `<section class="page left mb-portrait"><div class="sc kicker"><button type="button" class="pbtn" data-back>‹ The map</button>${sheet ? ` · sheet ${esc(sheet.id)}` : ''}</div>
         <div class="lede"><h2>${esc(L.name || 'Unnamed water')}</h2><div class="sub">${esc(yours)}</div></div>

@@ -8,11 +8,16 @@
 // Self-contained on purpose: it reads only world.meta.overview, world.base and the rides' rows, so the shared map
 // renderer can take its place later (drawCounterMap's arguments are the whole contract).
 //
-//   drawCounterMap(canvas, { world, here: { ep, x, z }, rows: [{ ep, x, z, price, unknown, short, outfitter }], hot, sandbox })
+//   drawCounterMap(canvas, { world, here: { ep, x, z }, rows: [{ ep, x, z, price, unknown, short, outfitter }], hot, sandbox, pma })
+// (r2: the primitive areas' outlines, fine dashed over the water; pma: the one chosen at the permit desk, washed and
+// named on the sketch)
 // (the game-loop round: the truck goes to every entry point. An outfitter is a ring, a trailhead a small square; a
 // trailhead off the sheet is left off it, unless it is the one hovered: the list beside the map has them all)
 //     → [{ ep, x, y, r }] the markers in css px, for hit testing (markerAt)
 //   markerAt(marks, x, y) → ep or null
+
+import { sketchPmas } from './map-render.js';
+import { pmaById } from './pma.js';
 
 const MI = 1609.344;          // metres in a mile
 const PAD = 0.14;             // the margin round the outfitters, as a share of the span
@@ -61,7 +66,7 @@ const miles = (m) => { const v = m / MI; return v < 10 ? +v.toFixed(1) : Math.ro
 // a round scale-bar length in miles for about a quarter of the sketch's width
 function scaleMiles(spanM) { const want = spanM / MI / 4; for (const s of [1, 2, 5, 10, 20, 25, 50]) if (s >= want * 0.7) return s; return 50; }
 
-export function drawCounterMap(canvas, { world, here, rows = [], hot = null, sandbox = false, onReady = null } = {}) {
+export function drawCounterMap(canvas, { world, here, rows = [], hot = null, sandbox = false, onReady = null, pma = null } = {}) {
   if (!canvas || !here) return [];
   const box = canvas.getBoundingClientRect(), cw = Math.max(120, Math.round(box.width)), ch = Math.max(120, Math.round(box.height));
   const dpr = Math.min(2, (typeof window !== 'undefined' && window.devicePixelRatio) || 1);
@@ -75,7 +80,8 @@ export function drawCounterMap(canvas, { world, here, rows = [], hot = null, san
   rows = rows.filter((r) => Number.isFinite(r.x) && Number.isFinite(r.z));
   const isTh = (r) => r.outfitter === false;
   const near = [...rows].sort((a, b) => Math.hypot(a.x - here.x, a.z - here.z) - Math.hypot(b.x - here.x, b.z - here.z)).slice(0, FRAME);
-  const pts = [here, ...near];
+  const pf = pmaById(pma); // (the area chosen at the desk is framed in too)
+  const pts = [here, ...near, ...(pf ? [{ x: pf.centre[0], z: pf.centre[1] }] : [])];
   const x0 = Math.min(...pts.map((p) => p.x)), x1 = Math.max(...pts.map((p) => p.x)), z0 = Math.min(...pts.map((p) => p.z)), z1 = Math.max(...pts.map((p) => p.z));
   const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, inner = 1 - 2 * PAD;
   const s = Math.min((cw * inner) / Math.max(MIN_SPAN, x1 - x0), (ch * inner) / Math.max(MIN_SPAN * (ch / cw), z1 - z0));
@@ -115,6 +121,17 @@ export function drawCounterMap(canvas, { world, here, rows = [], hot = null, san
     const sx = (cx - cw / 2 / s - wv.x0) / wv.mPerPx, sy = (cz - ch / 2 / s - wv.z0) / wv.mPerPx, sw = cw / s / wv.mPerPx, sh = ch / s / wv.mPerPx;
     ctx.imageSmoothingEnabled = true;
     try { ctx.drawImage(wv.canvas, sx, sy, sw, sh, 0, 0, cw, ch); } catch { /* off the picture's edge */ }
+  }
+
+  // the primitive areas: a fine dashed line, the one chosen at the desk washed and named in pencil
+  sketchPmas(ctx, X, Y, { stroke: 'rgba(82, 76, 98, .55)', width: 1, dash: [3, 2.5], focus: pma, wash: 'rgba(82, 76, 98, .14)', focusStroke: 'rgba(70, 64, 86, .95)' });
+  if (pf) {
+    ctx.font = 'italic 500 13px Alegreya, Georgia, serif';
+    const tw = ctx.measureText(pf.name).width;
+    const m = EDGE + R + 6; // (clear of the outfitters pinned along the edges)
+    const lx = Math.max(m + tw / 2, Math.min(cw - m - tw / 2, X(pf.centre[0]))), ly = Math.max(m, Math.min(ch - m - 26, Y(pf.centre[1]))); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+    ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(241, 233, 212, .9)'; ctx.strokeText(pf.name, lx, ly);
+    ctx.fillStyle = 'rgba(70, 64, 86, .95)'; ctx.fillText(pf.name, lx, ly);
   }
 
   // the roads as the truck goes: a faint pencil line out to each one (the hovered one firm)

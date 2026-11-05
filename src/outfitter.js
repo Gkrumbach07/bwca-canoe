@@ -766,7 +766,8 @@ export class Outfitter {
     const here = { ep: a.ep, x: a.x, z: a.z };
     const draw = () => {
       if (!this.open || this.tab !== 'counter' || !cv.isConnected) return;
-      this.mapMarks = drawCounterMap(cv, { world: this.world, here, rows, hot: this.mapHot, sandbox, onReady: draw });
+      let pma = null; try { pma = typeof this.pmaFocusFn === 'function' ? this.pmaFocusFn() : null; } catch { pma = null; } // r2: the primitive area chosen at the desk
+      this.mapMarks = drawCounterMap(cv, { world: this.world, here, rows, hot: this.mapHot, sandbox, onReady: draw, pma });
       for (const li of el.querySelectorAll('.rides li[data-ep]')) li.classList.toggle('hot', Number(li.dataset.ep) === this.mapHot);
     };
     const hover = (ep) => { if (ep !== this.mapHot) { this.mapHot = ep; draw(); } };
