@@ -7,7 +7,7 @@
 //      refuses until it is paid
 //   5. grant: a $0 permit
 //   6. an old save (a v3 core, a trip under way) boots: the trip goes on, grandfathered, never fined
-//   7. a PMA permit: off-site camping inside its polygon only, and not on another trip; 7″ the real twelve from the
+//   7. a PMA permit: off-site camping inside its polygon only (camp.offsiteOk: the tent pitches there), not on another trip; 7″ the real twelve from the
 //      Forest Service's layer (src/pma.json, scripts/gl-a-pma-real.mjs)
 //   8. the desk at a counter: 28 day cells, the sold-out ones disabled (stream B absent: the wrapped claims section)
 //
@@ -238,12 +238,12 @@ try {
   const p3 = await pushOff();
   const pm = await page.evaluate(([a, b, home]) => {
     const g = window.__game, P = g.permits, l = g.outfitter.landing(home);
-    return { inside: P.allowsOffsite(a[0], a[1]), insideAt: P.pmaAt(a[0], a[1])?.id || null, outside: P.allowsOffsite(l.x, l.z), other: P.allowsOffsite(b[0], b[1]) };
+    return { inside: P.allowsOffsite(a[0], a[1]), insideAt: P.pmaAt(a[0], a[1])?.id || null, outside: P.allowsOffsite(l.x, l.z), other: P.allowsOffsite(b[0], b[1]), campIn: g.camp.offsiteOk(a[0], a[1]), campOut: g.camp.offsiteOk(l.x, l.z) };
   }, [pmaInfo.a.c, pmaInfo.b.c, HOME]);
   await comeIn();
   await cardAway();
   const after = await page.evaluate((a) => window.__game.permits.allowsOffsite(a[0], a[1]), pmaInfo.a.c);
-  result('7 a PMA permit: off-site inside its polygon only; not outside, not another PMA, not on another trip', p3.permit && p3.permit.kind === 'pma' && pm.inside && pm.insideAt === pmaInfo.a.id && !pm.outside && !pm.other && !onOvernight && !after, { pma: pmaInfo.a.name, ...pm, onOvernight, afterTrip: after });
+  result('7 a PMA permit: off-site inside its polygon only; not outside, not another PMA, not on another trip', p3.permit && p3.permit.kind === 'pma' && pm.inside && pm.insideAt === pmaInfo.a.id && !pm.outside && !pm.other && pm.campIn && !pm.campOut && !onOvernight && !after, { pma: pmaInfo.a.name, ...pm, onOvernight, afterTrip: after });
 
   // --- 6: an old save (a v3 core, a trip under way) --------------------------------------------------------------------------
   // a trip under way since this morning, written as the old core (no permit fields), the page reloaded; the outfitter's

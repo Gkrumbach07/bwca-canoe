@@ -1133,8 +1133,8 @@ async function main() {
     Object.assign(window.__game, { story, onboarding, walt });
   }
   // gl-d: the trip-end tally and the board (the game-loop round, stream D; docs/build/game-loop-brief.md). Pay lands on
-  // the trip's card as it counts up (record.js ended → tasks.settle), never at the board; five notices held at most,
-  // each with a deadline that fits it; the new kinds (task-kinds-2.js: creel, campsite, beaver, iceout, colour,
+  // the trip's card as it counts up (record.js ended → tasks.settle), never at the board; no cap on notices held
+  // (the owner's call 2026-11-05), each with a deadline that fits it; the new kinds (task-kinds-2.js: creel, campsite, beaver, iceout, colour,
   // lastcheck, pma); the firsts and the milestones. Here: the new kinds wired to the camera and the parties, a party's
   // word heard by a creel survey, a visitor's gift kept when the tally pays their notice, the board's dot label, and
   // two moments.

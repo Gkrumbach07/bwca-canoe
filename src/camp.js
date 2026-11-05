@@ -590,6 +590,8 @@ export class Camp {
     for (const c of inv.campReach()) for (const e of c.grid) if (e.uid === uid && !e.box) { const d = itemDef(e.id); return d && d.slot === 'tent' ? { c, e, def: d } : null; }
     return null;
   }
+  // off the designated sites in Adventure: only inside the primitive area of the trip's PMA permit (permits.allowsOffsite)
+  offsiteOk(x, z) { const P = this.trip && this.trip.permits; return !!(P && typeof P.allowsOffsite === 'function' && P.allowsOffsite(x, z)); }
   // why that tent can't be pitched from here now, or null; site: the one you stand at (or null off one)
   pitchRefused(tent) {
     const p = this.player;
@@ -598,7 +600,7 @@ export class Camp {
     if (this.outfitter && this.outfitter.visit) return 'not in an outfitter’s yard';
     if (this.camp) return this.camp.stage >= 4 ? 'your tent is up already: strike it to pitch it elsewhere' : 'your tent stands half pitched: carry on with it, or strike it';
     const site = this.nearestSite(p.x, p.z, AREA_R, true);
-    if (this.adventure && !site) return 'only at a campsite in Adventure';
+    if (this.adventure && !site && !this.offsiteOk(p.x, p.z)) return 'only at a campsite in Adventure';
     if (site) { const h = this.registry.holder(campKey(site)); if (h && h !== PLAYER) return 'another party is camped here'; }
     return null;
   }
@@ -662,8 +664,8 @@ export class Camp {
     const Xx = -fdz, Xz = fdx; // along the tent; (fdx, fdz) across it, to the door
     const pt = (u, v) => [x + Xx * u + fdx * v, z + Xz * u + fdz * v];
     if (this.adventure) {
-      if (!site || !site.layout) return 'only at a campsite in Adventure';
-      if (Math.hypot(site.layout.fire.x - x, site.layout.fire.z - z) > AREA_R - 2) return 'outside the campsite';
+      if (!site || !site.layout) { if (!this.offsiteOk(x, z)) return 'only at a campsite in Adventure'; } // (off a site: a primitive area on its permit only)
+      else if (Math.hypot(site.layout.fire.x - x, site.layout.fire.z - z) > AREA_R - 2) return 'outside the campsite';
     }
     // the water: every corner and the door well up the bank
     const pts = [];
