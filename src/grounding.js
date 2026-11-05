@@ -46,7 +46,7 @@ export const RULES = [
   { id: 'afternoon', what: 'an afternoon word in the afternoon', re: /^(good )?afternoon\b/i, need: (F) => F.hours >= 12 && F.hours < 18 },
   { id: 'evening', what: 'an evening word in the evening', re: /^(good )?evening\b|\bpretty evening\b|\bnice night coming\b|\bgetting on for supper\b/i, need: (F) => F.hours >= 16 },
   { id: 'night', what: 'good night at night', re: /^good ?night\b/i, need: (F) => F.hours >= 19 || F.hours < 4 },
-  { id: 'wet', what: 'the wet when it is wet', re: /\bwet one\b|\bshake off\b|\bit’?'?s (raining|pouring)\b|\bin the rain\b|\bthis rain\b/i, need: (F) => F.wet || F.raining },
+  { id: 'wet', what: 'the wet when it is wet', re: /^wet one\b|\bwet one (out|eh|today)\b|\bshake off\b|\bit’?'?s (raining|pouring)\b|\bin the rain\b|\bthis rain\b/i, need: (F) => F.wet || F.raining },
   { id: 'fine', what: 'fine weather when it is fine', re: /\b(beautiful|lovely|gorgeous|nice|good|pretty) (day|morning|evening|night) for it\b|\bnice day\b|\bbeautiful (day|morning)\b|\bsunshine\b|\bblue sky\b/i, need: (F) => !F.raining && F.weather !== 'storm' && F.weather !== 'rain' },
   { id: 'windy', what: 'windy words when it blows', re: /\bwindy out there\b|\bwhitecaps (out|on the)\b|\bit’?'?s blowing\b|\bwind’?'?s up\b/i, need: (F) => F.wind.now >= 5.5 || (F.wind.today && F.wind.today.peak >= 6 && F.hours >= 10 && F.hours < 20) },
   { id: 'calm', what: 'calm words when it is calm', re: /\bflat calm\b|\bglass(y)? (out there|calm)\b|\bnot a breath\b/i, need: (F) => F.wind.now < 3 },

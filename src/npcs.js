@@ -1457,6 +1457,42 @@ export class People {
     return ev;
   }
   nameLists() { return nameLists(); } // (gl-e: the tests)
+  // gl-e (scripts/gl-ground-lint.mjs): every line the people at store ep could say now, after grounding, as the pickers
+  // see them: [{ src, text }]. raw: outfitters.js's keeper lines as written (read only), before any grounding
+  lintLines(ep, { raw = false } = {}) {
+    ep = Number(ep);
+    const out = [], add = (src, list) => { for (const t of list || []) { const x = typeof t === 'string' ? t : t && t.text; if (x) out.push({ src, text: x }); } };
+    const F = this.groundCtx(), ok = (list) => (list || []).filter((t) => GROUND.ok(typeof t === 'string' ? t : t && t.text, F)), h = this.day.hours;
+    const op = outfitterProfile(ep, this.world);
+    if (raw) {
+      if (op && op.keeper) { for (const [k, l] of Object.entries(op.keeper.moments || {})) add(`outfitters:${k}`, l); for (let n = 0; n < 24; n++) add('outfitters:chat', [keeperLine(op, 'chat', { doy: this.day.doy, n, hours: h, rep: 0 })]); }
+      return out;
+    }
+    const L = storeLayout(ep);
+    for (const v of (L ? this.at(ep) : [])) {
+      if (v.keeper) {
+        const ch = this.charOf(ep), m = ch ? ch.manner : 'warm';
+        if (op && op.keeper) for (const k of ['hello', 'goodbye']) add(`keeper:${k}`, ok(forHourPool(op.keeper.moments[k] || [], h)));
+        add('keeper:idle', ok(KEEPER_IDLE[m] || KEEPER_IDLE.warm));
+        add('keeper:word', this.wordList(v));
+        const adv = adviceFor(this.adviceCtx(), {}, this.today).map((a) => a.text(m));
+        add('keeper:advice', ok(adv));
+        add('keeper:past', ok(ch ? ch.past : []));
+        continue;
+      }
+      if (v.extra) continue;
+      if (v.inParty) { add(`party:${v.dir}`, this.tripLines(v)); add(`party:${v.dir}:lore`, ok(PARTY_LORE[v.trip.kind] || [])); add('party:intro', [this.pIntro(v, 0)]); continue; }
+      const pool = [...(REMARKS[v.arch] || [])];
+      if (this.weather && this.weather.wetness > 0.35) pool.push('Wet one out there.', 'Shake off by the stove, if you like.');
+      if (h < 9) pool.push('Early start, eh?');
+      if (h >= 19) pool.push('Getting on for supper.');
+      add(`visitor:${v.arch}:remark`, ok(pool));
+      add(`visitor:${v.arch}:hint`, this.hintList(v));
+      add(`visitor:${v.arch}:lore`, this.loreOf(v));
+      add(`visitor:${v.arch}:open`, ok(OPENERS[v.arch] || []).filter((w) => !(/^Morning/.test(w) && h >= 12) && !(/^Afternoon/.test(w) && (h < 12 || h >= 18))));
+    }
+    return out;
+  }
   lakeHere() { const p = this.player; try { return this.tasks && typeof this.tasks.lakeNear === 'function' ? this.tasks.lakeNear(p.x, p.z, 8) || 0 : 0; } catch { return 0; } }
   // a party's trip in their words (tests, the console): tripWords of storyOf, grounded
   partyLines(party, dir = null, T = this.today) { const P = this.sched; if (!P) return []; const S = P.storyOf(party, T), F = this.groundCtx(); return tripWords(S, { T, dir, size: party.size }).filter((x) => GROUND.ok(x.text, F)); }
@@ -1484,7 +1520,10 @@ export class People {
   groundCtx() {
     const o = this.outfitter, vis = o && o.visit, L = vis && vis.L ? vis.L : vis ? storeLayout(vis.ep) : null;
     const op = vis ? outfitterProfile(vis.ep, this.world) : null, p = this.player;
-    let lake = 0; try { lake = this.tasks && typeof this.tasks.lakeNear === 'function' ? this.tasks.lakeNear(p.x, p.z, 8) : 0; } catch { lake = 0; }
+    // (the lake: at a store its landing's, whose ice the world shows there; out on the water the one you are on)
+    const e = vis ? this.world.entryPoints.find((x) => x.ep === vis.ep) : null;
+    let lake = e && e.lake > 0 ? e.lake : 0;
+    if (!lake) { try { lake = this.tasks && typeof this.tasks.lakeNear === 'function' ? this.tasks.lakeNear(p.x, p.z, 8) : 0; } catch { lake = 0; } }
     return GROUND.facts({ store: L, kind: op ? op.kind : null, cafe: vis && vis.ep === 30, lake, ep: vis ? vis.ep : null });
   }
   grounded(t, F = null) { return GROUND.ok(t, F || this.groundCtx()); }
@@ -1851,7 +1890,9 @@ export class People {
   // their hints, in turn (each told on the map where it means some water), then that they have told you all they know
   hintList(v) {
     const A = ARCH[v.arch]; if (!A) return [];
-    if (v._hints) return v._hints;
+    const at = this.today * 8 + Math.floor(this.day.hours / 3); // (gl-e: written again every three hours: the weather, the ground)
+    if (v._hints && v._hintsAt === at) return v._hints;
+    v._hintsAt = at;
     const H = new HintWriter(this, v.ep, seeded(v.ep, this.week, v.arch.length, 0x4a17)), out = [];
     const F = this.groundCtx();
     for (const k of A.hints) { const fn = HINTS[k]; if (!fn) continue; try { const h = fn(H, v, 0, this); if (h && h.text && !out.some((x) => x.text === h.text) && GROUND.ok(h.text, F)) out.push(h); } catch (e) { console.warn('people: a hint', k, e); } } // (gl-e: only what is true now)
@@ -1868,7 +1909,8 @@ export class People {
   }
   // about them: their lore lines, their route or their history where those are hints of theirs
   loreOf(v) {
-    if (v._lore) return v._lore;
+    if (v._lore && v._loreAt === this.today) return v._lore;
+    v._loreAt = this.today;
     const out = [];
     for (const l of LORE[v.arch] || []) {
       if (typeof l === 'function') { out.push(l(v)); continue; }
