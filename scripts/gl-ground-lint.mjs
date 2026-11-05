@@ -7,11 +7,13 @@
 //   and jackets) on the wall · weather words fit the hour and the weather
 // Then outfitters.js's keeper lines as written (stream B's, read only) are scanned the same way and reported: those the
 // people would never say (grounding.js filters them) are listed for B, not failed.
-//   npx vite --port 5185 --strictPort &   node scripts/gl-ground-lint.mjs [--eps 25,38,1,55,16] [--step 1]
+//   npx vite --port 5185 --strictPort &   node scripts/gl-ground-lint.mjs [--eps 25,38,1,64,16] [--step 1]
+// (the join: five outfitters with hand-written keepers; Saganaga 55 is a trailhead now, Lise is at East Bearskin 64.
+// A season begun at a trailhead begins at its host, so the store the lint reads is the one the walker is in.)
 import { launch, openGame, seasonAt, log } from './gl-e-lib.mjs';
 
 const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i > 0 ? process.argv[i + 1] : d; };
-const EPS = String(arg('eps', '25,38,1,55,16')).split(',').map(Number);
+const EPS = String(arg('eps', '25,38,1,64,16')).split(',').map(Number);
 const OFF = process.argv.includes('--off'); // (grounding.js switched off: the lint must then find broken lines)
 const STEP = Number(arg('step', 1)), YEAR = 2026, FROM = 121, TO = 334, HOURS = [7, 13, 19.5];
 
@@ -47,9 +49,9 @@ try {
       for (let doy = FROM; doy <= TO; doy += STEP) for (const h of HOURS) {
         g.day.setClock(YEAR, doy, h); g.advance(1 / 30, 1);
         // (the ice: the store's own lake's, its ice-out and ice-in from lake-facts.js, as the world shows it there)
-        const e = g.world.entryPoints.find((x) => x.ep === ep), own = e && e.lake > 0 && g.lakeFacts ? g.lakeFacts.iceOf(e.lake) : null;
+        const at = (g.outfitter.visit && g.outfitter.visit.ep) || ep, e = g.world.entryPoints.find((x) => x.ep === at), own = e && e.lake > 0 && g.lakeFacts ? g.lakeFacts.iceOf(e.lake) : null;
         const se = S.seasonAt(doy), W = g.weather, D = { doy, h, ice: own ? S.seasonAt(doy, own).ice : se.ice, snow: se.snow, snowing: W.precipitation === 'snow', bugs: Math.max(B.mosqSeason(doy), B.flySeason(doy)), wet: W.wetness > 0.35, raining: W.precipitation === 'rain' || /rain|storm/.test(W.state) };
-        const said = N.lintLines(ep);
+        const said = N.lintLines(at);
         // the parties camped within reach of the store tonight: their greetings and their trip
         const T = P.today, r = mulberry32((doy * 977 + h * 13) >>> 0), camps = P.campsAt(T, h).filter((c) => Math.hypot(c.site.x - g.player.x, c.site.z - g.player.z) < 9000).slice(0, 6);
         for (const c of camps) { for (let k = 0; k < 3; k++) { const t = C.helloLine({ party: c.party, v: true }, r); if (t) said.push({ src: 'camp:hello', text: t }); } for (const x of N.partyLines(c.party, null, T)) said.push({ src: 'camp:trip', text: x.text }); }
@@ -58,7 +60,7 @@ try {
           lines++;
           for (const [id, test] of rules) if (test(x.text, D)) bad.push({ doy, h, id, src: x.src, text: x.text });
         }
-        if (h === HOURS[0] && doy % 7 === 0) for (const x of N.lintLines(ep, { raw: true })) for (const [id, test] of rules) if (test(x.text, D)) raw.push({ doy, id, src: x.src, text: x.text });
+        if (h === HOURS[0] && doy % 7 === 0) for (const x of N.lintLines(at, { raw: true })) for (const [id, test] of rules) if (test(x.text, D)) raw.push({ doy, id, src: x.src, text: x.text });
       }
       return { checked, lines, bad: bad.slice(0, 40), nBad: bad.length, raw };
     }, { ep, YEAR, FROM, TO, STEP, HOURS, RULES, OFF });

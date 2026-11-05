@@ -1579,7 +1579,9 @@ export class People {
     const o = this.outfitter, vis = o && o.visit, L = vis && vis.L ? vis.L : vis ? storeLayout(vis.ep) : null;
     const op = vis ? outfitterProfile(vis.ep, this.world) : null, p = this.player;
     // (the lake: at a store its landing's, whose ice the world shows there; out on the water the one you are on)
-    const e = vis ? this.world.entryPoints.find((x) => x.ep === vis.ep) : null;
+    let e = vis ? this.world.entryPoints.find((x) => x.ep === vis.ep) : null;
+    // (the join: at a trailhead, stream B's lot or landing with no store, its landing's lake as at a store)
+    if (!e && o && typeof o.entryHere === 'function' && p.onFoot) { try { const h = o.entryHere(p.x, p.z); e = h && h.e ? h.e : null; } catch { e = null; } }
     let lake = e && e.lake > 0 ? e.lake : 0;
     if (!lake) { try { lake = this.tasks && typeof this.tasks.lakeNear === 'function' ? this.tasks.lakeNear(p.x, p.z, 8) : 0; } catch { lake = 0; } }
     return GROUND.facts({ store: L, kind: op ? op.kind : null, cafe: vis && keeperKeyOf(vis.ep) === 30, lake, ep: vis ? vis.ep : null });
