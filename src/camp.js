@@ -900,7 +900,7 @@ export class Camp {
     const words = (at) => {
       const w = this.wakeTime(at), M = Math.round(w.hours * 60), H = Math.floor(M / 60), m = M % 60;
       const span = `${H ? `${H} h` : ''}${m ? ` ${m} min` : ''}`.trim() || 'no time at all';
-      const kind = w.nap ? 'a nap: some of the rest comes back' : w.hours >= 7 ? 'a full night' : 'a short night: not all the rest comes back'; // (fb5 join: no percent, rule 3)
+      const kind = w.nap ? 'a nap: some of the rest comes back' : w.day ? 'a sleep by day' : w.hours >= 7 ? 'a full night' : 'a short night: not all the rest comes back'; // (fb5 join: no percent, rule 3)
       const short = this.tentShort(); // (what the night is short of, said before it, not after)
       return `${span} · ${kind}${c.stage < 4 ? ' · no fly on' : ''}${short.length ? ` · ${short.join(', ')}` : ''}`;
     };
@@ -992,9 +992,12 @@ export class Camp {
     const d = this.day, { rise: r, set } = d.sunriseSunset, rise = r ?? 6, dusk = set ?? 19;
     if (Number.isFinite(choice)) {
       const at = ((choice % 24) + 24) % 24, hours = ((at - d.hours) % 24 + 24) % 24 || 24;
-      const byDay = (h) => h >= rise && h < dusk;
-      const nap = hours < NAP_UNDER && byDay(d.hours) && byDay(at) && at > d.hours;
-      return { at, hours, nap, day: nap };
+      // a rest that starts and ends in daylight (up to dusk itself, the dial's Dusk) crosses no dark: a sleep by day, its
+      // card the day's, no morning after it; under NAP_UNDER hours it is a nap (the playthrough: the dial's Dusk from
+      // 1 pm was "Night 1 · a full night's sleep", then a "Day 1 · sunrise" card at 9 pm)
+      const byDay = (h) => h >= rise && h <= dusk + 1 / 60;
+      const day = byDay(d.hours) && byDay(at) && at > d.hours, nap = day && hours < NAP_UNDER;
+      return { at, hours, nap, day };
     }
     if (d.hours >= rise && d.hours < dusk - SLEEP_FROM) { const at = Math.min(23.5, d.hours + SLEEP_IN); return { at, hours: at - d.hours, day: true }; } // a sleep by day, worn out
     let at = (rise + WAKE_AT) % 24, hours = ((at - d.hours) % 24 + 24) % 24 || 24;
@@ -1043,7 +1046,7 @@ export class Camp {
     // by day) whose hours hold the night's hour, with food not hung; the card is the visit, held while its sounds play
     const B = !nap && !byDay && this.bear && typeof this.bear.bedtime === 'function' ? this.bear.bedtime({ x: p.x, z: p.z, from: this.now, to: this.now + hours }) : null;
     if (B) { card.text = B.text; card.hold = B.hold; }
-    this.night = { kind, q, hours, wakeAt, x: p.x, z: p.z, rain, nap, bear: !!B, bag: !!gear.bag, pad: !!gear.pad, fly, rest0: e && e.live && e.needs ? e.needs.rest : null, clockTo: shared && shared.to ? shared.to : null };
+    this.night = { kind, q, hours, wakeAt, x: p.x, z: p.z, rain, nap, day: !!byDay, bear: !!B, bag: !!gear.bag, pad: !!gear.pad, fly, rest0: e && e.live && e.needs ? e.needs.rest : null, clockTo: shared && shared.to ? shared.to : null };
     // (the bear at the tent: its onDark is a promise, the card held while you have the moment to shout: bear.js tentNight)
     const onDark = () => {
       let w = null;
@@ -1134,6 +1137,8 @@ export class Camp {
     const n = this.night;
     if (n && n.nap) { this.night = null; this.note(`Up at ${clock12(this.day.hours)}, ${n.hours < 1.5 ? 'a little' : 'a good deal'} more rested.`, 5); return; }
     this.night = null;
+    // a long sleep by day (no dark in it): a word, not the day's card ("Day 1 · sunrise 5:08 am" at 9 pm)
+    if (n && n.day) { const m = this.morningNote; this.morningNote = null; this.note(`Up at ${clock12(this.day.hours)}.${m ? ` ${m}` : ''}`, 6); return; }
     const d = this.day, h = this.hud, p = this.player, w = this.world, e = this.energy;
     const rise = d.sunriseSunset.rise, wind = this.wind, dayN = this.tripDay(d.doy);
     const here = p.placeName || w.lakeName(p.lakeId) || 'Open country';
