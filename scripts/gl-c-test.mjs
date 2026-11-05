@@ -72,7 +72,7 @@ try {
     const I = await import(pathToFileURL(path.resolve('src/items.js')).href);
     const bad = I.WALT_IDS.map((id) => [id, I.itemDef(id).identity]).filter(([, w]) => /\bfor\b|\buse/i.test(w || ''));
     result('7 no new identity says what the item is for', !bad.length && I.WALT_IDS.length === 4, { identities: Object.fromEntries(I.WALT_IDS.map((id) => [id, I.itemDef(id).identity])), bad });
-    result('reserved name: the cedar minnow reads Leif', /^Leif/.test(I.itemDef('lure:cedarminnow').name), { name: I.itemDef('lure:cedarminnow').name });
+    result('reserved name: the cedar minnow reads Oskar', /^Oskar/.test(I.itemDef('lure:cedarminnow').name), { name: I.itemDef('lure:cedarminnow').name });
     const kit = JSON.stringify(I.STARTER_KIT);
     result('3a STARTER_KIT has no aframe, pack3 or pot', !/"aframe"|"pack3"|"pot"/.test(kit), { kit: I.STARTER_KIT });
   }

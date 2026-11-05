@@ -215,7 +215,7 @@ export const SHIRTS = [0x7a2e2a, 0x2f4f6a, 0x3f5a3a, 0x6a5a3a, 0x5a3a52, 0x4d657
 const PANTS = [0x3a4a5a, 0x4a4436, 0x34362f, 0x5a5444, 0x2f3a46];
 const BOOTS = [0x5a3e29, 0x3a2e24, 0x6a4a2e];
 const HATS = [0x9d8b61, 0x6a5a40, 0x4a4a3a, 0x7a6a4a, 0x3a4436];
-const FEMALE = new Set(['Ada', 'Agnes', 'Alma', 'Carol', 'Clara', 'Dot', 'Edna', 'Elsie', 'Ellen', 'Esther', 'Greta', 'Hazel', 'Helga', 'Ida', 'Inga', 'Ione', 'Joanne', 'June', 'Kari', 'Lois', 'Mae', 'Myrna', 'Nora', 'Sigrid', 'Sonja', 'Tess', 'Thea', 'Vi', 'Wilma', 'Ruth', 'Bev', 'Lise', 'Marit', 'Deb', 'Marge', 'Lorna', 'Anneli', 'Priya', 'Kate', 'Sue', 'Jo', 'Rosa', 'Nell', 'Britt', 'Maya', 'Hanna', 'Lucy', 'Liv', 'Ingrid', 'Pat', 'Dana', 'Gail']);
+const FEMALE = new Set(['Ada', 'Agnes', 'Alma', 'Bea', 'Clara', 'Dot', 'Edna', 'Elna', 'Ellen', 'Esther', 'Greta', 'Hazel', 'Helga', 'Ida', 'Inga', 'Ione', 'Joanne', 'Lempi', 'Kaija', 'Lois', 'Mae', 'Myrna', 'Nora', 'Sigrid', 'Sonja', 'Tess', 'Thea', 'Vi', 'Wilma', 'Ruth', 'Bev', 'Lise', 'Marit', 'Deb', 'Marge', 'Lorna', 'Anneli', 'Priya', 'Kate', 'Sue', 'Jo', 'Rosa', 'Nell', 'Britt', 'Maya', 'Hanna', 'Lucy', 'Liv', 'Ingrid', 'Pat', 'Dana', 'Gail']);
 // a palette: { skin, shirt, cuff, pants, belt, pfd, pfdDark, boot, sole, lace, hair, beard, hat, band } and how the
 // figure wears it: hat (bool), bun (bool), scale
 export function dress(rng, { female = false, age = 'adult', shirt, pfd, pants, hat, hatChance = 0.5, beardChance = 0.35, hair } = {}) {
@@ -239,19 +239,19 @@ function shade(hex, k) { const c = new THREE.Color(hex); c.r = Math.min(1, c.r *
 // what they may ask (null: nothing); odds: how often they have one; wear: their clothes.
 const CITIES = ['Minneapolis', 'St. Paul', 'Duluth', 'Des Moines', 'Madison', 'Chicago', 'Milwaukee', 'Rochester', 'Fargo', 'Iowa City', 'Thunder Bay', 'Winnipeg', 'Eau Claire', 'Ames'];
 const F_NAMES = ['Marit', 'Anneli', 'Priya', 'Kate', 'Sue', 'Jo', 'Rosa', 'Nell', 'Britt', 'Maya', 'Hanna', 'Lucy', 'Liv', 'Ingrid', 'Pat', 'Dana', 'Gail', 'Lorna'];
-const M_NAMES = ['Jake', 'Dave', 'Tom', 'Sam', 'Arne', 'Pete', 'Luis', 'Ben', 'Mike', 'Eli', 'Gary', 'Hal', 'Nate', 'Rolf', 'Will', 'Joe', 'Dan', 'Kurt'];
-const OLD_NAMES = ['Gunnar', 'Otto', 'Hjalmar', 'Clem', 'Arvo', 'Reino', 'Edna', 'Ione', 'Toivo', 'Elmer'];
-const KID_NAMES = ['Tyler', 'Emma', 'Owen', 'Ava', 'Finn', 'Lily', 'Max', 'Ruby', 'Leo', 'Nora'];
+const M_NAMES = ['Jake', 'Dave', 'Wyatt', 'Sam', 'Anders', 'Russ', 'Luis', 'Ben', 'Mike', 'Eli', 'Gary', 'Hal', 'Cole', 'Rolf', 'Will', 'Joe', 'Drew', 'Kurt'];
+const OLD_NAMES = ['Gunnar', 'Otto', 'Hjalmar', 'Clem', 'Arvo', 'Reino', 'Edna', 'Ione', 'Lauri', 'Elmer'];
+const KID_NAMES = ['Tyler', 'Emma', 'Owen', 'Ava', 'Finn', 'Lily', 'Max', 'Ruby', 'Milo', 'Nora'];
 // (the game-loop play: two Rosas, one in the store and one camped across the lake) the names a person takes only when
 // the name drawn is already someone else's (NameBook): the draws above stay as they were, so who is who does not change
-const F_MORE = ['Annika', 'Brenda', 'Cheryl', 'Darla', 'Freya', 'Heidi', 'Janet', 'Kirsten', 'Laila', 'Mira', 'Nadia', 'Paula', 'Renee', 'Sara', 'Tina', 'Vera', 'Wendy', 'Yvonne', 'Zoe', 'Gwen', 'Holly', 'Irene', 'Lena', 'Olive'];
-const M_MORE = ['Aaron', 'Bjorn', 'Carl', 'Doug', 'Erik', 'Frank', 'Glen', 'Hank', 'Ivan', 'Jon', 'Karl', 'Lars', 'Matt', 'Neil', 'Oscar', 'Paul', 'Ray', 'Stan', 'Ted', 'Vic', 'Wade', 'Zach', 'Brad', 'Craig'];
-const OLD_MORE = ['Alvin', 'Bernie', 'Delmar', 'Eldon', 'Floyd', 'Harlan', 'Mabel', 'Opal', 'Verna', 'Thelma', 'Orville', 'Lowell'];
-const KID_MORE = ['Mia', 'Jack', 'Ella', 'Noah', 'Ivy', 'Sam', 'Zara', 'Eli', 'Rose', 'Ben', 'Lucas', 'Grace'];
+const F_MORE = ['Annika', 'Brenda', 'Cheryl', 'Darla', 'Freya', 'Heidi', 'Janet', 'Kirsten', 'Laila', 'Mira', 'Nadia', 'Paula', 'Renee', 'Sara', 'Tina', 'Vera', 'Wendy', 'Yvonne', 'Zoe', 'Gwen', 'Holly', 'Ilse', 'Lena', 'Olive'];
+const M_MORE = ['Aaron', 'Bjorn', 'Curt', 'Doug', 'Erik', 'Fritz', 'Glen', 'Hank', 'Ivan', 'Jens', 'Karl', 'Lars', 'Mitch', 'Neil', 'Otis', 'Paul', 'Ray', 'Stan', 'Ted', 'Vic', 'Warren', 'Zach', 'Brad', 'Craig'];
+const OLD_MORE = ['Alvin', 'Bernie', 'Delmar', 'Eldon', 'Floyd', 'Arlo', 'Mabel', 'Opal', 'Verna', 'Thelma', 'Orville', 'Lyman'];
+const KID_MORE = ['Mia', 'Jack', 'Ella', 'Noah', 'Ivy', 'Sam', 'Zara', 'Eli', 'Hazel', 'Ben', 'Lucas', 'Grace'];
 for (const n of [...F_MORE, 'Mabel', 'Opal', 'Verna', 'Thelma']) FEMALE.add(n);
 // the story's own people and the hand-written keepers: never a generated person's name (the keepers' are added from
 // outfitters.js, the summer help's from onboarding.js)
-const STORY_NAMES = ['Walt', 'Eino', 'Leif'];
+const STORY_NAMES = ['Walt', 'Oskar']; // (the pools above hold no name of the story's cast: glf-f3 test 1a checks every list)
 const NAME_STALE = 2; // days: a name not seen for this long (its person gone out of the trip's reach) is free again
 // One name per person among the people you can meet at once: the store's people, the parties on the water and in camp,
 // the keepers and the summer help. A person's name is the one drawn for them unless someone else seen in the last two
@@ -283,8 +283,8 @@ class NameBook {
 const poolOf = (n) => (KID_NAMES.includes(n) ? [KID_NAMES, KID_MORE] : OLD_NAMES.includes(n) ? [OLD_NAMES, OLD_MORE] : COOKS.includes(n) ? [COOKS, F_NAMES, F_MORE]
   : F_NAMES.includes(n) || FEMALE.has(n) ? [F_NAMES, F_MORE] : [M_NAMES, M_MORE]);
 // gl-e: every name a generated person can have (the tests check the story's names are not among them)
-export const nameLists = () => ({ F_NAMES, M_NAMES, OLD_NAMES, KID_NAMES, SURNAMES, COOKS });
-const SURNAMES = ['Olson', 'Lindqvist', 'Peterson', 'Nguyen', 'Hansen', 'Garcia', 'Kowalski', 'Larsen', 'Schmidt', 'Johnson', 'Haugen', 'Novak'];
+export const nameLists = () => ({ F_NAMES, M_NAMES, OLD_NAMES, KID_NAMES, SURNAMES, COOKS, F_MORE, M_MORE, OLD_MORE, KID_MORE });
+const SURNAMES = ['Olson', 'Lindqvist', 'Peterson', 'Nguyen', 'Hansen', 'Garcia', 'Kowalski', 'Larsen', 'Schmidt', 'Johnson', 'Haugen', 'Swanson'];
 const COOKS = ['Marge', 'Lorna', 'Dolores', 'Arlene', 'Sue'];
 const ARCH = {
   guide: { months: [6, 9], hours: [7, 20], at: { lodge: 1.3, 'river post': 0.8, 'trout camp': 1, 'bait shop': 0.6 }, spots: ['counterEnd', 'aisle', 'rail'], hints: ['fish', 'route', 'camp'], task: 'fetch', odds: 0.8, party: true,
@@ -1044,7 +1044,33 @@ async function siteErrand(P, v, c, who) {
 // (key → lines told), mem (talk-memory.js), visits (ep → the days you have talked to the keeper there)
 // gl-e (v 2): met (party id → { abs, ep, where, exit, told }: the parties you talked to in a store, who know you out there;
 // pruned a week after their trip ends). A v 1 save loads with met {}.
-const blankState = () => ({ v: 2, talked: {}, tasks: {}, paid: {}, gifts: {}, names: {}, told: [], chat: {}, asked: {}, arcs: {}, word: {}, rumoured: {}, advised: {}, deal: {}, secret: {}, topics: {}, visits: {}, mem: null, met: {} });
+const blankState = () => ({ v: 2, talked: {}, tasks: {}, paid: {}, gifts: {}, names: {}, told: [], chat: {}, asked: {}, arcs: {}, word: {}, rumoured: {}, advised: {}, deal: {}, secret: {}, topics: {}, visits: {}, mem: null, met: {}, moved: 1 });
+// glf-3: the game-loop round moved four hand keepers to the host that serves their old landing (outfitters.js
+// KEEPER_FROM: Leon 14 → 16, Arvid 54 → 51, Lise 55 → 64, Ruth 30 → 31). What a save holds of them under the old landing
+// (their arc, deal, secret site, the days you talked, the week's word, what they told you, the talk with them) moves
+// to the new host once (s.moved); where the new host already has some, the further arc and the rest of the new host's
+// own stay. The old landing is a trailhead now, so nothing is left there for a generated keeper to inherit.
+export function moveKeepers(s) {
+  if (!s || s.moved) return false;
+  const has = (m, k) => m && Object.prototype.hasOwnProperty.call(m, k);
+  const take = (m, from, to, better = null) => {
+    if (!m || !has(m, from)) return;
+    if (!has(m, to) || (better && better(m[from], m[to]))) m[to] = m[from];
+    delete m[from];
+  };
+  for (const [to, from] of Object.entries(KEEPER_FROM)) {
+    take(s.arcs, from, to, (a, b) => (a && a.b) > (b && b.b));
+    for (const k of ['word', 'deal', 'secret', 'chat', 'rumoured']) take(s[k], from, to);
+    take(s.visits, from, to, (a, b) => Array.isArray(a) && Array.isArray(b) && a.length > b.length);
+    for (const k of Object.keys(s.topics || {})) if (k.startsWith(`${from}:`)) take(s.topics, k, `${to}:${k.slice(String(from).length + 1)}`);
+    for (const m of ['talked', 'tasks', 'paid', 'gifts', 'names', 'asked']) for (const k of Object.keys(s[m] || {})) {
+      if (k === `keeper:${from}` || k.startsWith(`keeper:${from}#`)) take(s[m], k, `keeper:${to}${k.slice(`keeper:${from}`.length)}`);
+    }
+    if (s.mem) for (const k of ['greet', 'heard']) take(s.mem[k], from, to);
+  }
+  s.moved = 1;
+  return true;
+}
 export class People {
   constructor({ world, scene, player, day, hud, tasks, outfitter = null, profile = null, weather = null, registry = null, mat }) {
     this.world = world; this.scene = scene; this.player = player; this.day = day; this.hud = hud; this.tasks = tasks; this.outfitter = outfitter; this.profile = profile; this.weather = weather; this.registry = registry;
@@ -1095,8 +1121,10 @@ export class People {
   load() {
     const s = save.read(NS);
     const o = (x) => (x && typeof x === 'object' && !Array.isArray(x) ? x : {});
-    return s && (s.v === 1 || s.v === 2) ? { v: 2, met: o(s.met), talked: s.talked || {}, tasks: s.tasks || {}, paid: s.paid || {}, gifts: s.gifts || {}, names: s.names || {}, told: Array.isArray(s.told) ? s.told : [], chat: s.chat || {}, asked: s.asked || {},
+    const out = s && (s.v === 1 || s.v === 2) ? { v: 2, moved: s.moved ? 1 : 0, met: o(s.met), talked: s.talked || {}, tasks: s.tasks || {}, paid: s.paid || {}, gifts: s.gifts || {}, names: s.names || {}, told: Array.isArray(s.told) ? s.told : [], chat: s.chat || {}, asked: s.asked || {},
       arcs: o(s.arcs), word: o(s.word), rumoured: o(s.rumoured), advised: o(s.advised), deal: o(s.deal), secret: o(s.secret), topics: o(s.topics), visits: o(s.visits), mem: s.mem && s.mem.v === 1 ? s.mem : null } : blankState(); // (an older save: the content B fields start empty)
+    if (moveKeepers(out)) save.write(NS, out); // glf-3: once, the moved keepers' talk to their new host
+    return out;
   }
   write() { save.write(NS, this.s); }
   reset() { this.s = blankState(); this.weekCache = null; this.rosters.clear(); this.names.clear(); this.preparing.clear(); this.chars.clear(); if (this.mem) this.mem.reset(); this.write(); }

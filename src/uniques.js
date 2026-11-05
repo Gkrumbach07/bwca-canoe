@@ -11,7 +11,7 @@
 //   to the Forest Service through the keeper, for REWARD dollars and the keepers' goodwill there; both reported in a
 //   season, word gets round the counters and goodwill comes half as fast again (goodwill(), profile.raise in main.js).
 // Found, noted and reported once a season (its own save, tied to profile.seasonId); a new season lays them out again.
-// The three a keeper's arc ends in (stream B: Leif's cedar minnow, Lise's lucky cap, Arvid's guiding map) are given
+// The three a keeper's arc ends in (stream B: Oskar's cedar minnow, Lise's lucky cap, Arvid's guiding map) are given
 // with give(). What each does is kit.js's; what each is, items.js's.
 //
 //   uniques.attach({ world, scene, player, inventory, profile, hud, camp, day, pointer, audio })

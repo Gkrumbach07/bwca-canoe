@@ -1187,6 +1187,7 @@ async function main() {
     // outfitters.js keepers, picked without the grounding: a line untrue today ("The bugs are free." in May, the reefs
     // on the ice) is drawn again, up to eight times
     { const sayE = outfitter.say.bind(outfitter); outfitter.say = (ep, kind) => { let w = sayE(ep, kind); for (let k = 0; k < 8 && w && !npcs.grounded(w); k++) w = sayE(ep, kind); return w; }; }
+    rides.grounded = (w) => npcs.grounded(w); // (and the truck's cards: the drive's goodbye, the pickup's line)
     // a moment, once: the first time a party going in or coming out is in the store with you and you have met none yet
     const storeParty = { id: 'storeparty', prio: 1, recur: 'once', text: 'Going in or just out, they know the water. E to talk.' };
     if (!MOMENTS.some((q) => q.id === storeParty.id)) MOMENTS.push(storeParty);

@@ -81,7 +81,7 @@ const MISSED_WORDS = {
   fetch: ['It came over on the road in the end.'], npc: ['{Who} found another way.'],
 };
 const THEY = ['the Hendersons', 'a party from Duluth', 'the Scouts', 'the Larsons', 'a couple from Iowa', 'a guide’s party'];
-const SHE = /^(Deb|Marge|Lorraine|Mrs|Ruth|Anna|Karen|Linda|Mary|Jean|Sue|Deborah|Ingrid|Elsa)/, HE = /^(Arnie|Hank|Bob|Jim|Olaf|Gus|Leif|Arvid|Mr)/;
+const SHE = /^(Deb|Marge|Lorraine|Mrs|Ruth|Anna|Karen|Linda|Mary|Jean|Sue|Deborah|Ingrid|Elsa)/, HE = /^(Arnie|Hank|Bob|Jim|Olaf|Gus|Oskar|Arvid|Mr)/;
 // gl-d: the kinds' own words (here and in the modules that wrote them before pay moved to the trip's end) said where a
 // notice is paid; they now say it pays when you come in
 const PAY_SAYS = [
@@ -110,7 +110,7 @@ const clampN = (v, a, b) => Math.max(a, Math.min(b, v));
 // the lost things: each lead is the notice's opening, signed by whoever pinned it up
 const ITEMS = {
   paddle: { label: 'paddle', float: false, where: 'washed up on the landing rocks', titles: ['Lost: a paddle', 'Paddle left behind'],
-    leads: [['We left ahead of a storm and forgot a paddle.', 'the Halvorsen party, cabin 2'], ['Our rental party came back a paddle short: ash, beavertail blade.', 'the rental desk']] },
+    leads: [['We left ahead of a storm and forgot a paddle.', 'the Ruud party, cabin 2'], ['Our rental party came back a paddle short: ash, beavertail blade.', 'the rental desk']] },
   locket: { label: 'locket', float: false, where: 'on the rock where the canoes pull up', titles: ['Lost: a gold locket', 'Reward: a locket'],
     leads: [["My grandmother's gold locket slipped its chain.", 'Mrs. Lindqvist, Ely'], ['A gold locket, a wedding picture inside.', 'ask at the counter, any hour']] },
   drybag: { label: 'dry bag', float: true, where: 'still floating below the fire grate', titles: ['Lost: a blue dry bag', 'Dry bag overboard'],

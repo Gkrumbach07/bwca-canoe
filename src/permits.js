@@ -20,8 +20,8 @@
 // Saved per season in `bwca-canoe:permits` { v: 1, season, held: [], used: [], fines: [], lapsed: [], nextId, told };
 // missing, or another season's, is a blank one.
 //
-//   permits.available(ep, abs) → { quota, booked, held, left, closed }
-//   permits.calendar(ep, fromAbs, days = 28) → [{ abs, left, quota, price, closed }]
+//   permits.available(ep, abs) → { quota, booked, held, left, closed, mine } (booked + held ≤ quota; mine: you hold one)
+//   permits.calendar(ep, fromAbs, days = 28) → [{ abs, left, quota, price, closed, mine }]
 //   permits.price(kind, abs) → dollars
 //   permits.buy({ ep, abs, kind = 'overnight', pma = null, at }) → { ok, permit, why, words, skip (a Promise when it skips) }
 //   permits.grant({ ep, abs, kind = 'overnight', pma = null, from, why }) → permit (free)
@@ -145,14 +145,16 @@ export class Permits {
     ep = Number(ep); abs = Math.round(abs);
     const quota = QUOTA[ep] ?? QUOTA_ELSE, closed = this.iced(ep, abs) || abs < this.today;
     const held = this.s.held.filter((p) => p.ep === ep && p.abs === abs).length;
-    const booked = closed ? quota : this.booked(ep, abs);
-    return { quota, booked, held, left: closed ? 0 : Math.max(0, quota - booked - held), closed };
+    // a permit you hold is one of the day's quota, the first trip's free one too (the outfitter held it back on a
+    // sold-out day): the parties have the rest, so booked and held never add up past the quota (glf-3)
+    const booked = closed ? quota : Math.min(this.booked(ep, abs), Math.max(0, quota - held));
+    return { quota, booked, held, left: closed ? 0 : Math.max(0, quota - booked - held), closed, mine: held > 0 };
   }
   calendar(ep, fromAbs = this.today, days = 28) {
     const out = [];
     for (let i = 0; i < days; i++) {
       const abs = fromAbs + i, a = this.available(ep, abs);
-      out.push({ abs, left: a.left, quota: a.quota, price: this.price('overnight', abs), closed: a.closed });
+      out.push({ abs, left: a.left, quota: a.quota, price: this.price('overnight', abs), closed: a.closed, mine: a.mine });
     }
     return out;
   }
