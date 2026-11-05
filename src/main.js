@@ -90,6 +90,7 @@ import { attachTaskKinds } from './task-kinds.js'; // content A
 import { attachTaskKinds2 } from './task-kinds-2.js'; // gl-d: the board's new kinds (registered before any save is read)
 import { bear } from './bear.js'; // cons A
 import { bugs } from './bugs.js'; // cons C
+import { LIFE_ENV } from './poses.js'; // r2: the bugs out, for the people's idle
 import { record } from './record.js'; // round A-A
 import { slots } from './save.js'; // round A-D
 import { migrateSeason } from './migrate.js'; // d2 join
@@ -361,6 +362,11 @@ async function main() {
   // and packs draw with the rig's material, so no program or light is added. Updated after the camera, below.
   const actorPool = typeof npcs.lend === 'function' ? { take: (look) => { const b = npcs.lend('actors'); if (b) b.wear(look); return b; }, give: (b) => npcs.giveBack(b) } : null;
   const actors = new Actors({ scene, ground: (x, z) => tiles.groundAt(x, z), world, water, ripples, material: canoe.material, lidMaterial: canoe.lid.material, pool: actorPool, reflectLayer: REFLECT_LAYER });
+  // r2 (NPC motion): the wind on the parties' canoes (their own physics near you), where your eyes are (a person near
+  // looks at you), and the bugs where you are (people swat at them)
+  actors.wind = wind;
+  actors.eye = (out) => out.set(player.x, (player.foot ? player.foot.y : player.altitude || 0) + 1.62, player.z);
+  { const upd = actors.update.bind(actors); actors.update = (dt, ...a) => { try { LIFE_ENV.bugs = (bugs.now && bugs.now.level) || 0; } catch { LIFE_ENV.bugs = 0; } upd(dt, ...a); }; }
 
   // the shell: settings (applied now and live), the trip saver, the title / pause screen
   const fps = new FpsCounter(renderer);

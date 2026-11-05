@@ -7,7 +7,7 @@ import { clamp, lerp, smoothstep } from './rng.js';
 import { windHeight } from './waves.js';
 import { GROUND, surfaceAt } from './terrain-build.js';
 import { HULL, keelAt, section, SEATS, floorAt } from './hull.js'; // (wetlands round 2: SEATS, floorAt, the haul's walk through the hull)
-import { paceOf, LIFE, CANOE, MAX_LAPSE, SWIM_LAPSE, canoeLapse, footSeen } from './pace.js';
+import { paceOf, LIFE, CANOE, MAX_LAPSE, SWIM_LAPSE, canoeLapse, footSeen, PADDLE_PHYS } from './pace.js';
 import { burnLook } from './burns.js';
 import { CarryBalance, BALANCE } from './balance.js'; // the canoe's balance on the shoulders (the owner, 2026-10-31)
 import { fmtDist } from './units.js';
@@ -34,7 +34,7 @@ export class Input {
 // the hull is moved at `speed` times the boost (updatePaddle; pace.js CANOE, about 7.8 at a steady stroke), while the
 // stroke keeps life's cadence (times pace.js CANOE.stroke), and everything that reads `speed` (the energy, a capsize, a
 // bump on the shore, the loons, the clock's "under way") reads the speed at life.
-const PADDLE = { accel: 3.1, hustle: 4.65, reverse: 1.35, drag: 0.31, lin: 0.12, yaw: 0.65, strokeRate: 0.95, hustleRate: 1.35 };
+const PADDLE = PADDLE_PHYS; // (pace.js: the parties' canoes run the same physics, r2)
 // m/s at life (pace.js LIFE): a walk, Shift a jog, and a carry before the load slows it; face: how fast the walker turns
 // to where the keys point. On foot the walker is time-lapsed to the seen speed of where he is (pace.js footSeen: a carry,
 // a trail, open land, a camp or a store): how he is seen to move, while the clock runs at its one rate.
