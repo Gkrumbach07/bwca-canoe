@@ -96,13 +96,17 @@ export class World extends GridQueries {
     // d1 lakes: and the agencies' lake facts (lake-facts.js), for the release they were joined to (their own chunk too)
     // round world: the campsites' landings, ways up and latrine trails (scripts/camp-access.mjs), for the release they
     // were worked out on (their own chunk too)
-    const [fixes, facts, access] = await Promise.all([
+    // (round 2, entry points true to life: the v9 release's entry points as they start in real life, ep-fixes.json, for
+    // the release it was made from, applied in the constructor before any tile or worker starts)
+    const [fixes, facts, access, epFixes] = await Promise.all([
       index.source && index.source.baked === FIXES_FOR ? import('./world-fixes.json').then((m) => m.default, () => null) : null,
       (index.version >= 4 ? import('./lake-facts-v4.json') : import('./lake-facts.json')).then((m) => m.default, () => null), // (d2 bake: each release its own, by its lake ids)
       import('./camp-access.json').then((m) => m.default, () => null),
+      import('./ep-fixes.json').then((m) => m.default, () => null),
     ]);
     if (index.version >= 4) rapidsV4(); // d2 bake
-    const w = new World(index, base, fixes);
+    const epOff = typeof location !== 'undefined' && /[?&]eps=off\b/.test(location.search); // (`?eps=off`: as before, for a before and after)
+    const w = new World(index, base, fixes, epOff ? null : epFixes);
     if (access && access.for === (index.source && index.source.baked) && !(typeof location !== 'undefined' && /[?&]access=off\b/.test(location.search))) w.setCampAccess(access); // (`?access=off`: as before, for a before and after)
     // d1 lakes (`?facts=off` leaves them out, for a before and after)
     const off = typeof location !== 'undefined' && /[?&]facts=off\b/.test(location.search);
@@ -112,7 +116,7 @@ export class World extends GridQueries {
     return w;
   }
 
-  constructor(index, base, fixes = null) {
+  constructor(index, base, fixes = null, epFixes = null) {
     super();
     this.meta = index; this.base = base;
     const g = index.grid;
@@ -157,6 +161,7 @@ export class World extends GridQueries {
     this.waterKinds = waterKinds(index.lakes);
     this.lowIds = Int32Array.from(index.lakes.filter((l) => l && ((l.creek && l.seasonal) || isFlowage(this.waterKinds[l.id]))).map((l) => l.id));
     this.fixed = fixes ? this.applyFixes(fixes) : null;
+    this.epFixed = epFixes ? this.applyEpFixes(epFixes) : null; // round 2: the entry points as they start in real life
     this.facts = null; // d1 lakes: a LakeFacts once load() has joined lake-facts.json (null on another release)
     this.creeks = null; // the wetlands round: a creeks.js Creeks once load() has read creeks.json (null on an older release)
     for (const p of this.portages) {
@@ -245,6 +250,35 @@ export class World extends GridQueries {
       campsites++;
     }
     return { landings, portages, baked: this.portages.length - portages, campsites };
+  }
+
+  // Round 2 (entry points true to life, the owner 2026-11-05): each entry point as it starts in real life (ep-start.js says
+  // what the fields mean): its real name, its put-in moved where the release had it wrong, a portage-first start's lot
+  // and opening portage, a shared landing, an outfitter's entry point's own start apart from its store (head: the store
+  // stays where it was built). The portages it fixes are replaced in place (their slots, so a season's saved indices
+  // hold: the four lines the release made of roads now hold the four carries it lacked); a renamed one keeps its line.
+  // The release's own spot is kept as `baked`. Applied only to the release the table was made from.
+  applyEpFixes(f) {
+    if (!f || f.for !== (this.meta.source && this.meta.source.baked)) return null;
+    let eps = 0, portages = 0, lakes = 0;
+    for (const L of f.lakes || []) { const l = this.lakes[L.id - 1]; if (l) { l.displayName = L.displayName; lakes++; } }
+    for (const q of f.portages || []) {
+      const p = this.portages[q.i]; if (!p) continue;
+      if (q.renameOnly) { if (q.name) p.name = q.name; if (q.posted) p.posted = q.posted; portages++; continue; }
+      if (!q.pts || q.pts.length < 2 || !q.launch || q.launch.length < 2) continue;
+      this.portages[q.i] = { name: q.name, lengthM: q.lengthM, rods: q.rods, posted: q.posted || null, pts: q.pts, launch: q.launch, ep: q.ep, was: { name: p.name, rods: p.rods } };
+      portages++;
+    }
+    for (const r of f.entryPoints || []) {
+      const e = this.entryPoints.find((x) => x.ep === r.ep); if (!e) continue;
+      e.baked = { x: e.x, z: e.z, lake: e.lake, name: e.name };
+      if (r.name) e.name = r.name;
+      e.start = r.start || null;
+      if (Number.isFinite(r.x) && Number.isFinite(r.z) && this.lakes[r.lake - 1]) { e.x = r.x; e.z = r.z; e.lake = r.lake; }
+      for (const k of ['lot', 'open', 'shares', 'head', 'drop', 'clipped']) if (r[k] != null) e[k] = r[k];
+      eps++;
+    }
+    return { eps, portages, lakes };
   }
 
   // --- tiles ----------------------------------------------------------------

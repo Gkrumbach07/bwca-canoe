@@ -151,10 +151,22 @@ export class Rides {
     return { night: true };
   }
   // at full dark: the move, the clock, the night if it is late, the outfitter known, its door or the trailhead's lot
+  // Round 2 (entry points true to life): the truck to a portage-first start's lot, on land: on foot there, the canoe set
+  // down in the lot (outfitter.js updateTrailArrival then puts it where the trailhead's layout says, once it is built)
+  async toLot(to) {
+    const o = this.outfitter, p = o && o.player, w = this.world, L = to.lot;
+    if (!p || !L || typeof p.standAt !== 'function') return this.teleport(to.x, to.z);
+    if (p.teleporting) return false;
+    p.teleporting = true;
+    try { if (w.tiles) await w.tiles.ensure(L.x, L.z, 130); } finally { p.teleporting = false; }
+    const ok = p.standAt({ x: L.x, z: L.z, heading: 0, drop: { x: L.x + 3, z: L.z, heading: 0 } });
+    if (ok && p.chase) p.chase.snap();
+    return ok || this.teleport(to.x, to.z);
+  }
   async arrive(from, to, r, toP) {
     void toP;
     const o = this.outfitter, pr = this.profile, core = this.core, d = this.day;
-    const ok = await this.teleport(to.x, to.z);
+    const ok = to.lot ? await this.toLot(to) : await this.teleport(to.x, to.z); // (round 2: a portage-first start's lot is on land)
     if (!ok) { // the truck could not get through (no open water found at the landing): nothing moves, the fare back
       if (pr && r.price > 0) { pr.s.money += r.price; pr.s.spent -= r.price; pr.entry(r.price, `the drive to ${to.name}, refunded`); pr.changed('money'); }
       this.note(`The road to ${to.name} is closed today. The fare is back in your hand.`);

@@ -6,6 +6,7 @@ import { withoutRamps } from './ramps.js'; // round ramps
 import { rockGeometry, makeRockMaterial, makeToonMaterial } from './rocks.js';
 import { outfitterName, isOutfitter, trailheadName, outfitterProfile } from './outfitters.js'; // (the game-loop round: the fourteen outfitters, the rest trailheads)
 import { setTrailhead, LOT_R } from './trailhead.js';
+import { headRecs, anchorOf } from './ep-start.js'; // round 2: the entry points as they start in real life (a lot, a carry first)
 import { bedding, seatRock, ROCK_FOOT, ROCK_KIND, TRAIL } from './placement.js';
 import { RockShape } from './collide.js';
 import { gridReader, trailMireAt, BOARDWALK } from './land.js'; // the wetlands underfoot: a trail's mud and puncheon
@@ -171,17 +172,19 @@ export function* tilePropsSteps(tg, world, tx, ty) {
     if (A.trail) campPath(ctx, A.trail, decal, CAMP_WAY.path, (c.kx ?? Math.round(c.x)) * 13 + (c.kz ?? Math.round(c.z)));
   }
   // the game-loop round: the trailheads' lots and their paths down to the water, in the same decal (trailheadDecal)
-  for (const ep of world.entryPoints) if (!isOutfitter(ep.ep) && inside(ep.x, ep.z)) { trailheadDecal({ ...ctx, H: Hdrawn }, ep, decal); yield; }
+  // (round 2: each at its lot where it has one, an outfitter's entry point's own start too: ep-start.js headRecs)
+  const heads = headRecs(world, isOutfitter);
+  for (const ep of heads) { const a = anchorOf(ep); if (inside(a.x, a.z)) { trailheadDecal({ ...ctx, H: Hdrawn }, ep, decal); yield; } }
   decal.lift(ctx);
   const trail = decal.mesh();
   if (trail) group.add(trail);
 
-  for (const ep of world.entryPoints) if (inside(ep.x, ep.z)) {
+  for (const ep of world.entryPoints) if (isOutfitter(ep.ep) && inside(ep.x, ep.z)) {
     yield;
-    if (isOutfitter(ep.ep)) yield* buildOutfitter({ ...ctx, H: Hdrawn }, ep, group);
-    else buildTrailhead({ ...ctx, H: Hdrawn }, ep, pieces, group); // (merged into this tile's props: no draw call of its own)
+    yield* buildOutfitter({ ...ctx, H: Hdrawn }, ep, group);
     yield;
   }
+  for (const ep of heads) { const a = anchorOf(ep); if (inside(a.x, a.z)) { yield; buildTrailhead({ ...ctx, H: Hdrawn }, ep, pieces, group); yield; } } // (merged into this tile's props: no draw call of its own)
 
   const ledges = [[], []]; // the ledge rocks' matrices, flats and slanted
   for (const c of world.campsites) if (inside(c.x, c.z)) { buildCampsite(ctx, c, pieces, ledges); yield; }
@@ -422,11 +425,12 @@ function puncheon(ctx, b, x, z, dx, dz, nx, nz, seed) {
 // d1 names: the words on the plate under a landing's board: the water the trail goes to and its length, "CONFUSION L." over
 // "45 RODS" (the Forest Service's rods where names.js has them: p.rods). Few words, the way an old routed sign has them.
 export function signWords(world, p, end) {
-  const far = p && p.launch && p.launch[end ? 0 : 1], nm = far && world && world.lakeName ? world.lakeName(far.lake) : null;
+  const far = p && p.launch && p.launch[end ? 0 : 1], nm = far && far.road ? 'TO THE ROAD' : far && world && world.lakeName ? world.lakeName(far.lake) : null; // (round 2: a portage-first start's road end)
   const short = (n) => String(n).toUpperCase().replace(/[–—]/g, '-').replace(/\s+LAKE$/, ' L.').replace(/\s+RIVER$/, ' R.').replace(/\s+CREEK$/, ' CR.').replace(/[^A-Z0-9.' -]/g, '').replace(/\s+/g, ' ').trim();
   const lines = [];
   if (nm) lines.push(short(nm));
-  if (p && p.rods > 0) lines.push(`${p.rods} ${p.rods === 1 ? 'ROD' : 'RODS'}`);
+  const rods = p && (p.posted || p.rods); // (round 2: the Forest Service's posted rods where the entry point table has them)
+  if (rods > 0) lines.push(`${rods} ${rods === 1 ? 'ROD' : 'RODS'}`);
   return lines;
 }
 function portageSign(ctx, pts, end, seed, p = null) {
@@ -665,7 +669,7 @@ export function stepOutfitters(budget = 3) {
 // steps by the shore distance itself (most of the way at once from a put-in far out: Clearwater's is 180 m out), and an
 // entry point whose nearest shore is the wrong one starts from its row in LANDINGS instead.
 export function landingPlan(ctx, ep, keep = null) {
-  const tg = ctx.tg, fix = LANDINGS[ep.ep] || null;
+  const tg = ctx.tg, fix = (!ep.noFix && LANDINGS[ep.ep]) || null; // (round 2: an outfitter's entry point's own start is not its store's row)
   let x = fix && fix.from ? fix.from[0] : ep.x, z = fix && fix.from ? fix.from[1] : ep.z, d = tg.deeperDir(x, z);
   const stepTo = (sd) => Math.min(25, Math.max(0.5, Math.abs(sd - 1.1) * 0.6));
   for (let i = 0; i < 400; i++) {
@@ -2373,10 +2377,12 @@ function kindSign(ctx, plan, dock, ep, rng) {
 // and the props' merged mesh), so a trailhead costs no draw call. Its layout goes to trailhead.js.
 const headPlans = new Map(); // ep → the plan, kept for the session (as siteKept: the site is chosen once)
 function trailheadPlan(ctx, ep) {
-  let P = headPlans.get(ep.ep);
+  const key = ep.key || ep.ep;
+  let P = headPlans.get(key);
   if (P) return P;
-  const plan = landingPlan(ctx, ep, siteKept.get(ep.ep) || null);
-  if (!siteKept.has(ep.ep)) siteKept.set(ep.ep, { ao: plan.site.ao, b0: plan.site.b0, fallback: plan.site.fallback, turn: plan.site.turn });
+  if (ep.lot) { P = lotPlan(ctx, ep); headPlans.set(key, P); return P; }
+  const plan = landingPlan(ctx, ep, siteKept.get(key) || null);
+  if (!siteKept.has(key)) siteKept.set(key, { ao: plan.site.ao, b0: plan.site.b0, fallback: plan.site.fallback, turn: plan.site.turn });
   const F = plan.F, d = plan.d, X = { x: d.z, z: -d.x };
   let [lx, lz] = F.W(plan.site.ao, plan.site.b0 - 2);
   // the whole lot on dry ground: back from the water until its edge is (Little Gabbro's and Clearwater's sites sit close)
@@ -2394,8 +2400,32 @@ function trailheadPlan(ctx, ep) {
   const sx = lx + ux * (LOT_R + 0.9) + X.x * 2.6, sz = lz + uz * (LOT_R + 0.9) + X.z * 2.6;
   const bx = sx + X.x * 1.5, bz = sz + X.z * 1.5;
   P = { plan, F, d, X, u: { x: ux, z: uz }, lot: { x: lx, z: lz }, water: { x: wx, z: wz }, sign: { x: sx, z: sz }, box: { x: bx, z: bz } };
-  headPlans.set(ep.ep, P);
+  headPlans.set(key, P);
   return P;
+}
+// Round 2 (entry points true to life): a portage-first start, a lot at the road's end (or where an outfitter's boat
+// leaves you) and the opening portage from its edge. u from the lot to where the trail is joined (ep.open.join; at the
+// trail's own end, along the trail toward the lake); the sign by the trail's mouth, the box beside it; the canoe comes
+// off the roof onto the lot's ground beside the way out (water: where it is set down, dry). The landing is the trail's
+// lake end, where the carry puts in.
+function lotPlan(ctx, ep) {
+  const w = ctx.world, o = ep.open, p = o ? w.portages[o.i] : null, lot = { x: ep.lot.x, z: ep.lot.z };
+  const pts = p ? (o.end === 1 ? p.pts : p.pts.slice().reverse()) : null;
+  const join = o && o.join ? o.join : pts ? { x: pts[0][0], z: pts[0][1] } : { x: ep.x, z: ep.z };
+  let ux = join.x - lot.x, uz = join.z - lot.z, L = Math.hypot(ux, uz);
+  if (L < LOT_R + 1 && pts) { // (the lot at the trail's end: the way out along the trail, a few points in)
+    const q = pts[Math.min(pts.length - 1, 3)]; ux = q[0] - lot.x; uz = q[1] - lot.z; L = Math.hypot(ux, uz);
+  }
+  if (!(L > 0.1)) { ux = 1; uz = 0; L = 1; }
+  ux /= L; uz /= L;
+  const X = { x: uz, z: -ux }, d = { x: ux, z: uz };
+  const end = pts ? pts[pts.length - 1] : [ep.x, ep.z];
+  const plan = { x: end[0], z: end[1], d, lot: true };
+  const sx = lot.x + ux * (LOT_R + 0.9) + X.x * 2.6, sz = lot.z + uz * (LOT_R + 0.9) + X.z * 2.6;
+  const bx = sx + X.x * 1.5, bz = sz + X.z * 1.5;
+  // the canoe off the roof: across the lot from the sign, along the way out
+  const water = { x: lot.x - X.x * 3.2 + ux * 1.5, z: lot.z - X.z * 3.2 + uz * 1.5, dry: true };
+  return { plan, F: null, d, X, u: { x: ux, z: uz }, lot, water, sign: { x: sx, z: sz }, box: { x: bx, z: bz }, join, lotMode: true };
 }
 // the lot and its path, as rows of the trail decal (worn to gravel and soil)
 function trailheadDecal(ctx, ep, decal) {
@@ -2408,8 +2438,8 @@ function trailheadDecal(ctx, ep, decal) {
     if (prev >= 0) decal.join(prev, r);
     prev = r;
   }
-  // the path down to the landing, from the lot's edge
-  const a = [lot.x + u.x * (LOT_R - 0.5), lot.z + u.z * (LOT_R - 0.5)], b = [P.plan.x, P.plan.z];
+  // the path down to the landing, from the lot's edge (round 2: a portage-first lot's, to where the trail is joined)
+  const a = [lot.x + u.x * (LOT_R - 0.5), lot.z + u.z * (LOT_R - 0.5)], b = P.lotMode ? [P.join.x, P.join.z] : [P.plan.x, P.plan.z];
   const m = [(a[0] + b[0]) / 2 + P.X.x * 0.8, (a[1] + b[1]) / 2 + P.X.z * 0.8];
   if (Math.hypot(b[0] - a[0], b[1] - a[1]) > 2) campPath(ctx, [a, m, b], decal, { hw: 0.75, wear: 0.42 }, ep.ep * 31 + 7);
 }
@@ -2477,9 +2507,9 @@ function buildTrailhead(ctx, ep, pieces) {
   const geo = b.build();
   occlude(geo, occ, { ground: localGround(ctx), rays: 8, reach: 0.7, floor: 0.35 });
   pieces.push(geo);
-  // a stone or two by the landing
+  // a stone or two by the landing (not a lot's: its landing is the far end of the carry)
   const sb = new PropBuilder();
-  for (let k = 0; k < 3; k++) {
+  for (let k = 0; k < (P.lotMode ? 0 : 3); k++) {
     const t = 0.5 + k * 0.7, sx = P.plan.x - P.d.x * (1.2 + t) + P.X.x * (k - 1) * 1.9, sz = P.plan.z - P.d.z * (1.2 + t) + P.X.z * (k - 1) * 1.9;
     if (ctx.tg.shoreAt(sx, sz) < 0.4) continue;
     stone(sb, V(sx - ctx.ox, ctx.H(sx, sz) - 0.12, sz - ctx.oz), 0.32 + rng() * 0.2, rng() * 6.28, rng, { up: 0.6, deep: 1.2 });
@@ -2493,13 +2523,20 @@ function buildTrailhead(ctx, ep, pieces) {
   // lake plants off it too: a landing's shallows are trodden bare.)
   {
     const fr = (x, z) => { const dx = x - P.lot.x, dz = z - P.lot.z; return [dx * P.X.x + dz * P.X.z, dx * P.u.x + dz * P.u.z]; };
-    const [la, lb] = fr(P.plan.x, P.plan.z), [wa, wb] = fr(P.water.x, P.water.z);
-    const far = Math.max(lb, wb) + 1.5, a0 = Math.min(la, wa) - TH_WAY.apron, a1 = Math.max(la, wa) + TH_WAY.apron;
-    const rects = [[-LOT_R - 1.5, LOT_R + 1.5, -LOT_R - 1.5, LOT_R + 1.5], [-TH_WAY.path, TH_WAY.path, 0, lb + 1], [-0.3, 4.6, LOT_R, LOT_R + 2.2], [a0, a1, lb - TH_WAY.up, far]];
-    const wet = [[a0, a1, lb - 1, far]];
+    let rects, wet;
+    if (P.lotMode) { // (round 2: a portage-first lot: the lot, the sign and its way to the trail; the trail clears its own)
+      const jb = Math.max(LOT_R, fr(P.join.x, P.join.z)[1]);
+      rects = [[-LOT_R - 1.5, LOT_R + 1.5, -LOT_R - 1.5, LOT_R + 1.5], [-TH_WAY.path, TH_WAY.path, 0, jb + 1], [-0.3, 4.6, LOT_R, LOT_R + 2.2]];
+      wet = [];
+    } else {
+      const [la, lb] = fr(P.plan.x, P.plan.z), [wa, wb] = fr(P.water.x, P.water.z);
+      const far = Math.max(lb, wb) + 1.5, a0 = Math.min(la, wa) - TH_WAY.apron, a1 = Math.max(la, wa) + TH_WAY.apron;
+      rects = [[-LOT_R - 1.5, LOT_R + 1.5, -LOT_R - 1.5, LOT_R + 1.5], [-TH_WAY.path, TH_WAY.path, 0, lb + 1], [-0.3, 4.6, LOT_R, LOT_R + 2.2], [a0, a1, lb - TH_WAY.up, far]];
+      wet = [[a0, a1, lb - 1, far]];
+    }
     const r = Math.max(...rects.flatMap(([q0, q1, c0, c1]) => [Math.hypot(q0, c0), Math.hypot(q1, c0), Math.hypot(q0, c1), Math.hypot(q1, c1)])) + 1;
-    const Y = { ep: ep.ep, x: P.lot.x, z: P.lot.z, ax: P.X.x, az: P.X.z, bx: P.u.x, bz: P.u.z, rects, wet, r };
-    const i = yards.findIndex((q) => q.ep === ep.ep);
+    const Y = { ep: ep.key || ep.ep, x: P.lot.x, z: P.lot.z, ax: P.X.x, az: P.X.z, bx: P.u.x, bz: P.u.z, rects, wet, r };
+    const i = yards.findIndex((q) => q.ep === Y.ep);
     if (i >= 0) yards[i] = Y; else yards.push(Y);
     for (const fn of yardFns) fn([Y.x - r - 2, Y.z - r - 2, Y.x + r + 2, Y.z + r + 2]);
     const T = ctx.world.tiles, size = ctx.world.tileMetres;
@@ -2513,7 +2550,9 @@ function buildTrailhead(ctx, ep, pieces) {
   const layout = {
     ep: ep.ep, name: trailheadName(ep), place: ep.name,
     landing: { x: P.plan.x, z: P.plan.z }, d: { x: P.d.x, z: P.d.z },
-    water: { x: P.water.x, z: P.water.z, heading: hd(P.X.x, P.X.z) },
+    // (round 2: a portage-first lot's canoe is set down dry in the lot, along the way out; start and the opening carry)
+    water: P.lotMode ? { x: P.water.x, z: P.water.z, heading: hd(P.u.x, P.u.z), dry: true } : { x: P.water.x, z: P.water.z, heading: hd(P.X.x, P.X.z) },
+    start: ep.start || null, drop: ep.drop || null, open: ep.open || null, head: !!ep.key,
     lot: { x: P.lot.x, z: P.lot.z, r: LOT_R, y: lotY },
     sign: { x: P.sign.x, z: P.sign.z, y: by, hx: hw, hy: hh + 0.3, hz: 0.2, heading: hd(S.X.x, S.X.z), faces: hd(-P.u.x, -P.u.z) },
     box: { x: P.box.x, z: P.box.z, y: btop + 0.2 },

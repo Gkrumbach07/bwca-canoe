@@ -337,6 +337,7 @@ export class Player {
     for (const p of this.world.portages) {
       for (let end = 0; end < 2; end++) {
         const l = p.launch[end];
+        if (l.road) continue; // (round 2: a portage-first start's road end)
         const d = Math.hypot(l.x - this.x, l.z - this.z);
         if (d < LANDING_RADIUS && (!best || d < best.d)) best = { def: p, end, d, launch: l };
       }
@@ -1777,7 +1778,7 @@ export class Player {
     if (trail && trail.dist < 12) {
       const pts = trail.trail.pts, e0 = pts[0], e1 = pts[pts.length - 1];
       const d0 = Math.hypot(e0[0] - this.x, e0[1] - this.z), d1 = Math.hypot(e1[0] - this.x, e1[1] - this.z);
-      if (Math.min(d0, d1) < 5) { const l = trail.def.launch[d1 < d0 ? 1 : 0]; L = { x: l.x, z: l.z, lake: l.lake, deep: true }; }
+      if (Math.min(d0, d1) < 5) { const l = trail.def.launch[d1 < d0 ? 1 : 0]; if (!l.road) L = { x: l.x, z: l.z, lake: l.lake, deep: true }; } // (round 2: a road end is no launch)
     }
     if (!L && w.shoreAt(this.x, this.z) < 8) L = this.launchFrom(this.x, this.z, 12);
     if (L && L.deep && away) {

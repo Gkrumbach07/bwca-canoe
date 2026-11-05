@@ -151,7 +151,8 @@ export class Outfitter {
     // trailheads (a lot, a permit box, the sign: trailhead.js), each with the outfitter that serves it (host)
     this.entries = world.entryPoints.map((ep) => {
       const out = isOutfitter(ep.ep);
-      return { ep: ep.ep, name: out ? outfitterName(ep) : trailheadName(ep), place: ep.name, x: ep.x, z: ep.z, lake: ep.lake, outfitter: out, host: hostOf(ep.ep, world) };
+      // (round 2: a portage-first start's lot, where the truck leaves you; an entry point sharing another's landing)
+      return { ep: ep.ep, name: out ? outfitterName(ep) : trailheadName(ep), place: ep.name, x: ep.x, z: ep.z, lake: ep.lake, outfitter: out, host: hostOf(ep.ep, world), lot: out ? null : ep.lot || null, shares: ep.shares || null, start: ep.start || null };
     });
     this.landings = this.entries.filter((e) => e.outfitter);
     this.desks = new Map();          // the counter's other desks (addDesk: the permit desk, the onboarding, the tally's)
@@ -363,6 +364,8 @@ export class Outfitter {
   // streams in), the canoe is tied up at its dock and you stand at the door, or back where you were on the floor.
   // With no store by ARRIVAL_WAIT, a season's counter opens from the water as it always did.
   updateArrival(dt) {
+    // (round 2: an entry point that puts in at another's landing arrives there: EP 66 Crocodile River at East Bearskin's)
+    if (this.arrival) { const sh = this.entry(this.arrival.ep); if (sh && sh.shares && this.entry(sh.shares)) { this.arrival.ep = sh.shares; this.arrival.via = sh.ep; } }
     if (this.arrival && !isOutfitter(this.arrival.ep)) return this.updateTrailArrival(dt);
     const a = this.arrival, p = this.player, l = this.landing(a.ep), L = l ? this.layout(a.ep) : null;
     a.t += dt;
@@ -402,7 +405,11 @@ export class Outfitter {
     this.arrival = null;
     if (this.distTo(e, p.x, p.z) > ARRIVAL_FAR || !(p.mode === 'paddle' || p.onFoot)) return;
     this.setDown(T, e);
-    if (a.why === 'ride') this.hud.note(`The truck leaves you in the lot at ${e.name}: the canoe at the landing.`, 5);
+    // (round 2: a portage-first start: the canoe off the roof in the lot, the carry from its edge; a boat drop at a portage)
+    const o = T.open, carry = o ? `the ${o.posted || o.rods}-rod portage` : 'the portage', far = o && o.i != null && this.world.portages[o.i] ? this.world.portages[o.i].launch[o.end] : null, toLake = far ? this.world.lakeName(far.lake) : null;
+    if (a.why === 'ride' && T.water && T.water.dry && T.drop === 'boat') this.hud.note(`The outfitter's boat leaves you at the start of ${carry}${toLake ? ` to ${toLake}` : ''}. The canoe is on the shore: Q on it to shoulder it.`, 7);
+    else if (a.why === 'ride' && T.water && T.water.dry) this.hud.note(`The truck leaves you in the lot at ${e.name}: the canoe off the roof. ${carry[0].toUpperCase() + carry.slice(1)}${toLake ? ` to ${toLake}` : ''} starts at the sign.`, 7);
+    else if (a.why === 'ride') this.hud.note(`The truck leaves you in the lot at ${e.name}: the canoe at the landing.`, 5);
     else if (a.why === 'moved') this.hud.note(a.words || `In the lot at ${e.name}.`, 7);
   }
   // you in a trailhead's lot by the sign, facing the water; the canoe set down afloat at its landing
@@ -410,7 +417,7 @@ export class Outfitter {
     const p = this.player, w = T.water, door = T.door;
     p.landing = null; p.ashore = null; p.swim = null; p.speed = 0; p.yawRate = 0; p.bob = null; p.balance = 0; p.extraRoll = 0;
     p.mode = 'walk';
-    p.carry = { trail: null, drop: { x: w.x, z: w.z, heading: w.heading }, hitCooldown: 0, from: null, choice: false };
+    p.carry = { trail: null, drop: { x: w.x, z: w.z, heading: w.heading }, hitCooldown: 0, from: null, choice: false }; // (round 2: w.dry, set down on the lot's ground)
     if (typeof p.restHull === 'function') p.restHull(w.x, w.z, w.heading);
     p.x = door.x; p.z = door.z; p.heading = door.heading;
     p.foot = { y: p.groundAt(p.x, p.z), vy: 0, air: false, t: 0, land: 0, near: null };
