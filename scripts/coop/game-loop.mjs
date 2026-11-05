@@ -81,6 +81,18 @@ try {
   await until(B, (ep) => { const g = window.__game, o = g.outfitter; return g.trip.adventure && o.visit && o.visit.ep === ep && !o.arrival && g.player.onFoot && g.coopGive.mine; }, HOME, 90000);
   await B.evaluate(() => { const g = window.__game; if (g.outfitter.open) g.outfitter.hide(); g.profile.s.money += 40; g.profile.changed('money'); });
   result('the guest is in at the host\'s store', true);
+  // the owner's call 2026-11-05: a friend joining gets the new player's starting kit, whatever the host owns; nothing of
+  // the story (Walt's pack, tent, stove and notebook are the host's); a tent to sleep in; never the counter scene
+  const kitOf = (P) => P.evaluate(() => {
+    const g = window.__game, inv = g.inventory, ids = new Set();
+    for (const c of inv.containers) { ids.add(c.item); for (const e of c.grid || []) ids.add(e.id); }
+    for (const l of inv.long || []) ids.add(l.item || l.id);
+    const meals = inv.containers.reduce((n, c) => n + (c.grid || []).filter((e) => /^meal:/.test(e.id)).reduce((k, e) => k + (e.qty || 1), 0), 0);
+    return { ids: [...ids].filter(Boolean).sort(), meals, money: g.profile.money, pending: g.onboarding.pending(g.outfitter.visit ? g.outfitter.visit.ep : undefined), canTent: g.profile.has('aframe') };
+  });
+  const [hostKit, guestKit] = await Promise.all([kitOf(A), kitOf(B)]);
+  const want = ['pack3', 'aframe', 'pot', 'stove', 'fuel', 'sleepingbag', 'pad', 'tarp', 'tacklebox', 'barrel30', 'ash', 'rod'];
+  result('the guest\'s first visit: the new player\'s starting kit, a tent among it, nothing of the story, no counter scene', want.every((id) => guestKit.ids.includes(id)) && !guestKit.ids.some((id) => /^walt/.test(id)) && guestKit.meals >= 6 && !guestKit.pending && guestKit.canTent && hostKit.ids.includes('walttent'), { guest: guestKit, missing: want.filter((id) => !guestKit.ids.includes(id)), host: hostKit.ids });
 
   // --- a notice each off the host's board -------------------------------------------------------------------------------------
   await until(A, (ep) => window.__game.tasks.board(ep).filter((t) => t && t.status === 'offered').length >= 2, HOME, 90000);
@@ -126,7 +138,6 @@ try {
   await until(A, () => window.__game.outfitter.trip.away, null, 30000);
   await until(B, () => !window.__game.player.teleporting, null, 30000);
   await sleep(1500);
-
   // --- each finishes their notice on the trip --------------------------------------------------------------------------------
   await A.evaluate((id) => { const T = window.__game.tasks, t = T.ads.get(id); t.status = 'done'; T.changed(); }, mine.id);
   await B.evaluate((id) => { const T = window.__game.tasks, t = T.ads.get(id); t.status = 'done'; T.changed(); }, theirs.id);

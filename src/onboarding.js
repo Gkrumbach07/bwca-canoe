@@ -18,6 +18,9 @@
 //   onboarding.start(ep) → bool (the talk opened)                  onboarding.update(dt) (the door's line, the staffer)
 //   onboarding.isWaltItem(id) → bool                              onboarding.give() → [item ids] (the gear, once)
 //   onboarding.showCounter(landing): set by main.js (the counter's own show, unwrapped), opened as the talk ends
+//   onboarding.skip() (a co-op guest: never the scene; coop-give.js gives the plain kit instead)
+//   packGear(inv, { pack, gift, order }) → [item ids]: a pack into the canoe, the gift and your own things out of the crate
+//     into it, three days of food in the barrel (the scene's give, and a co-op guest's starter kit: guestKit(inv))
 //
 // Saved per season (save.js `bwca-canoe:onboard`): { v: 1, step: 'door' | 'met' | 'gear' | 'done', done, season, nudged,
 // permit? }. A season from before this round (its profile started, no document) is { done: true, legacy: true }: it
@@ -30,6 +33,12 @@ import { absDay } from './trip.js';
 const NS = 'onboard';
 const FOOD_DAYS = 3;                      // the food that comes with the gear: a breakfast and a supper a day
 const GIFT = ['walttent', 'pot', 'waltstove', 'fuel']; // into the old pack, with your own things (items.js OWN_KIT)
+// biggest first, so the pack takes it all: the tent, your bag and pad, the tackle box, the pot, the rest
+const ORDER = ['walttent', 'sleepingbag', 'pad', 'tacklebox', 'pot', 'clothes', 'tarp', 'waltstove', 'fuel', 'tablets'];
+// A co-op guest's starter kit (the owner's call 2026-11-05: "friends joining get a basic starting pack"): the new
+// player's kit after the scene, with the plain things for the story's (Walt's pack, tent and stove stay the host's story)
+export const GUEST_PLAIN = { waltpack: 'pack3', walttent: 'aframe', waltstove: 'stove' };
+const plain = (id) => GUEST_PLAIN[id] || id;
 export const STAFF = ['Jess', 'Tanner', 'Marcy', 'Kyle', 'Brooke', 'Dani', 'Cody', 'Shelby', 'Megan', 'Logan', 'Paige', 'Trent']; // (never a story name: the brief's reserved names)
 const ROLE = 'the summer help';
 const DOOR_LINE = 'Got a minute? Come to the counter.';
@@ -55,6 +64,8 @@ export class Onboarding {
     return this;
   }
   newSeason(id = null) { this.dismiss(); this.state = blankOnboard(id); this.write(); }
+  // a co-op guest: the visit is no season of theirs, so no scene and no old gear (kv is frozen: nothing is written)
+  skip() { this.dismiss(); this.state = { ...blankOnboard(this.state ? this.state.season : null), step: 'done', done: true, guest: true }; }
   write() { if (this.state) save.write(NS, this.state); }
   get done() { return !this.state || !!this.state.done; }
   get home() { const pr = this.t.profile; return pr && pr.started ? pr.home : null; }
@@ -166,26 +177,7 @@ export class Onboarding {
   give() {
     const inv = this.t.inventory, st = this.state;
     if (!inv || !st || st.step === 'gear' || st.done) return [];
-    const q = { quiet: true }, given = ['waltpack'];
-    const pack = inv.addContainer('waltpack', 'canoe', null, q);
-    const away = (id) => { try { inv.place(id, 1, { crate: true, all: true, quiet: true }); } catch { /* kept nowhere */ } };
-    // biggest first, so the pack takes it all: the tent, your bag and pad, the tackle box, the pot, the rest
-    const order = ['walttent', 'sleepingbag', 'pad', 'tacklebox', 'pot', 'clothes', 'tarp', 'waltstove', 'fuel', 'tablets'];
-    const crate = inv.crate;
-    for (const id of order) {
-      if (GIFT.includes(id)) { if (inv.put(pack, id, q)) given.push(id); else { away(id); given.push(id); } continue; }
-      if (!OWN_KIT.includes(id) || !crate) continue;
-      if (id === 'tacklebox') { const tb = inv.containers.find((c) => c.item === 'tacklebox' && c.where === 'in' && c.in === crate.id); if (tb) inv.nest(tb, pack); continue; }
-      const e = crate.grid.find((k) => k.id === id && !k.box);
-      const spot = e ? inv.firstFit(pack, id) : null;
-      if (spot) inv.move(crate.id, e.uid, pack.id, spot.x, spot.y, spot.rot);
-    }
-    // the food: a breakfast and a supper a day, in the barrel (else the pack, else kept for you)
-    const barrel = inv.containers.find((c) => /^barrel/.test(c.item) && c.where === 'canoe') || inv.containers.find((c) => /^barrel/.test(c.item));
-    for (let i = 0; i < FOOD_DAYS; i++) for (const m of ['meal:breakfast', 'meal:supper']) { if (!((barrel && inv.put(barrel, m, q)) || inv.put(pack, m, q))) away(m); }
-    given.push(`meal:breakfast×${FOOD_DAYS}`, `meal:supper×${FOOD_DAYS}`);
-    inv.emit('containers');
-    if (typeof inv.write === 'function') inv.write();
+    const given = packGear(inv, { pack: 'waltpack', gift: GIFT, order: ORDER });
     st.step = 'gear'; this.write();
     const hud = this.t.hud;
     if (hud && typeof hud.note === 'function') hud.note('The old gear is in your canoe at the dock.', 5);
@@ -193,6 +185,36 @@ export class Onboarding {
     if (s && typeof s.emit === 'function') s.emit('gear:given', { items: given, ep: this.home, abs: this.abs });
     return given;
   }
+}
+
+// The pack into the canoe, the gift into it (else kept for you at the outfitters), your own things out of the crate into
+// it, three days of food in the barrel. → the item ids given
+export function packGear(inv, { pack: packId, gift, order }) {
+  const q = { quiet: true }, given = [packId];
+  const pack = inv.addContainer(packId, 'canoe', null, q);
+  const away = (id) => { try { inv.place(id, 1, { crate: true, all: true, quiet: true }); } catch { /* kept nowhere */ } };
+  const crate = inv.crate;
+  for (const id of order) {
+    if (gift.includes(id)) { if (!inv.put(pack, id, q)) away(id); given.push(id); continue; }
+    if (!OWN_KIT.includes(id) || !crate) continue;
+    if (id === 'tacklebox') { const tb = inv.containers.find((c) => c.item === 'tacklebox' && c.where === 'in' && c.in === crate.id); if (tb) inv.nest(tb, pack); continue; }
+    const e = crate.grid.find((k) => k.id === id && !k.box);
+    const spot = e ? inv.firstFit(pack, id) : null;
+    if (spot) inv.move(crate.id, e.uid, pack.id, spot.x, spot.y, spot.rot);
+  }
+  // the food: a breakfast and a supper a day, in the barrel (else the pack, else kept for you)
+  const barrel = inv.containers.find((c) => /^barrel/.test(c.item) && c.where === 'canoe') || inv.containers.find((c) => /^barrel/.test(c.item));
+  for (let i = 0; i < FOOD_DAYS; i++) for (const m of ['meal:breakfast', 'meal:supper']) { if (!((barrel && inv.put(barrel, m, q)) || inv.put(pack, m, q))) away(m); }
+  given.push(`meal:breakfast×${FOOD_DAYS}`, `meal:supper×${FOOD_DAYS}`);
+  inv.emit('containers');
+  if (typeof inv.write === 'function') inv.write();
+  return given;
+}
+// A co-op guest's first visit: the starting kit (inventory.newSeason) and the scene's gear in its plain form: a Duluth
+// pack #3, the A-frame tent, the pot, a canister stove and a canister, three days of food. Nothing of the story. → ids
+export function guestKit(inv) {
+  inv.newSeason();
+  return packGear(inv, { pack: plain('waltpack'), gift: GIFT.map(plain), order: ORDER.map(plain) });
 }
 
 export const onboarding = new Onboarding();
