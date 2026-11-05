@@ -510,7 +510,13 @@ class Boat {
   tick(dt) {
     // (r2: the parties' canoes near you paddle themselves to where the plan has them)
     const simOn = !!(this.ext && this.ext.sim && !this.hidden && this.dist < (this.simOn ? PHYS_R[1] : PHYS_R[0]));
-    if (simOn !== !!this.simOn) { this.simOn = simOn; this.sim = null; if (!simOn && this.ext) { this.x = this.ext.x; this.z = this.ext.z; } }
+    // (handed back to the plan: the way she was off it eased out over a few seconds, never a jump)
+    if (simOn !== !!this.simOn) { this.simOn = simOn; this.sim = null; this.goff = !simOn && this.ext ? { x: this.x - this.ext.x, z: this.z - this.ext.z, h: wrapPi(this.heading - this.ext.heading) } : null; }
+    if (!simOn && this.goff && this.ext && !this.hidden) {
+      const k = Math.exp(-Math.max(0, dt) * 0.6), G = this.goff; G.x *= k; G.z *= k; G.h *= k;
+      this.x = this.ext.x + G.x; this.z = this.ext.z + G.z;
+      if (Math.hypot(G.x, G.z) < 0.05) this.goff = null;
+    }
     if (simOn) { this.simTick(dt); this.settle(dt); this.measure(dt); return; }
     if (this.ext) {
       // (p2 C) placed from outside: the heading eases round as a canoe turns
@@ -566,12 +572,17 @@ class Boat {
       // held where she lies (a hand on the bank, a paddle's draw): eased into her place, turned to lie as the plan has her
       const k = ease(0.9, dt);
       this.x += gx * k; this.z += gz * k;
-      yawT = clamp(wrapPi(E.heading - this.heading) * 0.9, -0.35, 0.35);
+      yawT = clamp(wrapPi(E.heading - this.heading) * 1.2, -0.6, 0.6);
       m.speed *= Math.exp(-dt * 1.6);
     } else {
-      const ax = E.aim ? E.aim.x : E.x + Math.cos(E.heading) * 15, az = E.aim ? E.aim.z : E.z - Math.sin(E.heading) * 15;
+      // (the point ahead on the way; fallen well off the plan's place, or held off the bank, the plan's place itself: it is
+      // always on open water)
+      m.stuck = Math.max(0, (m.stuck || 0) - dt);
+      m.toG = m.toG ? gd > 7 : gd > 14;
+      const toG = m.toG || m.stuck > 0, ax = toG ? E.x : E.aim ? E.aim.x : E.x + Math.cos(E.heading) * 15, az = toG ? E.z : E.aim ? E.aim.z : E.z - Math.sin(E.heading) * 15;
+      // (steered as a paddler does: on where the bow will be in a moment, so she is straightened before she points there)
       const want = Math.atan2(-(az - this.z), ax - this.x), e = wrapPi(want - this.heading);
-      m.steer += (clamp(e / 0.3, -1, 1) - m.steer) * ease(8, dt);
+      m.steer += (clamp((e - 0.9 * m.yawRate) / 0.35, -1, 1) - m.steer) * ease(5, dt);
       yawT = m.steer * P.yaw * (0.55 + 0.45 * clamp(m.speed / 0.72, 0, 1));
       // the speed she wants: the plan's, and more while the plan is ahead of her bow (less when she is ahead of it); held
       // to over a stroke or two (m.vAvg), not fought within each stroke's surge
@@ -616,7 +627,7 @@ class Boat {
     // (never up the bank: a step that would take her within a metre of the shore is not taken, and she loses way: her
     // steering brings her round to where the plan has her, out on the water)
     const w = this.layer.world;
-    if (!holding && w && w.shoreAt && w.shoreAt(nx, nz) > -1.0 && w.shoreAt(nx, nz) > w.shoreAt(this.x, this.z)) { nx = this.x; nz = this.z; m.speed *= Math.exp(-dt * 3); }
+    if (!holding && w && w.shoreAt && w.shoreAt(nx, nz) > -1.0 && w.shoreAt(nx, nz) > w.shoreAt(this.x, this.z)) { nx = this.x; nz = this.z; m.speed *= Math.exp(-dt * 3); m.stuck = 1.5; }
     this.x = nx; this.z = nz;
     this.yawRate = m.yawRate;
     this.boost = m.boost;

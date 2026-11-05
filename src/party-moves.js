@@ -75,7 +75,7 @@ const RAW_MAX = 36;
 // first, the stern last and pushing off, each a walk to the side, a step over the gunwale and down to the kneel, the
 // hull rocking; and out again the same way. Real seconds (the clock's game seconds over CLOCK).
 const BOARD = { walk: 3.2, step: 1.6, gap: 0.1, first: 3.4, total: 9 }; // s: the walk to the side, each step in, the board's length
-const OUT = { first: 0.6, step: 1.5, gap: 0.15, walk: 3.0 };            // s: the first out, each step out, the walk to their place
+const OUT = { first: 2.0, step: 1.5, gap: 0.15, walk: 3.0 };            // s: the first out, each step out, the walk to their place
 const SEAT_X = { stern: SEATS.stern.x, bow: SEATS.bow.x, mid: -0.42 };
 const SLOT_ALONG = 6.2;      // m between canoes lying along the bank
 const ORDER = { bow: 0, mid: 1, stern: 2 }; // who gets in first (the bow) and out first (the bow)
@@ -488,7 +488,8 @@ export class PartyMoves {
       const all = [st.from, st.to, ...[...st.carry.values()].flatMap((c) => [c.A, c.B])];
       if (all.some((x) => x === 'wait')) return false;
       if (all.some((x) => !x)) { L.broken = true; return false; } // (no water by a landing: not drawn)
-      // (r2: the canoes along the bank lie bow the way the party goes)
+      // (r2: the canoes along the bank lie bow the way the party goes; at each landing, the way of the water leg they push
+      // off on or came in by)
       { const gx = plan.to.x - plan.from.x, gz = plan.to.z - plan.from.z; for (const S of all) S.tsign = S.L.tx * gx + S.L.tz * gz >= 0 ? 1 : -1; }
       L.st = st;
       // the paddle pieces' landings: from the leg's start or the last carry's far end, to the next carry's near end or the end
@@ -498,7 +499,9 @@ export class PartyMoves {
         else if (s.kind === 'paddle' || s.kind === 'drift') {
           s.A = cur;
           let nxt = null; for (let j = i + 1; j < plan.segs.length; j++) if (plan.segs[j].kind === 'carry') { nxt = st.carry.get(plan.segs[j]).A; break; }
-          s.B = nxt || st.to; s.pathKey = `${Math.round(s.A.L.x)},${Math.round(s.A.L.z)}>${Math.round(s.B.L.x)},${Math.round(s.B.L.z)}`;
+          s.B = nxt || st.to;
+          { const gx = s.B.L.x - s.A.L.x, gz = s.B.L.z - s.A.L.z; if (Math.hypot(gx, gz) > 20) for (const S of [s.A, s.B]) S.tsign = S.L.tx * gx + S.L.tz * gz >= 0 ? 1 : -1; }
+          s.pathKey = `${Math.round(s.A.L.x)},${Math.round(s.A.L.z)}>${Math.round(s.B.L.x)},${Math.round(s.B.L.z)}`;
         } else if (s.kind === 'carry') { const c = st.carry.get(s); s.A = c.A; s.B = c.B; s.trail = c.trail; cur = c.B; }
         else if (s.kind === 'landing') s.S = cur;
         else if (s.kind === 'land') s.S = st.to;
@@ -599,12 +602,13 @@ export class PartyMoves {
   }
   // beside seat `seat` of canoe c on the bank's side (where one stands to load it or to step in), the seat itself, and
   // which way faces the hull from there
-  sideOf(L, c, seat, S) {
+  sideOf(L, c, seat, S, i = -1) {
     const H = this.hullOf(L, c, S), fx = Math.cos(H.h), fz = -Math.sin(H.h), sx = SEAT_X[seat] ?? 0;
-    let nx = S.L.ux, nz = S.L.uz; const d = nx * fx + nz * fz; nx -= d * fx; nz -= d * fz;
-    let nl = Math.hypot(nx, nz); if (nl < 0.3) { nx = -fz; nz = fx; nl = 1; }
-    nx /= nl; nz /= nl;
-    return { x: H.x + fx * sx + nx * 0.85, z: H.z + fz * sx + nz * 0.85, face: headingOf(-nx, -nz), sx: H.x + fx * sx, sz: H.z + fz * sx, floor: H.y + floorAt(sx) + 0.02, h: H.h, side: Math.sign(nx * -fz + nz * fx) || 1, b: H.b };
+    // (the bank's side of her as she lies in her slot, kept while she swings: square to her keel)
+    const o = this.slot(S, c, L.boats.length, _sd), ox = Math.cos(o.h), oz = -Math.sin(o.h), sd = -oz * S.L.ux + ox * S.L.uz;
+    const sg = Math.abs(sd) < 0.3 ? 1 : Math.sign(sd), nx = -fz * sg, nz = fx * sg;
+    const r = i >= 0 ? mulberry32((hashStr(`${L.party.id}:${i}:side`) ^ 0x3c6e) >>> 0) : null, off = r ? 0.72 + 0.3 * r() : 0.85, along = r ? (r() - 0.5) * 0.5 : 0; // (each their own place by her)
+    return { x: H.x + fx * (sx + along) + nx * off, z: H.z + fz * (sx + along) + nz * off, face: headingOf(-nx, -nz), sx: H.x + fx * sx, sz: H.z + fz * sx, floor: H.y + floorAt(sx) + 0.02, h: H.h, side: Math.sign(nx * -fz + nz * fx) || 1, b: H.b };
   }
   // what one of them is doing at the bank t real seconds into it (from 'bank': their place up it, or 'hull': by the
   // canoe): carrying the packs down to the hull and stooping to load them (unload: up from it), kneeling at the hull,
@@ -615,7 +619,8 @@ export class PartyMoves {
     if (!seat) return stand(B.x, B.z, B.h);
     const r = mulberry32((hashStr(`${L.party.id}:${i}:job`) ^ 0x9e37) >>> 0), r1 = r(), r2 = r(), r3 = r(), r4 = r();
     const kind = lunch ? 'chat' : r1 < 0.62 ? 'ferry' : r1 < 0.84 ? 'load' : 'chat';
-    const Hs = this.sideOf(L, seat.c, seat.seat, S), up = headingOf(S.L.ux, S.L.uz);
+    const Hs = this.sideOf(L, seat.c, seat.seat, S, i), up = headingOf(S.L.ux, S.L.uz);
+    if (kind === 'chat' && from === 'hull') { const w0 = Math.max(1.6, Math.hypot(Hs.x - B.x, Hs.z - B.z) / 1.1); if (t < w0) { const k = t / w0; return { x: Hs.x + (B.x - Hs.x) * k, z: Hs.z + (B.z - Hs.z) * k, heading: headingOf(B.x - Hs.x, B.z - Hs.z), v: Math.hypot(B.x - Hs.x, B.z - Hs.z) / w0, mode: 'walk', pack: true, anim: null }; } }
     if (kind === 'chat') {
       // facing whoever of them stands nearest
       let best = null, bd = Infinity;
@@ -660,7 +665,7 @@ export class PartyMoves {
         const t0 = kind === 'launch' ? s.h0 : s.h0;
         return { job: this.jobAt(L, S, i, (h - t0) * 3600 / CLOCK, 'bank', false, kind === 'landing' && s.lunch) };
       }
-      const Hs = this.sideOf(L, seat.c, seat.seat, S), stIn = BOARD.first + jit + k * (BOARD.step + BOARD.gap);
+      const Hs = this.sideOf(L, seat.c, seat.seat, S, i), stIn = BOARD.first + jit + k * (BOARD.step + BOARD.gap);
       if (tb >= stIn + BOARD.step) return { seat: true };
       if (tb >= stIn) return { step: this.stepPose(Hs, (tb - stIn) / BOARD.step), Hs, u: (tb - stIn) / BOARD.step };
       // to the side of the canoe from wherever the job had them, then a hand on the gunwale till it is their turn
@@ -672,7 +677,7 @@ export class PartyMoves {
     if (kind === 'carry' || kind === 'land') {
       const S = kind === 'carry' ? s.A : s.S, t = (h - s.h0) * 3600 / CLOCK, st = OUT.first + jit * 0.5 + k * (OUT.step + OUT.gap);
       if (t < st) return { seat: true };
-      const Hs = this.sideOf(L, seat.c, seat.seat, S);
+      const Hs = this.sideOf(L, seat.c, seat.seat, S, i);
       if (t < st + OUT.step) return { step: this.stepPose(Hs, 1 - (t - st) / OUT.step), Hs, u: 1 - (t - st) / OUT.step, out: true };
       const t2 = t - st - OUT.step;
       if (kind === 'land') return { job: this.jobAt(L, S, i, t2, 'hull', true) };
@@ -1042,5 +1047,5 @@ export class PartyMoves {
   }
   _pathTest(a, b, basin) { const gen = waterPath(this.masks, this.world, this.basinOf, a, b, basin); let r = gen.next(); while (!r.done) r = gen.next(); return r.value; }
 }
-const _hv = new THREE.Vector3();
+const _hv = new THREE.Vector3(), _sd = { x: 0, z: 0, h: 0 };
 const _p = { x: 0, z: 0, tx: 1, tz: 0 }, _q = { x: 0, z: 0, tx: 1, tz: 0 }, _w = { x: 0, z: 0, tx: 1, tz: 0 }, _s = { x: 0, z: 0, h: 0 }, _b = { x: 0, z: 0, h: 0, v: 0 };
