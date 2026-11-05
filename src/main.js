@@ -87,6 +87,7 @@ import { kit } from './kit.js'; // content C
 import { uniques } from './uniques.js'; // content C
 import './gear-icons.js'; // content C
 import { attachTaskKinds } from './task-kinds.js'; // content A
+import { attachTaskKinds2 } from './task-kinds-2.js'; // gl-d: the board's new kinds (registered before any save is read)
 import { bear } from './bear.js'; // cons A
 import { bugs } from './bugs.js'; // cons C
 import { record } from './record.js'; // round A-A
@@ -1030,6 +1031,43 @@ async function main() {
   window.__game.autoWatch = autoWatch;
   loadingEl.classList.add('done');
   setTimeout(() => { loadingEl.style.display = 'none'; }, 900);
+  // gl-d: the trip-end tally and the board (the game-loop round, stream D; docs/build/game-loop-brief.md). Pay lands on
+  // the trip's card as it counts up (record.js ended → tasks.settle), never at the board; five notices held at most,
+  // each with a deadline that fits it; the new kinds (task-kinds-2.js: creel, campsite, beaver, iceout, colour,
+  // lastcheck, pma); the firsts and the milestones. Here: the new kinds wired to the camera and the parties, a party's
+  // word heard by a creel survey, a visitor's gift kept when the tally pays their notice, the board's dot label, and
+  // two moments.
+  {
+    attachTaskKinds2({ tasks, photo, parties, partyCamps, moves, npcs, outfitter, trip });
+    record.weather = weather; record.parties = parties;
+    // a party's word on their trip is a creel survey's answer: stream E's npcs.onTalk when it is there, else the camps'
+    // word (party-camps.js) and the canoes' talk (party-moves.js)
+    const lakeAt = (x, z) => world.lakeIdAt(x, z) || tasks.lakeNear(x, z, 6);
+    const talked = (party, lakeId) => { if (party && party.id != null) tasks.onEvent({ type: 'talk', kind: 'party', partyId: String(party.id), party, lakeId }); };
+    if (typeof npcs.onTalk === 'function') {
+      npcs.onTalk((e) => { if (e && e.kind === 'party' && e.partyId != null) talked({ id: e.partyId, ...(e.party || {}) }, e.lakeId || lakeAt(player.x, player.z)); });
+    } else {
+      const wordF = partyCamps.word.bind(partyCamps);
+      partyCamps.word = (v) => { const r = wordF(v); try { const D = [...partyCamps.drawn.values()].find((x) => x.v === v); if (D && r) talked(D.party, D.site ? lakeAt(D.site.x, D.site.z) : lakeAt(player.x, player.z)); } catch (e) { console.warn('gl-d: creel', e); } return r; };
+      const talkM = moves.talk.bind(moves);
+      moves.talk = (L, i) => { const r = talkM(L, i); try { if (L && r) talked(L.party, lakeAt(player.x, player.z)); } catch (e) { console.warn('gl-d: creel', e); } return r; };
+    }
+    // a visitor's notice paid at the tally: they still give what they promised (npcs.js paid), once
+    tasks.on('paid', (t) => { try { if (t && t.npc && npcs.s && npcs.s.tasks && npcs.s.tasks[t.npc] === t.id && typeof npcs.paid === 'function') npcs.paid({ key: t.npc, first: String(t.npcName || '').split(' ')[0] || 'They' }, t); } catch (e) { console.warn('gl-d: a visitor paid', e); } });
+    // the board's dot label counted the notices to claim: now only the fish to hand over there
+    if (typeof outfitter.readyHere === 'function') outfitter.readyHere = (ep) => { try { return tasks.deliverable(ep); } catch { return []; } };
+    // and the board's own line under its name said it pays there (outfitter.js render, stream B's): it pays when you come in
+    { const renderD = outfitter.render.bind(outfitter); outfitter.render = (...a) => { const r = renderD(...a); try { const say = outfitter.tab === 'board' && outfitter.el && outfitter.el.panel ? outfitter.el.panel.querySelector('.lede .say') : null; if (say && /paid here/.test(say.textContent)) say.textContent = 'Notices pinned up by the door. Take one on; it pays when you come in. Five at a time.'; } catch { /* the counter's */ } return r; }; }
+    // the moments: the first notice done on a trip ("it pays when you come in"), and the first tally (E finishes it)
+    let doneAt = -1e9;
+    tasks.on('done', () => { if (trip.active) doneAt = performance.now() / 1000; });
+    const glD = [{ id: 'paylater', prio: 1, recur: 'once', text: 'Done. Notices pay when you come in.', due: () => trip.active && performance.now() / 1000 - doneAt < 30 }, ...record.tallyMoments()];
+    for (const m of glD) if (!MOMENTS.some((q) => q.id === m.id)) { const { due, ...rest } = m; void due; MOMENTS.push(rest); }
+    const glDM = new Map(glD.map((m) => [m.id, m]));
+    const dueD = hints.due.bind(hints);
+    hints.due = (id, rec) => (glDM.has(id) ? glDM.get(id).due(rec) : dueD(id, rec));
+    window.__game.milestones = () => record.milestones();
+  }
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
 
   // fb3 join: a NaN never freezes the game. Once (the join's test aimed at an undefined point: the heading was NaN for a few
