@@ -9,7 +9,9 @@ import { miles, fmtDepth, fmtFtIn, fmtIn, fmtLbOz, fmtF, fmtMphMs, fmtMphKmh, fm
 import { names } from './names.js'; // d1 names: the bays, points, islands, narrows, summits and named portages on the map
 import { KIND, FOREST, REGIME, WCLASS, HGM, nwiCode, wetRegime, wetBeaver, wetHgm, wclass1 } from './land.js'; // 2026-10-31: the land under you, in the developer rows
 import { GROUND } from './terrain-build.js';
-import { paintGround, paintBurns, burnsInView, burnWords, paintBoundary, loadBoundary, BOUNDARY, paintEntry, tileGeo, tileCache, INK, lakeAt, lodOf, SMALL_LAKE, paintCreeks } from './map-render.js'; // the map as vectors (the wetlands round: paintCreeks)
+import { paintGround, paintBurns, burnsInView, burnWords, paintBoundary, loadBoundary, BOUNDARY, paintEntry, paintTrailhead, tileGeo, tileCache, INK, lakeAt, lodOf, SMALL_LAKE, paintCreeks } from './map-render.js'; // the map as vectors (the wetlands round: paintCreeks)
+import { isOutfitter } from './outfitters.js'; // round 2: an outfitter's store and its entry point's own start
+import { markOf } from './ep-start.js'; // round 2: an entry point marked at its start
 import './hud.css';
 const KIND_NAMES = Object.keys(KIND); // ground kind value -> its key (land.js KIND runs 0..13 in order)
 
@@ -1787,10 +1789,14 @@ export class Hud {
       ctx.font = `600 ${11 * k}px ${SERIF}`;
       const dockK = k * (1 - 0.35 * lodOf(mPerPx, k).gen);
       for (const ep of w.entryPoints) {
-        if (!inView(ep.x, ep.z, ep.x, ep.z)) continue;
-        const [a, b] = toPx(ep.x, ep.z);
+        // (round 2: a trailhead at its start, a portage-first one at its lot; an outfitter's entry point's own start apart
+        // from its store as a trailhead's sign too)
+        const out = isOutfitter(ep.ep), m = out ? ep : markOf(ep), h = out && ep.head ? markOf(ep) : null;
+        if (h && inView(h.x, h.z, h.x, h.z)) { const [c, d] = toPx(h.x, h.z); paintTrailhead(ctx, c, d, dockK); hits.push({ kind: 'dock', ep: ep.ep, x: h.x, z: h.z, px: 10 }); }
+        if (!inView(m.x, m.z, m.x, m.z)) continue;
+        const [a, b] = toPx(m.x, m.z);
         paintEntry(ctx, a, b, dockK, ep.ep); // (the game-loop round: an outfitter's dock, or a trailhead's sign)
-        hits.push({ kind: 'dock', ep: ep.ep, x: ep.x, z: ep.z, px: 10 });
+        hits.push({ kind: 'dock', ep: ep.ep, x: m.x, z: m.z, px: 10 });
         if (mid) { ctx.fillStyle = '#4a3b26'; ctx.textAlign = 'center'; ctx.fillText(`EP ${ep.ep}`, a, b + 19 * k); }
       }
       ctx.restore();

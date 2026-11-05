@@ -16,6 +16,7 @@
 // a piece of the map on a canvas: drawRegion(canvas, world, view, opts) (below) draws a region with markers.
 import { BURNS, burnDate } from './burns.js';
 import { isOutfitter } from './outfitters.js'; // the game-loop round: an outfitter's dock, or a trailhead's sign
+import { markOf } from './ep-start.js'; // round 2: an entry point marked at its start
 
 export const FT = 0.3048;
 export const INK = {
@@ -684,7 +685,14 @@ export function drawRegion(canvas, world, view, opts = {}) {
   if (opts.burns) paintBurns(ctx, v, burnsInView(v, W, H), k);
   if (opts.boundary !== false) { if (BOUNDARY.ready) paintBoundary(ctx, v, k); else loadBoundary(); }
   if (opts.names !== false) paintLakeNames(ctx, world, v, W, H, { k, detail });
-  if (opts.docks !== false) for (const ep of world.entryPoints) { const [a, b] = toPx(ep.x, ep.z); if (a > -20 && b > -20 && a < W + 20 && b < H + 20) paintEntry(ctx, a, b, k, ep.ep); }
+  if (opts.docks !== false) for (const ep of world.entryPoints) {
+    // (round 2: an entry point at its start, a portage-first one at its lot; an outfitter's store at its dock and its
+    // entry point's own start, when apart, as a trailhead's sign)
+    const out = isOutfitter(ep.ep), m = out ? ep : markOf(ep), [a, b] = toPx(m.x, m.z);
+    if (a > -20 && b > -20 && a < W + 20 && b < H + 20) paintEntry(ctx, a, b, k, ep.ep);
+    const h = out && ep.head ? markOf(ep) : null;
+    if (h) { const [c, d] = toPx(h.x, h.z); if (c > -20 && d > -20 && c < W + 20 && d < H + 20) paintTrailhead(ctx, c, d, k); }
+  }
   if (opts.route && opts.route.length > 1) {
     ctx.beginPath(); opts.route.forEach(([x, z], i) => { const [a, b] = toPx(x, z); if (i) ctx.lineTo(a, b); else ctx.moveTo(a, b); });
     ctx.strokeStyle = 'rgba(54, 46, 38, 0.86)'; ctx.lineWidth = 2 * k; ctx.lineCap = ctx.lineJoin = 'round'; ctx.setLineDash([6 * k, 4 * k]); ctx.stroke(); ctx.setLineDash([]);
