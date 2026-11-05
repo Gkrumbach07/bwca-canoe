@@ -41,7 +41,7 @@ export class PermitDesk {
   }
   selFor(at) {
     const P = this.permits, today = P.today;
-    if (!this.sel || this.sel.at !== at || this.sel.abs < today) this.sel = { at, ep: at, abs: null, kind: 'overnight', pma: null };
+    if (!this.sel || this.sel.at !== at || (this.sel.abs != null && this.sel.abs < today)) this.sel = { at, ep: at, abs: null, kind: 'overnight', pma: null }; // (a null day is "not chosen yet", not a past one: `null < today` threw away every other entry point picked)
     const s = this.sel;
     if (s.kind === 'pma' && !s.pma) { const n = P.pmasNear(at, 1)[0]; s.pma = n ? n.id : null; }
     if (s.abs == null || P.available(s.ep, s.abs).left <= 0) { const c = P.calendar(s.ep, today, DAYS).find((d) => d.left > 0); s.abs = c ? c.abs : null; }
@@ -77,7 +77,9 @@ export class PermitDesk {
       return `<button type="button" class="pd-day${off ? ' off' : ''}${chosen ? ' sel' : ''}${!off && c.left <= 2 ? ' few' : ''}${c.abs === today ? ' today' : ''}" data-act="permit-day" data-id="${c.abs}" ${off ? 'disabled' : ''} aria-pressed="${chosen}" aria-label="${esc(label)}"><i>${wd}</i><b>${dd}</b><span>${left}</span></button>`;
     }).join('');
     rows.push(`<div class="pd-cal" role="group" aria-label="The next four weeks at entry point ${s.ep}">${cells}</div>`);
-    if (s.abs != null) {
+    const mine = s.abs != null ? P.held().find((p) => p.abs === s.abs) : null;
+    if (mine) rows.push(`<div class="pd-buy"><div><b>${esc(dateWords(s.abs))}</b> · <span class="soft">your permit's for this day${mine.ep === s.ep ? '' : `, at entry point ${mine.ep}`}.</span></div></div>`); // (one permit a day: no Buy for a day you hold)
+    else if (s.abs != null) {
       const price = P.sandbox ? 0 : P.price(s.kind, s.abs), nights = s.abs - today, short = this.o && !this.o.sandbox && this.o.money < price;
       const later = nights > 0 ? `${word(nights)[0].toUpperCase()}${word(nights).slice(1)} ${plural(nights, 'night')} in the bunkhouse till then.` : 'Good for a push-off today.';
       rows.push(`<div class="pd-buy"><div><b>${esc(dateWords(s.abs))}</b> · <span class="soft">${later}</span></div><button type="button" class="stamp small" data-act="permit-buy" ${short ? 'disabled' : ''}>Buy · $${price}</button></div>`);
