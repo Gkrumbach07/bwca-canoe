@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { registerKind, KINDS, WORDS, NUMBERS, siteFeature, lakeNearGrid, shoreSpot, fishWith } from './tasks.js';
-import { PropBuilder, propMaterial, TILE, bakeSelf, buildHull } from './prop-kit.js';
+import { registerKind, KINDS, WORDS, NUMBERS, siteFeature, lakeNearGrid, fishWith } from './tasks.js';
+import { PropBuilder, propMaterial, TILE, bakeSelf } from './prop-kit.js';
 import { groundAt } from './props.js';
 import { defineItem, itemDef } from './items.js';
 import { hold } from './hold.js';
@@ -30,8 +30,8 @@ import { MOMENTS, TEACH } from './hints.js';
 //             the canoe comes within 26 m, so a count is made from a respectful distance).
 //   report    A route report: paddle a named chain of lakes, portage by portage, and say how it went. Each lake is
 //             noted as you paddle on it; the map rings the ones still to go.
-//   canoe     A rental left behind: an outfitter's canoe pulled up and turned over at a named campsite. Find it (the
-//             ring is the stretch of shore the party remembers) and read the number on its bow (E).
+//   (canoe    A rental left behind: cut in the game-loop round, gl-d. The owner, 2026-11-02: "lost gear stays, a whole
+//             canoe doesn't". An old save's rental notice is dropped as it loads, tasks.js restore.)
 //   lunch     The shore lunch class: two or three of one kind of fish into the cooler (as the fish notices), for the
 //             guests to learn to fillet on the rock. The keeper's pencil rings where they are biting.
 //
@@ -138,9 +138,10 @@ function along(pts, u) {
 const lakeHere = (T) => { const p = T.player, w = T.world; return w.lakeIdAt(p.x, p.z) || T.lakeNear(p.x, p.z, 4); };
 const sameLake = (T, a, b) => !!a && !!b && (a === b || (T.lakeName(a) && T.lakeName(a) === T.lakeName(b) && T.basinOf(a) === T.basinOf(b)));
 const landingName = (T, t) => { const L = T.landing(t.from); return L ? L.name : 'the outfitter'; };
-const backTo = (T, t) => `${landingName(T, t)}, entry point ${t.from}`;
-// "Tell Kawishiwi Lodge & Outfitters how it went: entry point 30." (as the survey's "Tell … what you saw: entry point …")
-const tell = (T, t, what = '') => `Tell ${landingName(T, t)}${what ? ` ${what}` : ''}: entry point ${t.from}.`;
+// gl-d: a notice done pays when you come in (tasks.js settle, the trip's tally), wherever that is: the done line says so
+const PAYS = 'It pays when you come in.';
+const tell = () => PAYS;
+void landingName;
 
 // --- the props: built on the props' one material ---------------------------------------------------------------------
 const MODELS = {};
@@ -229,23 +230,6 @@ function litterGeo(kind) {
   const geo = b.build();
   geo.scale(1.3, 1.3, 1.3); // (read from a standing eye: a crushed can is a hand long)
   bakeSelf(geo, { rays: 6, reach: 0.1, ground: 0, floor: 0.55 });
-  return (MODELS[k] = geo);
-}
-// a rental canoe turned over on the shore: the props' hull (prop-kit.js buildHull), keel up
-const HULLS = {
-  grumman: { shell: 0xa9adb0, inner: 0x9ea2a4, wood: 0x8d9194, cane: 0x6c6f71, words: 'an aluminium Grumman', short: 'Grumman' },
-  wenonah: { shell: 0x3e6a4b, inner: 0xa38d62, wood: 0x6e4b2e, cane: 0xb89a63, words: 'a green Wenonah', short: 'Wenonah' },
-};
-function hullGeo(make) {
-  const k = `hull:${make}`;
-  if (MODELS[k]) return MODELS[k];
-  const H = HULLS[make] || HULLS.grumman, b = new PropBuilder();
-  buildHull(b, C(H.shell), C(H.inner), C(H.wood), C(H.cane));
-  const geo = b.build();
-  geo.rotateX(Math.PI); // keel up, the gunwales on the ground
-  geo.computeBoundingBox();
-  geo.translate(0, -geo.boundingBox.min.y, 0);
-  bakeSelf(geo, { rays: 8, reach: 0.6, ground: 0, floor: 0.45 });
   return (MODELS[k] = geo);
 }
 // lay a mesh on the drawn ground at (x, z) turned to `yaw` (radians about up), tilted with the slope
@@ -484,7 +468,7 @@ function pickLitter(T, t, k) {
   b.got = true; t.got = t.bits.filter((x) => x.got).length;
   const g = T.props.get(t.id); if (g) for (const m of g.children) if (m.userData.bit === k) m.visible = false;
   const left = (t.need || t.bits.length) - t.got;
-  if (left <= 0) { t.status = 'done'; T.note(`That’s the lot packed out. Bring it back to ${backTo(T, t)}.`); }
+  if (left <= 0) { t.status = 'done'; T.note(`That’s the lot packed out. ${PAYS}`); }
   else T.note(`Packed out: ${LITTER[b.k] ? LITTER[b.k].label : 'litter'}. ${cap(word(left))} more ${plural(left, 'piece')}.`);
   if (T.audio && typeof T.audio.paddleDip === 'function') T.audio.paddleDip();
   T.changed(); T.boardChanged();
@@ -636,7 +620,7 @@ function beginSecchi(T, t) {
     onDone: () => {
       if (diskProp) diskProp.visible = false;
       t.reading = Math.round(((gone + back) / 2) * 10) / 10; t.status = 'done';
-      T.note(`Gone at ${ft1(gone)} ft, back in sight at ${ft1(back)}: ${ft1(t.reading)} ft on ${T.lakeName(t.lakeId) || 'the lake'}. Take it to ${backTo(T, t)}.`);
+      T.note(`Gone at ${ft1(gone)} ft, back in sight at ${ft1(back)}: ${ft1(t.reading)} ft on ${T.lakeName(t.lakeId) || 'the lake'}. ${PAYS}`);
       T.changed(); T.boardChanged();
     },
   });
@@ -732,7 +716,7 @@ function countLoons(T, t, dt = 1 / 60) {
   const ch = best.l.chick >= 0 && L.chicks && L.chicks[best.l.chick] && L.chicks[best.l.chick].alive;
   if (ch) t.chicks = (t.chicks || 0) + 1;
   const n = t.need || 4, lake = T.lakeName(t.lakeId) || 'the lake';
-  if (t.got >= n) { t.status = 'done'; T.note(`${cap(word(t.got))} loons on ${lake}${t.chicks ? `, and ${word(t.chicks)} ${plural(t.chicks, 'chick')}` : ''}. Take the count to ${backTo(T, t)}.`); }
+  if (t.got >= n) { t.status = 'done'; T.note(`${cap(word(t.got))} loons on ${lake}${t.chicks ? `, and ${word(t.chicks)} ${plural(t.chicks, 'chick')}` : ''}. ${PAYS}`); }
   else T.note(`A loon${ch ? ' with a chick' : ''}: ${word(t.got)} of ${word(n)} counted on ${lake}.`);
   T.changed(); T.boardChanged();
 }
@@ -809,81 +793,6 @@ function onRoute(T, t) {
 }
 
 // =======================================================================================================================
-// canoe: a rental left turned over at a named campsite; find it and read its number
-const CANOE_WORDS = {
-  titles: ['A rental left behind', 'Missing: one canoe', 'Our canoe, somewhere on {lake}'],
-  leads: [
-    ['One of our rentals never came home: {canoe}, number {n}. Its party came out early with another group and left it pulled up. {lake}{hops}: {site}{dir}, they think. Find it and read me the number on the bow.', 'the rental desk'],
-    ['{Canoe}, number {n}, left turned over on the shore when its party hitched a ride out with friends. {lake}{hops}: {site}{dir}, near enough. Find it so we can fetch it.', 'the counter'],
-  ],
-};
-registerKind('canoe', {
-  label: 'Lost and found', weight: { local: 0.3, medium: 0.45, far: 0.5 },
-  async make(T, c) {
-    const pool = siteCands(T, c, 'canoe').slice(0, 14);
-    for (let k = 0; k < 4 && pool.length; k++) {
-      const cand = pool.splice(Math.floor(c.rng() * pool.length), 1)[0], s = await readSite(T, c, cand);
-      if (!s) continue;
-      const spot = shoreSpot(s.tg, cand.s.x, cand.s.z, false);
-      if (!spot) continue;
-      const make = c.rng() < 0.55 ? 'grumman' : 'wenonah', n = 3 + Math.floor(c.rng() * 38), [lead, sign] = pickR(c.rng, CANOE_WORDS.leads);
-      const text = WORDS.fill(lead, { canoe: HULLS[make].words, Canoe: cap(HULLS[make].words), n, site: s.site, lake: cap(s.name), hops: hopsText(s.hops), dir: s.dir });
-      return { key: cand.i, site: cand.i, lakeId: s.lakeId, feature: s.feature, hops: s.hops, make, number: n, at: spot, km: kmFrom(c.landing, spot.x, spot.z),
-        title: WORDS.fill(pickR(c.rng, CANOE_WORDS.titles), { lake: s.name }), text, sign, hint: T.hintFor(s.lakeId, cand.s, AREA_LABEL[s.feature] || null) };
-    }
-    return null;
-  },
-  pay(t) { return Math.min(PAY_MAX, 15 + 5 * (t.hops ?? 1) + Math.round(1.5 * (t.km || 0))); },
-  update(T, t) { placeCanoe(T, t); },
-  use(T, t) { return foundCanoe(T, t); },
-  // the stretch of shore the party remembers, never the spot (it is found by looking)
-  target(T, t) { const s = T.world.campsites[t.site]; return s ? (t.feature === 'island' ? { x: s.x, z: s.z, r: 260, label: 'the island', tight: false } : T.hintFor(t.lakeId, s, AREA_LABEL[t.feature] || null)) : undefined; },
-  progress(t) { return `the ${HULLS[t.make] ? HULLS[t.make].short : 'canoe'} is still out there`; },
-  doneWords(t) { return `${HULLS[t.make] ? HULLS[t.make].short : 'canoe'} ${t.number} found`; },
-});
-// the hull turned over a couple of metres up the bank from where the canoes pull up, its bow to the water
-function placeCanoe(T, t) {
-  const p = T.player, w = T.world, a = t.at;
-  if (!a) return;
-  const d = Math.hypot(a.x - p.x, a.z - p.z);
-  let m = T.props.get(t.id);
-  if (!m) {
-    if (d > 900 || !w.isReady(a.x, a.z)) return;
-    // up the bank: away from the water by the shore's own gradient, along the shore to the first clear stretch (no rock,
-    // trunk or ring under the hull)
-    const up = (x, z) => { const e = 0.6, gx = w.shoreAt(x + e, z) - w.shoreAt(x - e, z), gz = w.shoreAt(x, z + e) - w.shoreAt(x, z - e), n = Math.hypot(gx, gz) || 1; return { x: gx / n, z: gz / n }; };
-    const tiles = ref('tiles'), u0 = up(a.x, a.z);
-    let x = a.x, z = a.z;
-    for (const k of [0, 1.6, -1.6, 3.2, -3.2, 4.8, -4.8, 6.4, -6.4]) {
-      let cx = a.x - u0.z * k, cz = a.z + u0.x * k;
-      for (let j = 0; j < 10 && w.shoreAt(cx, cz) < 2.4; j++) { const d = up(cx, cz); cx += d.x * 0.4; cz += d.z * 0.4; }
-      if (w.shoreAt(cx, cz) < 1.5) continue;
-      if (tiles && tiles.treesNear && tiles.treesNear(cx, cz, 2.3).some((o) => o.shape || o.box || (o.r || 0) > 0.05)) continue;
-      x = cx; z = cz; break;
-    }
-    const g0 = up(x, z), gx = g0.x, gz = g0.z;
-    const yaw = Math.atan2(gz, -gx) + 0.35; // pulled straight up the bank, a little skew
-    m = shared(meshOf(hullGeo(t.make), 'task rental canoe'));
-    setOnGround(m, w, x, z, yaw, true, 0);
-    m.userData.spot = { x, z, yaw };
-    T.scene.add(m); T.props.set(t.id, m);
-  }
-  const s = m.userData.spot;
-  // from the canoe, near enough to read: E (tasks.before takes it ahead of "Go ashore")
-  if (s && p.mode === 'paddle' && !p.landing && !p.teleporting && Math.hypot(s.x - p.x, s.z - p.z) < 9) {
-    p.prompt = { key: 'E', text: `Read the number · the ${HULLS[t.make] ? HULLS[t.make].short : 'canoe'}` };
-    T.inReach = t;
-  }
-}
-function foundCanoe(T, t) {
-  if (t.status !== 'open') return false;
-  t.status = 'done'; t.found = T.today();
-  T.note(`${cap(HULLS[t.make] ? HULLS[t.make].words : 'a canoe')}, number ${t.number}: theirs. ${tell(T, t, 'where it lies')}`);
-  T.changed(); T.boardChanged();
-  return true;
-}
-
-// =======================================================================================================================
 // lunch: fish for the shore lunch class. As the fish notices (the owner, 2026-10-31): the fish are kept like any
 // other and handed over at the board that posted it (tasks.js handIn), into its cooler there
 const LUNCH_WORDS = {
@@ -936,11 +845,11 @@ registerKind('lunch', {
 });
 
 // =======================================================================================================================
-// the dot (pointer.js) on foot: the blowdown (hold E with the saw), each piece of litter (E), the rental canoe (E)
+// the dot (pointer.js) on foot: the blowdown (hold E with the saw), each piece of litter (E)
 export function taskKindTargets(tasks) {
   return (ray, near) => {
     if (!tasks || !tasks.active) return null;
-    const out = [], w = tasks.world;
+    const out = [];
     for (const t of tasks.active) {
       if (t.status !== 'open') continue;
       const m = tasks.props.get(t.id);
@@ -968,12 +877,6 @@ export function taskKindTargets(tasks) {
           out.push({ dist: hit.t, miss: hit.miss, target: { kind: 'item', ref: `litter:${t.id}:${c.userData.bit}`, label: LITTER[b.k] ? LITTER[b.k].label : 'litter', mesh: c,
             e: { verb: 'Pack it out', why: room ? null : 'Pack it out: no room', needs: [{ label: 'Room in a pack or a free hand', done: room, chip: 'no room' }], next: room ? '' : 'Put a pack on, or free a hand', run: () => pickLitter(tasks, t, c.userData.bit) } } });
         }
-      } else if (t.kind === 'canoe' && m.userData.spot) {
-        const s = m.userData.spot;
-        if (near.flat(s.x, s.z) > 3.4) continue;
-        const gy = groundAt(w, s.x, s.z), hit = near.box({ x: s.x, y: gy + 0.25, z: s.z, hx: 2.5, hy: 0.32, hz: 0.48, heading: s.yaw });
-        if (!hit) continue;
-        out.push({ dist: hit.t, miss: hit.miss, target: { kind: 'item', ref: `task:${t.id}`, label: `the ${HULLS[t.make] ? HULLS[t.make].short : 'canoe'}, turned over`, mesh: m, e: { verb: 'Read the number', run: () => foundCanoe(tasks, t) } } });
       }
     }
     return out;
@@ -1025,5 +928,5 @@ export function attachTaskKinds(o = {}) {
   if (typeof window !== 'undefined' && window.__game) window.__game.taskKinds = { kinds: Object.keys(KIND_KEYS), state, models: MODELS, targets: tasks ? taskKindTargets(tasks) : null };
   return { kinds: KIND_KEYS };
 }
-export const KIND_KEYS = { deadfall: KINDS.deadfall, litter: KINDS.litter, secchi: KINDS.secchi, loons: KINDS.loons, report: KINDS.report, canoe: KINDS.canoe, lunch: KINDS.lunch };
+export const KIND_KEYS = { deadfall: KINDS.deadfall, litter: KINDS.litter, secchi: KINDS.secchi, loons: KINDS.loons, report: KINDS.report, lunch: KINDS.lunch };
 void esc; void FISH;
