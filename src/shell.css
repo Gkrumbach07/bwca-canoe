@@ -67,6 +67,31 @@
 .entries ul button.picked { color: var(--gold); font-weight: 700; }
 .entries ul button.picked b, .entries ul button:focus-visible b { color: inherit; }
 .entries ul button:disabled { color: var(--cream-50); cursor: default; }
+/* gl-c: the start map (startmap.js): the outfitters as pins on the overview's water, a card for the one under the
+   pointer, a key under it. The wizard widens while it is up. */
+.entries.wmap { width: min(600px, calc(68vw - 400px)); }
+#shell.wide.wizmap::before { width: min(1000px, 74vw); }
+.startmap { display: flex; flex-direction: column; gap: 8px; margin-top: -4px; }
+.smap { position: relative; width: 100%; height: clamp(170px, min(30vh, 34vw), 260px); border-top: 1px solid rgba(243, 236, 221, .25); border-bottom: 1px solid rgba(243, 236, 221, .25); }
+.smap canvas { position: absolute; inset: 0; pointer-events: none; }
+.smap .pins { position: absolute; inset: 0; }
+.smap .pin { position: absolute; transform: translate(-50%, -50%); appearance: none; width: 22px; height: 22px; padding: 0; margin: 0; border-radius: 50%; border: 1.5px solid rgba(243, 236, 221, .85); background: rgba(31, 42, 46, .82); color: var(--cream); font: 700 10px/1 var(--sc); letter-spacing: 0; cursor: pointer; display: flex; align-items: center; justify-content: center; text-shadow: none; z-index: 1; }
+.smap .pin b { font-weight: 700; }
+.smap .pin.gentle { border-color: #9cc48a; background: rgba(66, 104, 64, .9); }
+.smap .pin.hot, .smap .pin:focus-visible, .smap .pin:hover { border-color: var(--gold); color: var(--gold); outline: none; z-index: 3; transform: translate(-50%, -50%) scale(1.25); }
+.smap .pin.picked { border-color: var(--gold); background: var(--gold); color: var(--deep); z-index: 2; }
+.scard { display: flex; flex-direction: column; gap: 2px; min-height: 7.4em; font-size: 14.5px; line-height: 1.4; color: var(--cream-86); }
+.scard .sname { font: 500 21px/1.2 var(--serif); color: var(--cream); }
+.scard .splace { font: 700 11px/1.5 var(--sc); letter-spacing: .14em; color: rgba(243, 236, 221, .66); }
+.scard .scountry { color: var(--cream); }
+.scard .sreach, .scard .slakes, .scard .skeeper { color: var(--cream-72); }
+.scard .sgood { color: #b9dba6; font: 700 11px/1.6 var(--sc); letter-spacing: .14em; }
+.skey { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; font-size: 12px; color: rgba(243, 236, 221, .6); }
+.skey .k { display: inline-flex; align-items: center; gap: 6px; }
+.skey .k i { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid rgba(243, 236, 221, .85); background: rgba(31, 42, 46, .82); }
+.skey .k.gentle i { border-color: #9cc48a; background: rgba(66, 104, 64, .9); }
+.skey .keys kbd { font-size: 11px; padding: 1px 6px; border-color: rgba(243, 236, 221, .5); margin-left: 6px; }
+@media (max-width: 900px) { .entries.wmap { width: calc(100vw - 48px); min-width: 0; } }
 /* Back and Next */
 .wnav { display: flex; gap: 26px; margin-top: 6px; font: 700 13px/1.4 var(--sc); letter-spacing: .16em; }
 .wnav button { appearance: none; background: none; border: none; padding: 0; margin: 0; color: rgba(243, 236, 221, .72); font: inherit; letter-spacing: inherit; cursor: pointer; text-shadow: inherit; }

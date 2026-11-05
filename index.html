@@ -180,12 +180,13 @@
           <p class="sub" id="confirm-sub"></p>
           <div class="row"><button id="btn-confirm" class="item" type="button">Start a new season</button><button id="btn-keep" class="item" type="button">Keep the season</button></div>
         </div>
-        <!-- the new season as steps (src/wizard.js): where you start, when, then the season in a few lines and Start -->
+        <!-- the new season as steps (src/wizard.js): where you start (a map of the outfitters), when, then the season in a few lines and Start -->
         <div class="entries wizard" id="entry-card" hidden>
           <div class="sc kicker">New season</div>
           <section class="wstep" data-step="home">
             <p class="wq">Where does the season start?</p>
-            <ul id="entry-list" role="list"></ul>
+            <!-- gl-c: the outfitters as a map, a card for the one under the pointer (src/startmap.js) -->
+            <div id="start-map"></div>
           </section>
           <section class="wstep" data-step="date" hidden>
             <p class="wq when"></p>
