@@ -74,7 +74,8 @@ import * as THREE from 'three';
 import { buildFigure } from './figure.js';
 import { Mesher, V3, ringPts, loft } from './loft.js';
 import { registerKind, KINDS } from './tasks.js';
-import { outfitterProfile, keeperLine, placeFacts, abundanceOf, KEEPER_FROM } from './outfitters.js';
+import { outfitterProfile, keeperLine, placeFacts, abundanceOf, KEEPER_FROM, OUTFITTER_EPS } from './outfitters.js';
+import { STAFF } from './onboarding.js'; // (the summer help's names: no one else is given one)
 // (the join: a hand-written keeper who moved to the host that serves their old landing keeps their talk, by keeperKey)
 const keeperKeyOf = (ep) => KEEPER_FROM[ep] ?? ep;
 const keeperMoved = (ep) => Object.values(KEEPER_FROM).includes(ep) && KEEPER_FROM[ep] == null;
@@ -237,6 +238,46 @@ const F_NAMES = ['Marit', 'Anneli', 'Priya', 'Kate', 'Sue', 'Jo', 'Rosa', 'Nell'
 const M_NAMES = ['Jake', 'Dave', 'Tom', 'Sam', 'Arne', 'Pete', 'Luis', 'Ben', 'Mike', 'Eli', 'Gary', 'Hal', 'Nate', 'Rolf', 'Will', 'Joe', 'Dan', 'Kurt'];
 const OLD_NAMES = ['Gunnar', 'Otto', 'Hjalmar', 'Clem', 'Arvo', 'Reino', 'Edna', 'Ione', 'Toivo', 'Elmer'];
 const KID_NAMES = ['Tyler', 'Emma', 'Owen', 'Ava', 'Finn', 'Lily', 'Max', 'Ruby', 'Leo', 'Nora'];
+// (the game-loop play: two Rosas, one in the store and one camped across the lake) the names a person takes only when
+// the name drawn is already someone else's (NameBook): the draws above stay as they were, so who is who does not change
+const F_MORE = ['Annika', 'Brenda', 'Cheryl', 'Darla', 'Freya', 'Heidi', 'Janet', 'Kirsten', 'Laila', 'Mira', 'Nadia', 'Paula', 'Renee', 'Sara', 'Tina', 'Vera', 'Wendy', 'Yvonne', 'Zoe', 'Gwen', 'Holly', 'Irene', 'Lena', 'Olive'];
+const M_MORE = ['Aaron', 'Bjorn', 'Carl', 'Doug', 'Erik', 'Frank', 'Glen', 'Hank', 'Ivan', 'Jon', 'Karl', 'Lars', 'Matt', 'Neil', 'Oscar', 'Paul', 'Ray', 'Stan', 'Ted', 'Vic', 'Wade', 'Zach', 'Brad', 'Craig'];
+const OLD_MORE = ['Alvin', 'Bernie', 'Delmar', 'Eldon', 'Floyd', 'Harlan', 'Mabel', 'Opal', 'Verna', 'Thelma', 'Orville', 'Lowell'];
+const KID_MORE = ['Mia', 'Jack', 'Ella', 'Noah', 'Ivy', 'Sam', 'Zara', 'Eli', 'Rose', 'Ben', 'Lucas', 'Grace'];
+for (const n of [...F_MORE, 'Mabel', 'Opal', 'Verna', 'Thelma']) FEMALE.add(n);
+// the story's own people and the hand-written keepers: never a generated person's name (the keepers' are added from
+// outfitters.js, the summer help's from onboarding.js)
+const STORY_NAMES = ['Walt', 'Eino', 'Leif'];
+const NAME_STALE = 2; // days: a name not seen for this long (its person gone out of the trip's reach) is free again
+// One name per person among the people you can meet at once: the store's people, the parties on the water and in camp,
+// the keepers and the summer help. A person's name is the one drawn for them unless someone else seen in the last two
+// days already has it; then the next free one along their list, then along the longer list behind it.
+class NameBook {
+  constructor(now) { this.now = now; this.claims = new Map(); this.reserved = new Set(STORY_NAMES); }
+  reserve(n) { if (n) this.reserved.add(String(n)); }
+  free(n, owner) { if (!n || this.reserved.has(n)) return false; const c = this.claims.get(n); return !c || c.owner === owner || this.now() - c.seen > NAME_STALE; }
+  claim(owner, want, lists) {
+    let n = this.free(want, owner) ? want : null;
+    for (const list of lists) {
+      if (n) break;
+      const i0 = Math.max(0, list.indexOf(want));
+      for (let k = 1; k <= list.length && !n; k++) { const c = list[(i0 + k) % list.length]; if (this.free(c, owner)) n = c; }
+    }
+    // (every name of the kind someone's: the drawn one with an initial, "Tom B.", as two Toms would be told apart)
+    for (let k = 0; !n && k < 26; k++) { const c = `${want} ${String.fromCharCode(65 + ((hashKey(owner) + k) % 26))}.`; if (this.free(c, owner)) n = c; }
+    n = n || want;
+    this.claims.set(n, { owner, seen: this.now() });
+    return n;
+  }
+  // a person seen again (drawn, in the roster): their name stays theirs, unless they were gone long enough for someone
+  // else to be given it (then the next free one, as claim)
+  keep(owner, n) { const c = this.claims.get(n); if (!c || c.owner === owner || this.now() - c.seen > NAME_STALE) { this.claims.set(n, { owner, seen: this.now() }); return n; } return this.claim(owner, n, poolOf(n)); }
+  ownerOf(n) { const c = this.claims.get(n); return c && this.now() - c.seen <= NAME_STALE ? c.owner : null; }
+  clear() { this.claims.clear(); }
+}
+// the lists a name drawn from `n`'s list moves along (its own first, then the longer one of its kind)
+const poolOf = (n) => (KID_NAMES.includes(n) ? [KID_NAMES, KID_MORE] : OLD_NAMES.includes(n) ? [OLD_NAMES, OLD_MORE] : COOKS.includes(n) ? [COOKS, F_NAMES, F_MORE]
+  : F_NAMES.includes(n) || FEMALE.has(n) ? [F_NAMES, F_MORE] : [M_NAMES, M_MORE]);
 // gl-e: every name a generated person can have (the tests check the story's names are not among them)
 export const nameLists = () => ({ F_NAMES, M_NAMES, OLD_NAMES, KID_NAMES, SURNAMES, COOKS });
 const SURNAMES = ['Olson', 'Lindqvist', 'Peterson', 'Nguyen', 'Hansen', 'Garcia', 'Kowalski', 'Larsen', 'Schmidt', 'Johnson', 'Haugen', 'Novak'];
@@ -1006,6 +1047,9 @@ export class People {
     // [{ person, fig, f, d }] with person from partyPerson(party), drawn from the same pool, nearest first with a
     // store's; partyWord(person, fig): what E on one of them says (a bark: their talk trees are a later phase)
     this.extra = null; this.partyWord = null; this.partyPeople = new WeakMap(); // (by the party itself: a new season makes new parties)
+    this.names = new NameBook(() => this.today + (this.day ? this.day.hours : 0) / 24); // one name per person met at once
+    for (const n of STAFF) this.names.reserve(n);
+    for (const ep of OUTFITTER_EPS) { try { const k = outfitterProfile(ep, world); if (k && k.keeper) this.names.reserve(k.keeper.first); } catch { /* a world without it */ } }
     this.preparing = new Map(); // person key -> the promise writing up their task
     this.checkT = 0;
     this.quiet = null;          // () => true while something else owns the keys (the camera raised: stream B)
@@ -1043,7 +1087,7 @@ export class People {
       arcs: o(s.arcs), word: o(s.word), rumoured: o(s.rumoured), advised: o(s.advised), deal: o(s.deal), secret: o(s.secret), topics: o(s.topics), visits: o(s.visits), mem: s.mem && s.mem.v === 1 ? s.mem : null } : blankState(); // (an older save: the content B fields start empty)
   }
   write() { save.write(NS, this.s); }
-  reset() { this.s = blankState(); this.weekCache = null; this.rosters.clear(); this.preparing.clear(); this.chars.clear(); if (this.mem) this.mem.reset(); this.write(); }
+  reset() { this.s = blankState(); this.weekCache = null; this.rosters.clear(); this.names.clear(); this.preparing.clear(); this.chars.clear(); if (this.mem) this.mem.reset(); this.write(); }
 
   get today() { const d = this.day; return absDay(d.year, d.doy); }
   get week() { return Math.floor(this.today / 7); }
@@ -1085,6 +1129,7 @@ export class People {
     for (const v of this.partyVisitorsOf(ep, L)) out.push(v); // gl-e: the parties going in and coming out, by the schedule
     out.at = { y: L.floorY, x: L.centre.x, z: L.centre.z }; // the store they were placed in (follow(): built again since)
     out.partySig = this.partySig(ep);
+    for (const v of out) if (!v.keeper && !v.party && v.figNames) this.keepNames(v, v.key);
     return out;
   }
   // A store built again on new ground (props.js stepOutfitters: a LiDAR chunk in or out under it) can stand at another
@@ -1172,13 +1217,18 @@ export class People {
       const look = dress(rng, { ...wear, pfd: kidFig && arch !== 'kid' ? pickR(rng, [0xe07a2a, 0xd8b02a]) : i === 1 && Array.isArray(wear.pfd) ? pickR(rng, wear.pfd) : pfd, female: fem, age: kidFig ? 'kid' : A.age || 'adult', hatChance: kidFig ? 0.15 : wear.hatChance ?? 0.5 });
       return this.placeAt(L, SPOTS[s], look);
     });
-    const second = A.pair === 'adult' ? pickR(rng, rng() < 0.5 ? F_NAMES : M_NAMES) : null;
-    const full = arch === 'family' ? `${name} ${last}` : second && second !== name ? `${name} and ${second}` : name;
-    const v = { key: `${ep}:${this.week}:${arch}`, ep, arch, name: full, first: name, last, city, vars, figs };
+    let second = A.pair === 'adult' ? pickR(rng, rng() < 0.5 ? F_NAMES : M_NAMES) : null;
+    const key = `${ep}:${this.week}:${arch}`;
     // each figure's own name, for the line over their head (the family's child: a name of their own, drawn apart so
-    // the visitor's own draws are as they were)
+    // the visitor's own draws are as they were); then each made theirs alone among the people about (NameBook)
     const other = seeded(ep, this.week, 0x6b1d);
-    v.figNames = figs.length < 2 ? [name] : [name, A.pair === 'adult' ? (second && second !== name ? second : pickR(other, M_NAMES.filter((n) => n !== name))) : pickR(other, KID_NAMES.filter((n) => n !== name))];
+    const drawn = figs.length < 2 ? [name] : [name, A.pair === 'adult' ? (second && second !== name ? second : pickR(other, M_NAMES.filter((n) => n !== name))) : pickR(other, KID_NAMES.filter((n) => n !== name))];
+    const figNames = drawn.map((n, i) => (arch === 'cook' && keeperKeyOf(ep) === 30 && i === 0 ? n : this.names.claim(`${key}#${i}`, n, poolOf(n))));
+    if (second && figNames[1]) second = figNames[1];
+    name = figNames[0];
+    const full = arch === 'family' ? `${name} ${last}` : second && second !== name ? `${name} and ${second}` : name;
+    const v = { key, ep, arch, name: full, first: name, last, city, vars, figs };
+    v.figNames = figNames;
     v.who = A.who(vars);
     v.hasTask = !!A.task && rng() < A.odds;
     if (A.party) v.party = this.partyFor(v, rng); // the hook for later: a party on the water
@@ -1595,12 +1645,13 @@ export class People {
   // drawn) and hear (how far a greeting carries).
   partyPerson(party) {
     let v = this.partyPeople.get(party);
-    if (v) return v;
+    if (v) { if (this.names.now() - (v.seen || 0) > 0.02) { v.seen = this.names.now(); this.keepNames(v, `party:${party.id}`); } return v; }
     const rng = seeded(party.ep, party.day, party.slot, 0x7a11), used = new Set();
-    const nameFor = (m) => { const list = m.age === 'kid' ? KID_NAMES : m.age === 'old' ? OLD_NAMES : m.female ? F_NAMES : M_NAMES; let n = pickR(rng, list); for (let k = 0; k < 6 && used.has(n); k++) n = pickR(rng, list); used.add(n); return n; };
+    // (the draw as it was, then the name made this member's alone among the people about: NameBook)
+    const nameFor = (m, i) => { const list = m.age === 'kid' ? KID_NAMES : m.age === 'old' ? OLD_NAMES : m.female ? F_NAMES : M_NAMES; let n = pickR(rng, list); for (let k = 0; k < 6 && used.has(n); k++) n = pickR(rng, list); used.add(n); return this.names.claim(`party:${party.id}#${i}`, n, poolOf(n)); };
     const guidePfd = pickR(rng, [0xd65428, 0xc8a22a, 0x2f6aa0]), troop = pickR(rng, [0xc8a22a, 0xd65428, 0x2f6aa0, 0x3f6a4a]);
     const members = party.members.map((m, i) => ({
-      ...m, name: nameFor(m),
+      ...m, name: nameFor(m, i),
       look: dress(rng, { female: m.female, age: m.age === 'young' ? 'adult' : m.age, hatChance: m.age === 'kid' ? 0.15 : 0.5, pfd: party.kind === 'group' ? (i === 0 ? guidePfd : troop) : undefined }),
     }));
     for (const m of members) if (m.age === 'young') m.look.wear.scale = Math.min(m.look.wear.scale, 0.9); // the troop's teenagers
@@ -1608,9 +1659,21 @@ export class People {
     const who = party.kind === 'solo' ? `a solo paddler from ${city}` : party.kind === 'pair' ? `two paddlers from ${city}` : party.kind === 'family' ? `the ${last}s, from ${city}`
       : party.kind === 'group' ? `${pickR(rng, ['a scout troop', 'a church group', 'a youth group'])} out of ${city}, ${word(n)} of them` : `a party of ${word(n)} from ${city}`;
     v = { key: `party:${party.id}`, room: `party:${party.id}`, party: true, partyId: party.id, kind: party.kind, arch: 'party', ep: party.ep, name: members[0].name, first: members[0].name, last, city, who,
-      members, figNames: members.map((m) => m.name), figs: [], live: false, hear: null, vars: { city, last } };
+      members, figNames: members.map((m) => m.name), figs: [], live: false, hear: null, vars: { city, last }, seen: this.names.now() };
     this.partyPeople.set(party, v);
     return v;
+  }
+  // a person's names kept theirs (NameBook.keep); one given away while they were gone is changed everywhere it is said
+  keepNames(v, key) {
+    v.figNames.forEach((n, i) => {
+      const k = this.names.keep(`${key}#${i}`, n);
+      if (k === n) return;
+      const re = new RegExp(`(?<![\\w.])${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w])`); // (a whole name: "Jo", not the Jo of "Joanne")
+      v.figNames[i] = k;
+      if (v.members && v.members[i]) v.members[i].name = k;
+      if (v.first === n) v.first = k;
+      if (typeof v.name === 'string') v.name = v.name.replace(re, k);
+    });
   }
   // round A-F, for the actor layer (people phase 2): a body of the pool lent out, hidden from this module's drawing
   // and posing until it is given back; null when none is free
