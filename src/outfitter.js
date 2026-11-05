@@ -29,7 +29,7 @@
 // the home store's door (the keeper's forty dollars as you step in), and so does a ride's end; a page reloaded in a
 // store comes back on its floor (updateArrival).
 import { kv } from './store.js'; // the saves' store (IndexedDB, read into memory before the boot)
-import { outfitterName, trailheadName, isOutfitter, hostOf, roadOf } from './outfitters.js';
+import { outfitterName, trailheadName, isOutfitter, hostOf, roadOf, placeOf } from './outfitters.js';
 import { trailheadLayout, trailheadAt, trailheadDist } from './trailhead.js';
 import { esc, plural, word } from './hud.js';
 import { drawCounterMap, markerAt } from './counter-map.js';
@@ -151,7 +151,10 @@ export class Outfitter {
     // trailheads (a lot, a permit box, the sign: trailhead.js), each with the outfitter that serves it (host)
     this.entries = world.entryPoints.map((ep) => {
       const out = isOutfitter(ep.ep);
-      return { ep: ep.ep, name: out ? outfitterName(ep) : trailheadName(ep), place: ep.name, x: ep.x, z: ep.z, lake: ep.lake, outfitter: out, host: hostOf(ep.ep, world) };
+      // round 2 markers: an outfitter's landing is at its store (placeOf: x, z the water by its dock, where a season, a
+      // ride and a pickup come in; store, door), its entry point's own spot kept as epX, epZ
+      const pl = out ? placeOf(ep.ep, world) : null, at = pl && pl.dock ? pl.dock : ep;
+      return { ep: ep.ep, name: out ? outfitterName(ep) : trailheadName(ep), place: ep.name, x: at.x, z: at.z, epX: ep.x, epZ: ep.z, store: pl ? pl.store : null, door: pl ? pl.door : null, lake: ep.lake, outfitter: out, host: hostOf(ep.ep, world) };
     });
     this.landings = this.entries.filter((e) => e.outfitter);
     this.desks = new Map();          // the counter's other desks (addDesk: the permit desk, the onboarding, the tally's)
@@ -752,8 +755,8 @@ export class Outfitter {
     const n = this.rides && typeof this.rides.offer === 'function' ? this.rides.offer(a.ep).length : 0;
     return `<section class="sidemap" aria-labelledby="sidemap-h">
       <div class="top"><h3 id="sidemap-h">Where the truck goes</h3><span class="sum">${n ? `${n} entry points from ${a.ep}` : `from entry point ${a.ep}`}</span></div>
-      <div class="sheet"><canvas aria-label="A sketch map of the outfitters the truck goes to, with each one's entry point number and fare"></canvas><i class="tape l" aria-hidden="true"></i><i class="tape r" aria-hidden="true"></i></div>
-      <p class="key"><span class="k here"><i>★</i>you are here</span><span class="k known"><i>${a.ep}</i>outfitter</span><span class="k th"><i>${a.ep}</i>trailhead</span><span class="k fare"><b>$</b>the fare</span></p>
+      <div class="sheet"><canvas aria-label="A sketch map of the outfitters the truck goes to, with each outfitter's store, each trailhead's entry point number and the fare"></canvas><i class="tape l" aria-hidden="true"></i><i class="tape r" aria-hidden="true"></i></div>
+      <p class="key"><span class="k here"><i>★</i>you are here</span><span class="k known"><i>⌂</i>outfitter</span><span class="k th"><i>${a.ep}</i>trailhead</span><span class="k fare"><b>$</b>the fare</span></p>
     </section>`;
   }
   // draws the side map into the open counter, and ties its rings to the rides' rows (a hover lights both; a ring
@@ -762,8 +765,8 @@ export class Outfitter {
     const el = this.el.panel, cv = el && el.querySelector('.sidemap canvas'), a = this.at;
     if (!cv || !a || !this.rides || typeof this.rides.offer !== 'function') return;
     const money = this.money, sandbox = this.sandbox;
-    const rows = this.rides.offer(a.ep).map((r) => { const l = this.entry(r.ep) || {}; return { ep: r.ep, x: l.x, z: l.z, price: r.price, unknown: r.unknown, outfitter: r.outfitter !== false, short: !sandbox && r.price > money }; });
-    const here = { ep: a.ep, x: a.x, z: a.z };
+    const rows = this.rides.offer(a.ep).map((r) => { const l = this.entry(r.ep) || {}, m = l.store || l; return { ep: r.ep, x: m.x, z: m.z, name: l.name, price: r.price, unknown: r.unknown, outfitter: r.outfitter !== false, short: !sandbox && r.price > money }; });
+    const here = { ep: a.ep, x: (a.store || a).x, z: (a.store || a).z }; // (round 2 markers: an outfitter at its store)
     const draw = () => {
       if (!this.open || this.tab !== 'counter' || !cv.isConnected) return;
       this.mapMarks = drawCounterMap(cv, { world: this.world, here, rows, hot: this.mapHot, sandbox, onReady: draw });
