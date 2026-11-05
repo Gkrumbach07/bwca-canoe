@@ -258,6 +258,37 @@ registerKind('campsite', {
 });
 
 // =======================================================================================================================
+// starter: the start round (starter.js). An outfitter's first night out, suggested in talk with the site pencilled on
+// your map: look over the site's grate, latrine and tent pad (the campsite check's own steps, nothing found broken: a
+// first night is not a repair job), $20, three days. Never on a board (no weight): starter.js makes it with makeKind.
+const STARTER_WORDS = {
+  titles: ['First night out'],
+  texts: [['{site} on {lake}: a night there, and look over the grate, the latrine and the tent pad.', '{keeper}']],
+};
+registerKind('starter', {
+  label: 'First night out', weight: { local: 0, medium: 0, far: 0 },
+  make(T, c) {
+    const R = ref('starter'), r = R && typeof R.route === 'function' ? R.route(c.ep) : null;
+    if (!r) return null;
+    const s = r.siteRec;
+    const shop = T.outfitter && T.outfitter.shop, keeper = shop && typeof shop.keeperName === 'function' ? shop.keeperName(c.ep) : null;
+    const site = SITE_LABEL[r.feature] || 'the campsite';
+    const [say, sign] = STARTER_WORDS.texts[0];
+    return { key: `starter:${c.ep}`, site: r.site, lakeId: r.lakeId, feature: r.feature || null, faults: [], checks: {}, km: r.km, hops: (r.portages || []).length, known: true,
+      title: STARTER_WORDS.titles[0], text: fill(say, { site: cap(site), lake: r.lake || 'the lake' }), sign: keeper ? `${keeper}, at the counter` : fill(sign, { keeper: 'the counter' }), hint: { x: s.x, z: s.z, r: TIGHT, label: site } };
+  },
+  pay(t) { const R = ref('starter'); return R && typeof R.payOf === 'function' ? R.payOf(t.from) : 20; },
+  update(T, t) { return KINDS.campsite.update(T, t); },
+  use(T, t) { return KINDS.campsite.use(T, t); },
+  check(T, t, part) { return KINDS.campsite.check(T, t, part); },
+  onDrop(T, t) { t.checks = {}; delete t.found; },
+  target(T, t) { const s = T.world.campsites[t.site]; return s ? { x: s.x, z: s.z, r: TIGHT, label: SITE_LABEL[t.feature] || 'the campsite', tight: true } : null; },
+  progress(t) { return KINDS.campsite.progress(t); },
+  fraction(t) { return KINDS.campsite.fraction(t); },
+  doneWords(t) { return KINDS.campsite.doneWords(t); },
+});
+
+// =======================================================================================================================
 // beaver: the dams across a named creek, logged as you come by them
 const DAM_STATES = ['high, holding the water up', 'low: the canoe goes over', 'breached in the middle', 'new since the spring: fresh peeled sticks', 'old and grassed over, still holding'];
 const BEAVER_WORDS = {
@@ -509,7 +540,7 @@ registerKind('pma', {
 });
 
 // --- wiring (main.js, the gl-d block) ----------------------------------------------------------------------------------
-export const KINDS2 = ['creel', 'campsite', 'beaver', 'iceout', 'colour', 'lastcheck', 'pma'];
+export const KINDS2 = ['creel', 'campsite', 'beaver', 'iceout', 'colour', 'lastcheck', 'pma', 'starter'];
 export function attachTaskKinds2(o = {}) {
   Object.assign(G, o);
   const { tasks, photo } = o;

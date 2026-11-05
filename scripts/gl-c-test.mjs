@@ -150,7 +150,7 @@ try {
   await shot(A, 'c-staffer');
   const talked = await A.evaluate(async () => {
     const g = window.__game, d = g.npcs.dialogue, said = [];
-    for (let i = 0; i < 6 && d.convo; i++) { said.push(`${d.convo.node.by || d.convo.name}: ${d.convo.node.say}`); d.choose(0); await new Promise((r) => setTimeout(r, 30)); }
+    for (let i = 0; i < 10 && d.convo; i++) { said.push(`${d.convo.node.by || d.convo.name}: ${d.convo.node.say}`); d.choose(0); await new Promise((r) => setTimeout(r, 30)); }
     return { said, talking: d.talking, open: g.outfitter.open, tab: g.outfitter.tab };
   });
   result('2c the talk ends at the counter', !talked.talking && talked.open && talked.tab === 'counter', talked);

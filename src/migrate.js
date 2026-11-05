@@ -114,7 +114,7 @@ function deepKeys(v, map) {
 // --- each document ---------------------------------------------------------------------------------------------------
 // the notices (tasks.js ads): their sites and trails by index, their lakes by id; the keys the boards dedupe by
 // (gl-d: the new kinds' sites and lakes: a campsite check's site, a creel survey's lake, a last check's chain of sites)
-const SITE_KINDS = new Set(['item', 'litter', 'canoe', 'campsite']), TRAIL_KINDS = new Set(['survey', 'deadfall']), LAKE_KINDS = new Set(['secchi', 'loons', 'creel']);
+const SITE_KINDS = new Set(['item', 'litter', 'canoe', 'campsite', 'starter']), TRAIL_KINDS = new Set(['survey', 'deadfall']), LAKE_KINDS = new Set(['secchi', 'loons', 'creel']);
 function remapAd(t, M) {
   const c = { ...t };
   if (typeof c.site === 'number') { c.site = M.site(c.site); if (c.site < 0) return null; }

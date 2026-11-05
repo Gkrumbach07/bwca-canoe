@@ -127,6 +127,9 @@ export class MapBook {
     out.claim = [...claims.values()];
     // the words pencilled on the map, and who said them (a keeper's: outfitter.toldHints; a visitor's carries `by`)
     const told = o && typeof o.toldHints === 'function' ? o.toldHints() : [];
+    // (the start round: a first night out's way, pencilled by whoever suggested it: starter.js notes)
+    const st = this.starter || (typeof window !== 'undefined' && window.__game ? window.__game.starter : null);
+    if (st && typeof st.notes === 'function') { try { told.push(...st.notes()); } catch (e) { console.warn('map: the first night', e); } }
     for (const h of told) {
       const L = ts && ts.landing ? ts.landing(h.ep) : null;
       const who = h.by || (o.shop && typeof o.shop.keeperName === 'function' ? o.shop.keeperName(h.ep) : null) || 'the keeper';

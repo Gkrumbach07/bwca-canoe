@@ -1813,7 +1813,31 @@ export class Hud {
       return yy;
     };
     const mid = mPerPx < 60;
+    // (the start round, starter.js: a way pencilled for you, the first night out: a soft dashed line from the landing to the
+    // site, what for at its far end and who drew it. Drawn on blank paper too: someone drew it there for you)
+    if (lay.notes) for (const h of told.notes) {
+      if (!Array.isArray(h.way) || h.way.length < 2 || !inView(h.x - h.r, h.z - h.r, h.x + h.r, h.z + h.r)) continue;
+      ctx.save();
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.setLineDash([7 * k, 5 * k]);
+      ctx.strokeStyle = 'rgba(74, 64, 54, 0.7)'; ctx.lineWidth = 2 * k;
+      ctx.beginPath();
+      h.way.forEach(([x, z], i) => { const [a, b] = toPx(x, z); if (i) ctx.lineTo(a, b); else ctx.moveTo(a, b); });
+      ctx.stroke();
+      ctx.setLineDash([]);
+      const end = h.site || { x: h.way[h.way.length - 1][0], z: h.way[h.way.length - 1][1] }, [ea, eb] = toPx(end.x, end.z);
+      ctx.beginPath(); ctx.arc(ea, eb, 7 * k, 0.3, 6.0); ctx.lineWidth = 1.8 * k; ctx.stroke();
+      ctx.restore();
+      hits.push({ kind: 'note', note: h, x: end.x, z: end.z, r: 60, px: 12 });
+      if (mPerPx < 60) {
+        ctx.font = `600 ${17 * k}px ${PENCIL}`; ctx.fillStyle = 'rgba(74, 64, 54, 0.9)'; ctx.textAlign = 'center';
+        const tx = clamp(ea, 70 * k, W - 70 * k), y = place(h.label || 'first night out', tx, clamp(eb - 14 * k, 24 * k, H - 12 * k), 'center', 19 * k);
+        ctx.fillText(h.label || 'first night out', tx, y);
+        if (h.who && mPerPx < 30) { ctx.font = `600 ${13 * k}px ${PENCIL}`; ctx.fillStyle = 'rgba(74, 64, 54, 0.7)'; ctx.fillText(`— ${h.who}`, tx, y + 14 * k); placed.push({ x0: tx - 50 * k, x1: tx + 50 * k, y0: y + 4 * k, y1: y + 18 * k }); }
+      }
+    }
     if (!blank && lay.notes) for (const h of told.notes) {
+      if (Array.isArray(h.way)) continue; // (drawn above)
       if (!inView(h.x - h.r, h.z - h.r, h.x + h.r, h.z + h.r)) continue;
       const [a, b] = toPx(h.x, h.z), r = Math.max(h.r / mPerPx, 9 * k);
       ctx.beginPath(); ctx.ellipse(a, b, r * 1.04, r * 0.97, 0.3, 0, 6.28);

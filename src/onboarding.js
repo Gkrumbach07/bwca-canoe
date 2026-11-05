@@ -13,7 +13,8 @@
 // The staffer stands in the store through stream E's npcs.extraAt(ep, { key, name, look, spot, lines }) when the build
 // has it; without it the staffer is a voice at the counter's end, "the summer help", in the same conversation panel.
 //
-//   onboarding.attach({ outfitter, profile, inventory, talk, hud, day, story, npcs, sheets, permits: () => permits })
+//   onboarding.attach({ outfitter, profile, inventory, talk, hud, day, story, npcs, sheets, permits: () => permits, starter })
+//   (the start round: the keeper's last word suggests the first night out, starter.js talk, before the counter opens)
 //   onboarding.state { v, step, done, legacy?, season, nudged }     onboarding.pending(ep?) → bool
 //   onboarding.start(ep) → bool (the talk opened)                  onboarding.update(dt) (the door's line, the staffer)
 //   onboarding.isWaltItem(id) → bool                              onboarding.give() → [item ids] (the gear, once)
@@ -154,8 +155,11 @@ export class Onboarding {
     const keeper = shop && typeof shop.keeperName === 'function' ? shop.keeperName(ep) : null;
     const P = this.permits(), grant = !!(P && typeof P.grant === 'function');
     const close = () => { this.finish(ep, grant); return { end: true, after: () => this.openCounter(landing) }; };
-    const keeperNode = { say: grant ? 'And your first permit’s on me: today, from right here. The map of these lakes too.' : 'And the map of these lakes is on the house.', by: keeper || 'The keeper',
-      choices: [{ text: 'Thank you.', go: close }] };
+    // (the start round: then the keeper's first night out, the way pencilled on your map and a small job with it: starter.js)
+    const st = this.t.starter, by = keeper || 'The keeper';
+    const next = st && typeof st.available === 'function' && st.available(ep) ? () => st.talk(ep, close, { by }) : close;
+    const keeperNode = { say: grant ? 'And your first permit’s on me: today, from right here. The map of these lakes too.' : 'And the map of these lakes is on the house.', by,
+      choices: [{ text: 'Thank you.', go: next }] };
     return { say: 'It’s in your canoe at the dock. I put your own things in the pack, and three days of food in the barrel.', choices: [{ text: 'Thanks.', go: () => keeperNode }] };
   }
   openCounter(landing) { if (landing && typeof this.showCounter === 'function') this.showCounter(landing); }

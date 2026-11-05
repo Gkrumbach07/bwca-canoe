@@ -157,6 +157,19 @@ export const WIND_DAY = {
   // takes the peak to 8 to 12 m/s
   blow: { chance: 0.4, fall: 0.25, peak: [7.5, 10], floor: [4, 6], from: [295, 330] },
 };
+// The start round (the owner, 2026-11-05: "sometimes just randomly you can start and it will be raining or something like
+// that. In the intro, it should be very easy"): a season's first days are drawn like any others from the season's own
+// seed (main.js seeds the weather per season), so a start may be grey, wet or foggy; but over the first trip (starter.js
+// gentle: the season's start day and the two after, cut when the first trip ends) no thunderstorm, and no wind that puts
+// whitecaps on the water or the sea in the hull: a storm hour is steady rain, thunderheads are overcast, a front's floor
+// and gusts are held down, the day's breeze peaks at a gentle breeze at most and never blows all day.
+export const GENTLE = { peak: 4, floor: 1.2, min: 2.5, mul: 1.05, gust: 1.15 };
+const DAY0 = (year) => Math.round(Date.UTC(year, 0, 1) / 86400000);
+export const absHour = (year, h) => DAY0(year) * 24 + h; // (trip.js absDay × 24 + the hour of that day)
+function gentled(o) {
+  const s = o.s === S.storm ? S.rain : o.s === S.building ? S.overcast : o.s;
+  return { s, from: o.from, min: Math.min(o.min, GENTLE.min), mul: Math.min(o.mul, GENTLE.mul), gust: Math.min(o.gust, GENTLE.gust) };
+}
 export function windShape(hours) {
   const S = WIND_DAY.shape;
   return smoothstep(S.up[0], S.up[1], hours) * (1 - smoothstep(S.down[0], S.down[1], hours));
@@ -276,6 +289,7 @@ export class Weather {
     this.flashColor = new THREE.Color(0.75, 0.8, 1.0);
     this.windTarget = { min: 0, mul: 1, gust: 1, from: NaN, base: NaN }; // cons B: base, the day's breeze now (dayBreeze)
     this.forced = null;          // { state, snow, from (look), t, blend }
+    this.gentle = null;          // the start round: { from, to } abs hours of a season's first trip, its weather held kind (GENTLE)
     this.stateIndex = 0; this.publicIndex = 0;
     this.wetness = 0;
     this._years = new Map();
@@ -313,16 +327,27 @@ export class Weather {
   // the forecast's hour h of the year (h may run into the next year's first days)
   _hour(year, h) {
     let y = this._year(year);
+    const gh = this.gentle ? absHour(year, h) : NaN;
     if (h < 0) { y = this._year(year - 1); h += daysInYear(year - 1) * 24; }
     h = Math.min(h, y.N - 1);
-    return { s: y.st[h], from: y.from[h], min: y.min[h], mul: y.mul[h], gust: y.gust[h] };
+    const o = { s: y.st[h], from: y.from[h], min: y.min[h], mul: y.mul[h], gust: y.gust[h] };
+    return this.gentle && gh >= this.gentle.from && gh < this.gentle.to ? gentled(o) : o;
+  }
+  // the start round: is abs hour (or year, day of the year, hour) in the first trip's kind weather
+  isGentle(year = this.day.year, doy = this.day.doy, hours = this.day.hours) {
+    const g = this.gentle, h = absHour(year, (doy - 1) * 24 + hours);
+    return !!(g && h >= g.from && h < g.to);
   }
   // cons B: day d of the year's wind (0 = 1 January; it may run a day either side of the year): { peak, floor, blow }
   _dayWind(year, d) {
     let y = this._year(year);
+    const d0 = d;
     if (d < 0) { y = this._year(year - 1); d += daysInYear(year - 1); }
     d = Math.min(d, y.peak.length - 1);
-    return { peak: y.peak[d], floor: y.floor[d], blow: !!y.blow[d] };
+    const o = { peak: y.peak[d], floor: y.floor[d], blow: !!y.blow[d] };
+    const g = this.gentle;
+    if (g) { const h0 = absHour(year, d0 * 24), h1 = h0 + 24; if (h1 > g.from && h0 < g.to) { o.peak = Math.min(o.peak, GENTLE.peak); o.floor = Math.min(o.floor, GENTLE.floor); o.blow = false; } }
+    return o;
   }
   // The breeze the day's shape gives at an hour of a day (m/s), before the hour's weather bends it: the night's floor
   // carried across midnight into the next day's over 21:00..03:00, rising to the afternoon's peak and back (windShape)
