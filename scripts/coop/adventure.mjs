@@ -48,7 +48,7 @@ async function openGame(name, query = '') {
   page.on('pageerror', (e) => log(`[${name}] pageerror`, e.message));
   page.on('console', (m) => { if (m.type() === 'error' || /coop/i.test(m.text())) log(`[${name}] ${m.type()}`, m.text().slice(0, 300)); });
   await page.goto(`${APP}/?relay=${encodeURIComponent(RELAY)}${query}`, { timeout: 180000 });
-  await page.waitForFunction(() => window.__game && window.__game.coop && window.__game.title && window.__game.coopTrip, null, { timeout: 240000, polling: 500 });
+  await page.waitForFunction(() => window.__game && window.__game.coop && window.__game.title && window.__game.coopTrip && typeof window.__game.step === 'function', null, { timeout: 240000, polling: 500 });
   log(`[${name}] game loaded`);
   return page;
 }
@@ -127,7 +127,7 @@ try {
   // --- a ride as a group jump ------------------------------------------------------------------------------------------
   const ride = await B.evaluate((ep) => {
     const g = window.__game, R = g.rides, money = g.profile.money;
-    const rows = R.offer(ep).filter((r) => r.price <= money && !r.late).sort((a, b) => a.price - b.price);
+    const rows = R.offer(ep).filter((r) => r.price <= money && !r.late && r.outfitter !== false).sort((a, b) => a.price - b.price); // (the join: to a store; a trailhead has no door to be in at)
     return rows.length ? { to: rows[0].ep, name: rows[0].name, price: rows[0].price, hours: rows[0].hours, money } : { none: true, money };
   }, host.ep);
   log('[guest] ride', ride);

@@ -23,6 +23,7 @@ import * as THREE from 'three';
 import { buildTentMesh, buildAFrameMesh, TENT_SIZE, AFRAME_SIZE, aframeRidge } from './props.js';
 import { TILE, PropBuilder } from './prop-kit.js';
 import { CLOCK } from './pace.js';
+import { itemDef } from './items.js'; // gl-c: a tent's shape from its def (tentKind)
 
 const { a: TA, b: TB, h: TH } = TENT_SIZE;
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -68,14 +69,19 @@ const STAGE_WORDS_A = ['not pitched', 'the floor staked', 'the A-poles up', 'the
 // a hold's length as it is said: its seconds held ("about 10 s")
 export const heldWords = (phases) => `${Math.max(1, Math.round(phases.reduce((s, ph) => s + (ph.seconds || 0), 0)))} s`;
 // the fly's colour by the tent (items.js): the A-frame rust, the dome green, the four-season blue
-export const TENT_FLY = { aframe: 0xa8693f, dome: 0x5c7a55, fourseason: 0x56708a };
+export const TENT_FLY = { aframe: 0xa8693f, dome: 0x5c7a55, fourseason: 0x56708a, walttent: 0x8d8462 }; // (gl-c: the old canvas tent, faded khaki)
 // each kind's phases, words and size (props.js: half across, half along the door's way; the A-frame's vestibule)
 export const TENT_KINDS = {
   dome: { pitch: PITCH, strike: STRIKE, words: STAGE_WORDS, size: TENT_SIZE },
   aframe: { pitch: PITCH_A, strike: STRIKE_A, words: STAGE_WORDS_A, size: AFRAME_SIZE },
 };
-// a tent item's kind: the A-frame (and a save from before the phases, whose item is not known), else a dome
-export const kindOf = (item) => (item == null || item === 'aframe' ? 'aframe' : 'dome');
+// a tent item's kind: the A-frame (and a save from before the phases, whose item is not known), a def's own tentKind
+// (gl-c: the old canvas tent from the back room is an A-frame), else a dome
+export const kindOf = (item) => {
+  if (item == null || item === 'aframe') return 'aframe';
+  const d = itemDef(item);
+  return d && (d.tentKind === 'aframe' || d.tentKind === 'dome') ? d.tentKind : 'dome';
+};
 export const tentOf = (item) => TENT_KINDS[kindOf(item)];
 
 // --- the bugs' refuge (cons C, "bugs at dusk": bugs.js) ---------------------------------------------------------------

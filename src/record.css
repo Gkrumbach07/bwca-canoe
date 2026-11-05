@@ -31,3 +31,37 @@
 .tc-page.in-book .tc-line { font-size: 25px; }
 .tc-page.in-book .tc-grid { grid-template-columns: 86px minmax(0, 1fr); background: linear-gradient(90deg, transparent 77px, rgba(180, 50, 31, .28) 77px, rgba(180, 50, 31, .28) 78px, transparent 78px); }
 .tc-page.in-book .tc-grid > .v { font-size: 15px; }
+
+/* --- gl-d: the tally (record.js tallyHtml): the trip's lines counted up one at a time, the pay ticking into the purse.
+   Ruled like the page; each line comes in with a little drop, a first is stamped in red, a milestone is a pencil bar. */
+.tc-tally { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.tc-tally .tl-lines { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; align-items: center; column-gap: 12px; }
+.tc-tally .tl-l:not(.first) { flex: 1 0 100%; box-sizing: border-box; }
+.tc-tally .tl-l { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 14px; padding: 5px 2px 4px; border-bottom: 1px dotted var(--edge);
+  opacity: 0; translate: 0 -4px; transition: opacity .22s ease-out, translate .22s ease-out; }
+.tc-tally .tl-l.on { opacity: 1; translate: 0 0; }
+.tc-tally .tl-k { font-size: 16px; line-height: 1.35; color: var(--ink); min-width: 0; }
+.tc-tally .tl-v { font-size: 16px; text-align: right; color: var(--ink); }
+.tc-tally .tl-l.pay .tl-v { font: 600 22px/1 var(--pencil-font); color: #3f5a2a; }
+.tc-tally .tl-l.stat .tl-k { font: 700 11px/1.9 var(--sc); letter-spacing: .14em; color: var(--ink-soft); text-transform: uppercase; }
+/* the firsts stamped side by side, a row of them between the counts and the milestones */
+.tc-tally .tl-l.first { display: inline-flex; flex: none; border-bottom: none; padding: 10px 2px 8px; }
+.tc-tally .tl-stamp { display: inline-block; padding: 2px 10px; border: 3px double rgba(180, 50, 31, .85); border-radius: 4px; rotate: -3deg;
+  font: 700 15px/1.2 var(--sc); letter-spacing: .14em; text-transform: uppercase; color: rgba(180, 50, 31, .92); mix-blend-mode: multiply; }
+.tc-tally .tl-l.first.on .tl-stamp { animation: tl-stamp .32s ease-out; }
+@keyframes tl-stamp { 0% { scale: 1.6; opacity: 0; } 70% { scale: .94; opacity: 1; } 100% { scale: 1; } }
+.tc-tally .tl-l.mile .tl-k { font-style: italic; }
+.tc-tally .tl-l.mile .tl-v { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--ink-soft); }
+.tc-tally .tl-bar { display: inline-block; width: 120px; height: 7px; border: 1px solid var(--pencil); border-radius: 2px;
+  background: linear-gradient(90deg, var(--pencil) var(--f, 0%), transparent var(--f, 0%)); opacity: .8; }
+.tc-tally .tl-title { font: 600 21px/1 var(--pencil-font); color: var(--map-red); rotate: -2deg; }
+.tc-tally .tl-l.missed .tl-k { color: var(--ink-soft); }
+.tc-tally .tl-l.fine .tl-v { font: 600 19px/1 var(--pencil-font); color: var(--map-red); }
+.tc-tally .tl-l.missed .tl-v { font-size: 14px; text-align: left; }
+.tc-tally .tl-purse { display: flex; align-items: baseline; gap: 14px; justify-content: flex-end; padding: 8px 2px 4px; border-top: 2px solid var(--ink-faint); }
+.tc-tally .tl-purse .tl-k { font: 700 12px/1 var(--sc); letter-spacing: .16em; text-transform: uppercase; color: var(--ink-soft); margin-right: auto; }
+.tc-tally .tl-purse b { font: 500 30px/1 var(--serif); color: var(--ink); }
+.tc-tally .tl-purse .pencil { font: 500 19px/1 var(--pencil-font); color: var(--pencil); }
+.tc-page.in-book .tc-tally .tl-k, .tc-page.in-book .tc-tally .tl-v { font-size: 14px; }
+.tc-page.in-book .tc-tally .tl-purse b { font-size: 22px; }
+@media (prefers-reduced-motion: reduce) { .tc-tally .tl-l { transition: none; } .tc-tally .tl-l.first.on .tl-stamp { animation: none; } }

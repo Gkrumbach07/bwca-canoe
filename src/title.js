@@ -84,7 +84,7 @@ export class Title {
     this.el = {
       shell: $('shell'), menu: $('title-card'), settingsCard: $('settings-card'), controlsCard: $('controls-card'),
       kicker: $('title-kicker'), go: $('btn-continue'), goLi: $('li-continue'), hint: $('continue-hint'), newTrip: $('btn-new'), newHint: $('new-hint'), sandbox: $('btn-sandbox'), settings: $('btn-settings'), controls: $('btn-controls'),
-      entries: $('entry-card'), list: $('entry-list'), status: $('entry-status'), modePick: $('mode-pick'), modeNote: $('mode-note'),
+      entries: $('entry-card'), status: $('entry-status'), modePick: $('mode-pick'), modeNote: $('mode-note'),
       confirm: $('confirm-card'), confirmSub: $('confirm-sub'), confirmGo: $('btn-confirm'), confirmKeep: $('btn-keep'),
       settingsKicker: $('settings-kicker'), controlsKicker: $('controls-kicker'), nav: $('settings-nav'), form: $('settings-form'), keymap: $('keymap'),
     };
@@ -103,21 +103,8 @@ export class Title {
   }
 
   // --- the cards ------------------------------------------------------------------------------
+  // (gl-c: the entry points' list is the start map now, startmap.js in the wizard's first step)
   buildEntries() {
-    const list = this.el.list, start = this.world.meta.start;
-    list.textContent = '';
-    const eps = [...this.world.entryPoints].sort((a, b) => a.ep - b.ep);
-    for (const ep of eps) {
-      const li = document.createElement('li');
-      const b = document.createElement('button'); b.type = 'button';
-      const n = document.createElement('b'); n.textContent = String(ep.ep);
-      b.append(n, document.createTextNode(ep.name));
-      if (Math.hypot(ep.x - start.x, ep.z - start.z) < 600) { b.classList.add('current'); const s = document.createElement('small'); s.textContent = ' · the default start'; b.appendChild(s); }
-      b.dataset.ep = String(ep.ep);
-      b.addEventListener('click', () => this.wizard.choose(ep)); // home, and on to the date (the list shows only once the confirm is given)
-      li.appendChild(b);
-      list.appendChild(li);
-    }
     this.el.entries.hidden = true;
     // the way to travel: Adventure or Sandbox, for the season New season begins
     const pick = this.el.modePick;
@@ -170,7 +157,7 @@ export class Title {
       if (ev.code === 'Escape') { ev.preventDefault(); if (performance.now() - (this.lockPausedAt || 0) < 300) return; this.back(); return; } // (the same Esc that let go of the mouse)
       const tag = ev.target && ev.target.tagName;
       if (ev.code === 'Tab') return; // the browser's own focus order, within the card
-      if (this.right === 'entries' && ev.target && ev.target.closest && ev.target.closest('.cal') && this.wizard.key(ev)) return; // ← → on the date strip
+      if (this.right === 'entries' && ev.target && ev.target.closest && ev.target.closest('.cal, .startmap') && this.wizard.key(ev)) return; // ← → on the date strip, or between the start map's pins (gl-c)
       if (tag === 'SELECT' || tag === 'INPUT') { if (ev.code === 'ArrowDown' || ev.code === 'ArrowUp') { ev.preventDefault(); this.moveFocus(ev.code === 'ArrowDown' ? 1 : -1); } return; } // ← → belong to the control
       if (ev.code === 'ArrowDown' || ev.code === 'ArrowUp') { ev.preventDefault(); this.moveFocus(ev.code === 'ArrowDown' ? 1 : -1); }
       else if (ev.code === 'ArrowRight' || ev.code === 'ArrowLeft') {
@@ -205,6 +192,7 @@ export class Title {
     if (this.seasons) { const on = which === 'seasons'; if (on !== this.seasons.shown || on) this.seasons.show(on); }
     e.shell.classList.toggle('wide', which === 'seasons' || which === 'entries'); // (the band widens under the slots' lines and the wizard's strip)
     e.shell.classList.toggle('wiz', which === 'entries'); // (the line under the name gives the wizard its room)
+    if (which !== 'entries') e.shell.classList.remove('wizmap'); // (gl-c: the start map's wider band)
     e.shell.classList.toggle('sbx', (which === 'entries' || which === 'confirm') && this.newMode === 'sandbox'); // (New season's gold gives way to Sandbox's)
     if (which !== 'entries' && which !== 'confirm') { this.newIn = 0; this.newVia = null; this.newMode = 'adventure'; }
     const fromSeasons = which === 'entries' && this.newVia === 'seasons', sandbox = this.newMode === 'sandbox';
@@ -263,7 +251,8 @@ export class Title {
     let canoe = '';
     try { const k = pr.kit && pr.kit.canoe; canoe = k === 'kevlar' ? 'the Kevlar canoe' : k ? 'the aluminium canoe' : ''; } catch { canoe = ''; }
     const has = (id) => { try { return pr.has(id); } catch { return false; } };
-    const rest = [has('pack2') ? 'two packs' : has('pack') ? 'a pack' : '', has('barrel') ? 'a barrel' : ''].filter(Boolean);
+    const packs = (has('pack2') ? 2 : has('pack') ? 1 : 0) + (has('waltpack') ? 1 : 0); // (gl-c: the old canvas pack counts)
+    const rest = [packs >= 2 ? 'two packs' : packs ? 'a pack' : '', has('barrel') ? 'a barrel' : ''].filter(Boolean);
     const all = [canoe, ...rest].filter(Boolean);
     return all.length > 1 ? `${all.slice(0, -1).join(', ')} and ${all[all.length - 1]}` : all[0] || '';
   }
@@ -379,14 +368,6 @@ export class Title {
     if (e.newHint) e.newHint.textContent = season ? (room ? `in slot ${room}: this season is kept` : pause ? '' : 'forgets the season under way') : `a fresh start, with $40 and the kit`;
     e.newTrip.classList.toggle('current', !pause && !season);
     this.showRight(null);
-    // home, marked in the list of entry points
-    for (const b of e.list.querySelectorAll('button')) {
-      const n = Number(b.querySelector('b') && b.querySelector('b').textContent), isHome = season && pr.home === n;
-      let tag = b.querySelector('small.home');
-      if (isHome && !tag) { tag = document.createElement('small'); tag.className = 'home'; tag.textContent = ' · home'; b.appendChild(tag); }
-      else if (!isHome && tag) tag.remove();
-      for (const s of b.querySelectorAll('small:not(.home)')) s.hidden = season; // 'the default start' says nothing once home is set
-    }
   }
 
   // --- the three ways out --------------------------------------------------------------------
@@ -441,6 +422,14 @@ export class Title {
     const at = start && Number.isFinite(start.year) && Number.isFinite(start.doy) ? start : null;
     if (at) { this.day.setClock(at.year, at.doy, START_HOUR); if (this.profile && this.profile.setStart) this.profile.setStart(at); }
     else { const now = new Date(); this.day.setClock(now.getFullYear(), dayOfYear(now), now.getHours() + now.getMinutes() / 60); }
+    // up since seven on the season's first morning. (The outfitter's newSeason reset the hours awake on the title's own
+    // clock, before the clock was set to the season's day: a July season begun in November read thousands of hours
+    // awake, and since the needs show between trips it began at the store's door with the bar at nothing and "No food
+    // and not much left in you".)
+    const en = this.outfitter && this.outfitter.energy;
+    // (saved again: a season begun into a slot is begun on a fresh page, whose outfitter.boot restores the energy from
+    // the save outfitter.newSeason wrote, after this)
+    if (en && Number.isFinite(en.now)) { en.awakeSince = en.now - Math.min(12, Math.max(0, this.day.hours - 7)); en.lastNow = en.now; if (this.outfitter.save) this.outfitter.save(); }
     this.day.running = true;
     if (this.chase.mode !== this.settings.get('camera')) this.chase.setMode(this.settings.get('camera'));
     this.close();

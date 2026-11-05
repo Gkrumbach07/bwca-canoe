@@ -30,6 +30,7 @@
 //   contents(id) → { campsites, portages, lakes }, migrate(inventory), update() (per frame: the migration's watch),
 //   version (bumps when the sheets owned change)
 import { save } from './save.js';
+import { isOutfitter } from './outfitters.js';
 
 export const SHEET_PRICE = 8;
 export const SHEET_KG = 0.1;
@@ -99,6 +100,26 @@ export function stockFor(ep, reach = 12000) {
   const near = neighbours(own.id).map((s) => [s, distTo(s, at.x, at.z)]).filter(([, d]) => d <= reach).sort((a, b) => a[1] - b[1]);
   return [own, ...near.map(([s]) => s)];
 }
+// The game-loop round: only the fourteen outfitters have a map table. Each sells its own stock (stockFor), and a sheet
+// none of them reaches is sold at the table nearest it as well, so every printed sheet is sold somewhere.
+// sheetsSoldAt(ep) → [sheet] for an outfitter's table (null for an entry point with none), soldAtTables() → Map id → [eps]
+let TABLES = null;
+function tables() {
+  const w = sheets.world; if (!w) return null;
+  if (TABLES && TABLES.world === w) return TABLES;
+  const outs = w.entryPoints.filter((e) => isOutfitter(e.ep)), by = new Map(outs.map((e) => [e.ep, stockFor(e)])), sold = new Map();
+  for (const [ep, list] of by) for (const s of list) { const l = sold.get(s.id) || []; l.push(ep); sold.set(s.id, l); }
+  for (const s of SHEETS) {
+    if (sold.has(s.id)) continue;
+    let best = null, bd = Infinity;
+    for (const e of outs) { const d = distTo(s, e.x, e.z); if (d < bd) { bd = d; best = e; } }
+    if (best) { by.get(best.ep).push(s); sold.set(s.id, [best.ep]); }
+  }
+  TABLES = { world: w, by, sold };
+  return TABLES;
+}
+export function sheetsSoldAt(ep) { const T = tables(); return T && T.by.has(Number(ep)) ? T.by.get(Number(ep)).slice() : null; }
+export function soldAtTables() { const T = tables(); return T ? T.sold : new Map(); }
 // the sheet as the shop's catalogue sees it
 export function sheetItem(id) {
   const s = sheetById(id); if (!s) return null;
@@ -153,7 +174,7 @@ class Sheets {
   }
   landingOf(ep) { const w = this.world; return w ? w.entryPoints.find((e) => e.ep === Number(ep)) || null : null; }
   giveHome() {
-    const pr = this.profile, l = pr && this.landingOf(pr.home), s0 = l && stockFor(l)[0];
+    const pr = this.profile, l = pr && this.landingOf(pr.home), s0 = l && (sheetsSoldAt(l.ep) || stockFor(l))[0];
     if (s0) pr.ownSheet(s0.id);
   }
 
@@ -185,7 +206,7 @@ class Sheets {
   hereIds() {
     const o = this.outfitter, ep = o ? (o.visit ? o.visit.ep : o.open && o.at ? o.at.ep : null) : null;
     if (ep == null) return NONE;
-    if (!this.here || this.here.ep !== ep) { const l = this.landingOf(ep); this.here = { ep, ids: new Set(l ? stockFor(l).map((s) => s.id) : []) }; }
+    if (!this.here || this.here.ep !== ep) { const l = this.landingOf(ep), at = sheetsSoldAt(ep); this.here = { ep, ids: new Set((at || (l ? stockFor(l) : [])).map((s) => s.id)) }; }
     return this.here.ids;
   }
   // the entry points whose map table sells a sheet, nearest the sheet's middle first
@@ -193,7 +214,7 @@ class Sheets {
     const s = sheetById(id), w = this.world; if (!s || !w) return [];
     if (!this.sold) {
       this.sold = new Map();
-      for (const e of w.entryPoints) for (const t of stockFor(e)) { const l = this.sold.get(t.id) || []; l.push(e); this.sold.set(t.id, l); }
+      for (const [id, eps] of soldAtTables()) this.sold.set(id, eps.map((n) => w.entryPoints.find((e) => e.ep === n)).filter(Boolean)); // (the game-loop round: the outfitters' tables only)
       for (const [k, l] of this.sold) { const t = sheetById(k); l.sort((a, b) => Math.hypot(a.x - t.cx, a.z - t.cz) - Math.hypot(b.x - t.cx, b.z - t.cz)); }
     }
     return this.sold.get(s.id) || [];

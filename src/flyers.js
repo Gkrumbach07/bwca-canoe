@@ -21,7 +21,12 @@
 // text, sign, pay); the look adds only what such paper always carries (a form number, a header, the tabs).
 import { esc } from './hud.js';
 
-const STYLE = { fish: 'order', lunch: 'order', item: 'lost', canoe: 'rental', survey: 'usfs', deadfall: 'usfs', report: 'usfs', litter: 'lnt', secchi: 'clmp', loons: 'dnr', photo: 'photo', firewood: 'tag', berries: 'tag', fetch: 'scrap', npc: 'scrap' };
+const STYLE = { fish: 'order', lunch: 'order', item: 'lost', survey: 'usfs', deadfall: 'usfs', report: 'usfs', litter: 'lnt', secchi: 'clmp', loons: 'dnr', photo: 'photo', firewood: 'tag', berries: 'tag', fetch: 'scrap', npc: 'scrap',
+  // gl-d: the new kinds (task-kinds-2.js); the rental canoe is cut (its yellow slip stays drawn for nothing)
+  creel: 'dnr', campsite: 'usfs', beaver: 'usfs', lastcheck: 'usfs', pma: 'usfs', iceout: 'order', colour: 'photo' };
+// the Forest Service's forms, by kind: [what it is, its number]
+const FORMS = { deadfall: ['Trail work request', 'FS-2300-12'], report: ['Route condition report', 'FS-2300-31'], campsite: ['Campsite inspection', 'FS-2300-18'],
+  beaver: ['Beaver dam report', 'FS-2300-22'], lastcheck: ['Site closure check', 'FS-2300-40'], pma: ['Primitive area trail survey', 'FS-2300-9'] };
 export const flyerStyle = (t) => (t.npc || t.note ? 'scrap' : STYLE[t.kind] || 'notice');
 
 // a small stable number from the notice (its form number, its tilt, which tab is torn off)
@@ -67,7 +72,7 @@ const FLYER = {
 
   // a Forest Service form, typed
   usfs: ({ title, text, sign, pay, h, t }) => {
-    const form = t.kind === 'deadfall' ? ['Trail work request', 'FS-2300-12'] : t.kind === 'report' ? ['Route condition report', 'FS-2300-31'] : ['Portage survey', 'FS-2300-7'];
+    const form = FORMS[t.kind] || ['Portage survey', 'FS-2300-7'];
     return `<header>${SHIELD}<span><small>United States Department of Agriculture</small><b>Forest Service</b><small>Superior National Forest</small></span></header>
       <p class="fl-form">${form[0]}<span>${form[1]} (${(h % 9) + 1}/${88 + (h % 9)})</span></p>
       <p class="fl-t">${title}</p><p class="fl-x">${text}</p>
@@ -85,8 +90,8 @@ const FLYER = {
     <footer><span class="fl-sig">${sign}</span><b class="fl-pay">${pay}</b></footer>`,
 
   // the DNR's loon count
-  dnr: ({ title, text, sign, pay }) => `<header><small>Minnesota Department of Natural Resources · Nongame Wildlife</small><b>Loon count</b></header>
-    <div class="fl-art">${LOON}</div><p class="fl-t">${title}</p><p class="fl-x">${text}</p>
+  dnr: ({ title, text, sign, pay, t }) => `<header><small>Minnesota Department of Natural Resources · ${t.kind === 'creel' ? 'Fisheries' : 'Nongame Wildlife'}</small><b>${t.kind === 'creel' ? 'Creel survey' : 'Loon count'}</b></header>
+    ${t.kind === 'creel' ? '' : `<div class="fl-art">${LOON}</div>`}<p class="fl-t">${title}</p><p class="fl-x">${text}</p>
     <footer><span class="fl-sig">${sign}</span><b class="fl-pay">${pay}</b></footer>`,
 
   // a photo wanted, with a frame drawn for it

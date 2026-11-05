@@ -87,6 +87,7 @@ import { kit } from './kit.js'; // content C
 import { uniques } from './uniques.js'; // content C
 import './gear-icons.js'; // content C
 import { attachTaskKinds } from './task-kinds.js'; // content A
+import { attachTaskKinds2 } from './task-kinds-2.js'; // gl-d: the board's new kinds (registered before any save is read)
 import { bear } from './bear.js'; // cons A
 import { bugs } from './bugs.js'; // cons C
 import { record } from './record.js'; // round A-A
@@ -106,6 +107,11 @@ import { whiteWater } from './rapids.js'; // d1 rapids
 import { bonk } from './audio-voices.js'; // d1 rapids
 import { loadBurns, setBurnDate, burnStats, burnLook, eventsAt } from './burns.js'; // the real burns
 import { BurnNotes } from './burn-notes.js'; // the real burns
+import { Permits } from './permits.js'; // gl-a: permits
+import { PermitDesk } from './permit-desk.js'; // gl-a: the permit desk
+import { story } from './story-hooks.js'; // gl-c: the story's event bus and saved state
+import { onboarding } from './onboarding.js'; // gl-c: the home counter's first visit, the old gear
+import { walt } from './walt.js'; // gl-c: the notebook in the old tent
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -390,6 +396,7 @@ async function main() {
 
   window.__game = { THREE, scene, camera, renderer, player, world, canoe, tiles, chase, hud, geo, water, day, post, loons, fauna, weather, cover, mist, audio, wind, fishing, energy, tasks, outfitter, settings, title, saver, stats: fps, fps, journal, tripStats, sun, hemi, moon, store: kv };
   window.__game.trip = trip; window.__game.veil = veil; // trip core A
+  hud.veil = veil; // (the game-loop play: no action line over a veil's card, the bunk night's)
   window.__game.profile = profile; // hubs 1A
   window.__game.props = { storeLayout, onStore, storeLayouts, setStoreNotices, stats: storeStats }; // hubs 2A
   window.__game.shop = shop; // hubs 2B
@@ -869,7 +876,7 @@ async function main() {
   // asked once. What the last page asked of this load (Play: straight in; New: the season begun at its home) runs once
   // the frames do.
   window.__game.slots = slots;
-  { const boot = slots.takeBoot(); if (boot) setTimeout(() => title.fromBoot(boot), 0); }
+  const bootAsk = slots.takeBoot(); // (run once the game-loop modules below are attached: see the animation loop's start)
   // round A-F: wilderness people, phase 1, the camps (the owner, 2026-10-26: "wilderness people"; the people plan,
   // docs/plans/people.md). parties.js: the other parties out there, a pure function of the entry points' real quotas,
   // the season's fill, the weekday and the Traffic setting, seeded by the season and never saved; each night at a
@@ -1030,6 +1037,163 @@ async function main() {
   window.__game.autoWatch = autoWatch;
   loadingEl.classList.add('done');
   setTimeout(() => { loadingEl.style.display = 'none'; }, 900);
+  // gl-a: permits (the game-loop round, stream A; docs/build/game-loop-brief.md). Trips are the unit and permits move
+  // time: permits.js keeps what you hold (bwca-canoe:permits, per season), the calendar (each entry point's real quota
+  // less the parties booked), the prices, the fines and the skip to a permit's day; permit-desk.js is its section of
+  // the counter. A push-off takes the permit for that landing today (trip.js start), else it is day use, and still out
+  // after dark is a ranger's fine (permits.update). pma.js: the primitive areas a PMA permit camps off-site in.
+  {
+    const permits = new Permits({ world, day, profile, trip, outfitter, energy, veil, hud, parties, player });
+    permits.attach();
+    trip.permits = permits;
+    const permitDesk = new PermitDesk({ permits, outfitter, world, day, profile });
+    // stream B's counter sections (the join: the claims-hook fallback dropped, B's addDesk is there)
+    outfitter.addDesk('permits', { order: 10, html: (l) => permitDesk.section(l.ep), act: (a, id, ev) => permitDesk.act(a, id, ev) });
+    { const tu = trip.update.bind(trip); trip.update = (dt) => { tu(dt); try { permits.update(dt); } catch (e) { if (!permits.warned) { permits.warned = true; console.warn('permits', e); } } }; }
+    // the push-off's title over the water says a day trip is one (outfitter.start shows it just after trip.start)
+    {
+      const startA = outfitter.start.bind(outfitter);
+      outfitter.start = (...a) => {
+        const place = hud.showPlace;
+        hud.showPlace = (t, lake, sub, ...r) => place.call(hud, t, lake, trip.adventure && trip.state.dayUse ? 'Day use: out by dark' : sub, ...r);
+        try { return startA(...a); } finally { hud.showPlace = place; }
+      };
+    }
+    // the moment (hints.js): once a season, near sunset on a day-use trip; and no "make camp" on one
+    const dayUseNow = () => { const s = trip.state; return trip.active && trip.adventure && !!s.dayUse && !s.grandfathered && !s.fined; };
+    if (!MOMENTS.some((m) => m.id === 'dayuse')) MOMENTS.unshift({ id: 'dayuse', prio: 2, recur: 'once', text: 'Day use: out by dark, or a ranger fines you. Overnight needs a permit.' });
+    const dueA = hints.due.bind(hints);
+    hints.due = (id, rec) => {
+      if (id === 'dayuse') { const ss = day.sunriseSunset, set = ss && Number.isFinite(ss.set) ? ss.set : 20.5; return dayUseNow() && day.hours >= set - 0.75 && day.hours < permits.duskOf(); }
+      if ((id === 'evening' || id === 'dusk') && dayUseNow()) return false;
+      return dueA(id, rec);
+    };
+    Object.assign(window.__game, { permits, permitDesk });
+  }
+  // gl-b: outfitters, drives, pickups, roads (the game-loop round, stream B). Fourteen outfitters on entry points
+  // (outfitters.js OUTFITTERS), the other forty-one trailheads (trailhead.js: a lot, a permit box, the sign); the truck
+  // drives from a counter to any entry point by the road graph, and a trailhead's sign calls a pickup (rides.js). A trip
+  // pushes off from any landing and comes out in a store, by its door or in a trailhead's lot (outfitter.js updateTrip).
+  {
+    // (the modules are in already: a namespace each, so a name another stream's branch lacks is undefined, not a build error)
+    const [OF, TH, { TEACH }] = await Promise.all([import('./outfitters.js'), import('./trailhead.js'), import('./hints.js')]);
+    // a season begins at an outfitter: a home picked at a trailhead (the title's list of every entry point, until the
+    // start map) is the outfitter that serves it
+    const newSeasonB = title.newSeason.bind(title);
+    title.newSeason = (ep, opts) => {
+      const n = ep && typeof ep === 'object' ? ep.ep : Number(ep), h = n != null && !OF.isOutfitter(n) ? OF.hostOf(n, world) : null;
+      return newSeasonB(h != null ? world.entryPoints.find((e) => e.ep === h) || ep : ep, opts);
+    };
+    // only an outfitter is one to know (a trailhead's landing is not: trip.js learns what it reaches)
+    const learnB = trip.learn.bind(trip);
+    trip.learn = (ep) => (OF.isOutfitter(ep) ? learnB(ep) : false);
+    // the trip card and the map book name a trailhead by its place, not as an outfitter
+    const landingB = tasks.landing.bind(tasks);
+    tasks.landing = (ep) => (OF.isOutfitter(ep) ? landingB(ep) : outfitter.entry(ep) || landingB(ep));
+    if (typeof record.landing === 'function') { const recLandingB = record.landing.bind(record); record.landing = (ep) => recLandingB(ep) || (ep != null ? outfitter.entry(ep) : null); }
+    // the moments: what a trailhead's landing is not, and what its sign is for (taught once each, at the moment)
+    const inLot = () => { const p = player, h = p.onFoot && !outfitter.open && !trip.active ? TH.trailheadAt(p.x, p.z) : null; return !!(h && h.where === 'lot'); };
+    const atLanding = () => { const p = player, h = p.onFoot && trip.active && outfitter.trip.away ? TH.trailheadAt(p.x, p.z) : null; return !!(h && h.where === 'landing'); };
+    const glbM = [
+      { id: 'gl-b:pickup', prio: TEACH, recur: 'once', text: 'Out at the lot. {E} on the sign calls a pickup.', due: inLot },
+      { id: 'gl-b:landing', prio: TEACH, recur: 'once', text: 'A trailhead. Walk up to the lot to come out here.', due: atLanding },
+    ];
+    for (const m of glbM) if (!MOMENTS.some((q) => q.id === m.id)) { const { due, ...rest } = m; void due; MOMENTS.push(rest); }
+    const glbDue = new Map(glbM.map((m) => [m.id, m.due])), dueB = hints.due.bind(hints);
+    hints.due = (id, rec) => (glbDue.has(id) ? glbDue.get(id)() : dueB(id, rec));
+    window.__game.outfitters = { OUTFITTER_EPS: OF.OUTFITTER_EPS, OUTFITTERS: OF.OUTFITTERS, isOutfitter: OF.isOutfitter, hostOf: (ep) => OF.hostOf(ep, world), reachOf: (ep) => OF.reachOf(ep, world),
+      countryOf: (ep) => OF.countryOf(ep, world), roadKm: (a, b) => OF.roadKm(a, b, world), roadWay: (a, b) => OF.roadWay(a, b, world), premiumOf: OF.premiumOf, specialtyOf: OF.specialtyOf,
+      outfitterHomes: () => OF.outfitterHomes(world), homeTurf: (ep) => OF.homeTurf(ep, world) };
+    window.__game.trailhead = { trailheadLayout: TH.trailheadLayout, trailheadLayouts: TH.trailheadLayouts, trailheadAt: TH.trailheadAt, onTrailhead: TH.onTrailhead };
+  }
+  // gl-c: a new save and its first day (docs/build/game-loop-brief.md, stream C). The title's first step is a map of the
+  // outfitters (startmap.js in wizard.js). A season's first visit to the home counter opens the summer help's talk
+  // (onboarding.js): rentals are out, old gear from the back "if you're not going to need it", into the canoe at the dock,
+  // then the keeper's first permit (stream A's permits.grant, when there) and the counter. The first night in the old
+  // tent finds the notebook (walt.js, story-hooks.js); its Read is a paper of the story's pages. Old seasons are legacy.
+  {
+    story.attach({ profile });
+    onboarding.attach({ outfitter, profile, inventory, talk, hud, day, story, npcs, sheets, player, permits: () => (window.__game && window.__game.permits) || null });
+    walt.attach({ trip, camp, inventory, hud, veil, day, story, world, player });
+    const showC = outfitter.show.bind(outfitter);
+    onboarding.showCounter = (l) => showC(l, 'counter');
+    outfitter.show = (landing, tab = null, focus = null) => {
+      const t = tab || (outfitter.staged && outfitter.staged.tab) || 'counter';
+      if (landing && t === 'counter' && onboarding.pending(landing.ep) && !talk.talking) { outfitter.staged = null; if (onboarding.start(landing.ep)) return; }
+      return showC(landing, tab, focus);
+    };
+    const updC = outfitter.update.bind(outfitter);
+    outfitter.update = (dt) => { updC(dt); onboarding.update(dt); if (walt.paperOpen) player.input.paused = true; };
+    const verbC = inventory.verb.bind(inventory);
+    inventory.verb = (id, ref) => (id === 'read' ? walt.readVerb(ref) || verbC(id, ref) : verbC(id, ref)); // the notebook's Read
+    for (const m of walt.moments()) if (!MOMENTS.some((q) => q.id === m.id)) { const { due, ...rest } = m; void due; MOMENTS.push(rest); }
+    const waltM = new Map(walt.moments().map((m) => [m.id, m]));
+    const dueC = hints.due.bind(hints);
+    hints.due = (id, rec) => (waltM.has(id) ? waltM.get(id).due(rec) : dueC(id, rec)); // "The notebook: I, right-click it, Read."
+    Object.assign(window.__game, { story, onboarding, walt });
+  }
+  // gl-d: the trip-end tally and the board (the game-loop round, stream D; docs/build/game-loop-brief.md). Pay lands on
+  // the trip's card as it counts up (record.js ended → tasks.settle), never at the board; no cap on notices held
+  // (the owner's call 2026-11-05), each with a deadline that fits it; the new kinds (task-kinds-2.js: creel, campsite, beaver, iceout, colour,
+  // lastcheck, pma); the firsts and the milestones. Here: the new kinds wired to the camera and the parties, a party's
+  // word heard by a creel survey, a visitor's gift kept when the tally pays their notice, the board's dot label, and
+  // two moments.
+  {
+    attachTaskKinds2({ tasks, photo, parties, partyCamps, moves, npcs, outfitter, trip });
+    record.weather = weather; record.parties = parties;
+    // a party's word on their trip is a creel survey's answer: stream E's npcs.onTalk when it is there, else the camps'
+    // word (party-camps.js) and the canoes' talk (party-moves.js)
+    const lakeAt = (x, z) => world.lakeIdAt(x, z) || tasks.lakeNear(x, z, 6);
+    const talked = (party, lakeId) => { if (party && party.id != null) tasks.onEvent({ type: 'talk', kind: 'party', partyId: String(party.id), party, lakeId }); };
+    if (typeof npcs.onTalk === 'function') {
+      npcs.onTalk((e) => { if (e && e.kind === 'party' && e.partyId != null) talked({ id: e.partyId, ...(e.party || {}) }, e.lakeId || lakeAt(player.x, player.z)); });
+    } else {
+      const wordF = partyCamps.word.bind(partyCamps);
+      partyCamps.word = (v) => { const r = wordF(v); try { const D = [...partyCamps.drawn.values()].find((x) => x.v === v); if (D && r) talked(D.party, D.site ? lakeAt(D.site.x, D.site.z) : lakeAt(player.x, player.z)); } catch (e) { console.warn('gl-d: creel', e); } return r; };
+      const talkM = moves.talk.bind(moves);
+      moves.talk = (L, i) => { const r = talkM(L, i); try { if (L && r) talked(L.party, lakeAt(player.x, player.z)); } catch (e) { console.warn('gl-d: creel', e); } return r; };
+    }
+    // a visitor's notice paid at the tally: they still give what they promised (npcs.js paid), once
+    tasks.on('paid', (t) => { try { if (t && t.npc && npcs.s && npcs.s.tasks && npcs.s.tasks[t.npc] === t.id && typeof npcs.paid === 'function') npcs.paid({ key: t.npc, first: String(t.npcName || '').split(' ')[0] || 'They' }, t); } catch (e) { console.warn('gl-d: a visitor paid', e); } });
+    // the board's dot label counted the notices to claim: now only the fish to hand over there
+    if (typeof outfitter.readyHere === 'function') outfitter.readyHere = (ep) => { try { return tasks.deliverable(ep); } catch { return []; } };
+    // and the board's own line under its name said it pays there (outfitter.js render, stream B's): it pays when you come in
+    { const renderD = outfitter.render.bind(outfitter); outfitter.render = (...a) => { const r = renderD(...a); try { const say = outfitter.tab === 'board' && outfitter.el && outfitter.el.panel ? outfitter.el.panel.querySelector('.lede .say') : null; if (say && /paid here/.test(say.textContent)) say.textContent = 'Notices pinned up by the door. Take on what you can do in time; each pays when you come in.'; } catch { /* the counter's */ } return r; }; }
+    // the moments: the first notice done on a trip ("it pays when you come in"), and the first tally (E finishes it)
+    let doneAt = -1e9;
+    tasks.on('done', () => { if (trip.active) doneAt = performance.now() / 1000; });
+    const glD = [{ id: 'paylater', prio: 1, recur: 'once', text: 'Done. Notices pay when you come in.', due: () => trip.active && performance.now() / 1000 - doneAt < 30 }, ...record.tallyMoments()];
+    for (const m of glD) if (!MOMENTS.some((q) => q.id === m.id)) { const { due, ...rest } = m; void due; MOMENTS.push(rest); }
+    const glDM = new Map(glD.map((m) => [m.id, m]));
+    const dueD = hints.due.bind(hints);
+    hints.due = (id, rec) => (glDM.has(id) ? glDM.get(id).due(rec) : dueD(id, rec));
+    window.__game.milestones = () => record.milestones();
+  }
+  // gl-e: the people are real (the game-loop round, stream E; docs/build/game-loop-brief.md). A store's visitors are the
+  // scheduled parties' own members (npcs.js storeParties: going in from an hour and a half before their put-in until
+  // their canoes go in the water, coming out for an hour after they land), the whole crew in the store or at the dock;
+  // everyone but the keeper is at something (smart.js: the shelves, the counter, the board, the map table, the stove,
+  // the porch, the dock), seeded by the clock and the season; what anyone says is held to what is true now
+  // (grounding.js: the ice, the snow, the bugs, the hour, the weather, what the store really has); a party you talk to in
+  // a store knows you at their camp or on the water (npcs.js met), and their news is their own trip (parties.js
+  // storyOf). npcs.onTalk tells who listens (stream D's creel notices); npcs.extraAt stands someone in a store (stream C).
+  {
+    npcs.grounding.attach({ day, weather, wind, world });
+    parties.attach({ weather });
+    // (the join: stream B's trailheads, so parties load and unload round the cars in a trailhead's lot)
+    npcs.attachParties({ parties, moves, ground: (x, z) => tiles.groundAt(x, z), trailheadLayout: window.__game.trailhead ? window.__game.trailhead.trailheadLayout : undefined });
+    Object.assign(window.__game, { smart: npcs.smart, grounding: npcs.grounding });
+    // (the join) the counter's own keeper lines (outfitter.say: the greeting, the goodbye, the bunk card) are B's
+    // outfitters.js keepers, picked without the grounding: a line untrue today ("The bugs are free." in May, the reefs
+    // on the ice) is drawn again, up to eight times
+    { const sayE = outfitter.say.bind(outfitter); outfitter.say = (ep, kind) => { let w = sayE(ep, kind); for (let k = 0; k < 8 && w && !npcs.grounded(w); k++) w = sayE(ep, kind); return w; }; }
+    rides.grounded = (w) => npcs.grounded(w); // (and the truck's cards: the drive's goodbye, the pickup's line)
+    // a moment, once: the first time a party going in or coming out is in the store with you and you have met none yet
+    const storeParty = { id: 'storeparty', prio: 1, recur: 'once', text: 'Going in or just out, they know the water. E to talk.' };
+    if (!MOMENTS.some((q) => q.id === storeParty.id)) MOMENTS.push(storeParty);
+    const dueE = hints.due.bind(hints);
+    hints.due = (id, rec) => (id === storeParty.id ? npcs.partyHere() : dueE(id, rec));
+  }
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
 
   // fb3 join: a NaN never freezes the game. Once (the join's test aimed at an undefined point: the heading was NaN for a few
@@ -1179,6 +1343,10 @@ async function main() {
     fps.end(real);
   };
   renderer.setAnimationLoop(tick);
+  // the last page's ask (a new season into a slot, or Play), now that every module is attached. (The replay: run from
+  // where the slot is taken, it came while main awaited the game-loop modules, before onboarding.attach, which then
+  // took the season just begun for an old one and marked it legacy: no summer help, no old gear, no first permit.)
+  if (bootAsk) setTimeout(() => title.fromBoot(bootAsk), 0);
   // the look board (lookboard.js): a contact sheet of fixed spots and hours; the loop is held while it runs
   window.__game.lookboard = (opts) => lookboard(window.__game, opts, {
     pause: () => renderer.setAnimationLoop(null),

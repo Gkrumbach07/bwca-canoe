@@ -360,7 +360,7 @@ class Nearby {
         }
         // fb4 A: the bagged tarp on the ground (a pile holding only it): E Pick up · Q Pitch the tarp (stream E's
         // tarp.verb(pile, entry) → { enabled, why, needs, next, label, run }: it arms the rig's ghost)
-        const tarp = window.__game && window.__game.tarp, te = o.grid.length === 1 && !o.grid[0].box && tarp && typeof tarp.verb === 'function' ? o.grid[0] : null;
+        const tarp = window.__game && window.__game.tarp, te = o.grid.length === 1 && !o.grid[0].box && o.grid[0].id === 'tarp' && tarp && typeof tarp.verb === 'function' ? o.grid[0] : null; // (only the tarp: a lone notebook on the ground read "the a small notebook, bagged · Q Pitch the tarp")
         const tv = te ? check(tarp, 'verb', o, te) : null;
         if (tv) {
           push(hit, { kind: 'item', ref: o.id, label: `the ${lower((itemDef(te.id) || {}).name || 'tarp')}, bagged`, e: { verb: 'Pick up', ...(roomOnYou(inv, te.id) ? { why: null } : { why: 'no room on you', ...ROOM_FULL }), run: () => this.takeOne(o) }, q: { verb: tv.label || 'Pitch the tarp', why: whyOf(tv), needs: tv.needs || null, next: tv.next || null, run: (o2) => tv.run(o2) }, mesh: view && view.objs && view.objs.get(o.id) });

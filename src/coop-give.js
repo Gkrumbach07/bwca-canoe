@@ -17,9 +17,11 @@
 //     friend has left the room (or we have).
 //   - A guest's things kept by the host: the guest sends { inv, money, ledger } every KEEP_EVERY and as they leave (and
 //     on pagehide); the host keeps it in its own season's save (`coop-guests`, by the visitor's id, coop.js visitor.id).
-//     A guest coming in asks for theirs (claim) and gets it back (yours), or { fresh } on a first visit: the starter kit
-//     in the canoe (inventory.newSeason) and START_MONEY. Nothing a guest has is sent to the host before that answer, so
-//     their own season's things never reach the host.
+//     A guest coming in asks for theirs (claim) and gets it back (yours), or { fresh } on a first visit: the new
+//     player's starting kit, whatever the host owns (the owner's call 2026-11-05: onboarding.js guestKit: the starter
+//     things, a Duluth pack, the A-frame tent, the pot, a stove and a canister, three days of food; the plain things for
+//     Walt's, which are the host's story) and START_MONEY. A rejoin gets back what they had (the host kept it). Nothing a
+//     guest has is sent to the host before that answer, so their own season's things never reach the host.
 //
 // The wire (coop.on / coop.send, through the relay; `to` a peer's id, `from` added by the relay):
 //   claim    guest → host  { vid, name }                       (again every CLAIM_EVERY until the answer)
@@ -38,6 +40,7 @@ import { save } from './save.js';
 import { START_MONEY } from './profile.js';
 import { lookOf } from './coop.js';
 import { SERIF, INK } from './map-render.js';
+import { guestKit, onboarding } from './onboarding.js';
 
 export const GIVE_R = 3;          // m: a friend this near can be given to, both on foot
 export const AFLOAT_R = 6;        // m: and when either of you is in a canoe (alongside)
@@ -133,7 +136,8 @@ export class CoopGive {
     const inv = this.g.inventory, pr = this.g.profile;
     if (!inv || !pr) return;
     let money = START_MONEY, ledger = [{ n: START_MONEY, why: `to start the visit to ${this.coop.hostName || 'a friend'}` }];
-    if (m.fresh || !m.inv) inv.newSeason();
+    onboarding.skip(); // (never the home counter's scene on a visit)
+    if (m.fresh || !m.inv) guestKit(inv);
     else {
       inv.restore(m.inv);
       inv.season = pr.seasonId; // (kv is frozen: nothing of the visit is written whatever the id)

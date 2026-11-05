@@ -52,7 +52,7 @@ async function openGame(name, query = '') {
   page.on('pageerror', (e) => log(`[${name}] pageerror`, e.message));
   page.on('console', (m) => { if (m.type() === 'error' || /coop/i.test(m.text())) log(`[${name}] ${m.type()}`, m.text().slice(0, 300)); });
   await page.goto(`${APP}/?relay=${encodeURIComponent(RELAY)}${query}`, { timeout: 180000 });
-  await page.waitForFunction(() => window.__game && window.__game.coop && window.__game.title && window.__game.coopTrip, null, { timeout: 240000, polling: 500 });
+  await page.waitForFunction(() => window.__game && window.__game.coop && window.__game.title && window.__game.coopTrip && typeof window.__game.step === 'function', null, { timeout: 240000, polling: 500 });
   log(`[${name}] game loaded`);
   return page;
 }

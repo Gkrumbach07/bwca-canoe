@@ -590,6 +590,8 @@ export class Camp {
     for (const c of inv.campReach()) for (const e of c.grid) if (e.uid === uid && !e.box) { const d = itemDef(e.id); return d && d.slot === 'tent' ? { c, e, def: d } : null; }
     return null;
   }
+  // off the designated sites in Adventure: only inside the primitive area of the trip's PMA permit (permits.allowsOffsite)
+  offsiteOk(x, z) { const P = this.trip && this.trip.permits; return !!(P && typeof P.allowsOffsite === 'function' && P.allowsOffsite(x, z)); }
   // why that tent can't be pitched from here now, or null; site: the one you stand at (or null off one)
   pitchRefused(tent) {
     const p = this.player;
@@ -598,7 +600,7 @@ export class Camp {
     if (this.outfitter && this.outfitter.visit) return 'not in an outfitter’s yard';
     if (this.camp) return this.camp.stage >= 4 ? 'your tent is up already: strike it to pitch it elsewhere' : 'your tent stands half pitched: carry on with it, or strike it';
     const site = this.nearestSite(p.x, p.z, AREA_R, true);
-    if (this.adventure && !site) return 'only at a campsite in Adventure';
+    if (this.adventure && !site && !this.offsiteOk(p.x, p.z)) return 'only at a campsite in Adventure';
     if (site) { const h = this.registry.holder(campKey(site)); if (h && h !== PLAYER) return 'another party is camped here'; }
     return null;
   }
@@ -662,8 +664,8 @@ export class Camp {
     const Xx = -fdz, Xz = fdx; // along the tent; (fdx, fdz) across it, to the door
     const pt = (u, v) => [x + Xx * u + fdx * v, z + Xz * u + fdz * v];
     if (this.adventure) {
-      if (!site || !site.layout) return 'only at a campsite in Adventure';
-      if (Math.hypot(site.layout.fire.x - x, site.layout.fire.z - z) > AREA_R - 2) return 'outside the campsite';
+      if (!site || !site.layout) { if (!this.offsiteOk(x, z)) return 'only at a campsite in Adventure'; } // (off a site: a primitive area on its permit only)
+      else if (Math.hypot(site.layout.fire.x - x, site.layout.fire.z - z) > AREA_R - 2) return 'outside the campsite';
     }
     // the water: every corner and the door well up the bank
     const pts = [];
@@ -758,7 +760,7 @@ export class Camp {
     return {
       id: 'tent', label: 'Pitching the tent', phases: K.pitch, at: c.stage, clock: false, near: { x: p.x, z: p.z, r: 1.5 },
       onTick: (at) => { if (this.camp === c) c.stages.set(at); },
-      onPhase: (i) => { this.setStage(c, i + 1); if (i === 3) this.pitched(); },
+      onPhase: (i) => { c.halfStruck = false; this.setStage(c, i + 1); if (i === 3) this.pitched(); },
       onStop: (job) => { if (this.camp === c) { this.setStage(c, job.done); this.note(`${cap(K.words[job.done])}. ${this.pitching ? 'Hold E or a click to carry on.' : 'Hold E at the tent to carry on.'}`, 3); } },
     };
   }
@@ -770,7 +772,7 @@ export class Camp {
       onTick: (at) => { if (this.camp === c) c.stages.set(from - at); },
       onPhase: (i) => { const st = from - (i + 1); if (st <= 0) this.packTent(); else this.setStage(c, st); },
       // (half struck: the panel's Strike takes the rest down, Carry on pitching puts it back up)
-      onStop: (job) => { if (this.camp === c) { this.setStage(c, from - job.done); if (job.done > 0) this.note(`${cap(K.words[c.stage])}. Strike takes the rest down; Carry on pitching puts it back up.`, 4); } },
+      onStop: (job) => { if (this.camp === c) { this.setStage(c, from - job.done); if (job.done > 0) { c.halfStruck = true; this.note(`${cap(K.words[c.stage])}. Strike takes the rest down; Carry on pitching puts it back up.`, 4); } } },
     };
   }
   // the footprint staked: the tent out of its container, the site claimed, the camp begun
@@ -879,7 +881,9 @@ export class Camp {
     const pitch = { verb: c.stage === 3 ? 'Put the fly on' : 'Carry on pitching', held: true, why: busy ? 'a moment' : null, run: (o) => hold.begin({ ...this.pitchOnOpts(), ...keys(o) }) };
     const strike = { verb: 'Strike', held: true, why: busy ? 'a moment' : null, run: (o) => hold.begin({ ...this.strikeOpts(), ...keys(o) }) };
     const rest = { verb: c.stage === 3 ? 'Rest until… (no fly)' : 'Rest until…', why: busy ? 'a moment' : null, run: () => this.restDial() };
-    const e = c.stage >= 4 ? rest : pitch, q = c.stage >= 4 ? strike : c.stage === 3 ? rest : strike;
+    // (the replay: a strike let go after the fly came off left the tent at 3 with Put the fly on and Rest, and no Strike
+    // anywhere, though the note says "Strike takes the rest down": half struck, Q strikes on)
+    const e = c.stage >= 4 ? rest : pitch, q = c.stage >= 4 ? strike : c.stage === 3 && !c.halfStruck ? rest : strike;
     return { e, q, label: `your ${lower(d ? d.name : 'tent')}`, hint: K.words[c.stage], stage: c.stage };
   }
   // the Rest-until dial: first light, 7:00, 9:00, noon, 4 pm, dusk, 10 pm, or any hour by ← →; E rests until then
@@ -900,7 +904,7 @@ export class Camp {
     const words = (at) => {
       const w = this.wakeTime(at), M = Math.round(w.hours * 60), H = Math.floor(M / 60), m = M % 60;
       const span = `${H ? `${H} h` : ''}${m ? ` ${m} min` : ''}`.trim() || 'no time at all';
-      const kind = w.nap ? 'a nap: some of the rest comes back' : w.hours >= 7 ? 'a full night' : 'a short night: not all the rest comes back'; // (fb5 join: no percent, rule 3)
+      const kind = w.nap ? 'a nap: some of the rest comes back' : w.day ? 'a sleep by day' : w.hours >= 7 ? 'a full night' : 'a short night: not all the rest comes back'; // (fb5 join: no percent, rule 3)
       const short = this.tentShort(); // (what the night is short of, said before it, not after)
       return `${span} · ${kind}${c.stage < 4 ? ' · no fly on' : ''}${short.length ? ` · ${short.join(', ')}` : ''}`;
     };
@@ -992,9 +996,12 @@ export class Camp {
     const d = this.day, { rise: r, set } = d.sunriseSunset, rise = r ?? 6, dusk = set ?? 19;
     if (Number.isFinite(choice)) {
       const at = ((choice % 24) + 24) % 24, hours = ((at - d.hours) % 24 + 24) % 24 || 24;
-      const byDay = (h) => h >= rise && h < dusk;
-      const nap = hours < NAP_UNDER && byDay(d.hours) && byDay(at) && at > d.hours;
-      return { at, hours, nap, day: nap };
+      // a rest that starts and ends in daylight (up to dusk itself, the dial's Dusk) crosses no dark: a sleep by day, its
+      // card the day's, no morning after it; under NAP_UNDER hours it is a nap (the playthrough: the dial's Dusk from
+      // 1 pm was "Night 1 · a full night's sleep", then a "Day 1 · sunrise" card at 9 pm)
+      const byDay = (h) => h >= rise && h <= dusk + 1 / 60;
+      const day = byDay(d.hours) && byDay(at) && at > d.hours, nap = day && hours < NAP_UNDER;
+      return { at, hours, nap, day };
     }
     if (d.hours >= rise && d.hours < dusk - SLEEP_FROM) { const at = Math.min(23.5, d.hours + SLEEP_IN); return { at, hours: at - d.hours, day: true }; } // a sleep by day, worn out
     let at = (rise + WAKE_AT) % 24, hours = ((at - d.hours) % 24 + 24) % 24 || 24;
@@ -1043,7 +1050,7 @@ export class Camp {
     // by day) whose hours hold the night's hour, with food not hung; the card is the visit, held while its sounds play
     const B = !nap && !byDay && this.bear && typeof this.bear.bedtime === 'function' ? this.bear.bedtime({ x: p.x, z: p.z, from: this.now, to: this.now + hours }) : null;
     if (B) { card.text = B.text; card.hold = B.hold; }
-    this.night = { kind, q, hours, wakeAt, x: p.x, z: p.z, rain, nap, bear: !!B, bag: !!gear.bag, pad: !!gear.pad, fly, rest0: e && e.live && e.needs ? e.needs.rest : null, clockTo: shared && shared.to ? shared.to : null };
+    this.night = { kind, q, hours, wakeAt, x: p.x, z: p.z, rain, nap, day: !!byDay, bear: !!B, bag: !!gear.bag, pad: !!gear.pad, fly, rest0: e && e.live && e.needs ? e.needs.rest : null, clockTo: shared && shared.to ? shared.to : null };
     // (the bear at the tent: its onDark is a promise, the card held while you have the moment to shout: bear.js tentNight)
     const onDark = () => {
       let w = null;
@@ -1134,6 +1141,8 @@ export class Camp {
     const n = this.night;
     if (n && n.nap) { this.night = null; this.note(`Up at ${clock12(this.day.hours)}, ${n.hours < 1.5 ? 'a little' : 'a good deal'} more rested.`, 5); return; }
     this.night = null;
+    // a long sleep by day (no dark in it): a word, not the day's card ("Day 1 · sunrise 5:08 am" at 9 pm)
+    if (n && n.day) { const m = this.morningNote; this.morningNote = null; this.note(`Up at ${clock12(this.day.hours)}.${m ? ` ${m}` : ''}`, 6); return; }
     const d = this.day, h = this.hud, p = this.player, w = this.world, e = this.energy;
     const rise = d.sunriseSunset.rise, wind = this.wind, dayN = this.tripDay(d.doy);
     const here = p.placeName || w.lakeName(p.lakeId) || 'Open country';

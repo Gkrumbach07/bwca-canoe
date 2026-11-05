@@ -18,17 +18,25 @@
 // line from the outfitter, and you wake at 7:30 at the nearest outfitter you know. The stringer and the rest of the
 // day are lost; the tasks are kept, and there is no fee. Sandbox never ends a trip.
 //
-// The trip is saved inside the outfitter's document (`bwca-canoe-trip`, outfitter.save()) as `core` (v3). A v2 core
-// (the trip core's, with dates) loses its dates; a document without one is from before the trip core and comes back
-// as Sandbox. The logbook (`bwca-canoe:logbook`) keeps every trip's outcome and what has been seen (lakes, campsites,
+// Permits (the game-loop round, stream A, permits.js): a push-off takes the permit you hold for that landing and that
+// day (permits.forTrip, then used), and without one the trip is day use (`dayUse`: still out after dark, a ranger's
+// fine, permits.js checkDusk). `permit` is the paper as it was used ({ id, kind, ep, abs, pma, from, price }); the
+// 'exit' outcome carries { dayUse, permitId }. A trip comes in at any entry point (stream B's trailheads too), and only
+// an outfitter's landing makes an outfitter known.
+//
+// The trip is saved inside the outfitter's document (`bwca-canoe-trip`, outfitter.save()) as `core` (v4). A v3 core
+// (from before permits) loads with no permit and `grandfathered` (an active trip from an old save is never fined); a
+// v2 core (the trip core's, with dates) loses its dates; a document without one is from before the trip core and comes
+// back as Sandbox. The logbook (`bwca-canoe:logbook`) keeps every trip's outcome and what has been seen (lakes, campsites,
 // landings, portages) across trips: the hook for achievements.
 //
 //   trip.mode ('adventure' | 'sandbox'), trip.adventure, trip.sandbox, trip.active, trip.dayN, trip.state (the saved core),
 //   trip.state.since { year, doy, hours }, trip.state.from (the push-off's entry point), trip.state.packs { count, canoe, foodDays }, trip.log(kind, data),
 //   trip.on(kind, fn) → off, trip.start(f), trip.comeIn(ep), trip.takeBack(), trip.evacuate(why),
-//   trip.nearestKnownOutfitter(x, z)
+//   trip.nearestKnownOutfitter(x, z), trip.state.permit, trip.state.dayUse, trip.permits (permits.js, set by main.js)
 //   kinds: 'start' (the season's first push-off: the needs fresh, main.js) 'leave' (a later one) 'lake' 'portage'
-//   'camp' 'sleep' 'capsize' 'offsite' 'bunk' 'ride' 'known' 'evac' 'exit'
+//   'camp' 'sleep' 'capsize' 'offsite' 'bunk' 'ride' 'known' 'evac' 'exit' 'permit' (bought, granted or used) 'fine'
+//   'skip' (the bunkhouse until a permit's day)
 import { kv } from './store.js'; // the saves' store (IndexedDB, read into memory before the boot)
 import { save } from './save.js';
 import { plural } from './hud.js';
@@ -57,9 +65,11 @@ const pick = (a) => a[Math.floor(Math.random() * a.length)];
 
 function blank(mode = 'adventure') {
   return {
-    v: 3, id: null, mode: mode === 'sandbox' ? 'sandbox' : 'adventure', active: false,
+    v: 4, id: null, mode: mode === 'sandbox' ? 'sandbox' : 'adventure', active: false,
     since: null, from: null, packs: { count: 1, canoe: 'aluminium', foodDays: 0 },
     camp: null, wet: false, offsite: 0, log: [], outcome: null,
+    permit: null, dayUse: false, grandfathered: false, fined: false,
+    via: null, // the outfitter that drove you to the put-in or saw you off (stream B's pickups; the join)
   };
 }
 const blankBook = () => ({ trips: [], seen: { lakes: [], camps: [], eps: [], portages: [] } });
@@ -74,6 +84,7 @@ export class Trip {
     this.hud = t.hud || null; this.veil = t.veil || null; this.tasks = t.tasks || null; this.fishing = t.fishing || null; this.stats = t.stats || null;
     this.profile = null;            // the season (profile.js), handed over with useProfile
     this.outfitter = null;          // the outfitter sets itself here
+    this.permits = null;            // permits.js (main.js gl-a): the permit a push-off takes
     this.handlers = new Map();
     this.state = blank(save.read('tripMode') || 'adventure');
     const book = save.read(BOOK);
@@ -117,7 +128,16 @@ export class Trip {
     return cap ? s[0].toUpperCase() + s.slice(1) : s;
   }
   landing(ep) { const o = this.outfitter; return o && ep != null ? o.landings.find((l) => l.ep === ep) || null : null; }
-  placeOf(ep) { const l = this.landing(ep); return l ? (this.world.lakeName(l.lake) || l.place) : ''; }
+  // any entry point, an outfitter's or a trailhead (stream B's outfitter.entry; else the world's record)
+  entryOf(ep) {
+    const o = this.outfitter, n = Number(ep);
+    const e = o && typeof o.entry === 'function' ? o.entry(n) : null;
+    if (e) return e;
+    const l = this.landing(n); if (l) return l;
+    const r = (this.world.entryPoints || []).find((q) => q.ep === n);
+    return r ? { ep: r.ep, name: r.name, place: r.name, x: r.x, z: r.z, lake: r.lake } : null;
+  }
+  placeOf(ep) { const l = this.entryOf(ep); return l ? (this.world.lakeName(l.lake) || l.place) : ''; }
   packWords(foodDays = this.state.packs.foodDays) {
     const pk = this.state.packs;
     return `${pk.count === 1 ? 'one pack' : 'two packs'}, ${this.sandbox ? 'food that keeps' : foodDays > 0 ? `${foodDays} ${plural(foodDays, 'day')} of food` : 'no food'}`;
@@ -150,7 +170,9 @@ export class Trip {
   saveBook() { this.bookDirty = false; save.write(BOOK, this.book); }
   // an outfitter becomes known: you reached its landing (or stood at its counter)
   learn(ep) {
-    const pr = this.profile; if (!pr || ep == null || !pr.learn(ep)) return false;
+    const pr = this.profile; if (!pr || ep == null) return false;
+    if (this.outfitter && !this.landing(ep)) return false; // a trailhead is not an outfitter (stream B)
+    if (!pr.learn(ep)) return false;
     const l = this.landing(ep);
     this.fresh = ep; // the counter greets a first visit (outfitter.js)
     this.log('known', { ep });
@@ -164,7 +186,7 @@ export class Trip {
   start(f) {
     const s = this.state, d = this.day;
     s.id = `${f.ep}-${absDay(d.year, d.doy)}-${Math.floor(Math.random() * 1e5).toString(36)}`;
-    s.active = true; s.outcome = null; s.camp = null; s.offsite = 0; s.log = [];
+    s.active = true; s.outcome = null; s.camp = null; s.offsite = 0; s.log = []; s.grandfathered = false; s.fined = false;
     s.since = { year: d.year, doy: d.doy, hours: +d.hours.toFixed(2) }; s.from = f.ep;
     s.packs = { count: 1, canoe: CANOES.includes(f.canoe) ? f.canoe : 'aluminium', foodDays: f.foodDays ?? 0 };
     this.syncKit();
@@ -174,7 +196,13 @@ export class Trip {
     const en = this.energy;
     if (f.fresh && en) { s.wet = false; en.value = 1; en.awakeSince = en.now - Math.min(12, Math.max(0, d.hours - 7)); en.tired = 0; en.lastMealAbs = -1e9; }
     this.seen('eps', f.ep); this.learn(f.ep);
-    this.log(f.fresh ? 'start' : 'leave', { ep: f.ep });
+    // the permit for this landing today, else day use (Sandbox needs none)
+    const P = this.permits, abs = absDay(d.year, d.doy);
+    const pm = this.adventure && P && typeof P.forTrip === 'function' ? P.forTrip(f.ep, abs) : null;
+    s.permit = pm ? { id: pm.id, kind: pm.kind, ep: pm.ep, abs: pm.abs, pma: pm.pma ?? null, from: pm.from ?? null, price: pm.price ?? 0 } : null;
+    s.dayUse = this.adventure && !pm;
+    this.log(f.fresh ? 'start' : 'leave', { ep: f.ep, permit: s.permit ? s.permit.id : null, dayUse: s.dayUse });
+    if (pm) { P.use(pm); this.log('permit', { id: pm.id, kind: pm.kind, ep: pm.ep, abs: pm.abs, used: true }); }
   }
   // a trip under way has reached an outfitter's landing (outfitter.js updateTrip): logged as came in, there
   comeIn(ep) {
@@ -182,16 +210,20 @@ export class Trip {
     this.learn(ep);
     return this.close('completed', 'came in', ep);
   }
-  // back at the landing it left without having gone anywhere: no trip after all, and nothing in the logbook
+  // back at the landing it left without having gone anywhere: no trip after all, and nothing in the logbook.
+  // → false (no trip under way), else { permit (as it was used), kept (back in your pocket, still good), dayUse, fined }
   takeBack() {
     const s = this.state; if (!s.active) return false;
-    s.active = false; s.camp = null; s.outcome = null; s.log = [];
-    return true;
+    // the permit it took goes back in your pocket (still good today; a day gone, it lapses)
+    const pm = s.permit, kept = !!(pm && this.permits && typeof this.permits.unuse === 'function' && this.permits.unuse(pm.id) && this.permits.held().some((p) => p.id === pm.id));
+    const out = { permit: pm ? { ...pm } : null, kept, dayUse: !!s.dayUse, fined: !!s.fined };
+    s.active = false; s.camp = null; s.outcome = null; s.log = []; s.permit = null; s.dayUse = false; s.fined = false;
+    return out;
   }
   abandon() { return this.active ? this.close('abandoned', 'a new season begun', null) : null; }
   close(k, why, ep) {
     const s = this.state, d = this.day, st = this.stats;
-    s.outcome = { k, why, ep, at: { year: d.year, doy: d.doy, hours: +d.hours.toFixed(2) } };
+    s.outcome = { k, why, ep, at: { year: d.year, doy: d.doy, hours: +d.hours.toFixed(2) }, dayUse: !!s.dayUse, permitId: s.permit ? s.permit.id : null };
     const entry = s.since || { year: d.year, doy: d.doy, hours: d.hours };
     this.book.trips.push({
       id: s.id, mode: s.mode, k, why, from: s.from ?? null, to: ep, entry, end: s.outcome.at,
@@ -199,6 +231,7 @@ export class Trip {
       km: st ? +st.km.toFixed(2) : 0, portages: st ? st.portages : 0, lakes: st ? st.lakes.length : 0, nights_out: st ? st.nights.length : 0,
       fish: this.fishing ? Math.max(0, this.fishing.log.length - (s.fish0 || 0)) : 0, offsite: s.offsite || 0,
       resupplies: (s.log || []).filter((e) => e.k === 'resupply').length,
+      permit: s.permit ? { id: s.permit.id, kind: s.permit.kind } : null, dayUse: !!s.dayUse, fined: !!s.fined,
     });
     s.active = false; s.camp = null;
     this.log('exit', { outcome: s.outcome });
@@ -333,21 +366,28 @@ export class Trip {
 
   // --- saving ------------------------------------------------------------------------------------------------
   serialize() { return this.state; }
-  // the outfitter's document: its core (v3; a v2 core loses its dates; any permit either carried is dropped, its
-  // push-off kept as since and from), or an old one (no core) brought back as Sandbox
+  // the outfitter's document: its core (v4; a v3 one has no permit and is grandfathered: never fined; a v2 core loses its
+  // dates; the old season permit either carried is dropped, its push-off kept as since and from), or an old one (no
+  // core) brought back as Sandbox
   restoreFrom(doc) {
     if (!doc) { this.setMode(this.mode); return; }
     const c = doc.core;
-    if (c && (c.v === 3 || c.v === 2)) {
+    if (c && c.v === 4) {
       const b = blank(c.mode);
-      const s = { ...b, ...c, v: 3, packs: { ...b.packs, ...(c.packs || {}) }, log: Array.isArray(c.log) ? c.log : [] };
+      const pm = c.permit && typeof c.permit === 'object' && c.permit.id ? c.permit : null;
+      this.state = { ...b, ...c, v: 4, packs: { ...b.packs, ...(c.packs || {}) }, log: Array.isArray(c.log) ? c.log : [], permit: pm, dayUse: !!c.dayUse && !pm, grandfathered: !!c.grandfathered, fined: !!c.fined };
+    } else if (c && (c.v === 3 || c.v === 2)) {
+      const b = blank(c.mode);
+      const s = { ...b, ...c, v: 4, packs: { ...b.packs, ...(c.packs || {}) }, log: Array.isArray(c.log) ? c.log : [] };
       const pm = c.permit || null; // a core from before the world cards: the paper's date and entry point stand in for a missing push-off
       if (c.v === 2 || (pm && c.active && !s.since)) s.since = c.active ? stampDate(pm) : null;
       if (c.v === 2 || (pm && s.from == null)) s.from = pm ? pm.ep ?? null : null;
-      delete s.permit;
+      // from before permits: no permit, not day use, and never fined (the game-loop round)
+      s.permit = null; s.dayUse = false; s.grandfathered = true; s.fined = false;
       this.state = s;
     } else {
       const t = doc.trip || {}, s = blank('sandbox'), d = this.day;
+      s.grandfathered = true;
       const kevlar = !!(doc.tasks && Array.isArray(doc.tasks.unlocks) && doc.tasks.unlocks.includes('kevlar'));
       s.packs = { count: 1, canoe: kevlar ? 'kevlar' : 'aluminium', foodDays: t.days || 4 };
       if (t.active) {

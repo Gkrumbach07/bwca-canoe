@@ -9,7 +9,7 @@ import { miles, fmtDepth, fmtFtIn, fmtIn, fmtLbOz, fmtF, fmtMphMs, fmtMphKmh, fm
 import { names } from './names.js'; // d1 names: the bays, points, islands, narrows, summits and named portages on the map
 import { KIND, FOREST, REGIME, WCLASS, HGM, nwiCode, wetRegime, wetBeaver, wetHgm, wclass1 } from './land.js'; // 2026-10-31: the land under you, in the developer rows
 import { GROUND } from './terrain-build.js';
-import { paintGround, paintBurns, burnsInView, burnWords, paintBoundary, loadBoundary, BOUNDARY, paintDock, tileGeo, tileCache, INK, lakeAt, lodOf, SMALL_LAKE, paintCreeks } from './map-render.js'; // the map as vectors (the wetlands round: paintCreeks)
+import { paintGround, paintBurns, burnsInView, burnWords, paintBoundary, loadBoundary, BOUNDARY, paintEntry, tileGeo, tileCache, INK, lakeAt, lodOf, SMALL_LAKE, paintCreeks } from './map-render.js'; // the map as vectors (the wetlands round: paintCreeks)
 import './hud.css';
 const KIND_NAMES = Object.keys(KIND); // ground kind value -> its key (land.js KIND runs 0..13 in order)
 
@@ -932,7 +932,8 @@ export class Hud {
   updatePrompt(ctx) {
     const { player, fishing } = ctx, e = this.el;
     const fu = fishing ? fishing.ui : null;
-    const p = player.prompt || (fu && fu.message ? { key: null, text: fu.message } : null);
+    const veiled = !!(this.veil && this.veil.cur); // a card on the veil (the bunk night, an evacuation) is the screen's
+    const p = veiled ? null : player.prompt || (fu && fu.message ? { key: null, text: fu.message } : null);
     this.el.air.classList.toggle('prompt', !!p); // the action line owns the bottom row: the journal lines lift
     if (!p) { e.prompt.classList.remove('show'); return; }
     const key = p.key ? `<kbd>${esc(p.key)}</kbd>` : '';
@@ -1097,7 +1098,9 @@ export class Hud {
     const dayW = day ? this.dayWords(ctx) : '';
     this.set('ebClock', eb.clock, day ? clock12(day.hours) : '');
     this.set('ebDay', eb.day, `${dayW ? `${dayW} · ` : ''}${day ? `${weekdayOf(day.year, day.doy).slice(0, 3)}, ${shortDate(day.year, day.doy)}` : ''}`);
-    const show = !shell && !!day;
+    // one time bar at once (the game-loop play: the Rest dial and a counter showed this bar and the strip together): the
+    // strip over the paper stands in for it while it is up
+    const show = !shell && !!day && !this.stripWanted(ctx);
     eb.el.classList.toggle('show', show);
     this.el.air.classList.toggle('ebar', show && on); // the readout keeps under the bar (hud.css)
   }
@@ -1184,10 +1187,11 @@ export class Hud {
     this.stripAlso = null; // () => true while something of paper the register does not know is up (the Rest dial)
     this.tipBind(this.strip, q('.hit'), false);
   }
+  stripWanted(ctx) { return !!this.strip && !ctx.shell && (!!this.paper || !!(this.stripAlso && this.stripAlso())); }
   updateStrip(ctx) {
     const s = this.strip; if (!s) return;
-    const { energy, day, shell } = ctx;
-    const show = !shell && (!!this.paper || !!(this.stripAlso && this.stripAlso()));
+    const { energy, day } = ctx;
+    const show = this.stripWanted(ctx);
     if (show !== s.shown) { s.shown = show; s.el.classList.toggle('show', show); if (!show) { s.prev = null; this.tipHide(s); } }
     if (!show) return;
     if (energy) {
@@ -1785,7 +1789,7 @@ export class Hud {
       for (const ep of w.entryPoints) {
         if (!inView(ep.x, ep.z, ep.x, ep.z)) continue;
         const [a, b] = toPx(ep.x, ep.z);
-        paintDock(ctx, a, b, dockK);
+        paintEntry(ctx, a, b, dockK, ep.ep); // (the game-loop round: an outfitter's dock, or a trailhead's sign)
         hits.push({ kind: 'dock', ep: ep.ep, x: ep.x, z: ep.z, px: 10 });
         if (mid) { ctx.fillStyle = '#4a3b26'; ctx.textAlign = 'center'; ctx.fillText(`EP ${ep.ep}`, a, b + 19 * k); }
       }

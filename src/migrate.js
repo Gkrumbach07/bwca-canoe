@@ -113,7 +113,8 @@ function deepKeys(v, map) {
 
 // --- each document ---------------------------------------------------------------------------------------------------
 // the notices (tasks.js ads): their sites and trails by index, their lakes by id; the keys the boards dedupe by
-const SITE_KINDS = new Set(['item', 'litter', 'canoe']), TRAIL_KINDS = new Set(['survey', 'deadfall']), LAKE_KINDS = new Set(['secchi', 'loons']);
+// (gl-d: the new kinds' sites and lakes: a campsite check's site, a creel survey's lake, a last check's chain of sites)
+const SITE_KINDS = new Set(['item', 'litter', 'canoe', 'campsite']), TRAIL_KINDS = new Set(['survey', 'deadfall']), LAKE_KINDS = new Set(['secchi', 'loons', 'creel']);
 function remapAd(t, M) {
   const c = { ...t };
   if (typeof c.site === 'number') { c.site = M.site(c.site); if (c.site < 0) return null; }
@@ -121,14 +122,15 @@ function remapAd(t, M) {
   if (typeof c.lakeId === 'number' && c.lakeId > 0) { c.lakeId = M.lake(c.lakeId); if (!c.lakeId && (LAKE_KINDS.has(c.kind) || c.kind === 'report')) return null; }
   if (typeof c.lakeHint === 'number' && c.lakeHint > 0) c.lakeHint = M.lake(c.lakeHint);
   if (Array.isArray(c.route)) { c.route = c.route.map((l) => (l && typeof l.id === 'number' ? { ...l, id: M.lake(l.id) } : l)); if (c.route.some((l) => l && l.id === 0)) return null; }
+  if (c.kind === 'lastcheck' && Array.isArray(c.sites)) { c.sites = c.sites.map((i) => (typeof i === 'number' ? M.site(i) : i)); if (c.sites.some((i) => i < 0)) return null; c.key = c.sites.join('>'); }
   if (c.target && typeof c.target === 'object' && typeof c.target.lake === 'number') { c.target = { ...c.target, lake: M.lake(c.target.lake) }; if (!c.target.lake && c.target.type === 'sunset') return null; }
   if (SITE_KINDS.has(c.kind) && typeof c.key === 'number') c.key = c.site;
   else if (TRAIL_KINDS.has(c.kind) && typeof c.key === 'number') c.key = c.portage;
   else if (LAKE_KINDS.has(c.kind) && typeof c.key === 'number') c.key = c.lakeId;
   else if (c.kind === 'report' && Array.isArray(c.route)) c.key = c.route.map((l) => l.id).join('>');
-  else if (c.kind === 'photo' && typeof c.key === 'string') {
-    const m = /^(island|trail|sunset):(\d+)$/.exec(c.key);
-    if (m) { const n = +m[2], to = m[1] === 'island' ? M.site(n) : m[1] === 'trail' ? M.portage(n) : M.lake(n); if (to < 0 || (m[1] === 'sunset' && !to)) return null; c.key = `${m[1]}:${to}`; }
+  else if ((c.kind === 'photo' || c.kind === 'colour') && typeof c.key === 'string') {
+    const m = /^(colour:)?(island|trail|sunset):(\d+)$/.exec(c.key);
+    if (m) { const n = +m[3], to = m[2] === 'island' ? M.site(n) : m[2] === 'trail' ? M.portage(n) : M.lake(n); if (to < 0 || (m[2] === 'sunset' && !to)) return null; c.key = `${m[1] || ''}${m[2]}:${to}`; }
   }
   return c;
 }

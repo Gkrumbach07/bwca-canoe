@@ -2,7 +2,7 @@
 // season goes on, and a small arc of three or four beats that ends in something for you: a discount at their counter,
 // a site nobody else knows pencilled on your map, or one of a kind (stream C's unique items). The six written by hand
 // (outfitters.js HAND: Ruth Aho at Lake One, Gus Lindgren at Moose Lake, Bev Kangas at Sawbill, Arvid Strand at Seagull,
-// Lise Thibodeau at Saganaga, Leon Zupancic on the Little Indian Sioux) have their own; the other forty-nine are written
+// Lise Thibodeau at Saganaga, Leon Kastelic on the Little Indian Sioux) have their own; the other forty-nine are written
 // from their manner (warm, dry, gruff, an old hand, a keen summer hire, a precise ex-ranger) and their own country,
 // seeded by the entry point so each is the same person every season.
 //
@@ -27,16 +27,16 @@
 // --- the six written by hand ---------------------------------------------------------------------------------------
 export const HAND = {
   30: { // Ruth Aho, Lake One: warm, the lodge and the café; her brother carves the paddles
-    past: ['My father built this place in ’61: two cabins and a dock. I was born the summer the café opened.', 'Forty-odd summers behind this counter. Winters I knit and listen to the ice talk.', 'My brother Eino carves the paddles on the wall. He’s out in the shed most days, being difficult.'],
+    past: ['My father built this place in ’61: two cabins and a dock. I was born the summer the café opened.', 'Forty-odd summers behind this counter. Winters I knit and listen to the ice talk.', 'My brother Oskar carves the paddles on the wall. He’s out in the shed most days, being difficult.'],
     topics: [
       { id: 'cafe', ask: 'The café?', say: ['Deb runs it. Walleye when you lot bring some in, pie when you don’t.', 'She pays for a fish she can fry. Look at the board.'] },
       { id: 'chain', ask: 'Lake One, Two, Three and Four?', gate: { trips: 1 }, say: ['They’re one long chain, really. Lake One’s all islands and narrows; Two and Three open up.', 'Four’s where the Kawishiwi comes in. Quietest of the lot.'] },
     ],
-    arc: { id: 'eino', places: { goal: { lake: 'Lake Two' } }, beats: [
-      { ask: 'Who carves the paddles?', gap: 0, say: ['My brother Eino. Cherry and ash, all winter, in the shed out back.', 'He did lures too, before his hands got bad. Cedar minnows. The walleye used to queue up for them.'] },
-      { ask: 'How’s Eino?', need: { trips: 1 }, say: ['He asked after the new paddler. I said you came back with all your gear and most of your sense.', 'He wants to know if the walleye still hold in {goal}. Bring one in, any size, and tell me.'], ring: 'goal:walleye' },
+    arc: { id: 'leif', places: { goal: { lake: 'Lake Two' } }, beats: [
+      { ask: 'Who carves the paddles?', gap: 0, say: ['My brother Oskar. Cherry and ash, all winter, in the shed out back.', 'He did lures too, before his hands got bad. Cedar minnows. The walleye used to queue up for them.'] },
+      { ask: 'How’s Oskar?', need: { trips: 1 }, say: ['He asked after the new paddler. I said you came back with all your gear and most of your sense.', 'He wants to know if the walleye still hold in {goal}. Bring one in, any size, and tell me.'], ring: 'goal:walleye' },
       { ask: 'I had a walleye out of {goal}.', need: { caught: { sp: 'walleye', lake: '{goal}' } }, say: ['Out of {goal}! He’ll be pleased as a pup. He swore they’d all gone down to Three.', 'He’s gone back out to the shed. Won’t say what for.'] },
-      { ask: 'What’s Eino up to?', gap: 1, say: ['He came in this morning with this, wrapped in a dish towel. For whoever found his walleye, he said.', 'White cedar, painted by hand. Don’t lose it in a snag. Lose it in a big one.'], done: { give: 'lure:cedarminnow', or: 'lure:lazyike' } },
+      { ask: 'What’s Oskar up to?', gap: 1, say: ['He came in this morning with this, wrapped in a dish towel. For whoever found his walleye, he said.', 'White cedar, painted by hand. Don’t lose it in a snag. Lose it in a big one.'], done: { give: 'lure:cedarminnow', or: 'lure:lazyike' } },
     ] },
   },
   25: { // Gus Lindgren, Moose Lake: gruff, ran the tow boat thirty years
@@ -91,7 +91,7 @@ export const HAND = {
       { ask: 'How’s the count going?', gap: 1, say: ['Fourteen pairs, thanks to you. Here, I want you to have this.', 'My lucky cap. Never lost a fish wearing it. Okay, one.'], done: { give: 'luckycap', or: 'lure:silverminnow' } },
     ] },
   },
-  14: { // Leon Zupancic, the Little Indian Sioux: precise, twenty years with the Forest Service
+  14: { // Leon Kastelic, the Little Indian Sioux: precise, twenty years with the Forest Service
     past: ['Twenty years with the Forest Service out of Ely. Wilderness ranger, then the trail crews.', 'I retired and bought this place. My wife says I only moved my desk.', 'I’ve read the gauge at the landing every morning since 2004. The river doesn’t care. I do.'],
     topics: [
       { id: 'echo', ask: 'The Echo Trail?', say: ['About forty-six miles of gravel out of Ely, built in the thirties. Graded about as often.'] },
@@ -109,7 +109,7 @@ export const HAND = {
 // --- the other forty-nine, by manner -------------------------------------------------------------------------------
 // Each manner's past (its {vars} drawn per keeper: a year, a town, a relation), topics, and an arc whose places come from
 // the keeper's own country.
-export const RELS = [['husband', 'his', ['Walt', 'Arne', 'Dale', 'Lyle', 'Ray', 'Norm']], ['sister', 'her', ['Inga', 'Marit', 'June', 'Edna', 'Lois']], ['father', 'his', ['Emil', 'Toivo', 'Karl', 'Nels']], ['mother', 'her', ['Helga', 'Ida', 'Sigrid', 'Alma']]];
+export const RELS = [['husband', 'his', ['Wendell', 'Orval', 'Marvin', 'Lowell', 'Ray', 'Norm']], ['sister', 'her', ['Inga', 'Marit', 'Ardis', 'Edna', 'Lois']], ['father', 'his', ['Sulo', 'Waino', 'Karl', 'Nels']], ['mother', 'her', ['Helga', 'Ida', 'Sigrid', 'Alma']]];
 export const COLLEGES = [['UMD', 'Duluth'], ['Bemidji State', 'Bemidji'], ['St. Cloud State', 'St. Cloud'], ['the U', 'Minneapolis'], ['Northland College', 'Ashland'], ['Lake Superior College', 'Duluth']];
 export const SUBJECTS = ['Biology', 'Forestry', 'Geology', 'Fisheries', 'Outdoor ed', 'English, weirdly'];
 export const CITIES = ['Minneapolis', 'St. Paul', 'Duluth', 'Des Moines', 'Madison', 'Chicago', 'Milwaukee', 'Rochester', 'Fargo'];
@@ -131,7 +131,7 @@ export const MANNER = {
     arc: { id: 'bet', places: { goal: { fish: true }, secret: { secret: {} } }, beats: [
       { ask: 'The fish on the wall?', gap: 0, say: ['A {sp}, {lenWall} inches, out of {goal}. I’ve been insufferable since ’{yy}.', 'Nobody’s beaten it. Nobody tries hard enough.'] },
       { ask: 'Is that a challenge?', need: { trips: 1 }, say: ['Bring me a {sp} over {len} inches and I’ll stop telling that story.', '{goal}{goalWhere}, if you want a head start. You didn’t hear it from me.'], ring: 'goal:fish' },
-      { ask: 'I had a {sp} over {len} inches.', need: { bigger: { sp: '{spId}', cm: '{cm}' } }, say: ['{cmGot} inches? Hm. Fine. The story’s retired.', 'The fish on the wall is a liar anyway. Come back tomorrow.'] },
+      { ask: 'I had a {sp} over {len} inches.', need: { bigger: { sp: '{spId}', cm: '{cm}' } }, say: ['{cmGot} inches? Hm. Fine. The story’s retired.', 'The fish in that story grows an inch a winter anyway. Come back tomorrow.'] },
       { ask: 'You said tomorrow.', gap: 1, say: ['Here’s what that fish never told anyone: {secret}{secretWhere}.', 'Best site in the country. Don’t bring a radio.'], ring: 'secret', done: { secret: true } },
     ] },
   },

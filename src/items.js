@@ -453,14 +453,21 @@ export const LEGACY = { pack: 'pack3', pack2: 'pack4', barrel: 'barrel60', rod: 
 // the season's starting kit as items: where each goes (inventory.newSeason)
 // content join (the owner's call on the new-player review, 2026-10-25): the 30 L blue barrel comes in the starting kit; the
 // bears' line, the raid and the hang all asked for one, and it was $25 of the $40
+// gl-c (the game-loop round's onboarding, 2026-11-05): no pack, no tent and no pot of your own: rentals are out in the
+// busy season, and the summer help at the home counter digs out the old gear nobody rents (onboarding.js WALT_GIFT: the
+// canvas pack, the old canvas tent, the dented stove, the pot from the back, food for three days). Your own things (the
+// bag, the pad, the clothes, the tarp, the tablets and the tackle box) wait in the outfitters' crate until there is a
+// pack to put them in; the gift packs them for you. (`crate` is the outfitters' crate, inventory.newSeason.)
 export const STARTER_KIT = {
-  canoe: ['pack3', 'barrel30', 'bucket', 'stringer'],
+  canoe: ['barrel30', 'bucket', 'stringer'],
   // (the camp pass, 2026-10-31: and the foam pad: the bag and the pad in the tent make a whole night's rest, camp.js)
-  pack3: ['aframe', 'sleepingbag', 'pad', 'clothes', 'pot', 'tarp', 'tablets', 'tacklebox'],
+  crate: ['sleepingbag', 'pad', 'clothes', 'tarp', 'tablets', 'tacklebox'],
   tacklebox: ['lure:jig', 'lure:mepps'],
   bucket: [['leeches', 12]],
   long: ['ash', 'rod'],
 };
+// the things the gift packs into the old pack from the crate, biggest first (onboarding.js)
+export const OWN_KIT = ['sleepingbag', 'pad', 'tacklebox', 'clothes', 'tarp', 'tablets'];
 
 // --- content C: the gear's upgrades, the varied things and the uniques ---------------------------------------------
 // Content pass 1, stream C (the owner, 2026-10-25: "item upgrades, different unique items, varied items"). Every def
@@ -589,6 +596,22 @@ defineItem({ id: 'matchsafe', name: 'Tin match safe', short: 'Matches', kind: 't
 defineItem({ id: 'toque', name: 'Red wool toque', short: 'Toque', kind: 'gear', kg: 0.1, unique: true, identity: 'Hand-knit, lost on a portage', model: 'cap', tint: 0xa8322a, onYou: [O('Cold', 'costs ×0.8')] });
 defineItem({ id: 'luckycap', name: 'Lise’s lucky cap', short: 'Cap', kind: 'gear', kg: 0.1, unique: true, identity: 'Faded UMD Bulldogs cap · never lost a fish', model: 'cap', tint: 0x6e2630, onYou: [O('Bites', '×1.08')] });
 defineItem({ id: 'guidemap', name: 'Arvid’s guiding map', short: 'Arvid’s map', kind: 'map', w: 2, h: 2, kg: 0.05, unique: true, icon: 'guidemap', identity: 'An old Fisher sheet, pencilled', model: 'map', onYou: [O('A site', 'pencilled on your map'), EF('rest', 0.08, 'a night there')] });
-defineItem({ id: 'lure:cedarminnow', name: 'Eino’s cedar minnow', short: 'Cedar', kind: 'lure', kg: 0.02, unique: true, lure: 'cedarminnow', identity: 'Carved white cedar, painted by hand', model: 'lure', tint: 0x6f8a52, onYou: [lureOn('cedarminnow')] });
+defineItem({ id: 'lure:cedarminnow', name: 'Oskar’s cedar minnow', short: 'Cedar', kind: 'lure', kg: 0.02, unique: true, lure: 'cedarminnow', identity: 'Carved white cedar, painted by hand', model: 'lure', tint: 0x6f8a52, onYou: [lureOn('cedarminnow')] });
 export const UNIQUE_IDS = ['hatchet', 'brassreel', 'matchsafe', 'toque', 'luckycap', 'guidemap', 'lure:cedarminnow'];
 export const ARTIFACT_IDS = ['axehead', 'tradesilver']; // found and left where they lie
+
+// --- gl-c: the old gear from the back room, and what is in the old tent ---------------------------------------------
+// The game-loop round's onboarding (docs/build/game-loop-brief.md, stream C; the story canon docs/story/00-owner-decisions.md):
+// busy season, rentals out, and the summer help at your home counter digs out old gear that never gets rented because
+// it's old. It works, just not modern. Nothing here names whose it was, and nothing says what it is for: the canvas pack
+// has pack #3's room and is heavier; the canvas tent pitches as the A-frame (tent.js kindOf reads tentKind) and sleeps as
+// it; the dented stove lights under a pot like the canister stove (its own `stove` verb, cook.js). The notebook turns
+// up in the old tent the first night you sleep in it (walt.js), and reads as a paper (its Read, walt.js readVerb).
+VERBS.read = { label: 'Read', words: 'Its pages, by the light you have.' };
+defineItem({ id: 'waltpack', name: 'Old canvas Duluth pack', short: 'Old pack', kind: 'container', w: 4, h: 5, kg: 2.7, price: 0, wear: ['back', 'chest'], mesh: 'food', container: { cols: 6, rows: 8 }, icon: 'pack', identity: 'Canvas, patched at the corners · room 6 × 8' });
+defineItem({ id: 'walttent', name: 'Old canvas tent', short: 'Canvas tent', kind: 'gear', w: 2, h: 4, kg: 4.6, price: 0, slot: 'tent', tentKind: 'aframe', icon: 'tent', model: 'tentbag', tint: 0x8d8462, identity: 'Heavy canvas, a ridge pole, two A-poles', onYou: [EF('rest', AFRAME_SLEEP, 'a night')] });
+defineItem({ id: 'waltstove', name: 'Dented brass stove', short: 'Old stove', kind: 'tool', kg: 0.6, price: 0, icon: 'stove', model: 'stove', tint: 0xb8923a, identity: 'Brass burner, a dent in its side',
+  verbs: [{ id: 'stove', label: 'Light it under the pot' }, { id: 'hand', label: 'Put in hand' }] });
+defineItem({ id: 'waltnotebook', name: 'Small notebook', short: 'Notebook', kind: 'tool', kg: 0.15, price: 0, unique: true, icon: 'waltnotebook', model: 'book', identity: 'Pencil, in an old hand · the pages swollen',
+  verbs: [{ id: 'read', label: 'Read' }, { id: 'hand', label: 'Put in hand' }] });
+export const WALT_IDS = ['waltpack', 'walttent', 'waltstove', 'waltnotebook'];

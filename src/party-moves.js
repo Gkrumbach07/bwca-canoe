@@ -811,6 +811,7 @@ export class PartyMoves {
     L.talkHold = MOVES.talkFor;
     C.greeted.set(L.party.id, T);
     this.say(L, i, line, PRI.reply);
+    if (this.people && typeof this.people.emitTalk === 'function') this.people.emitTalk({ kind: 'party', partyId: L.party.id, moving: true }); // gl-e: people.onTalk (the lake: where you are)
     return line;
   }
 

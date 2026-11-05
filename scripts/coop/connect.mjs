@@ -71,7 +71,7 @@ function watch(page, name) {
   page.on('pageerror', (e) => log(`[${name}] pageerror`, e.message));
   page.on('console', (m) => { if (m.type() === 'error' || /coop/i.test(m.text())) log(`[${name}] ${m.type()}`, m.text().slice(0, 300)); });
 }
-const loaded = (page) => page.waitForFunction(() => window.__game && window.__game.coop && window.__game.title && window.__game.coopSky && window.__game.coopGive, null, { timeout: 240000, polling: 500 });
+const loaded = (page) => page.waitForFunction(() => window.__game && window.__game.coop && window.__game.title && window.__game.coopSky && window.__game.coopGive && typeof window.__game.step === 'function', null, { timeout: 240000, polling: 500 });
 async function openGame(b, query = '') {
   const page = await b.ctx.newPage();
   watch(page, b.name);

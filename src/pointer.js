@@ -523,7 +523,7 @@ export function peopleTargets(people) {
       if (!b.who) continue;
       const v = b.who.person, f = v.figs && v.figs[b.who.fig];
       if (!f) continue;
-      const reach = v.keeper ? 2.9 : 2.3;
+      const reach = v.keeper || v.extra ? 2.9 : 2.3; // (the counter's people: the keeper, and gl-c's summer help beside them)
       if (near.flat(f.x, f.z) > reach) continue;
       // the rod runs up the body from where the figure is drawn (f.y: a store's floor stands 0.3 m and more over the
       // terrain, so the ground under it put the rod low and only the legs and belly took the dot, the owner: "peoples

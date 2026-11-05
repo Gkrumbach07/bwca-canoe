@@ -183,14 +183,15 @@ export class Inventory {
   mk(item, where, at = null) { const d = itemDef(item); return { id: this.uid('c'), item, name: d ? d.name : item, grid: [], where, at, in: null, hand: null }; }
 
   // --- a new season, and the migration of an older one -------------------------------------------------------------
-  // The starting kit (items.js STARTER_KIT): a Duluth pack #3 with the tent, the bag, the clothes, the pot, the tarp,
-  // the tablets and the tackle box (a jig and a Mepps); the 30 L food barrel, empty (the content join); the leech bucket
-  // with a dozen; the stringer; the ash paddle and the rod. All of it in the canoe, tied up at the home store's dock.
+  // The starting kit (items.js STARTER_KIT): the 30 L food barrel, empty (the content join); the leech bucket with a
+  // dozen; the stringer; the ash paddle and the rod, in the canoe tied up at the home store's dock; and your own things
+  // (the bag, the pad, the clothes, the tarp, the tablets and the tackle box with a jig and a Mepps) kept in the
+  // outfitters' crate until the old pack from the back room takes them (gl-c, onboarding.js).
   newSeason() {
     this.containers = []; this.long = []; this.n = 1;
     this.season = this.profile ? this.profile.seasonId : null;
     this.ensureFixed();
-    const K = STARTER_KIT, made = {};
+    const K = STARTER_KIT, made = { crate: this.crate }; // (gl-c: your own things wait in the crate till the old pack comes, onboarding.js)
     for (const it of K.canoe) made[it] = this.addContainer(it, 'canoe', null, { quiet: true });
     for (const [host, list] of Object.entries(K)) {
       if (host === 'canoe' || host === 'long') continue;

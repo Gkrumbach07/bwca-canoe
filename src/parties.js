@@ -46,8 +46,20 @@
 //   parties.legsOn(absDay) -> [{ party, k }]   parties.legPlan(party, k)   parties.crewOf(party)
 //   parties.arrivalOf(stay), parties.departureOf(stay)   (party-camps.js: the camp comes up as they land)
 //   parties.seenIn   stays whose landing you see (party-moves.js): their camp may come up while you look
+//
+// gl-e (the game-loop round, stream E: the people are real). What a party has to tell you comes from its own trip and
+// nothing else: storyOf(party, T) is the nights so far and tonight's (each at its site's lake), the lakes in order, what
+// they caught on them (catchOf: seeded per party and night from each lake's own water, as the keepers' hints read it),
+// what they saw (seeded, in its season: a cow moose and calf, loons with a chick, an eagle, a wolf's tracks, a bear in
+// the berries), the days they sat out wind-bound (a layover day whose afternoon the forecast's windDay puts whitecaps on
+// the big lakes) and the night they found the site they wanted taken (the sweep's first choice held by another). A
+// party coming out on day T is in leaving(ep, T): their trip ends where it began, so they come back to their entry
+// point. Pure functions of the schedule, the season and the forecast, like the rest; nothing saved.
+//   parties.leaving(ep, T) → [party]   parties.storyOf(party, T) → { stays, lakes, tonight, catch, seen, windbound, taken,
+//     ahead, home }   parties.catchOf(party, T) → [{ sp, n, bestCm }]   parties.stayLake(stay) → lake id (0: none)
 import { mulberry32 } from './rng.js';
 import { seasonAt } from './season.js';
+import { abundanceOf } from './outfitters.js'; // gl-e: a lake's fish as the keepers read them (read only)
 import SITE_LAKES from './site-lakes.json';
 
 // The daily overnight paddle quotas (May 1 – Sep 30) by entry point number. p2 C: checked against the real numbers,
@@ -111,6 +123,27 @@ export const MOVE = {
   pace: { pair: 1, friends: 1, family: 0.86, group: 0.9, solo: 1.08 },
 };
 
+// gl-e: what their trip gives them to tell (storyOf, catchOf)
+export const STORY = {
+  back: 12,          // days before T a party coming out may have put in (the longest trip and a margin)
+  windbound: 6.5,    // m/s: a layover day's afternoon peak (weather.windDay) that put whitecaps on the big lakes
+  seen: 0.45,        // the chance of a sighting a stay
+  keen: { pair: 1, friends: 1.05, family: 0.8, group: 0.7, solo: 1.15 }, // how much each kind fishes
+  len: { walleye: [33, 62], pike: [48, 95], smallmouth: [28, 48], laketrout: [45, 80], perch: [16, 30], crappie: [20, 34] }, // cm, the best of a night
+};
+// what a party may have seen, each in its season (doy, seasonAt)
+export const SEEN = [
+  { id: 'moose', when: (d) => d >= 150 && d <= 290 },        // a cow and her calf (calves come late May)
+  { id: 'loonchick', when: (d, s) => d >= 175 && d <= 240 && s.loons > 0.5 },
+  { id: 'loons', when: (d, s) => s.loons > 0.5 },
+  { id: 'eagle', when: (d) => d >= 100 && d <= 320 },
+  { id: 'wolf', when: (d) => d >= 120 && d <= 330 },          // tracks on a portage
+  { id: 'bear', when: (d) => d >= 190 && d <= 245 },          // in the blueberries
+  { id: 'otter', when: (d, s) => s.ice < 0.3 },
+  { id: 'beaver', when: (d, s) => s.ice < 0.3 },
+];
+export const ymdOf = (n) => { const d = new Date(n * 86400000), y = d.getUTCFullYear(); return { year: y, doy: n - Math.round(Date.UTC(y, 0, 0) / 86400000) }; };
+
 export const PARTY = 'party:';
 const AREA = 25; // m round a site's ring that are its area (camp.js AREA_R)
 export const absDay = (year, doy) => Math.round(Date.UTC(year, 0, doy) / 86400000); // as trip.js and tasks.js
@@ -147,7 +180,8 @@ export class Parties {
     this.sig = '';
     this.index();
   }
-  attach({ registry = null, camp = null, player = null, camera = null, settings = null, inventory = null, fires = null } = {}) {
+  attach({ registry = null, camp = null, player = null, camera = null, settings = null, inventory = null, fires = null, weather = null } = {}) {
+    if (weather) this.weather = weather; // gl-e: the forecast's windDay, for the days they sat out
     if (registry) { this.registry = registry; registry.spoken = (key) => this.spokenSet.has(key); }
     if (inventory) this.inventory = inventory;
     if (fires) this.fires = fires;
@@ -646,6 +680,99 @@ export class Parties {
     return [...out];
   }
   partiesNear(x, z, r) { const out = []; for (const c of this.live.values()) if (Math.hypot(c.site.x - x, c.site.z - z) < r) out.push(c.party); return out; }
+
+  // --- gl-e: their trip, as they would tell it --------------------------------------------------------------------
+  // the parties whose trip ends at ep on day T (out the way they came in): those that put in up to STORY.back days before
+  leaving(ep, T) {
+    const out = [];
+    for (let d = T - STORY.back; d <= T; d++) for (const p of this.entering(ep, d)) if (p.exit === T && p.stays.length) out.push(p);
+    return out;
+  }
+  // the lake a stay's site is on (the sweep's site; the basin's biggest named lake when it found none), 0 for none
+  stayLake(s) {
+    const i = this.block(s.start).site.get(s);
+    if (i != null && i >= 0) { const id = this.siteLake[i]; if (id > 0 && this.world.lakeName(id)) return id; }
+    if (s._lake != null) return s._lake;
+    let best = 0, bc = 0;
+    for (const k of this.sitesIn(s.basin)) { const id = this.siteLake[k], l = id > 0 ? this.world.lakes[id - 1] : null; if (l && l.cells > bc && this.world.lakeName(id)) { bc = l.cells; best = id; } }
+    return (s._lake = best);
+  }
+  // the night they found the site they wanted taken: the sweep gave them another than their first liking
+  firstTaken(s) {
+    const i = this.block(s.start).site.get(s), sites = this.sitesIn(s.basin), score = this.prefs(s);
+    if (!sites.length) return false;
+    let k0 = 0; for (let k = 1; k < sites.length; k++) if (score[k] < score[k0]) k0 = k;
+    return i !== sites[k0];
+  }
+  // what a lake gives a party that fishes it (as the keepers' hints read a lake: npcs.js fishOf), best first
+  fishOfLake(id) {
+    const l = id > 0 ? this.world.lakes[id - 1] : null; if (!l) return [];
+    const ha = l.cells / 100, depth = l.maxDepth || 0, secchi = l.secchi || 2.6, tp = l.tp || 0, river = !!(l.river || l.creek), ab = (sp) => abundanceOf(id, sp, l.cells), out = [];
+    if (depth >= 20) out.push(['laketrout', 0.6 + 0.5 * ab('laketrout')]);
+    if (ha >= 60 && !river && secchi < 3.2) out.push(['walleye', 1.4 * ab('walleye')]);
+    if (ha >= 20 && !river && (tp >= 12 || secchi < 2.3)) out.push(['pike', 1.1 * ab('pike')]);
+    if (ha >= 40 && !river && secchi >= 3.4) out.push(['smallmouth', 1.1 * ab('smallmouth')]);
+    if (ha >= 10 && ha <= 160 && !river && secchi < 3) out.push(['perch', 0.8]);
+    if (river || (!out.length && ha >= 5)) out.push(['pike', 0.7 * ab('pike')]);
+    return out.sort((a, b) => b[1] - a[1]);
+  }
+  // what they caught by the end of day T: each night's evening and the morning after, on that stay's lake, seeded by
+  // the party and the night (none on ice; a group fishes less, a solo more): [{ sp, n, bestCm, lakes: [id] }], most first
+  catchOf(party, T = this.today) {
+    const by = new Map();
+    for (const s of party.stays) for (let d = s.start; d < s.end && d <= T; d++) {
+      if (d === T && this.day && this.today === T && this.day.hours < 19) continue; // (tonight's evening not fished yet)
+      const id = this.stayLake(s), fish = this.fishOfLake(id);
+      if (!fish.length || seasonAt(doyOfAbs(d)).ice > 0.4) continue;
+      const r = seeded(hashStr(party.id), d, 0xf15e), keen = STORY.keen[party.kind] ?? 1;
+      if (r() > 0.78 * keen) continue; // (an evening not fished)
+      const tot = fish.reduce((a, f) => a + f[1], 0);
+      let x = r() * tot, sp = fish[0][0]; for (const [q, w] of fish) { x -= w; if (x <= 0) { sp = q; break; } }
+      const n = Math.floor(r() * 4 * keen), L = STORY.len[sp] || [30, 60];
+      if (!n) continue;
+      const best = Math.round(L[0] + (L[1] - L[0]) * Math.pow(r(), 1.6));
+      const c = by.get(sp) || { sp, n: 0, bestCm: 0, lakes: [] };
+      c.n += n; c.bestCm = Math.max(c.bestCm, best); if (!c.lakes.includes(id)) c.lakes.push(id);
+      by.set(sp, c);
+    }
+    return [...by.values()].sort((a, b) => b.n - a.n);
+  }
+  // Their trip as of day T (hours: the clock's, for "tonight" and "last night"): only what happened in it.
+  //   stays [{ abs, end, lake (id), name, nights, site }] the nights so far (a stay begun by T), ahead [same] the ones to
+  //   come, lakes [names, in order], tonight (name | null), catch (catchOf), seen [{ what, lake, abs }], windbound
+  //   [{ abs, lake, peak }], taken [{ abs, lake }], home (on the way out today)
+  storyOf(party, T = this.today) {
+    const W = this.world, stays = [], ahead = [];
+    for (const s of party.stays) {
+      const id = this.stayLake(s), rec = { abs: s.start, end: s.end, lake: id, name: id ? W.lakeName(id) : null, nights: s.end - s.start, stay: s };
+      (s.start <= T ? stays : ahead).push(rec);
+    }
+    const lakes = [];
+    for (const s of stays) if (s.name && !lakes.includes(s.name)) lakes.push(s.name);
+    const cur = party.stays.find((s) => s.start <= T && s.end > T), tonight = cur ? (W.lakeName(this.stayLake(cur)) || null) : null;
+    // the days they sat out: a layover day (a night at the same site before and after) the forecast blew on
+    const windbound = [];
+    if (this.weather && typeof this.weather.windDay === 'function') {
+      for (const s of stays) for (let d = s.abs + 1; d < s.end && d <= T; d++) {
+        if (d === T && this.day && this.day.hours < 14) continue; // (today's afternoon not come yet)
+        const { year, doy } = ymdOf(d); let w = null;
+        try { w = this.weather.windDay(year, doy); } catch { w = null; }
+        if (w && (w.blow || w.peak >= STORY.windbound)) windbound.push({ abs: d, lake: s.name, peak: w.peak });
+      }
+    }
+    const taken = [];
+    for (const s of stays) if (s.name && s.stay !== party.stays[0] && this.firstTaken(s.stay)) taken.push({ abs: s.abs, lake: s.name });
+    // what they saw: one seeded sighting a stay at most, in its season and on that stay's lake
+    const seen = [];
+    for (const s of stays) {
+      if (!s.name || (s.abs === T && this.day && this.today === T && this.day.hours < 17)) continue; // (not there yet)
+      const r = seeded(hashStr(party.id), s.abs, 0x5ee), doy = doyOfAbs(s.abs), se = seasonAt(doy);
+      const list = SEEN.filter((q) => q.when(doy, se));
+      if (!list.length || r() > STORY.seen) continue;
+      seen.push({ what: list[Math.floor(r() * list.length)].id, lake: s.name, abs: s.abs });
+    }
+    return { party: party.id, ep: party.ep, day: party.day, exit: party.exit, stays: stays.map(({ stay, ...x }) => x), ahead: ahead.map(({ stay, ...x }) => x), lakes, tonight, catch: this.catchOf(party, T).map((c) => ({ ...c, lake: c.lakes.length ? W.lakeName(c.lakes[0]) : null })), seen, windbound, taken, home: party.exit === T };
+  }
   // the console's and the tests' summary
   stats(T = this.today) {
     const blk = this.block(T), out = { day: T, block: blk.b, stays: blk.stays.length, campedTonight: 0, homeless: 0, live: this.live.size, spoken: this.spokenSet.size, traffic: this.traffic, entering: 0 };

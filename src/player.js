@@ -131,7 +131,6 @@ const SNOW_WALK = { slow: 0.9, max: 0.4, trail: 0.5 };
 const MIRE_PLACE = { [KIND.openBog]: 'Open bog', [KIND.coniferBog]: 'Spruce bog', [KIND.shrubSwamp]: 'Alder swamp', [KIND.marsh]: 'Marsh', [KIND.wetMeadow]: 'Wet meadow', [KIND.hardwoodSwamp]: 'Ash swamp', [KIND.water]: 'Beaver flowage' };
 const TRAIL_TO_WATER = 2.5;   // tuning: a trail's end farther than this up the bank runs on down to the waterline (trailFor)
 const TRAIL_PUT_MAX = 30;     // tuning: and no farther than this from the end to the waterline (a sanity bound: the Hudson–Lake Four end is 19 m)
-const HULL_REACH = 3;         // metres from a canoe on the ground within which you can shoulder or launch it
 const GROUNDS = 40;           // metres around an outfitter's landing that are its cleared yard and dock
 const CAMP_AREA = 25;         // fb3 A: metres round a campsite within which you walk at life on the idle clock (camp.js AREA_R)
 const FLOAT_SD = -3.5;        // shoreAt where a canoe floats clear (the paddle wants 1.2 m under the middle and 0.5 m under the ends)
@@ -1763,9 +1762,10 @@ export class Player {
     if (c.drop) {
       // fb3 A: the canoe lying by has no keys of its own on this line: the dot on the hull offers E Get in (fb4 A: or,
       // beached, a held E Push it off) and Q Shoulder it (packs.js hullAction, nearby.js)
-      const d = c.drop, dd = Math.hypot(d.x - this.x, d.z - this.z);
+      // (no "The canoe is 80 ft away": packs.js says nothing of the canoe's distance outdoors, and this line was left to
+      // speak only where packs.js steps aside, in a store and over its cards: the world shows the canoe, the game-loop play)
       c.choice = false;
-      this.say(note || trailText || (dd <= HULL_REACH ? null : `The canoe is ${fmtDist(dd)} away`));
+      this.say(note || trailText || null);
       return;
     }
     // carrying: launch at a trail end where the map says, or at any shore with a metre of water within reach,

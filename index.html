@@ -180,16 +180,17 @@
           <p class="sub" id="confirm-sub"></p>
           <div class="row"><button id="btn-confirm" class="item" type="button">Start a new season</button><button id="btn-keep" class="item" type="button">Keep the season</button></div>
         </div>
-        <!-- the new season as steps (src/wizard.js): where you start, when, then the season in a few lines and Start -->
+        <!-- the new season as steps (src/wizard.js): where you start (a map of the outfitters), when, then the season in a few lines and Start -->
         <div class="entries wizard" id="entry-card" hidden>
           <div class="sc kicker">New season</div>
           <section class="wstep" data-step="home">
             <p class="wq">Where does the season start?</p>
-            <ul id="entry-list" role="list"></ul>
+            <!-- gl-c: the outfitters as a map, a card for the one under the pointer (src/startmap.js) -->
+            <div id="start-map"></div>
           </section>
           <section class="wstep" data-step="date" hidden>
             <p class="wq when"></p>
-            <div class="cal" tabindex="0" role="slider" aria-label="The day you put in">
+            <div class="cal" tabindex="0" role="slider" aria-label="The day the season starts">
               <div class="bands"></div>
               <div class="months"></div>
               <span class="today" title="today" hidden></span>
@@ -199,7 +200,7 @@
             <p class="wkeys"><kbd>← →</kbd> a day <kbd>Shift</kbd> a week <kbd>PgUp PgDn</kbd> a month</p>
           </section>
           <section class="wstep" data-step="sum" hidden>
-            <p class="wq">Ready to put in</p>
+            <p class="wq">Ready to start</p>
             <div class="wsum"></div>
             <button id="btn-start" class="item current" type="button">Start the season</button>
           </section>
