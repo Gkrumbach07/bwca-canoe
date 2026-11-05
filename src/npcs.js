@@ -2276,6 +2276,8 @@ export class People {
   }
   kChoices(v) {
     const ch = this.charOf(v.ep), m = ch ? ch.manner : 'warm', ws = this.wordState(v.ep), list = this.wordList(v), out = [];
+    // (the start round: what another module asks of a keeper first, starter.js's first night out; each (v) → a choice or null)
+    for (const f of this.extraChoices || []) { try { const c = f(v); if (c) out.push(c); } catch (e) { console.warn('people: a keeper choice', e); } }
     const more = list.slice(ws.n).some((x) => !this.said.has(x.text)), none = this.fresh(NO_WORD[m] || NO_WORD.warm);
     if (more || none) out.push({ text: ws.n ? 'Anything else on the water?' : 'What’s the word on the water?', dim: !more, go: () => this.kWord(v) });
     const beat = this.arcBeat(v.ep);

@@ -30,7 +30,7 @@ import { Ripples } from './wake.js';
 import { Wind } from './wind.js';
 import { Fishing } from './fishing.js';
 import { Energy, GULP } from './energy.js';
-import { Tasks } from './tasks.js';
+import { Tasks, siteFeature } from './tasks.js';
 import { Outfitter } from './outfitter.js';
 import { Settings, FpsCounter } from './settings.js';
 import { TripSaver } from './save.js';
@@ -111,6 +111,7 @@ import { Permits } from './permits.js'; // gl-a: permits
 import { PermitDesk } from './permit-desk.js'; // gl-a: the permit desk
 import { story } from './story-hooks.js'; // gl-c: the story's event bus and saved state
 import { onboarding } from './onboarding.js'; // gl-c: the home counter's first visit, the old gear
+import { starter } from './starter.js'; // the start round: each outfitter's first night out, the season's sky and its kind first days
 import { walt } from './walt.js'; // gl-c: the notebook in the old tent
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
@@ -1194,6 +1195,40 @@ async function main() {
     const dueE = hints.due.bind(hints);
     hints.due = (id, rec) => (id === storeParty.id ? npcs.partyHere() : dueE(id, rec));
   }
+  // The start round (2026-11-05; starter.js). The owner: "sometimes just randomly you can start and it will be raining …
+  // In the intro, it should be very easy and take you on a very simple route … each outfitter has a starter route and task
+  // that gets you a little bit more money." The weather is the season's own (its seed from the season), kind over the
+  // first trip (weather.js GENTLE); each outfitter's first night out is suggested once a season (at home as the first
+  // talk ends, elsewhere when you ask the keeper), its way pencilled on your map, a small job with it, the site held.
+  {
+    starter.attach({ tasks, profile, outfitter, npcs, onboarding, parties, weather, trip, day, world, hud });
+    onboarding.attach({ starter });
+    starter.sync();
+    // the keeper's first choice at an outfitter whose first night you have not heard
+    npcs.extraChoices = npcs.extraChoices || [];
+    npcs.extraChoices.push((v) => {
+      if (!v || !starter.available(v.ep) || onboarding.pending(v.ep)) return null;
+      const home = Number(v.ep) === starter.home;
+      return { text: home ? 'Somewhere easy for a night out?' : 'First time here. Somewhere easy for a night?', tag: 'new', go: () => starter.talk(v.ep, () => ({ say: 'Anything else?', filler: true, choices: npcs.kChoices(v) })) };
+    });
+    // the site suggested is yours from the hour it was suggested, while it stands (parties.js mine)
+    const mineS = parties.mine.bind(parties);
+    parties.mine = () => { const out = mineS(); try { for (const h of starter.holds()) { const o = out.find((q) => q.i === h.i); if (o) o.since = Math.min(o.since, h.since); else out.push(h); } } catch (e) { console.warn('starter: holds', e); } return out; };
+    const updS = outfitter.update.bind(outfitter);
+    outfitter.update = (dt) => { updS(dt); starter.update(dt); };
+    // the moments: the first paddle out says where the pencilled way is; new water says the keeper knows an easy night
+    const sAsk = { id: 'starter:ask', prio: 1, recur: 'once', text: 'New water. The keeper knows an easy first night: {E} to talk.' };
+    if (!MOMENTS.some((q) => q.id === sAsk.id)) MOMENTS.push(sAsk);
+    const dueS = hints.due.bind(hints);
+    hints.due = (id, rec) => {
+      if (id === sAsk.id) { const v = outfitter.visit; return !!(v && v.inside && Number(v.ep) !== starter.home && starter.available(v.ep) && !talk.talking && !outfitter.open); }
+      const r = dueS(id, rec);
+      if (id === 'start' && r) { let n = []; try { n = starter.notes(); } catch { n = []; } if (n.length) return { lv: 1, text: 'Your first night’s way is pencilled on your map: {M}.' }; }
+      return r;
+    };
+    window.__game.starter = starter;
+  }
+  window.__game.siteFeature = siteFeature; // (scripts/r2-starter-routes.mjs: a site's kind of shore)
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
 
   // fb3 join: a NaN never freezes the game. Once (the join's test aimed at an undefined point: the heading was NaN for a few

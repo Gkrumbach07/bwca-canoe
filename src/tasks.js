@@ -64,7 +64,7 @@ const STANDING = 0.25;       // standing with an outfitter for each notice claim
 // gl-d: each kind's deadline in game days from the day it is taken (the owner's table, docs/plans/campaigns.md "Board
 // tasks"; the loon count's is its week). No cap on how many you hold: the deadlines are the only limit.
 export const KIND_DAYS = { fish: 3, lunch: 3, firewood: 3, berries: 5, item: 7, deadfall: 7, litter: 7, fetch: 7, npc: 7, survey: 10, secchi: 10,
-  creel: 10, campsite: 10, beaver: 10, colour: 10, report: 14, photo: 14, pma: 14, iceout: 5, lastcheck: 7, loons: 7 };
+  creel: 10, campsite: 10, beaver: 10, colour: 10, report: 14, photo: 14, pma: 14, iceout: 5, lastcheck: 7, loons: 7, starter: 3 };
 const DAYS_ELSE = 7;
 const MISSED_KEEP = 30;      // the missed notices kept for the journal
 // a missed notice's line, by kind, from whoever posted it ({who}: the first word of the signature; {they}: someone else)
@@ -78,7 +78,7 @@ const MISSED_WORDS = {
   secchi: ['The reading went in without you.'], loons: ['The count went in without your numbers.'], creel: ['The creel survey closed without you.'],
   photo: ['They went with somebody else’s picture.'], colour: ['The magazine went with somebody else’s picture.'],
   berries: ['The café found berries from {they}.'], firewood: ['Somebody else brought the wood in.'],
-  fetch: ['It came over on the road in the end.'], npc: ['{Who} found another way.'],
+  fetch: ['It came over on the road in the end.'], npc: ['{Who} found another way.'], starter: ['Somebody else looked the site over.'],
 };
 const THEY = ['the Hendersons', 'a party from Duluth', 'the Scouts', 'the Larsons', 'a couple from Iowa', 'a guide’s party'];
 const SHE = /^(Deb|Marge|Lorraine|Mrs|Ruth|Anna|Karen|Linda|Mary|Jean|Sue|Deborah|Ingrid|Elsa)/, HE = /^(Arnie|Hank|Bob|Jim|Olaf|Gus|Oskar|Arvid|Mr)/;

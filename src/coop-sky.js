@@ -28,11 +28,18 @@ export class CoopSky {
     const e = this.wind && this.wind.puffEv, fresh = e && e.n !== this.puffN;
     if (!fresh && now - this.lastT < SKY_EVERY) return;
     this.lastT = now; if (e) this.puffN = e.n;
-    this.coop.send({ t: 'sky', ts: Math.round(now), seed: this.weather ? this.weather.seed : null, w: this.wind ? this.wind.state() : null });
+    this.coop.send({ t: 'sky', ts: Math.round(now), seed: this.weather ? this.weather.seed : null, gentle: this.weather ? this.weather.gentle : null, w: this.wind ? this.wind.state() : null });
   }
   onSky(m, at) {
     if (this.coop.role !== 'guest') return;
+    // (the start round: the seed is the season's now, so this browser's own is taken as it first follows; and the host's
+    // first-trip kind weather comes with it)
+    if (this.weather && !this.following) { this.following = true; this.home = this.weather.seed; this.homeGentle = this.weather.gentle; }
     if (this.weather && Number.isInteger(m.seed)) this.weather.setSeed(m.seed);
+    if (this.weather && 'gentle' in m) {
+      const g = m.gentle && Number.isFinite(m.gentle.from) ? m.gentle : null, o = this.weather.gentle;
+      if (!g !== !o || (g && (g.from !== o.from || g.to !== o.to))) { this.weather.gentle = g ? { from: g.from, to: g.to } : null; this.weather._lastAbs = NaN; }
+    }
     const lag = this.coop.lagOf(m, at);
     if (this.wind && m.w) this.wind.setState(m.w, lag);
     this.got++; this.lastLag = lag;
@@ -41,6 +48,8 @@ export class CoopSky {
   alone() {
     if (this.wind && this.wind.follow) this.wind.unfollow();
     if (this.weather && Number.isInteger(this.home)) this.weather.setSeed(this.home);
+    if (this.weather && this.following) this.weather.gentle = this.homeGentle || null;
+    this.following = false;
   }
   stats() {
     const w = this.wind, wx = this.weather;
