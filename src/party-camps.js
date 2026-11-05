@@ -415,9 +415,10 @@ export class PartyCamps {
   // get up and walk there (npcs.js walkOn: the store people's walk, eased in and out, the gait's feet), and settle into
   // the job's pose at the end. Placed at once only the first time (the camp just drawn) or from far off.
   goTo(f, s, id, spec, G) {
-    const y = G(s.x, s.z);
+    const y = G(s.x, s.z), h = this.day ? this.day.hours : 0, was = f.lastH;
+    f.lastH = h; // (placed a moment ago, not from hours back: the clock moved on, a Rest, the camp just drawn: placed at once)
     if (f.at !== id) {
-      const d = Math.hypot(s.x - f.x, s.z - f.z), walk = f.placed && Number.isFinite(d) && d > 0.35 && d < 90 && this.people && typeof this.people.walkOn === 'function';
+      const d = Math.hypot(s.x - f.x, s.z - f.z), walk = f.placed && was != null && Math.abs(h - was) < 0.02 && Number.isFinite(d) && d > 0.35 && d < 60 && this.people && typeof this.people.walkOn === 'function';
       f.at = id; f.home = s.heading;
       if (walk) { f.goal = { x: s.x, z: s.z, y, heading: s.heading, spec }; f.path = [{ x: s.x, z: s.z, y }]; return; }
       f.heading = s.heading; f.path = null;
