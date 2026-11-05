@@ -612,6 +612,6 @@ defineItem({ id: 'waltpack', name: 'Old canvas Duluth pack', short: 'Old pack', 
 defineItem({ id: 'walttent', name: 'Old canvas tent', short: 'Canvas tent', kind: 'gear', w: 2, h: 4, kg: 4.6, price: 0, slot: 'tent', tentKind: 'aframe', icon: 'tent', model: 'tentbag', tint: 0x8d8462, identity: 'Heavy canvas, a ridge pole, two A-poles', onYou: [EF('rest', AFRAME_SLEEP, 'a night')] });
 defineItem({ id: 'waltstove', name: 'Dented brass stove', short: 'Old stove', kind: 'tool', kg: 0.6, price: 0, icon: 'stove', model: 'stove', tint: 0xb8923a, identity: 'Brass burner, a dent in its side',
   verbs: [{ id: 'stove', label: 'Light it under the pot' }, { id: 'hand', label: 'Put in hand' }] });
-defineItem({ id: 'waltnotebook', name: 'A small notebook', short: 'Notebook', kind: 'tool', kg: 0.15, price: 0, unique: true, icon: 'waltnotebook', model: 'book', identity: 'Pencil, in an old hand · the pages swollen',
+defineItem({ id: 'waltnotebook', name: 'Small notebook', short: 'Notebook', kind: 'tool', kg: 0.15, price: 0, unique: true, icon: 'waltnotebook', model: 'book', identity: 'Pencil, in an old hand · the pages swollen',
   verbs: [{ id: 'read', label: 'Read' }, { id: 'hand', label: 'Put in hand' }] });
 export const WALT_IDS = ['waltpack', 'walttent', 'waltstove', 'waltnotebook'];

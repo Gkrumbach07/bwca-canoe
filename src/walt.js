@@ -68,15 +68,20 @@ export class Walt {
     const lake = id && w.lakeName ? w.lakeName(id) || null : null; // (the site's lake: the water beside it)
     return this.find({ key: c.key ?? e.key ?? null, lake });
   }
-  // the notebook found: into the tent (its floor's pile), else where it fits, else kept for you; the story told; the card
+  // the notebook found: into your pocket, else the tent (its floor's pile), else where it fits, else kept for you; the story
+  // told; the card
   find({ key = null, lake = null } = {}) {
     if (this.found) return false;
     const inv = this.t.inventory, d = this.t.day, s = this.t.story;
     let put = false;
     if (inv) {
       try {
-        const pile = typeof inv.tentPile === 'function' ? inv.tentPile(true) : null;
-        put = !!(pile && inv.put(pile, 'waltnotebook'));
+        // (into your pocket first: read by headlamp, it stays on you; on the tent's floor it went out by the door with the
+        // strike, the story's one item left on the ground at the site: the playthrough)
+        const pk = inv.pockets;
+        put = !!(pk && inv.put(pk, 'waltnotebook'));
+        const pile = !put && typeof inv.tentPile === 'function' ? inv.tentPile(true) : null;
+        if (!put) put = !!(pile && inv.put(pile, 'waltnotebook'));
         if (!put) put = inv.place('waltnotebook', 1, { crate: true, all: true }).placed > 0;
         if (typeof inv.write === 'function') inv.write();
       } catch (err) { console.warn('walt: the notebook', err); }
