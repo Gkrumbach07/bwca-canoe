@@ -4,7 +4,7 @@ import { mulberry32, hash2 } from './rng.js';
 import { surfaceAt, meshHeightAt } from './terrain-build.js';
 import { withoutRamps } from './ramps.js'; // round ramps
 import { rockGeometry, makeRockMaterial, makeToonMaterial } from './rocks.js';
-import { outfitterName, isOutfitter, trailheadName, outfitterProfile } from './outfitters.js'; // (the game-loop round: the fourteen outfitters, the rest trailheads)
+import { outfitterName, isOutfitter, trailheadName, outfitterProfile, notePlace } from './outfitters.js'; // (the game-loop round: the fourteen outfitters, the rest trailheads)
 import { setTrailhead, LOT_R } from './trailhead.js';
 import { bedding, seatRock, ROCK_FOOT, ROCK_KIND, TRAIL } from './placement.js';
 import { RockShape } from './collide.js';
@@ -2277,6 +2277,7 @@ function* buildStore(ctx, F, rng, ep, group, pieces, dock, site) {
     boardCanvas: cv, boardTex: tex, mesh, glass,
   };
   stores.set(ep.ep, L);
+  notePlace(L); // round 2 markers: where the store stands, for a release outfitter-places.json was not made for
   storeNews.push(L);
   took.push(+(performance.now() - t1).toFixed(1));
   geo.addEventListener('dispose', () => { if (stores.get(ep.ep) === L) { stores.delete(ep.ep); tellStore(null, ep.ep); } tex.dispose(); });
@@ -2541,15 +2542,23 @@ function wayHeading(way, fx, fz) {
   const dx = p[0] - fx, dz = p[1] - fz, L = Math.hypot(dx, dz);
   return L > 1 ? { x: dx / L, z: dz / L } : null;
 }
+// Where a campsite's fire ring is built: back from its point when that is near the water and, for a site the data puts
+// out on the lake (65 of them), on up the bank to CAMP_FIRE_DRY metres from the shore (scripts/camp-access.mjs fireOf
+// does the same). tg: the site's tile (its shore distance and the way to deeper water). Round 2 markers: also what
+// scripts/r2-camp-fires.mjs writes to src/camp-fires.json, for the maps (world.js campSpot) without the tile.
+export function campFireAt(tg, c) {
+  const dir = tg.deeperDir(c.x, c.z);
+  let fx = c.x - dir.x * (c.shore < 4 ? 6 : 0), fz = c.z - dir.z * (c.shore < 4 ? 6 : 0);
+  for (let i = 0; i < 60 && tg.shoreAt(fx, fz) < CAMP_FIRE_DRY; i++) { const d = tg.deeperDir(fx, fz); fx -= d.x; fz -= d.z; }
+  return { x: fx, z: fz };
+}
 function buildCampsite(ctx, c, pieces, ledges) {
   const { tg, ox, oz, H } = ctx;
   const crng = mulberry32(7 + (c.kx ?? Math.round(c.x)) * 31 + (c.kz ?? Math.round(c.z)) * 17);
   const a = hash2(c.kx ?? Math.round(c.x), c.kz ?? Math.round(c.z), 5) * 6.28; // (round flat: from the key, as camp-ramps.mjs reads it)
   const dir = tg.deeperDir(c.x, c.z);
-  let fx = c.x - dir.x * (c.shore < 4 ? 6 : 0), fz = c.z - dir.z * (c.shore < 4 ? 6 : 0);
-  // round world: a site the data puts out on the lake (65 of them) has its ring on up the bank, out of the water, to
-  // CAMP_FIRE_DRY metres from the shore (scripts/camp-access.mjs fireOf does the same)
-  for (let i = 0; i < 60 && tg.shoreAt(fx, fz) < CAMP_FIRE_DRY; i++) { const d = tg.deeperDir(fx, fz); fx -= d.x; fz -= d.z; }
+  const { x: fx, z: fz } = campFireAt(tg, c);
+  c.grate = { x: fx, z: fz }; // round 2 markers: the ring as built (scripts/r2-markers-test.mjs holds c.fire, the maps' spot, to it)
   const fy = H(fx, fz);
   // round world: the ledge lies down the way to the landing (world.js c.access), where that leaves the ring
   const A = c.access, toLand = A && A.way ? wayHeading(A.way, fx, fz) : null;

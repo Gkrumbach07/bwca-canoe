@@ -82,6 +82,9 @@ const resampleLine = (pts, step) => {
   return out;
 };
 
+// Round 2 markers: where a campsite is marked on a map: its fire ring (c.fire, setCampFires), else its spot
+export function campSpot(c) { return c && c.fire ? c.fire : c; }
+
 export class World extends GridQueries {
   static async load(onProgress = () => {}, base = DATA_URL) {
     onProgress(0.05, 'Reading map data…');
@@ -96,14 +99,16 @@ export class World extends GridQueries {
     // d1 lakes: and the agencies' lake facts (lake-facts.js), for the release they were joined to (their own chunk too)
     // round world: the campsites' landings, ways up and latrine trails (scripts/camp-access.mjs), for the release they
     // were worked out on (their own chunk too)
-    const [fixes, facts, access] = await Promise.all([
+    const [fixes, facts, access, fires] = await Promise.all([
       index.source && index.source.baked === FIXES_FOR ? import('./world-fixes.json').then((m) => m.default, () => null) : null,
       (index.version >= 4 ? import('./lake-facts-v4.json') : import('./lake-facts.json')).then((m) => m.default, () => null), // (d2 bake: each release its own, by its lake ids)
       import('./camp-access.json').then((m) => m.default, () => null),
+      import('./camp-fires.json').then((m) => m.default, () => null), // round 2 markers: each site's ring, for the maps
     ]);
     if (index.version >= 4) rapidsV4(); // d2 bake
     const w = new World(index, base, fixes);
     if (access && access.for === (index.source && index.source.baked) && !(typeof location !== 'undefined' && /[?&]access=off\b/.test(location.search))) w.setCampAccess(access); // (`?access=off`: as before, for a before and after)
+    if (fires && fires.for === (index.source && index.source.baked) && w.campAccess) w.setCampFires(fires);
     // d1 lakes (`?facts=off` leaves them out, for a before and after)
     const off = typeof location !== 'undefined' && /[?&]facts=off\b/.test(location.search);
     if (facts && !off && facts.for === (index.source && index.source.baked)) w.facts = new LakeFacts(facts, w);
@@ -218,6 +223,20 @@ export class World extends GridQueries {
   // kept as `baked`), and the connected portages appended after the release's own, so the indices saved survey tasks
   // hold stay good. A connected trail that walks on along others draws only its own piece (`tread`): props.js draws a
   // portage's `trailPts` when it has them, so the stretch it shares is drawn once, by the trail it belongs to.
+  // Round 2 markers (the owner, 2026-11-05: "the campsites also kind of get moved around a little bit, so those need to
+  // have their locations updated"): each site's fire ring where props.js builds it (scripts/r2-outfitter-places.mjs ->
+  // camp-fires.json: [dx, dz] decimetres from the site's spot after round flat's move), as c.fire { x, z }: where every
+  // map marks the site (campSpot). Only with the round-flat moves in (the table is from the moved spots).
+  setCampFires(table) {
+    let n = 0;
+    for (const c of this.campsites) {
+      const k = c.key || `${Math.round(c.x)}:${Math.round(c.z)}`, o = table.fires[k];
+      c.fire = o ? { x: c.x + o[0] / 10, z: c.z + o[1] / 10 } : { x: c.x, z: c.z };
+      if (o) n++;
+    }
+    this.campFires = n;
+    return n;
+  }
   applyFixes(f) {
     if (!f || f.for !== (this.meta.source && this.meta.source.baked)) return null;
     const named = (id) => { const l = id > 0 ? this.lakes[id - 1] : null; return l ? l.displayName || l.name || null : null; };

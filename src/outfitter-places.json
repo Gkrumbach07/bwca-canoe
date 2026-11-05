@@ -1,0 +1,468 @@
+{
+ "about": "Where each outfitter stands, laid out as the game lays it out (props.js buildOutfitterNow on the 10 m ground; the site is chosen there and kept), by entry point number: store (its middle), door ([x, z, heading], on the porch, facing out), steps (the foot of the porch steps), dockLand (the dock's land end), deck (on the dock by the first berth), dock (the water beside the dock where a canoe is tied: the spot a season, a ride or a pickup arrives at), dockHeading, floorY, fromEp (m from the entry point's own spot), doorShore/dockShore (the release's shore distance there). Written by scripts/r2-outfitter-places.mjs for the release `for` (index.json source.baked); read by outfitters.js placeOf; scripts/r2-markers-test.mjs holds it to the live build.",
+ "for": "2026-11-03T15:08:22.659Z",
+ "places": {
+  "1": {
+   "name": "Cold Spring Canoe Co.",
+   "store": [
+    -82369.5,
+    19574.6
+   ],
+   "door": [
+    -82371.4,
+    19578.6,
+    1.184
+   ],
+   "steps": [
+    -82372.7,
+    19582.3
+   ],
+   "dockLand": [
+    -82374.8,
+    19587.4
+   ],
+   "deck": [
+    -82376.8,
+    19593.5
+   ],
+   "dock": [
+    -82375.2,
+    19594.2
+   ],
+   "dockHeading": -1.958,
+   "floorY": 415.83,
+   "fromEp": 53,
+   "doorShore": 8.5,
+   "dockShore": -5.4
+  },
+  "6": {
+   "name": "Thimbleberry Outfitters",
+   "store": [
+    -55308,
+    10578.8
+   ],
+   "door": [
+    -55304.5,
+    10576.1,
+    -2.426
+   ],
+   "steps": [
+    -55301.3,
+    10573
+   ],
+   "dockLand": [
+    -55278.9,
+    10566.8
+   ],
+   "deck": [
+    -55276.3,
+    10563.9
+   ],
+   "dock": [
+    -55277.4,
+    10562.6
+   ],
+   "dockHeading": 0.716,
+   "floorY": 425.11,
+   "fromEp": 780,
+   "doorShore": 23.9,
+   "dockShore": -0.6
+  },
+  "12": {
+   "name": "Grey Jay Outfitters",
+   "store": [
+    -93584.7,
+    -19908.8
+   ],
+   "door": [
+    -93580.3,
+    -19908.1,
+    3.043
+   ],
+   "steps": [
+    -93575.3,
+    -19907.6
+   ],
+   "dockLand": [
+    -93569.9,
+    -19907.3
+   ],
+   "deck": [
+    -93563.4,
+    -19907.1
+   ],
+   "dock": [
+    -93563.3,
+    -19908.8
+   ],
+   "dockHeading": -0.099,
+   "floorY": 343.43,
+   "fromEp": 40,
+   "doorShore": 10.5,
+   "dockShore": -4.1
+  },
+  "16": {
+   "name": "Cattail Creek Outfitters",
+   "store": [
+    -65745.1,
+    -4502.9
+   ],
+   "door": [
+    -65743.1,
+    -4498.9,
+    2.084
+   ],
+   "steps": [
+    -65741.3,
+    -4495.8
+   ],
+   "dockLand": [
+    -65738.4,
+    -4491
+   ],
+   "deck": [
+    -65735.3,
+    -4486.5
+   ],
+   "dock": [
+    -65733.8,
+    -4487.4
+   ],
+   "dockHeading": -1.058,
+   "floorY": 388.31,
+   "fromEp": 21,
+   "doorShore": 8.4,
+   "dockShore": -2.8
+  },
+  "25": {
+   "name": "Loon Narrows Outfitters",
+   "store": [
+    -21213.1,
+    11433.7
+   ],
+   "door": [
+    -21217.3,
+    11432.2,
+    -0.295
+   ],
+   "steps": [
+    -21223.5,
+    11430.5
+   ],
+   "dockLand": [
+    -21228.3,
+    11429.1
+   ],
+   "deck": [
+    -21234.6,
+    11427.6
+   ],
+   "dock": [
+    -21235.1,
+    11429.3
+   ],
+   "dockHeading": 2.846,
+   "floorY": 411.68,
+   "fromEp": 33,
+   "doorShore": 10.7,
+   "dockShore": -5.6
+  },
+  "31": {
+   "name": "Hayfield Landing Outfitters",
+   "store": [
+    -39202.9,
+    21800.7
+   ],
+   "door": [
+    -39199.1,
+    21802.9,
+    2.666
+   ],
+   "steps": [
+    -39195.2,
+    21804.6
+   ],
+   "dockLand": [
+    -39189.9,
+    21807.4
+   ],
+   "deck": [
+    -39183.7,
+    21810
+   ],
+   "dock": [
+    -39182.9,
+    21808.5
+   ],
+   "dockHeading": -0.475,
+   "floorY": 424.85,
+   "fromEp": 31,
+   "doorShore": 10.1,
+   "dockShore": -5.3
+  },
+  "36": {
+   "name": "Muskrat Run Outfitters",
+   "store": [
+    9723.8,
+    30912.9
+   ],
+   "door": [
+    9720.7,
+    30909.7,
+    -0.745
+   ],
+   "steps": [
+    9712.7,
+    30902.7
+   ],
+   "dockLand": [
+    9708.1,
+    30898.5
+   ],
+   "deck": [
+    9703.1,
+    30894.5
+   ],
+   "dock": [
+    9701.9,
+    30895.8
+   ],
+   "dockHeading": 2.397,
+   "floorY": 502.88,
+   "fromEp": 26,
+   "doorShore": 16.2,
+   "dockShore": -2.6
+  },
+  "38": {
+   "name": "Saw-whet Owl Outfitters",
+   "store": [
+    24398.6,
+    25181.8
+   ],
+   "door": [
+    24394.2,
+    25180.9,
+    -0.164
+   ],
+   "steps": [
+    24391.3,
+    25180.4
+   ],
+   "dockLand": [
+    24380,
+    25178.8
+   ],
+   "deck": [
+    24373.5,
+    25178.2
+   ],
+   "dock": [
+    24373.3,
+    25179.9
+   ],
+   "dockHeading": 2.978,
+   "floorY": 548.68,
+   "fromEp": 34,
+   "doorShore": 14.6,
+   "dockShore": -5.2
+  },
+  "40": {
+   "name": "Blueberry Hill Outfitters",
+   "store": [
+    41348.1,
+    20617.6
+   ],
+   "door": [
+    41346,
+    20621.6,
+    1.128
+   ],
+   "steps": [
+    41344.7,
+    20624.3
+   ],
+   "dockLand": [
+    41342.3,
+    20629.8
+   ],
+   "deck": [
+    41339.8,
+    20636.2
+   ],
+   "dock": [
+    41341.4,
+    20636.9
+   ],
+   "dockHeading": -2.014,
+   "floorY": 555.11,
+   "fromEp": 30,
+   "doorShore": 9.1,
+   "dockShore": -5.3
+  },
+  "49": {
+   "name": "Long Carry Outfitting",
+   "store": [
+    49993.8,
+    3829.8
+   ],
+   "door": [
+    49995.7,
+    3833.9,
+    2.059
+   ],
+   "steps": [
+    49998.2,
+    3838.2
+   ],
+   "dockLand": [
+    50003.3,
+    3842.4
+   ],
+   "deck": [
+    50006.9,
+    3848.1
+   ],
+   "dock": [
+    50008.4,
+    3847.3
+   ],
+   "dockHeading": -1.083,
+   "floorY": 567.84,
+   "fromEp": 19,
+   "doorShore": 10.5,
+   "dockShore": -3
+  },
+  "51": {
+   "name": "Lost Chain Outfitters",
+   "store": [
+    28191.4,
+    1707.2
+   ],
+   "door": [
+    28192.8,
+    1711.4,
+    1.938
+   ],
+   "steps": [
+    28194.8,
+    1716
+   ],
+   "dockLand": [
+    28200.6,
+    1724.2
+   ],
+   "deck": [
+    28203.3,
+    1729.8
+   ],
+   "dock": [
+    28204.9,
+    1729.1
+   ],
+   "dockHeading": -1.203,
+   "floorY": 537.11,
+   "fromEp": 59,
+   "doorShore": 13.7,
+   "dockShore": -5
+  },
+  "64": {
+   "name": "Cub Creek Outfitters",
+   "store": [
+    60878.6,
+    6035.4
+   ],
+   "door": [
+    60879.1,
+    6039.8,
+    1.748
+   ],
+   "steps": [
+    60880.1,
+    6043.9
+   ],
+   "dockLand": [
+    60881.2,
+    6050
+   ],
+   "deck": [
+    60882.8,
+    6056.3
+   ],
+   "dock": [
+    60884.5,
+    6056
+   ],
+   "dockHeading": -1.393,
+   "floorY": 521.82,
+   "fromEp": 30,
+   "doorShore": 10.6,
+   "dockShore": -5.5
+  },
+  "67": {
+   "name": "Pitcher Plant Outfitters",
+   "store": [
+    -13427.4,
+    34288
+   ],
+   "door": [
+    -13423.2,
+    34289.5,
+    2.874
+   ],
+   "steps": [
+    -13416.7,
+    34291.2
+   ],
+   "dockLand": [
+    -13412,
+    34292.3
+   ],
+   "deck": [
+    -13405.7,
+    34293.5
+   ],
+   "dock": [
+    -13405.3,
+    34291.8
+   ],
+   "dockHeading": -0.268,
+   "floorY": 478.16,
+   "fromEp": 104,
+   "doorShore": 10.1,
+   "dockShore": -5.4
+  },
+  "69": {
+   "name": "Old Mill Outfitters",
+   "store": [
+    86288.5,
+    3992.2
+   ],
+   "door": [
+    86286.8,
+    3988.1,
+    -1.114
+   ],
+   "steps": [
+    86284.9,
+    3984.9
+   ],
+   "dockLand": [
+    86282.5,
+    3980
+   ],
+   "deck": [
+    86279.1,
+    3974.1
+   ],
+   "dock": [
+    86277.6,
+    3974.9
+   ],
+   "dockHeading": 2.027,
+   "floorY": 448.51,
+   "fromEp": 30,
+   "doorShore": 9.1,
+   "dockShore": -5
+  }
+ }
+}
