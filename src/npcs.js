@@ -1975,7 +1975,7 @@ export class People {
   keepOf(want, free) {
     if (want.length <= free.length) return want;
     const cam = this.camera;
-    if (!cam) return want.slice(0, free.length);
+    if (!cam) return [...want.filter((w) => w.must), ...want.filter((w) => !w.must)].slice(0, free.length);
     const drawn = (w) => free.some((b) => b.who && b.who.person === w.person && b.who.fig === w.fig);
     const P = this._vp || (this._vp = new THREE.Vector3());
     const seen = (w) => { if (w.d > 45) return false; const f = w.f; P.set(f.x, (Number.isFinite(f.y) ? f.y : 0) + 1, f.z).project(cam); return P.z < 1 && Math.abs(P.x) < 1.25 && Math.abs(P.y) < 1.25; };
@@ -1985,6 +1985,17 @@ export class People {
       if (seen(w)) continue;
       let vi = -1;
       for (let i = 0; i < keep.length; i++) if (keep[i].d > w.d + 1.5 && !seen(keep[i]) && (vi < 0 || keep[i].d > keep[vi].d)) vi = i;
+      if (vi >= 0) keep[vi] = w;
+    }
+    // (r3 final: the keeper and the staffer (an extraAt person: the guide's gem is over them, E talks to them) always
+    // have a body. A busy morning, eight of a party and the photographer in the store, left the summer help undrawn: the
+    // gem over empty air and E a word with whoever stood there. Someone else gives theirs up, one out of sight first,
+    // else the farthest; only the must-haves past the pool's size go without)
+    for (const w of want) {
+      if (!w.must || keep.includes(w)) continue;
+      if (keep.length < free.length) { keep.push(w); continue; }
+      let vi = -1;
+      for (let i = 0; i < keep.length; i++) { const k = keep[i]; if (k.must) continue; if (vi < 0) { vi = i; continue; } const a = !seen(k), b = !seen(keep[vi]); if (a !== b ? a : k.d > keep[vi].d) vi = i; }
       if (vi >= 0) keep[vi] = w;
     }
     return keep;
@@ -2008,7 +2019,7 @@ export class People {
       const L = storeLayout(ep), ds = L ? Math.max(0, Math.hypot(L.centre.x - p.x, L.centre.z - p.z) - STORE_R) : Infinity;
       for (const v of this.rosters.get(ep) || []) v.figs.forEach((f, i) => {
         const drawn = this.bodies.some((b) => b.who && b.who.person === v && b.who.fig === i);
-        if (ds < DRAW_R || (drawn && ds < DRAW_OUT)) want.push({ person: v, fig: i, f, d: Math.hypot(f.x - p.x, f.z - p.z) - (v.keeper ? 5 : 0) });
+        if (ds < DRAW_R || (drawn && ds < DRAW_OUT)) want.push({ person: v, fig: i, f, d: Math.hypot(f.x - p.x, f.z - p.z) - (v.keeper || v.extra ? 5 : 0), must: !!(v.keeper || v.extra) }); // (r3 final: the keeper and the staffer always drawn: keepOf)
       });
     }
     for (const [ep, list] of this.lots) { const T = list.T, ds = T ? Math.hypot(T.lot.x - p.x, T.lot.z - p.z) : Infinity; if (ds < DRAW_R + 20) for (const v of list) v.figs.forEach((f, i) => want.push({ person: v, fig: i, f, d: Math.hypot(f.x - p.x, f.z - p.z) })); void ep; } // gl-e: a trailhead's lot

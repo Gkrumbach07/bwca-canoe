@@ -162,7 +162,52 @@ try {
     return out;
   });
   await shot('2-staffer-gem');
-  result('2 the staffer stands where the gem points; the gem never into their head through the idles', two.cur === 'story:onboard:talk' && two.drawn > 1700 && two.gemFrames > 1700 && two.maxOff < 0.6 && two.minClear >= 0 && two.maxDrift < 0.35, two);
+  result('2 the staffer stands where the gem points; the gem never into their head through the idles', two.cur === 'story:onboard:talk' && two.drawn > 1700 && two.gemFrames > 1700 && two.maxOff < 0.6 && two.minClear >= 0 && two.maxDrift < 0.35 && two.byHer === 0, two);
+
+  // 9 a crowded store: bodies lent out until the pool is short of the store's people, you at the door; the staffer and
+  // the keeper drawn every frame
+  const nine = await ev(async () => {
+    const g = window.__game, H = window.__r3f, N = g.npcs, ep = g.profile.home, L = g.outfitter.layout(ep), d = L.door, c = L.centre || L.door;
+    const dx = c.x - d.x, dz = c.z - d.z, n = Math.hypot(dx, dz) || 1;
+    H.standAt(d.x - (dx / n) * 1.0, d.z - (dz / n) * 1.0, Math.atan2(-dz, dx)); H.step(4);
+    const people = (N.rosters.get(ep) || []).reduce((a, v) => a + v.figs.length, 0);
+    for (const b of N.bodies) if (!b.lent && b.who) { b.who = null; b.park(); }
+    const lent = []; const keepFree = Math.max(3, Math.min(5, people - 3));
+    while (N.bodies.filter((b) => !b.lent).length > keepFree) { const b = N.lend('r3-final-test'); if (!b) break; lent.push(b); }
+    const out = { people, free: N.bodies.filter((b) => !b.lent).length, frames: 0, short: 0, staffer: 0, keeper: 0, ev: [] };
+    for (let k = 0; k < 600; k++) {
+      g.step(1 / 30, 1); out.frames++;
+      if (k < 3) continue;
+      const fs = H.storeFigs(), s = fs.some((f) => f.extra), kp = fs.some((f) => f.v.keeper);
+      out.short++;
+      if (s) out.staffer++; if (kp) out.keeper++;
+      if ((!s || !kp) && out.ev.length < 5) out.ev.push({ k, s, kp, pool: fs.map((f) => f.key) });
+      if (k % 60 === 0) await H.wait(2);
+    }
+    for (const b of lent) N.giveBack(b);
+    H.step(30);
+    return out;
+  });
+  result('9 a crowded store (more people than bodies): the staffer and the keeper drawn every frame', nine.people > nine.free && nine.short > 500 && nine.staffer === nine.short && nine.keeper === nine.short, nine);
+
+  // 10 the staffer's door line placed clear of her gem, at the default camera as you come up to her
+  const ten = await ev(async () => {
+    const g = window.__game, H = window.__r3f, sp = g.onboarding.spot(g.profile.home), D = g.npcs.dialogue;
+    if (g.chase.setMode && g.chase.mode !== 'third') g.chase.setMode('third');
+    H.face(sp, 2.5, 0.0); H.step(40);
+    g.onboarding.extra.say('Got a minute? Come to the counter.');
+    const out = { frames: 0, both: 0, overlap: 0, ev: [] };
+    for (let k = 0; k < 90; k++) {
+      g.step(1 / 30, 1); out.frames++;
+      const gems = g.locator.screenRects(), barks = D.on.filter((b) => !b.out && b.where);
+      if (!gems.length || !barks.length) continue;
+      out.both++;
+      for (const b of barks) for (const r of gems) { const w = b.where; if (w.x < r.x + r.w && w.x + w.w > r.x && w.y < r.y + r.h && w.y + w.h > r.y) { out.overlap++; if (out.ev.length < 4) out.ev.push({ k, bark: w, gem: r }); } }
+    }
+    return out;
+  });
+  await shot('10-door-line-clear');
+  result('10 the staffer\'s door line placed clear of her gem on screen', ten.both > 30 && ten.overlap === 0, ten);
 
   // 3 E on the staffer opens the talk, the gem hidden while it lasts; escaped
   const three = await ev(() => {
