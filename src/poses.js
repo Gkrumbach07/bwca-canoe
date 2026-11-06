@@ -1190,6 +1190,9 @@ export function workArms(me, kind, t, w = 1) {
         _wt.set(hd.x + 0.15, hd.y - 0.03, hd.z + sg * 0.07); axis = V(0, 1, 0);
         pole = V(sh.x - 0.05, sh.y - 0.35, sh.z + sg * 0.3);
         break;
+      case 'push': // r2 2: both hands forward and down on a gunwale, shoving (a party's stern pushing the canoe off)
+        _wt.set(sh.x + 0.5 + 0.05 * Math.sin(t * 2.4), sh.y - 0.52, sh.z - sg * 0.06); palm = V(1, 0, 0);
+        break;
       default: // 'pitch', 'work'
         _wt.set(sh.x + 0.4, sh.y - 0.55 + 0.07 * Math.sin(t * 5 + (k === 'L' ? Math.PI : 0)), sh.z + sg * 0.1);
         palm = V(0, -1, 0);

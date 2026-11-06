@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { buildFigure } from './figure.js';
-import { buildHullGeometry, buildLidGeometry, buildPackGeometry, buildFarHullGeometry, HULL_PALETTES, PACK_AT, PACK2_AT, PACKS, SEATS, floorAt } from './hull.js';
+import { buildHullGeometry, buildLidGeometry, buildPackGeometry, buildFarHullGeometry, HULL_PALETTES, PACK_AT, PACK2_AT, PACKS, SEATS, floorAt, keelAt, HULL } from './hull.js';
 import { paddleMesher } from './gear.js';
 import { FLOAT_OFFSET, makeBody, makeGait, makeMoves, makeStroke, newState, placeFigure, wrapPi, swimPose, sitPose, updateIdle, workArms, makeLife, poseSnap, fadeStep } from './poses.js';
 import { PADDLE_PHYS, LIFE, CANOE } from './pace.js'; // r2: the parties' canoes near you paddle with the player's physics
@@ -48,6 +48,7 @@ const PHYS_R = [400, 430];     // m (r2): a boat with its own hull physics withi
 const LOOK_R = 7;              // m (r2): a person standing this near you looks at you
 const SEAT_ORDER = ['stern', 'bow', 'mid']; // p2 C: a third kneels in the middle, behind the yoke (a family's kid, a group's third)
 const MID_X = -0.42;
+const KEEL_A = 2.05;           // m (r2 2): where along the keel a hull by the bank is held off the ground (bow, stern; the middle too)
 const seatX = (seat) => (seat === 'stern' ? SEATS.stern.x : seat === 'bow' ? SEATS.bow.x : MID_X);
 
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
@@ -424,7 +425,7 @@ class Person {
     else B.gait.walk(dt, an ? an.mk || null : null, an ? an.fz || null : null);
     if (air) this.airN = (this.airN || 0) + 1; // (the rig: frames posed in the air)
     // round 2: the arms at a held job, eating or drinking, the camera up (poses.js workArms), eased in and out over the gait's
-    const want = an && an.arms && this.mode === 'walk' && !an.fz ? an.arms : null;
+    const want = an && an.arms && (this.mode === 'walk' || this.mode === 'stand') && !an.fz ? an.arms : null; // (r2 2: standing too: a push off the bank)
     if (want) { this.arms = { kind: want.kind, t: want.t }; }
     this.armsW = clamp((this.armsW || 0) + (want ? dt * 5 : -dt * 4), 0, 1);
     if (this.arms && this.armsW > 0.01) { workArms(B.pb, this.arms.kind, this.arms.t, this.armsW * this.armsW * (3 - 2 * this.armsW)); this.armsN = (this.armsN || 0) + 1; }
@@ -646,7 +647,18 @@ class Boat {
     if (!lc || Math.abs(lc.x - this.x) + Math.abs(lc.z - this.z) > 4) this.lvl = { x: this.x, z: this.z, v: L.levelAt(this.x, this.z) };
     const given = this.ext && this.ext.level, level = Number.isFinite(given) ? given : this.lvl.v, full = !!this.near || this.dist < 260, w = (a) => (full ? L.waveAt(this.x + f.x * a, this.z + f.z * a) : 0);
     const hb = w(2), hs = w(-2), hm = w(0);
-    const y = level + FLOAT_OFFSET + (hb + hs + hm) / 3, pitch = Math.atan2(hb - hs, 4) * 0.6 + this.v * 0.01;
+    let y = level + FLOAT_OFFSET + (hb + hs + hm) / 3, pitch = Math.atan2(hb - hs, 4) * 0.6 + this.v * 0.01;
+    // r2 2: a hull by the bank rests on the ground under her where it rises over her keel: pulled in bow first, the bow up
+    // the bank and the stern afloat (she had lain level with the bank's ground over her waterline, 0.4 to 1 m at the bow)
+    if (full && this.ext && this.ext.sim && L.ground && L.world && L.world.shoreAt && L.world.shoreAt(this.x, this.z) > -7) { // (the parties' own: a friend's canoe lies as their screen has it)
+      const need = (a) => L.ground(this.x + f.x * a, this.z + f.z * a) - keelAt(a / (HULL.L / 2)) + 0.01; // (the root's height that keeps her keel there over it)
+      const nb = need(KEEL_A), ns = need(-KEEL_A), nm = need(0);
+      if (Math.max(nb, ns, nm) > y) {
+        const yb = Math.max(y, nb), ys = Math.max(y, ns), sl = clamp((yb - ys) / (2 * KEEL_A), -0.35, 0.35);
+        y = Math.max((yb + ys) / 2, nm); pitch = -Math.atan(sl); // (placeRoot turns by -pitch: the bow up for a slope up to it)
+        this.beached = sl;
+      } else this.beached = 0;
+    }
     // (r2: and the rock of someone stepping in or out, a damped spring)
     const rk = this.rock; if (dt > 0) { rk.v += (-30 * rk.a - 3.2 * rk.v) * dt; rk.a += rk.v * dt; rk.a = clamp(rk.a, -0.2, 0.2); }
     const roll = this.yawRate * 0.1 + 0.012 * this.stroke.power * Math.sin(this.stroke.phase * Math.PI * 2) + rk.a;
