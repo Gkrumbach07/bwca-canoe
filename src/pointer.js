@@ -126,6 +126,7 @@ export function stripKey(text, key = 'E') {
 export const stripE = (text) => stripKey(text, 'E');
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _o = new THREE.Vector3(), _d = new THREE.Vector3(), _m = new THREE.Matrix4();
+const _hp = new THREE.Vector3(), _n = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0), _tq = new THREE.Quaternion(), _tm = new THREE.Matrix4(), _tm2 = new THREE.Matrix4(); // r2: the person's head, the pool on a slope
 
 class Pointer {
   constructor() {
@@ -491,11 +492,23 @@ class Pointer {
     this.rimMat.opacity = (off ? 0.28 : 0.55) * (0.55 + 0.45 * k);
   }
   // the pool under a box target: its footprint and a little more, on its bottom (the floor, the ground at its feet)
+  // (r2, a person: at their feet (b.foot), and on ground that slopes laid along it (b.ground: the slope under them from
+  // four points round), so its uphill side is not in the ground and its downhill side not in the air at mid-shin)
   pool(b, off) {
     const g = this.glow;
     if (!g) return;
-    const y = b.y - b.hy + 0.025;
+    const y = (Number.isFinite(b.foot) ? b.foot : b.y - b.hy) + 0.025;
     g.matrix.makeRotationY(b.heading || 0).multiply(_m.makeScale(b.hx * 2 + 0.7, 1, b.hz * 2 + 0.7)).setPosition(b.x, y, b.z);
+    if (typeof b.ground === 'function') {
+      const r = 0.5, gx = (b.ground(b.x + r, b.z) - b.ground(b.x - r, b.z)) / (2 * r), gz = (b.ground(b.x, b.z + r) - b.ground(b.x, b.z - r)) / (2 * r);
+      if (Number.isFinite(gx) && Number.isFinite(gz) && Math.hypot(gx, gz) > 0.02) {
+        _n.set(-gx, 1, -gz).normalize();
+        _tq.setFromUnitVectors(_up, _n);
+        _tm.makeRotationFromQuaternion(_tq);
+        const ty = b.ground(b.x, b.z);
+        g.matrix.premultiply(_tm2.makeTranslation(-b.x, -y, -b.z)).premultiply(_tm).premultiply(_tm2.makeTranslation(b.x, Number.isFinite(ty) ? ty + 0.03 : y, b.z));
+      }
+    }
     g.matrixWorldNeedsUpdate = true; g.updateMatrixWorld(true);
     g.frustumCulled = false;
     const k = this.light();
@@ -530,12 +543,19 @@ export function peopleTargets(people) {
       // hit boxes dont fill their whole body, you have to look down at them") to its head (npcs.js look(): the same
       // reckoning of where the head is, by pose and size); the rod's radius rounds it off over the crown and the feet
       const gy = Number.isFinite(f.y) ? f.y : p && p.groundAt ? p.groundAt(f.x, f.z) : near.y, sit = f.spec && f.spec.pose === 'sit';
-      const sc = (f.look && f.look.wear && f.look.wear.scale) || 1, headY = gy + (sit ? (f.spec.seat || 0.45) + 0.78 : 1.66) * sc;
-      const top = headY - 0.08, bot = gy + (sit ? 0.25 : 0.35) * sc;
-      const hit = near.segment(f.x, bot, f.z, f.x, top, f.z, 0.42);
+      const sc = (f.look && f.look.wear && f.look.wear.scale) || 1;
+      // (r2: the head where the skeleton has it this frame: a stoop, a seat, a lean over the counter; the rod from it down)
+      let hx = f.x, hz = f.z, headY = gy + (sit ? (f.spec.seat || 0.45) + 0.78 : 1.66) * sc;
+      if (b.fig && b.fig.bones && b.fig.bones.head && b.group.visible) { b.fig.bones.head.getWorldPosition(_hp); if (Number.isFinite(_hp.y) && Math.abs(_hp.y - headY) < 1.2) { hx = _hp.x; hz = _hp.z; headY = _hp.y + 0.1 * sc; } }
+      const top = headY - 0.08, bot = gy + (sit ? 0.25 : 0.22) * sc;
+      const hit = near.segment(f.x, bot, f.z, hx, top, hz, 0.42);
       if (!hit) continue;
-      const name = v.keeper ? v.name : (people.s && people.s.talked && people.s.talked[v.key] ? v.first : v.name);
-      out.push({ dist: hit.t, miss: hit.miss * 0.9, target: { kind: 'person', ref: v.key, label: name, e: { verb: 'Talk', run: () => people.talkTo(v) }, hint: v.who && !v.keeper ? v.who : null, box: { x: f.x, y: (gy + headY + 0.14) / 2, z: f.z, hx: 0.3, hy: (headY + 0.14 - gy) / 2, hz: 0.3, heading: f.heading || 0 } } });
+      let name = v.keeper ? v.name : (people.s && people.s.talked && people.s.talked[v.key] ? v.first : v.name);
+      // (r2 2: one of several drawn for a person (a camp's party, a group in the store): their own name, not the first's
+      // on everyone; one with none, a plain word for who they are)
+      if (!v.keeper && v.figNames && (v.figNames.length > 1 || b.who.fig > 0)) name = v.figNames[b.who.fig] || (v.party || v.inParty ? 'One of the party' : 'A visitor');
+      // (r2 2 verify: and E is a word with the one named, not with the first of them: Jens named, Nadia had answered)
+      out.push({ dist: hit.t, miss: hit.miss * 0.9, target: { kind: 'person', ref: v.key, label: name, e: { verb: 'Talk', run: ((fi) => () => people.talkTo(v, fi))(b.who.fig) }, hint: v.who && !v.keeper ? v.who : null, box: { x: f.x, y: (gy + headY + 0.14) / 2, z: f.z, hx: 0.3, hy: (headY + 0.14 - gy) / 2, hz: 0.3, heading: f.heading || 0, foot: gy, ground: b.floorY == null && b.G ? b.G : null } } });
     }
     return out;
   };

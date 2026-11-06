@@ -91,6 +91,7 @@ import { attachTaskKinds } from './task-kinds.js'; // content A
 import { attachTaskKinds2 } from './task-kinds-2.js'; // gl-d: the board's new kinds (registered before any save is read)
 import { bear } from './bear.js'; // cons A
 import { bugs } from './bugs.js'; // cons C
+import { LIFE_ENV } from './poses.js'; // r2: the bugs out, for the people's idle
 import { record } from './record.js'; // round A-A
 import { slots } from './save.js'; // round A-D
 import { migrateSeason } from './migrate.js'; // d2 join
@@ -348,6 +349,7 @@ async function main() {
   // hotspots leave E to a visitor you face (outfitter.people). Updated after the outfitter's prompt, in the frame below.
   const npcs = new People({ world, scene, player, day, hud, tasks, outfitter, profile, weather, registry: campsites, mat: canoe.rig.getObjectByProperty('isSkinnedMesh', true).material });
   outfitter.people = npcs;
+  npcs.camera = camera; // (r2 2 verify: a body changes hands only out of view)
   npcs.quiet = () => photo.raised; // the people say nothing while the camera is up (3B)
   weather.indoors = () => !!(outfitter.visit && outfitter.visit.inside); // hubs 3 join: no rain falling inside a store
   // polish B: the soundscape knows indoors too (audio.js): the wind, the trees, the shore and the birds through the walls,
@@ -367,6 +369,11 @@ async function main() {
   // and packs draw with the rig's material, so no program or light is added. Updated after the camera, below.
   const actorPool = typeof npcs.lend === 'function' ? { take: (look) => { const b = npcs.lend('actors'); if (b) b.wear(look); return b; }, give: (b) => npcs.giveBack(b) } : null;
   const actors = new Actors({ scene, ground: (x, z) => tiles.groundAt(x, z), world, water, ripples, material: canoe.material, lidMaterial: canoe.lid.material, pool: actorPool, reflectLayer: REFLECT_LAYER });
+  // r2 (NPC motion): the wind on the parties' canoes (their own physics near you), where your eyes are (a person near
+  // looks at you), and the bugs where you are (people swat at them)
+  actors.wind = wind;
+  actors.eye = (out) => out.set(player.x, (player.foot ? player.foot.y : player.altitude || 0) + 1.62, player.z);
+  { const upd = actors.update.bind(actors); actors.update = (dt, ...a) => { try { LIFE_ENV.bugs = (bugs.now && bugs.now.level) || 0; } catch { LIFE_ENV.bugs = 0; } upd(dt, ...a); }; }
 
   // the shell: settings (applied now and live), the trip saver, the title / pause screen
   const fps = new FpsCounter(renderer);
@@ -892,7 +899,7 @@ async function main() {
   const parties = new Parties({ world, profile, day });
   parties.attach({ registry: campsites, camp, player, camera, settings, inventory, fires });
   const partyCamps = new PartyCamps({ world, scene, tiles, fires, parties, people: npcs, player, day, camp, weather, wind });
-  npcs.extra = () => partyCamps.extras(); npcs.partyWord = (v) => partyCamps.word(v);
+  npcs.extra = () => partyCamps.extras(); npcs.partyWord = (v, fig) => partyCamps.word(v, fig);
   { const campUpdF = camp.update.bind(camp); camp.update = (dt) => { campUpdF(dt); parties.update(dt); partyCamps.update(dt); }; }
   // a party's greeting carries over the water (their speakers' hear: dialogue.js keeps a bark to 22 m of its speaker)
   { const distF = talk.distTo.bind(talk); talk.distTo = (sp) => { const d = distF(sp); return sp && sp.hear ? (d * 22) / sp.hear : d; }; }
@@ -1323,6 +1330,7 @@ async function main() {
   };
 
   const frame = (dt) => {
+    tiles.ground(player.x, player.z, camera.position); // r2 (NPC motion 2): the ground's changes first, so all stand on this frame's ground (tiles.js ground)
     wind.update(dt, day.hours);
     water.setWind(wind.dir.x, wind.dir.z, wind.speed);
     if (wind.puff > 0) water.uniforms.uRippleAmt.value = Math.min(1.35, water.uniforms.uRippleAmt.value + 0.4 * wind.puff); // a gust darkens the ripples (wind.js PUFF); the waves keep the steady wind

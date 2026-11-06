@@ -55,6 +55,10 @@ export const MAX_LAPSE = 12;
 
 // m/s at life: the aluminium canoe and the ash paddle at a steady stroke (Shift 2.0), a 3 mph walk and a jog, and a
 // carry before the load slows it (player.js divides by (kg / 40) ^ 0.6: 55 kg of canoe and pack is 0.83 m/s, 3 km an hour)
+// The paddle's physics at life (player.js updatePaddle reads them; r2: the parties' canoes near you run the same,
+// actors.js HullSim): the thrust a stroke pulses over its first half, the hull's drag (0.31 v^2 + 0.12 v), the most the
+// strokes turn her (rad/s) and how often they come (a second)
+export const PADDLE_PHYS = { accel: 3.1, hustle: 4.65, reverse: 1.35, drag: 0.31, lin: 0.12, yaw: 0.65, strokeRate: 0.95, hustleRate: 1.35 };
 export const LIFE = { cruise: 1.6, hustle: 2.0, walk: 1.35, jog: 2.9, carry: 1.0, carryHustle: 1.25 };
 
 export const PACES = {
