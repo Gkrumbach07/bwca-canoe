@@ -89,6 +89,7 @@ try {
     t.setPick('adventure');
     await t.newSeason(ep, { confirm: false, start: { year: 2026, doy } });
     if (g.onboarding && g.onboarding.pending()) { g.onboarding.give(); g.onboarding.finish(g.onboarding.home, false); } // (r3: the talk's gear and the loaned canoe first)
+    { const ob = g.onboarding && g.onboarding.state; if (ob && ob.path) { ob.path.food = ob.path.leeches = ob.path.canoe = true; g.onboarding.write(); } } // (r3 join: past the tutorial's path, so no story step heads the Tasks list)
   }, [HOME, START_DOY]);
   await until(page, () => window.__game.title.state === 'game' && !window.__game.player.teleporting && !!window.__game.outfitter.visit, null, 180000);
   await page.evaluate(() => { const g = window.__game, o = g.outfitter; if (o.open) o.hide(); for (const p of g.permits.held()) g.permits.s.held.splice(g.permits.s.held.indexOf(p), 1); });
