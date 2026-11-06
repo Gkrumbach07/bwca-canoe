@@ -343,6 +343,7 @@ async function main() {
   // hotspots leave E to a visitor you face (outfitter.people). Updated after the outfitter's prompt, in the frame below.
   const npcs = new People({ world, scene, player, day, hud, tasks, outfitter, profile, weather, registry: campsites, mat: canoe.rig.getObjectByProperty('isSkinnedMesh', true).material });
   outfitter.people = npcs;
+  npcs.camera = camera; // (r2 2 verify: a body changes hands only out of view)
   npcs.quiet = () => photo.raised; // the people say nothing while the camera is up (3B)
   weather.indoors = () => !!(outfitter.visit && outfitter.visit.inside); // hubs 3 join: no rain falling inside a store
   // polish B: the soundscape knows indoors too (audio.js): the wind, the trees, the shore and the birds through the walls,

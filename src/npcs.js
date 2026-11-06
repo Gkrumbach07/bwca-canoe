@@ -1896,6 +1896,28 @@ export class People {
   }
   giveBack(b) { if (b && b.lent) { b.lent = null; b.who = null; b.park(); } }
 
+  // r2 2 (verify): who of those wanted has a body, the nearest first. With more people about than bodies (a busy store
+  // morning: a party of nine and two more at Moose Lake), the nearest-first cut had people popping out and in a few
+  // metres off as two of them walked past each other in the ranking (13 in 90 s seen from the doorway). Now one drawn
+  // keeps their body while still wanted, and a body changes hands only between two out of sight (or far off): someone
+  // in view is never put away nor brought out of nothing; a spare body still goes to the nearest at once.
+  keepOf(want, free) {
+    if (want.length <= free.length) return want;
+    const cam = this.camera;
+    if (!cam) return want.slice(0, free.length);
+    const drawn = (w) => free.some((b) => b.who && b.who.person === w.person && b.who.fig === w.fig);
+    const P = this._vp || (this._vp = new THREE.Vector3());
+    const seen = (w) => { if (w.d > 45) return false; const f = w.f; P.set(f.x, (Number.isFinite(f.y) ? f.y : 0) + 1, f.z).project(cam); return P.z < 1 && Math.abs(P.x) < 1.25 && Math.abs(P.y) < 1.25; };
+    const keep = want.filter(drawn), rest = want.filter((w) => !drawn(w));
+    for (const w of rest) {
+      if (keep.length < free.length) { keep.push(w); continue; }
+      if (seen(w)) continue;
+      let vi = -1;
+      for (let i = 0; i < keep.length; i++) if (keep[i].d > w.d + 1.5 && !seen(keep[i]) && (vi < 0 || keep[i].d > keep[vi].d)) vi = i;
+      if (vi >= 0) keep[vi] = w;
+    }
+    return keep;
+  }
   // --- per frame ---------------------------------------------------------------------------------------------------
   update(dt) {
     const p = this.player;
@@ -1921,7 +1943,7 @@ export class People {
     for (const [ep, list] of this.lots) { const T = list.T, ds = T ? Math.hypot(T.lot.x - p.x, T.lot.z - p.z) : Infinity; if (ds < DRAW_R + 20) for (const v of list) v.figs.forEach((f, i) => want.push({ person: v, fig: i, f, d: Math.hypot(f.x - p.x, f.z - p.z) })); void ep; } // gl-e: a trailhead's lot
     if (this.extra) { try { for (const w of this.extra() || []) if (w && w.f) want.push(w); } catch (e) { console.warn('people.extra', e); } } // round A-F: the parties' camps
     want.sort((a, b) => a.d - b.d);
-    const free = this.bodies.filter((b) => !b.lent), keep = want.slice(0, free.length); // (round A-F: a body lent out is the borrower's)
+    const free = this.bodies.filter((b) => !b.lent), keep = this.keepOf(want, free); // (round A-F: a body lent out is the borrower's)
     for (const b of free) if (b.who && !keep.some((w) => w.person === b.who.person && w.fig === b.who.fig)) { b.who = null; b.park(); }
     for (const w of keep) {
       if (free.some((b) => b.who && b.who.person === w.person && b.who.fig === w.fig)) continue;
