@@ -565,7 +565,7 @@ class Boat {
     if (!m) { m = this.sim = { speed: 0, boost: 1, thr: 0, yawRate: 0, steer: 0 }; if (E.v > 0.3 && !E.hold) { m.boost = bt; m.speed = E.v / bt; S.power = 1; } this.heading = this.heading ?? E.heading; }
     if (!(dt > 0)) return;
     const gx = E.x - this.x, gz = E.z - this.z, gd = Math.hypot(gx, gz);
-    if (gd > 60 || bt > 8.9) { this.x = E.x; this.z = E.z; this.heading = E.heading; m.speed = E.v / bt; m.boost = bt; m.yawRate = 0; this.yawRate = 0; return; } // (fallen far behind, or a time-lapse past paddling: placed)
+    if (gd > 150 || bt > 8.9) { this.x = E.x; this.z = E.z; this.heading = E.heading; m.speed = E.v / bt; m.boost = bt; m.yawRate = 0; this.yawRate = 0; return; } // (fallen far behind, or a time-lapse past paddling: placed)
     const holding = E.hold || ((E.v || 0) < 0.05 && gd < 5);
     let thr = 0, yawT = 0;
     if (holding) {
@@ -617,6 +617,10 @@ class Boat {
     m.boost += (bw - m.boost) * ease(bw > m.boost ? 1.1 : 3.5, dt);
     const fx = Math.cos(this.heading), fz = -Math.sin(this.heading), vb = m.speed * m.boost;
     let nx = this.x + fx * vb * dt, nz = this.z + fz * vb * dt;
+    // (r2 verify: fallen behind the plan, after a stop or the push-off, as the plan's time-lapsed way ran on ahead of a
+    // stroke still building: she is brought up along her own way a little more each second the further back she is, so
+    // she trails it by twenty-odd metres at worst. She had been snapped onto it 60 m ahead, 130 m from you, in view)
+    if (!holding) { const al = gx * fx + gz * fz; if (al > 12) { const k = 1 - Math.exp(-dt * 0.02 * (al - 12)), d = Math.min(al * k, Math.max(4, 0.8 * (E.v || 0)) * dt); nx += fx * d; nz += fz * d; } } // (never a zip: at most 0.8 of the plan's speed more)
     // the wind: pushed downwind, the bow off it (time-lapsed with the hull, as the player's)
     const Wd = this.layer.wind;
     if (Wd && Wd.dir) {

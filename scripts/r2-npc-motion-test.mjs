@@ -54,7 +54,7 @@ const PROBE = () => {
       const v = b.who.person, f = v.figs[b.who.fig]; if (!f) continue;
       const key = `${v.key}#${b.who.fig}`, s = b.sc || 1;
       b.rig.updateMatrixWorld(true);
-      out.push({ key, pose: f.spec.pose, walking: !!(f.path && f.path.length), floor: b.floorY != null, x: f.x, z: f.z, slope: slope(f.x, f.z), ...feetOf(b.gait, b.fig.bones, s, (x, z) => b.footGround(x, z)), dq: dq(key, b.fig.bones) });
+      out.push({ key, crouch: b.pb && b.pb.life ? b.pb.life.crouch : 0, pose: f.spec.pose, walking: !!(f.path && f.path.length), floor: b.floorY != null, x: f.x, z: f.z, slope: slope(f.x, f.z), ...feetOf(b.gait, b.fig.bones, s, (x, z) => b.footGround(x, z)), dq: dq(key, b.fig.bones) });
     }
     return out;
   }
@@ -111,7 +111,7 @@ try {
   const worstA = standing.slice().sort((a, b) => b.ankle - a.ankle)[0];
   const byPose = {}; for (const r of standing) { const o = byPose[r.pose] || (byPose[r.pose] = []); o.push(r.ankle); }
   check(pct(ank, 0.95) <= 0.03, 'store: the drawn ankles where the gait planted them', `p95 ${pct(ank, 0.95).toFixed(3)} max ${Math.max(0, ...ank).toFixed(3)} m (worst: ${worstA ? `${worstA.pose} on ${worstA.slope.toFixed(2)}` : '-'}; p95 by pose ${Object.entries(byPose).map(([k, a]) => `${k} ${pct(a, 0.95).toFixed(3)}`).join(', ')})`);
-  const tilt = sloped.filter((r) => r.pose === 'stand').map((r) => r.tilt);
+  const tilt = sloped.filter((r) => r.pose === 'stand' && !(r.crouch > 0.1)).map((r) => r.tilt); // (r2 verify: not while the idle crouches to a pack: its 11 degrees are the crouch's own lean)
   check(!tilt.length || Math.max(...tilt) <= 8, 'store: upright on a slope', `pelvis tilt max ${tilt.length ? Math.max(...tilt).toFixed(1) : '-'} deg over ${tilt.length} frames`);
   // frozen: a run of standing frames over 6 s with next to no bone moving
   let frozen = 0; const detail = [];
