@@ -68,9 +68,12 @@ export class Tracker {
         this.push('Close by', e);
       }));
       this.offs.push(G.on('change', (e, d) => {
+        if (!(d.fields || []).includes('next')) return;
         const cur = G.current();
-        if (!cur || cur.id !== e.id || cur.tutorial || !(d.fields || []).includes('next')) return;
-        this.push('Next', e);
+        // the main path's step past the tutorial, or (r3 replay) any task whose place is in reach: a site's grate checked,
+        // "Next: Look over the latrine", so the part after it is never left to the journal
+        const main = cur && cur.id === e.id && !cur.tutorial, here = G.nearOn && G.nearOn.has(e.id) && !(cur && cur.id === e.id && cur.tutorial);
+        if (main || here || (this.ev && this.ev.id === e.id)) this.push('Next', e);
       }));
       this.offs.push(G.on('done', (e) => { if (e.kind !== 'story') this.push('Done', e); }));
       this.offs.push(G.on('gone', (e) => {
@@ -91,7 +94,8 @@ export class Tracker {
   later(e) { const G = this.t.guide, cur = G && G.current(); return !!(e && e.kind === 'story' && e.tutorial && !e.done && (!cur || cur.id !== e.id)); }
   push(head, e) {
     if (!this.enabled || !e || this.later(e)) return;
-    if (this.ev && this.ev.id === e.id) { if (head === 'Done') this.ev.head = head; this.ev.left = TRACKER.showS; return; }
+    // (r3 replay: the card up for it takes the new head, so a "Close by" card never goes on showing a changed line under it)
+    if (this.ev && this.ev.id === e.id) { if (head !== 'Close by') this.ev.head = head; this.ev.left = TRACKER.showS; return; }
     // (a task added where you stand is "New task", not "Close by": the guide's add and near come in the same sync)
     if (head === 'Close by' && this.queue.some((x) => x.id === e.id && x.head === 'New task')) return;
     this.queue = this.queue.filter((x) => x.id !== e.id);
@@ -115,6 +119,8 @@ export class Tracker {
     // (r3 replay: a tutorial step just come up is said first; other news waits behind it TRACKER.tutFirstS: the talk's
     // end brought "New task: First night out" before "Next: Buy food", so a new player read the side job first)
     const cur0 = G.current(), tut = cur0 && cur0.tutorial && !cur0.done ? cur0 : null;
+    // (r3 replay: the tutorial just over (in the canoe): what is next on the list is said once, the first night's job)
+    if (!tut && this.tutId) { const n = G.list({ done: false }).find((x) => x.next && !(x.kind === 'story' && x.tutorial)); if (n) this.push('Next', n); }
     if (!tut) this.tutId = null;
     else if (tut.id !== this.tutId) { this.tutId = tut.id; this.tutLeft = TRACKER.tutFirstS; }
     if (this.tutLeft > 0) this.tutLeft -= step;

@@ -282,7 +282,22 @@ try {
 
   // [slot:journal-more]
   // [slot:fish-next]
-  // [slot:tutorial-end]
+  // tutorial-end (playtest 3 minor 11): leeches bought, then in the canoe at the dock: the tutorial over, the tracker says
+  // what is next once (the first night's job: "Paddle to …"), then goes
+  const te = await page.evaluate(async () => {
+    const g = window.__game, H = window.__rp, S = g.outfitter.shop, ep = g.profile.home, p = g.player;
+    const lee = S.buyItem('leeches', ep); H.step(10);
+    const canoeStep = H.cur();
+    H.cards.length = 0;
+    g.packs.getIn(p.carry.drop); for (let i = 0; i < 40 && p.mode !== 'paddle'; i++) { H.step(5); await H.wait(20); }
+    H.step(40);
+    const mid = g.tracker.state();
+    H.step(300);
+    return { lee: lee.ok, canoeStep, mode: p.mode, seq: H.seq(), mid, after: g.tracker.state(), cur: H.cur() };
+  });
+  result('tutorial-end: in the canoe the tutorial ends and the tracker says the job\'s next line once',
+    te.lee && te.canoeStep && te.canoeStep.id === 'story:onboard:canoe' && te.mode === 'paddle' && te.seq.some((s) => /^event:Next:task:/.test(s)) && te.mid.shown && /^Paddle to /.test(te.mid.next || '') && !te.after.shown && !(te.cur && /^story:onboard/.test(te.cur.id)), te);
+
   // [slot:latrine]
   // leave-early (playtest 2 major 3): a second season: the gear taken, the talk escaped, then paddled away from the
   // landing: the keeper's part is done for you (the first permit), so no day-use ticket waits
