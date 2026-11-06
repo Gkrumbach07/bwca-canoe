@@ -893,7 +893,7 @@ async function main() {
   const parties = new Parties({ world, profile, day });
   parties.attach({ registry: campsites, camp, player, camera, settings, inventory, fires });
   const partyCamps = new PartyCamps({ world, scene, tiles, fires, parties, people: npcs, player, day, camp, weather, wind });
-  npcs.extra = () => partyCamps.extras(); npcs.partyWord = (v) => partyCamps.word(v);
+  npcs.extra = () => partyCamps.extras(); npcs.partyWord = (v, fig) => partyCamps.word(v, fig);
   { const campUpdF = camp.update.bind(camp); camp.update = (dt) => { campUpdF(dt); parties.update(dt); partyCamps.update(dt); }; }
   // a party's greeting carries over the water (their speakers' hear: dialogue.js keeps a bark to 22 m of its speaker)
   { const distF = talk.distTo.bind(talk); talk.distTo = (sp) => { const d = distF(sp); return sp && sp.hear ? (d * 22) / sp.hear : d; }; }

@@ -2099,7 +2099,7 @@ export class People {
   talkTo(key, fig = 0) {
     const v = typeof key === 'string' ? this.find(key) : key;
     if (!v) return null;
-    if (v.party) return this.partyWord ? this.partyWord(v) : null; // round A-F: a word from a party out there (a bark; gl-e: party-camps.js tells onTalk)
+    if (v.party) return this.partyWord ? this.partyWord(v, fig) : null; // round A-F: a word from a party out there (a bark; gl-e: party-camps.js tells onTalk)
     if (v.extra) return this.extraTalk(v); // gl-e: someone another module stands here
     if (v.inParty) return this.dialogue ? this.pConverse(v, fig) : this.pTalk(v, fig); // gl-e: a party member in a store
     if (this.dialogue) return v.keeper ? this.keeperConverse(v) : this.converse(v);

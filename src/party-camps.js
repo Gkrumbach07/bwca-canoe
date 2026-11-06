@@ -576,9 +576,10 @@ export class PartyCamps {
     return this.people.bark(D.v, k, text, pri);
   }
   // E on one of them: a word about their trip, in their words, filled from the plan (their put-in, the nights left)
-  word(v) {
+  word(v, fig = null) {
     const D = [...this.drawn.values()].find((x) => x.v === v); if (!D) return null;
-    const k = this.greeter(D) ?? 0, T = this.parties.today, rng = mulberry32(((D.stay.seed >>> 0) ^ 0xa11ce ^ (T * 977)) >>> 0);
+    // (r2 2 verify: the one pointed at answers; the greeter only when nobody in particular was)
+    const k = fig != null && D.v.figs[fig] ? fig : this.greeter(D) ?? 0, T = this.parties.today, rng = mulberry32(((D.stay.seed >>> 0) ^ 0xa11ce ^ (T * 977)) >>> 0);
     const line = this.tripLine(D.party, D.stay.end === D.party.exit, rng);
     this.say(D, k, line, PRI.reply);
     if (this.people && typeof this.people.emitTalk === 'function') this.people.emitTalk({ kind: 'party', partyId: D.party.id, lakeId: this.parties.stayLake ? this.parties.stayLake(D.stay) : 0 }); // gl-e
