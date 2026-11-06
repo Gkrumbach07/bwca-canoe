@@ -96,7 +96,20 @@ try {
   // [slot:arrive]
   // [slot:season-line]
   // [slot:pack-tab]
-  // [slot:swim]
+  // swim (playtests 1 and 2, major): before the staff talk, swimming at the empty berth names no canoe and E climbs
+  // into nothing (player.js read carry.drop with no onboarding gate)
+  const sw = await page.evaluate(async () => {
+    const g = window.__game, H = window.__rp, p = g.player, d = p.carry && p.carry.drop;
+    if (!d) return { none: true };
+    const back = { x: p.x, z: p.z };
+    H.standAt(d.x + 1.2, d.z + 0.6); p.enterSwim(); H.step(10);
+    const prompt = p.prompt ? p.prompt.text : '', inn = p.swimIn(); H.step(4);
+    const mode = p.mode, noCanoe = g.onboarding.noCanoe;
+    H.standAt(back.x, back.z); H.step(10);
+    return { prompt, inn, mode, noCanoe, step: g.onboarding.state.step };
+  });
+  result('swim: at the empty berth before the talk, no canoe named and none to climb into', !sw.none && sw.noCanoe && !/canoe/i.test(sw.prompt) && sw.inn === false && sw.mode === 'swim' && sw.step !== 'gear', sw);
+
   // [slot:coop]
   // [slot:name]
   // [slot:bye]

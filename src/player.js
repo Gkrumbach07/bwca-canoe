@@ -1,4 +1,5 @@
 import { FLOAT_OFFSET, LENGTH } from './canoe.js';
+import { onboarding } from './onboarding.js'; // r3 replay: no canoe to swim to before the staff talk lends one
 import { resample, PUNCHEON_TOP, yardBlocked } from './props.js';
 import { KIND, BOARDWALK, mireAt, trailMireAt } from './land.js'; // the wetlands underfoot
 import { brushAt } from './thicket.js'; // the density round: the brush in the way
@@ -910,8 +911,8 @@ export class Player {
       } else this.prompt = { key: null, text: `You are in the water — swim to the canoe (${fmtDist(d)})` };
       return;
     }
-    // from the shore: the canoe where you left it
-    const drop = this.carry && this.carry.drop, dd = drop ? Math.hypot(drop.x - this.x, drop.z - this.z) : Infinity;
+    // from the shore: the canoe where you left it (r3 replay: none at all before the staff talk lends one)
+    const drop = !onboarding.noCanoe && this.carry && this.carry.drop, dd = drop ? Math.hypot(drop.x - this.x, drop.z - this.z) : Infinity;
     if (dd < 3.4) {
       // fb4 A: in where it floats (or where a push would float it: packs.js pushPlan), as it lies; no launch point
       const pk = this.packs, floats = !!(pk && pk.afloat && pk.afloat(drop));
@@ -945,7 +946,7 @@ export class Player {
   // as it lies (co-op round 3: coop-boat.js too). False when it lies too far up the bank
   swimIn() {
     const drop = this.carry && this.carry.drop, st = this.canoe.state;
-    if (this.mode !== 'swim' || !drop) return false;
+    if (this.mode !== 'swim' || !drop || onboarding.noCanoe) return false;
     const pk = this.packs, floats = !!(pk && pk.afloat && pk.afloat(drop)), plan = !floats && pk && pk.pushPlan ? pk.pushPlan(drop) : null;
     const at = floats ? drop : plan ? plan.to : null, L = at ? null : this.launchFrom(drop.x, drop.z, 10);
     if (!at && !L) return false;
