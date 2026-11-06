@@ -93,9 +93,31 @@ try {
   await newSeason(page);
   log('season', JSON.stringify(await page.evaluate(() => ({ home: window.__game.profile.home, cur: window.__rp.cur() }))));
 
-  // [slot:arrive]
-  // [slot:season-line]
-  // [slot:pack-tab]
+  // arrive (playtests 1, 2 and 3 minor: "Tied up at the … dock" with no canoe): the arrival note of an empty-handed start
+  // ties up no canoe
+  const ar = await page.evaluate(() => ({ notes: window.__rp.notes.slice(0, 6), noCanoe: window.__game.onboarding.noCanoe }));
+  result('arrive: the empty-handed arrival note says no canoe is tied up', ar.noCanoe && ar.notes.some((n) => /The (door is open|store is up the yard)/.test(n)) && !ar.notes.some((n) => /Tied up/.test(n)), ar);
+
+  // season-line (playtest 3 major 3: two voices on arrival): while the staffer's talk is to come, the keeper's season
+  // line ("Forty dollars to start you … Food on the shelf, work on the board") is not said
+  const sl = await page.evaluate(() => {
+    const H = window.__rp, g = window.__game;
+    return { keeper: H.keeper.slice(0, 4), notes: H.notes.slice(0, 6), barks: H.barks.slice(0, 6), pending: g.onboarding.pending() };
+  });
+  const said = [...sl.keeper.map((k) => `${k.kind}:${k.words}`), ...sl.notes, ...sl.barks.map((b) => b.text)];
+  result('season-line: one voice on arrival (no keeper\'s season line before the staffer\'s talk)', sl.pending && !sl.keeper.some((k) => k.kind === 'season') && !said.some((t) => /work on the board|start you/i.test(t)), sl);
+
+  // pack-tab (playtest 1 minor 6): with no canoe yet the pack page has no "The canoe · at the dock" tab
+  const pt = await page.evaluate(async () => {
+    const g = window.__game, H = window.__rp, J = g.journal;
+    J.show('pack'); H.step(4); await H.wait(120);
+    const vis = [...document.querySelectorAll('body *')].filter((n) => n.childElementCount === 0 && n.offsetParent && /\S/.test(n.textContent)).map((n) => n.textContent.trim());
+    const r = { open: J.open, side: J.side, canoe: vis.some((t) => /^The canoe$/.test(t)), tabs: vis.filter((t) => /^The |Keeping|^Yours/.test(t)).slice(0, 12) };
+    J.close(); H.step(4);
+    return r;
+  });
+  result('pack-tab: no canoe tab before the loan', pt.open && pt.side === 'pack' && !pt.canoe, pt);
+
   // swim (playtests 1 and 2, major): before the staff talk, swimming at the empty berth names no canoe and E climbs
   // into nothing (player.js read carry.drop with no onboarding gate)
   const sw = await page.evaluate(async () => {

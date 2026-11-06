@@ -38,6 +38,7 @@ import { FOOD_PRICE } from './profile.js';
 import * as props from './props.js';
 import { SHELVES, itemOf } from './shop.js';
 import { ShelfScreen, model as invModel } from './inv-ui.js';
+import { onboarding } from './onboarding.js'; // r3 replay: no canoe tied up, and the keeper holds the season's line, before the staff talk
 // fb2 C: the crosshair's pointer (stream A's pointer.js) when the build has it: the store's hotspots are its targets;
 // without it, E in the store reads the same boxes along the view (aimAt)
 const POINTER = import.meta.glob('./pointer.js', { eager: true })['./pointer.js'] || null;
@@ -342,7 +343,9 @@ export class Outfitter {
     this.visit = { ep: l.ep, landing: l, L, berth, inside: false, switched: false, settled: false, bye: false };
     this.port = l;
     if (this.core) this.core.learn(l.ep); else if (this.profile) this.profile.learn(l.ep);
-    if (!quiet) this.hud.note(deck ? `Tied up at the ${l.name} dock. The store is up the yard.` : `Tied up at the ${l.name} dock. The door is open.`, 4);
+    // (r3 replay: an empty-handed start has no canoe to tie up: you are simply there)
+    const tied = !onboarding.noCanoe;
+    if (!quiet) this.hud.note(deck ? `${tied ? 'Tied up at' : 'At'} the ${l.name} dock. The store is up the yard.` : tied ? `Tied up at the ${l.name} dock. The door is open.` : `At ${l.name}. The door is open.`, 4);
   }
   // E afloat by a store's dock: the canoe comes alongside it, paddled in over DOCK_TIME (updateDocking), and you step
   // out onto the deck. Like going ashore anywhere, only onto the dock: no door, no teleport.
@@ -461,6 +464,9 @@ export class Outfitter {
       if (kind === 'season' || this.arrivedBy) this.lineKind = 'welcome';
       this.arrivedBy = null;
       if (fresh) this.core.fresh = null;
+      // (r3 replay: while the staffer's talk is to come, the keeper's season line ("Food on the shelf, work on the board")
+      // is not said: one voice sends you on, the staffer's ("confusing who you're supposed to talk to", the owner)
+      if (kind === 'season' && onboarding.pending(v.ep)) return;
       const who = this.shop ? this.shop.keeperName(v.ep) : null, words = this.say(v.ep, kind); // (said, not pencilled: the counter's "Mark it on my map" does that)
       if (!(this.people && this.people.keeperSays && this.people.keeperSays(v.ep, words, kind))) this.hud.note(who ? `${who}, behind the counter: “${words}”` : `From behind the counter: “${words}”`, 7); // fb F: said by the keeper's head
     }
