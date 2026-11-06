@@ -272,6 +272,11 @@ export class Guide {
       const L = typeof T.landing === 'function' ? T.landing(t.from) : null;
       return `Hand it over at the board${L ? ` at ${L.name}` : ''}`;
     }
+    // (r3 replay: a catch notice not caught yet says what to do, not "Not caught yet · it goes to …")
+    if (k && k.handsIn) {
+      const L = typeof T.landing === 'function' ? T.landing(t.from) : null, n = Math.max(1, (t.need || 1) - (t.cooler ? t.cooler.length : 0));
+      return `Catch ${n > 1 ? 'them' : 'one'}, then bring ${n > 1 ? 'them' : 'it'} to the board${L ? ` at ${L.name}` : ''}`;
+    }
     const w = typeof T.progressOf === 'function' ? T.progressOf(t) : '';
     return w && w !== 'on the go' ? cap(w) : '';
   }

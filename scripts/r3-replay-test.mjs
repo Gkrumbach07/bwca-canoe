@@ -281,7 +281,18 @@ try {
     tw.st && /^New task /.test(tw.st.text) && !/New task:/.test(tw.st.text) && tw.next && !/\(I\)/.test(tw.next) && (tw.st.text.match(/journal/g) || []).length <= 2 && tw.gem && tw.off < 0.6, tw);
 
   // [slot:journal-more]
-  // [slot:fish-next]
+  // fish-next (playtest 3 minor 7): a catch notice not caught yet says what to do ("Catch one, then bring it to the
+  // board at …"), not "Not caught yet · it goes to …"
+  const fn = await page.evaluate(async () => {
+    const g = window.__game, T = g.tasks, home = g.profile.home;
+    let t = null;
+    try { t = await T.makeKind('fish', home, 'local'); } catch (e) { return { err: String(e) }; }
+    if (!t) return { none: true };
+    const next = g.guide.taskNext(T, { ...t, status: 'open' });
+    return { title: t.title, next };
+  });
+  result('fish-next: a catch notice\'s next line is an instruction', fn.none || (fn.next && /^Catch (one|them), then bring (it|them) to the board/.test(fn.next) && !/Not caught/.test(fn.next)), fn);
+
   // tutorial-end (playtest 3 minor 11): leeches bought, then in the canoe at the dock: the tutorial over, the tracker says
   // what is next once (the first night's job: "Paddle to …"), then goes
   const te = await page.evaluate(async () => {
