@@ -58,6 +58,7 @@ const MAX_PEERS = 3;
 const GLIDE_K = 6;            // 1/s: how fast a catch-up's correction dies away
 const GLIDE_MAX = 40;         // m: a step bigger than this is a teleport, taken at once
 const LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // the code's letters (no I or O)
+const CONNECT_WAIT = 20000; // ms a join or an invite waits for the relay's answer (r2 replay: 8 s ran out on a busy page)
 const RETRY_FOR = 2 * 60 * 1000;   // ms: a dropped socket that had been in keeps trying this long (phase 3), then the choice
 const STAMP_EVERY = 30000;          // ms between the visitor profile's stamps while in a room (Rejoin, a host's code back)
 const ROOM_KEEP_MS = 10 * 60 * 1000; // the relay keeps a room this long after the last one leaves: a host's code is reused within it
@@ -136,10 +137,13 @@ class Relay {
       }
       this.on(m, performance.now());
     });
-    ws.addEventListener('close', () => {
+    ws.addEventListener('close', (e) => {
       if (this.ws !== ws) return;
       this.state = 'closed'; clearTimeout(this.pingT);
       if (this.ended) return;
+      // r2 replay: a refusal's words come with the close too (code 4000, the reason: 'full', 'no trip' ...), for when its
+      // message was missed; before a welcome that is the answer, not a drop to retry
+      if (!this.joined && e && e.code === 4000 && e.reason) { this.ended = true; this.on({ t: 'error', why: e.reason }); return; }
       // dropped: try again (the room keeps the host's snapshot for a joiner), then give up. Once in, for RETRY_FOR (the
       // relay restarting, a laptop's wifi coming back); before, a few times
       const now = Date.now();
@@ -435,7 +439,7 @@ export class Coop {
         this.message(m, at);
       } });
       relay.open();
-      setTimeout(() => { if (!settled) { relay.close(); done({ ok: false, why: 'unreachable' }); } }, 8000);
+      setTimeout(() => { if (!settled) { relay.close(); done({ ok: false, why: 'unreachable' }); } }, CONNECT_WAIT);
     });
   }
   disconnect() {
