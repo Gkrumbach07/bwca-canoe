@@ -198,3 +198,18 @@ it real.
   `public/data/data` link inside it.
 - **Lint.** `npx -y eslint@8 --no-eslintrc --parser-options=ecmaVersion:latest,sourceType:module --env browser,es2022 --rule 'no-undef: error' src/`
 - **Servers.** Kill only your own servers, by PID.
+
+## 8. The join (claude/r3-join)
+
+`claude/r3-base` + `--no-ff` merges of `claude/r3-start` (as `claude/r3-start-b`, its fast-forward), `claude/r3-journal`
+and `claude/r3-locator`. No conflicts: each builder's main.js block sat under its own marker.
+
+Seam fixes:
+- **tracker.js:** a tutorial story step that is not `current()` is never said. The food, leeches and canoe steps come in
+  together mid-talk (the gear is given at its second line), and the store has all three in reach, so the queue filled
+  with "Close by: Buy leeches" while the food was the step. The tutorial card says each step in its turn.
+- **tracker.js:** a task added where you stand says "New task", not "Close by" (the guide's add and near come in the
+  same sync; a ticket written at the counter).
+- **Rigs:** r3-journal-test, r2-tickets and r2-join latch the main path walked before checking "past the tutorial" or
+  "the ticket heads the Tasks list" (story steps head the list while the tutorial runs, by the contract's order).
+- **New rig** `scripts/r3-join-test.mjs`: the seams on the real path (no stand-ins).
