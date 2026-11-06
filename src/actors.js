@@ -891,6 +891,10 @@ export class Actors {
     const t0 = performance.now();
     if (!(dt >= 0)) dt = 0;
     if (this.pool.tick) this.pool.tick();
+    // (r2 2 verify: how far each is before they move: a hull shown again (set down off a carry, out from the camp) had
+    // ticked its first frame on the distance of where it last was, kilometres off, so not lying on the bank: 0.4 m of it
+    // through the ground that frame)
+    for (const b of this.boats) b.dist = Math.hypot(b.x - vx, b.z - vz);
     for (const b of this.boats) b.tick(dt);
     for (const p of this.people) p.tick(dt);
     const fl = Math.hypot(fx, fz), pri = (x, z, d) => (fl > 0 && (x - vx) * fx + (z - vz) * fz < -0.2 * d * fl ? 3 * d : d);
