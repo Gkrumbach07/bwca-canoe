@@ -35,6 +35,7 @@
 import { kv } from './store.js'; // the saves' store (IndexedDB, read into memory before the boot)
 import './inv-ui.css';
 import { fmtLb, fmtIn, fmtDist, fmtMphKmh } from './units.js';
+import { onboarding } from './onboarding.js'; // r3 replay: no canoe tab before the staff talk lends one
 
 // --- the model ----------------------------------------------------------------------------------------------------
 // Stream A's items, when they are in the build (an eager glob: no import fails without them). items.js must not import
@@ -2057,7 +2058,7 @@ export class MineSide {
     const ground = groundAll.filter((c) => c.item !== 'pile' && top(c).item !== 'pile');
     const canoe = list.filter((c) => top(c).where === 'canoe');
     const tent = list.filter((c) => top(c).where === 'tent'), atTent = typeof inv.nearTent === 'function' && inv.nearTent();
-    const atCanoe = !!(stash || canoe.length > 0 || afloat || (typeof inv.nearCanoe === 'function' && inv.nearCanoe()));
+    const atCanoe = !(onboarding.noCanoe && !canoe.length && !afloat) && !!(stash || canoe.length > 0 || afloat || (typeof inv.nearCanoe === 'function' && inv.nearCanoe()));
     const near3 = (l) => l.at && p && Math.hypot(l.at.x - p.x, l.at.z - p.z) < 3;
     const longs = inv.long || [], longCanoe = atCanoe ? longs.filter((l) => l.where === 'canoe') : [], longTent = atTent ? longs.filter((l) => l.where === 'tent') : [], longGround = foot ? longs.filter((l) => l.where === 'ground' && near3(l)) : [];
     const pieces = foot ? this.pieces : [];
