@@ -126,7 +126,8 @@ try {
 
   // the shelves, each with its gem (SETUP: faced from 3 m; bought through shop.buyItem)
   const shelf = async (id, buys, name, caption) => {
-    const s = await ev(({ id }) => { const g = window.__game, H = window.__pl, e = g.guide.get(id), r = e && g.guide.reach(e); if (r) H.face(r.pos, 3.2, 0.1); H.step(200); return H.screen(); }, { id });
+    // (SETUP: from the store's middle, then 3.8 m off the shelf facing it)
+    const s = await ev(({ id }) => { const g = window.__game, H = window.__pl, L = g.outfitter.layout(g.profile.home), c = L.centre || L.counter, e = g.guide.get(id), r = e && g.guide.reach(e); if (c) H.standAt(c.x, c.z); if (r) H.face(r.pos, 3.8, 0.18); H.step(200); return H.screen(); }, { id });
     log('shelf', id, JSON.stringify(s));
     await shot(name, caption);
     const b = await ev(({ buys }) => { const g = window.__game, H = window.__pl, S = g.outfitter.shop, ep = g.profile.home; const r = buys.map((x) => S.buyItem(x, ep).ok); H.step(20); return { r, money: g.profile.money, screen: H.screen() }; }, { buys });
@@ -182,7 +183,7 @@ try {
     for (let k = 0; k < 80 && !s.layout; k++) { H.step(10); await H.wait(80); }
     H.step(20); g.guide.sync();
     const id = `task:${t.id}`, e = g.guide.get(id), r = e && g.guide.reach(e);
-    if (r) { H.face(r.pos, 5, -0.05); H.step(90); }
+    if (r) { H.face(r.pos, 5, -0.05); H.step(240); } // (past the lake's name card)
     return { id, ...H.screen(), mode: g.player.mode };
   });
   log('site', JSON.stringify(site));
@@ -197,8 +198,8 @@ try {
   log('checked', JSON.stringify(checked));
   result('play 6: at the site each part\'s gem shows at full in turn (grate, latrine, pad), each line "Look over the …"; the job done', site.gems.some((x) => /^task:/.test(x)) && checked.out.every((o) => o.gem && o.fade === 1 && /^Look over the /.test(o.next || '')) && checked.status === 'done', checked);
 
-  // the night (SETUP: the clock to 22:40)
-  await ev(() => { const g = window.__game, H = window.__pl; g.day.setClock(g.day.year, g.day.doy, 22.67); H.step(120); });
+  // the night (SETUP: the clock to 21:54, the last light)
+  await ev(() => { const g = window.__game, H = window.__pl; g.day.setClock(g.day.year, g.day.doy, 21.9); H.step(120); });
   await shot('11-night', 'The first night out');
 
   // home the next day (SETUP: the clock to 10 the day after, the paddle home a teleport to the home landing)
