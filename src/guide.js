@@ -296,7 +296,7 @@ export class Guide {
       const n = f.n || 0;
       return {
         id: `ticket:${f.id}`, kind: 'ticket', title: 'A ranger’s ticket', ref: f.id, order: f.abs || 0,
-        next: money >= n ? `Pay $${n} in your journal (I)` : `$${n} to pay; you have $${money}`,
+        next: money >= n ? `Pay $${n} in your journal` : `$${n} to pay; you have $${money}`, // (r3 replay: the card's own line says I)
         target: { kind: 'place', key: 'counter', label: 'the counter', store: 'any', near: 0, pos: () => { const v = o && o.visit; return v ? this.spot(v.ep, 'counter')() : null; } },
       };
     });

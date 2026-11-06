@@ -146,7 +146,7 @@ export class Tracker {
       this.sig = sig;
       // (the title is said only when the next line doesn't already say it: "Talk to Josie" / "Talk to Josie at the counter.")
       const showTitle = card.mode === 'event' && e.title && !bare(next).startsWith(bare(e.title));
-      const lead = card.head === 'New task' ? 'New task:' : card.head;
+      const lead = card.head; // (r3 replay: no colon after "New task": every head reads alike, "Next", "Close by", "Done")
       this.el.className = `k-${e.kind}${card.mode === 'tutorial' ? ' tut' : ''}${this.shown ? ' on' : ''}`;
       this.el.innerHTML = `<div class="tr-head">${ICON(e.kind)}<span>${esc(lead)}</span></div>${showTitle ? `<div class="tr-title">${esc(e.title)}</div>` : ''}${next ? `<div class="tr-next">${esc(next)}</div>` : ''}<div class="tr-key"><kbd>I</kbd> for your journal</div>`;
     }

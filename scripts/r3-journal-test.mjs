@@ -109,7 +109,7 @@ try {
     return { cur: cur && { id: cur.id, next: cur.next, tutorial: cur.tutorial }, s0, was, during, talking: d.talking, s1, s2, vis: cs.visibility, op: cs.opacity, rect: document.getElementById('tracker').getBoundingClientRect().toJSON() };
   });
   result('1a the tracker is up through the tutorial with the step\'s line ("New task: …", then on and on)', one.cur && one.cur.tutorial && one.s0.shown && one.s0.id === 'story:onboard:talk' && one.s0.next === one.cur.next
-    && /^New task:/.test(one.s0.text) && /Talk to .+ at the counter\./.test(one.s0.text) && /I for your journal/.test(one.s0.text) && one.rect.left < 200
+    && /^New task\b/.test(one.s0.text) && /Talk to .+ at the counter\./.test(one.s0.text) && /I for your journal/.test(one.s0.text) && one.rect.left < 200
     && one.s2.shown && one.s2.mode === 'tutorial' && one.s2.id === 'story:onboard:talk' && /Talk to .+ at the counter\..*I for your journal/.test(one.s2.text), one);
   result('1b escaping the first talk keeps it, saying the same (hidden while the talk was up)', one.was && !one.during && !one.talking && one.s1.shown && one.s1.id === 'story:onboard:talk' && one.s1.next === one.cur.next && one.vis === 'visible', { s1: one.s1, was: one.was, during: one.during, vis: one.vis });
   await page.waitForTimeout(500);
@@ -147,7 +147,7 @@ try {
     for (let k = 0; k < 80 && st && !(sNew.mode === 'event' && sNew.id === st.id); k++) { H.step(3); sNew = g.tracker.state(); }
     return { starter: st && st.id, cur: g.guide.current() && g.guide.current().id, sNew, home };
   });
-  result('5a a new entry shows the card ("New task: …")', three.starter && three.sNew.shown && three.sNew.mode === 'event' && three.sNew.head === 'New task' && three.sNew.id === three.starter && /^New task:/.test(three.sNew.text), three);
+  result('5a a new entry shows the card ("New task: …")', three.starter && three.sNew.shown && three.sNew.mode === 'event' && three.sNew.head === 'New task' && three.sNew.id === three.starter && /^New task\b/.test(three.sNew.text), three);
   await page.waitForTimeout(400);
   await shot(page, 'r3-tracker-new.png');
   const fade = await page.evaluate(async () => {

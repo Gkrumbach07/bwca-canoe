@@ -264,10 +264,25 @@ try {
     tl.cur && tl.cur.id === 'story:onboard:leeches' && tl.title && tl.next && !bare(tl.next).startsWith(bare(tl.title)) && tl.where === null, tl);
 
   // [slot:bark-tracker]
-  // [slot:tutorial-end]
-  // [slot:ticket-words]
+  // ticket-words (playtest 3 minor 10): the card's heads read alike ("New task", no colon), and a ticket's line does not
+  // say "(I)" over the card's own "I for your journal"; the ticket's gem is over the counter
+  const tw = await page.evaluate(async () => {
+    const g = window.__game, H = window.__rp, P = g.permits, ep = g.profile.home, o = g.outfitter;
+    const L = o.layout(ep), at = L.counter || L.centre;
+    H.standAt(at.x + 0.6, at.z + 0.6); H.step(30);
+    H.cards.length = 0;
+    P.fine('dayuse'); P.issue(); g.guide.sync();
+    let st = null;
+    for (let k = 0; k < 80; k++) { H.step(3); const s = g.tracker.state(); if (s.shown && /^ticket:/.test(s.id || '')) { st = s; break; } }
+    const t = g.guide.list().find((e) => e.kind === 'ticket');
+    return { st, next: t && t.next, gem: t ? !!H.gem(t.id) : false, off: t ? H.off(t.id) : null };
+  });
+  result('ticket-words: "New task" with no colon, no "(I)" in the ticket\'s line, the gem over the counter',
+    tw.st && /^New task /.test(tw.st.text) && !/New task:/.test(tw.st.text) && tw.next && !/\(I\)/.test(tw.next) && (tw.st.text.match(/journal/g) || []).length <= 2 && tw.gem && tw.off < 0.6, tw);
+
   // [slot:journal-more]
   // [slot:fish-next]
+  // [slot:tutorial-end]
   // [slot:latrine]
   // leave-early (playtest 2 major 3): a second season: the gear taken, the talk escaped, then paddled away from the
   // landing: the keeper's part is done for you (the first permit), so no day-use ticket waits
