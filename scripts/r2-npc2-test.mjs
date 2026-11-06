@@ -219,7 +219,7 @@ try {
     // (whatever the earlier sections left up, a card or a word, let it go: the dot is off under it)
     const why = await page.evaluate(async () => {
       const g = window.__game, P = g.pointer, h = g.hud;
-      for (let k = 0; k < 300 && !P.usable(false); k++) { if (h && h.paper && h.closePaper) h.closePaper(); if (h && h.big && h.closeBig) h.closeBig(); if (g.input) { g.input.once.add && g.input.once.add('Escape'); } g.step(1 / 30, 1); await new Promise((q) => setTimeout(q, 2)); }
+      for (let k = 0; k < 300 && !P.usable(false); k++) { if (h && h.paper) { const c = h.papers && h.papers.get(h.paper); if (c) c(); } if (h && h.big && h.closeBig) h.closeBig(); if (g.input) { g.input.once.add && g.input.once.add('Escape'); } g.step(1 / 30, 1); await new Promise((q) => setTimeout(q, 2)); }
       return { usable: P.usable(false), paper: !!(h && h.paper), big: !!(h && h.big), talking: !!(g.dialogue && g.dialogue.talking), quiet: !!(P.quiet && P.quiet()) };
     });
     log('names: the dot', JSON.stringify(why));
@@ -486,10 +486,11 @@ try {
       out.hulls = Math.max(out.hulls, H.length);
       const nearMe = (q) => Math.hypot(q.x - p.x, q.z - p.z) < 70;
       if (prevH) {
-        for (const q of H) if (nearMe(q) && !prevH.some((o) => Math.hypot(o.x - q.x, o.z - q.z) < 2.5)) { out.pops++; if (out.popEv.length < 6) out.popEv.push({ k, appear: q.w }); }
+        for (const q of H) if (nearMe(q) && !prevH.some((o) => Math.hypot(o.x - q.x, o.z - q.z) < 2.5)) { out.pops++; if (out.popEv.length < 6) out.popEv.push({ k, appear: q.w, at: [+q.x.toFixed(1), +q.z.toFixed(1)], prev: prevH.map((o) => [o.w, +o.x.toFixed(1), +o.z.toFixed(1)]) }); }
         for (const o of prevH) if (nearMe(o) && !H.some((q) => Math.hypot(o.x - q.x, o.z - q.z) < 2.5)) { out.pops++; if (out.popEv.length < 6) out.popEv.push({ k, gone: o.w }); }
       }
       prevH = H;
+      if (window.__dbgHand && L && L.arrive && k < 140 && k % 4 === 0) { const X = L.arrive, tl = (L.seg.h1 - (g.day.hours - mv.lagOf(L.party.id))) * 3600 / 8; (out.dbg || (out.dbg = [])).push({ k, tl: +tl.toFixed(1), seg: L.seg.kind, cr: [...X.carry.entries()].map(([i, cr]) => ({ i, c: cr.c, up: +cr.up.toFixed(1), dur: +cr.dur.toFixed(1), fx: !!cr.fixed, from: [+cr.from.x.toFixed(1), +cr.from.z.toFixed(1)], to: [+cr.to.x.toFixed(1), +cr.to.z.toFixed(1)], a: [+L.persons[i].x.toFixed(1), +L.persons[i].z.toFixed(1), L.persons[i].mode], b: [+L.boats[cr.c].x.toFixed(1), +L.boats[cr.c].z.toFixed(1), L.boats[cr.c].hidden] })) }); }
       // the people: who of the party is drawn on foot, who of the camp
       const party = L ? L.persons.filter((a) => a.bind && !a.boat).map((a) => ({ x: a.x, z: a.z })) : [];
       // (one of the party drawn on foot moved over 0.6 m in a frame: a jump)
@@ -526,13 +527,15 @@ try {
     let R = null;
     for (const c of picks) {
       log('arrive:', JSON.stringify(c));
-      await page.evaluate(({ c, YEAR }) => window.__game.day.setClock(YEAR, 192, c.arrive - 0.04), { c, YEAR }); await tp(page, c.to.x, c.to.z, 'arrive arrival');
+      await page.evaluate(({ c, YEAR }) => window.__game.day.setClock(YEAR, 192, c.arrive - 0.12), { c, YEAR }); await tp(page, c.to.x, c.to.z, 'arrive arrival');
       const S = await page.evaluate(({ id }) => { for (let k = 0; k < 40; k++) { const L = [...window.__game.moves.active.values()].find((x) => x.plan.id === id); if (L && L.st) { const q = L.st.to.L; return { x: q.x, z: q.z, ux: q.ux, uz: q.uz, tx: q.tx, tz: q.tz }; } window.__game.step(1 / 30, 15); } return null; }, { id: c.id });
       if (!S) continue;
       await watchLanding(S);
       // (to the last minute of their landing, then every frame through the hand-over)
       await page.evaluate(({ c, YEAR }) => { const g = window.__game; g.day.setClock(YEAR, 192, c.end - 0.075); g.step(1 / 30, 30); }, { c, YEAR });
+      if (process.env.DBG) await page.evaluate(() => { window.__dbgHand = true; });
       R = await HAND(c.pid, c.key, 'arrive', 1500, 'in');
+      if (R.dbg) for (const q of R.dbg) log('dbg', JSON.stringify(q)); delete R.dbg;
       log('arrive measured', JSON.stringify(R)); await flushShots(page);
       if (R.dropped != null) break;
     }

@@ -845,7 +845,8 @@ export class PartyMoves {
       // (up to her by her place in the water over HAND.reach s, lifted over HAND.lift, carried up over dur, and held there
       // till the camp has her: tl the landing's real seconds left)
       if (tl > cr.up) return null;
-      if (!cr.fixed) { const Y = this.sideOf(L, cr.c, 'mid', s.S); cr.from = { x: Y.x, z: Y.z }; cr.fixed = true; } // (by her middle as she lies when he goes to her)
+      // (by her middle as she lies, followed while he goes to her and taken as he lifts her)
+      if (tl > cr.dur + HAND.lift || !cr.fixed) { const Y = this.sideOf(L, cr.c, 'mid', s.S); cr.from = { x: Y.x, z: Y.z }; if (tl <= cr.dur + HAND.lift) cr.fixed = true; }
       if (tl > cr.dur + HAND.lift) { const J = this.jobPoseAt(L, s, i, h - (cr.up - tl) * CLOCK / 3600), k = smooth((cr.up - tl) / HAND.reach); return { x: J.x + (cr.from.x - J.x) * k, z: J.z + (cr.from.z - J.z) * k, heading: headingOf(cr.from.x - J.x, cr.from.z - J.z), v: (Math.hypot(cr.from.x - J.x, cr.from.z - J.z) / HAND.reach) * 1.5 * Math.sin(Math.PI * k), mode: 'walk', pack: false }; }
       const u = smooth(clamp(1 - tl / cr.dur, 0, 1)), px = cr.from.x + (cr.to.x - cr.from.x) * u, pz = cr.from.z + (cr.to.z - cr.from.z) * u;
       const hd = u < 0.9 ? headingOf(cr.to.x - cr.from.x, cr.to.z - cr.from.z) : cr.to.h;
