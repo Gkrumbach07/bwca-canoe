@@ -85,8 +85,11 @@ export class Tracker {
     return this;
   }
   get enabled() { const S = this.t.settings; return !S || typeof S.get !== 'function' || S.get('tracker') !== false; }
+  // a tutorial step that is not the main path's step now is never said (the tutorial card says each step in its turn:
+  // the food, leeches and canoe steps come in together mid-talk, and the store has them all in reach)
+  later(e) { const G = this.t.guide, cur = G && G.current(); return !!(e && e.kind === 'story' && e.tutorial && !e.done && (!cur || cur.id !== e.id)); }
   push(head, e) {
-    if (!this.enabled || !e) return;
+    if (!this.enabled || !e || this.later(e)) return;
     if (this.ev && this.ev.id === e.id) { if (head === 'Done') this.ev.head = head; this.ev.left = TRACKER.showS; return; }
     this.queue = this.queue.filter((x) => x.id !== e.id);
     this.queue.push({ head, id: e.id });
@@ -108,8 +111,8 @@ export class Tracker {
     const step = Number.isFinite(dt) && dt > 0 ? Math.min(dt, 0.5) : 0;
     if (this.ev) { this.ev.left -= step; if (this.ev.left <= 0 || !G.get(this.ev.id)) this.ev = null; }
     while (!this.ev && this.queue.length) {
-      const q = this.queue.shift();
-      if (G.get(q.id)) this.ev = { ...q, left: TRACKER.showS };
+      const q = this.queue.shift(), e = G.get(q.id);
+      if (e && !this.later(e)) this.ev = { ...q, left: TRACKER.showS };
     }
     let card = null;
     if (this.ev) card = { mode: 'event', head: this.ev.head, e: G.get(this.ev.id), fade: this.ev.left < 0.6 };

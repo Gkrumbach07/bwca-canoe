@@ -150,6 +150,9 @@ try {
   await shot(page, 'r3-tracker-new.png');
   const fade = await page.evaluate(async () => {
     const g = window.__game, H = window.__r3;
+    // (the join: the main path goes on past the talk (food, leeches, the canoe: onboarding.js); "past the tutorial" is
+    // that path walked, latched as the game latches it)
+    const ob = g.onboarding.state; if (ob && ob.path) { ob.path.food = ob.path.leeches = ob.path.canoe = true; g.onboarding.write(); }
     H.step(30); const mid = g.tracker.state().shown;
     H.step(200); // (~6.7 s of game frames)
     return { mid, cur: g.guide.current() && g.guide.current().id, after: g.tracker.state() };
