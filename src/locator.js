@@ -40,6 +40,9 @@ export const LOCATOR = {
   appear: 0.3,        // s to fade and swell in
   vanish: 0.25,       // s to shrink away when its entry goes
   closeCam: 1.1,      // m: nearer the camera than this it is hidden (it never fills the view)
+  xray: 9,            // m: nearer the camera than this it is drawn over what stands in front of it (your own hat and
+                      // shoulders, the staffer's lamp shade): close by, the gem is never lost behind the near things; past it
+                      // the world hides it as ever (depthTest only: no new program)
   water: 0.6,         // m over the water at least, when the target is over water (the canoe tied at the dock)
   shades: [0xffe58a, 0xf2b01e, 0xb57a0a], // light, mid and dark facets: the gold
 };
@@ -166,7 +169,8 @@ export class Locator {
       me.position.set(p.x, y, p.z);
       me.rotation.set(0, s.spin, 0);
       me.scale.setScalar(h);
-      for (const mat of me.material) mat.opacity = op;
+      const xr = dc < LOCATOR.xray;
+      for (const mat of me.material) { mat.opacity = op; mat.depthTest = !xr; }
       me.visible = op > 0.01 && dc > LOCATOR.closeCam;
     }
   }
@@ -176,7 +180,7 @@ export class Locator {
     for (const [id, s] of this.slots) {
       const me = s.mesh;
       if (!me.visible) continue;
-      out.push({ id, main: !!s.main, gone: s.gone, x: me.position.x, y: me.position.y, z: me.position.z, s: me.scale.x, opacity: me.material[0].opacity });
+      out.push({ id, main: !!s.main, gone: s.gone, x: me.position.x, y: me.position.y, z: me.position.z, s: me.scale.x, opacity: me.material[0].opacity, xray: !me.material[0].depthTest });
     }
     return out;
   }

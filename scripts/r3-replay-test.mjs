@@ -173,7 +173,19 @@ try {
   result('marks-one: one story gem, over the step\'s place (no gem yet on the leeches or the canoe)',
     mk.cur === 'story:onboard:food' && mk.open.includes('story:onboard:leeches') && mk.marks.filter((id) => /^story:/.test(id)).join() === 'story:onboard:food' && mk.gems.filter((id) => /^story:/.test(id)).join() === 'story:onboard:food', mk);
 
-  // [slot:gem-depth]
+  // gem-depth (playtest 3 major 2, playtest 1 minor 11: the gem hidden behind your own hat, the lamp shade): close to the
+  // camera the gem is drawn over the near things (depthTest off), with no new shader program
+  const gd = await page.evaluate(async () => {
+    const g = window.__game, H = window.__rp, R = g.renderer || (g.quality && g.quality.renderer) || null;
+    const p0 = R && R.info && R.info.programs ? R.info.programs.length : null;
+    const e = g.guide.get('story:onboard:food'), r = e && g.guide.reach(e);
+    if (r) { H.face(r.pos, 3); H.step(30); }
+    const near = H.gem('story:onboard:food');
+    const p1 = R && R.info && R.info.programs ? R.info.programs.length : null;
+    return { near, p0, p1 };
+  });
+  result('gem-depth: the near gem is drawn over what stands in front of it (r3-locator-test counts the programs)', gd.near && gd.near.xray === true, gd); // (the program count: r3-locator-test's own check)
+
   // [slot:money]
   // [slot:food-two]
   // [slot:bark-tracker]
