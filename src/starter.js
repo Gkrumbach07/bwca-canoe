@@ -46,7 +46,7 @@ export const STARTER = {
 const COMPASS = ['north', 'northeast', 'east', 'southeast', 'south', 'southwest', 'west', 'northwest'];
 const compass = (dx, dz) => COMPASS[Math.round((((Math.atan2(dx, -dz) * 180) / Math.PI + 360) % 360) / 45) % 8];
 const SITE_WORDS = { island: 'the island site', point: 'the site on the point', bay: 'the site back in the bay' };
-const blank = (season = null) => ({ v: 1, season, offered: {}, taken: {}, firstOut: null });
+const blank = (season = null) => ({ v: 1, season, offered: {}, answered: {}, taken: {}, firstOut: null });
 const hashStr = (s) => { let h = 2166136261; for (const c of String(s || '')) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; };
 // the weather's seed for a season (an integer, never the default's 23 by chance alone)
 export const seasonSeed = (id) => (id ? (hashStr(`sky:${id}`) % 2147483000) + 101 : 23);
@@ -57,6 +57,8 @@ export class Starter {
     Object.assign(this.t, t);
     const pr = this.t.profile, s = save.read(NS);
     this.state = s && s.v === 1 && (!pr || !pr.seasonId || s.season === pr.seasonId) ? { ...blank(), ...s } : blank(pr ? pr.seasonId : null);
+    // (r3 replay: a save from before 'answered' counts every suggestion it made as answered)
+    if (s && s.v === 1 && !s.answered) this.state.answered = Object.fromEntries(Object.keys(this.state.offered || {}).map((k) => [k, true]));
     if (pr && typeof pr.onChange === 'function') pr.onChange((what) => { if (what === 'season') this.newSeason(pr.seasonId); });
     const tr = this.t.trip;
     if (tr && typeof tr.on === 'function') tr.on('exit', () => this.tripOut());
@@ -77,12 +79,14 @@ export class Starter {
     const site = w.campsites[r.site];
     return site ? { ...r, ep: Number(ep), siteRec: site } : null;
   }
-  // a route to suggest here: one this season has not heard yet (not a co-op guest's: their host's season)
+  // a route to suggest here: one this season has not answered yet (not a co-op guest's: their host's season). r3 replay:
+  // a suggestion escaped before any answer is made again (every onboarding talk can be escaped and picked up)
   available(ep) {
     const pr = this.t.profile;
     if (!this.state || this.guest || !pr || !pr.started || pr.mode === 'sandbox') return false;
-    return !!this.route(ep) && this.state.offered[Number(ep)] == null;
+    return !!this.route(ep) && !(this.state.answered || {})[Number(ep)];
   }
+  answer(ep) { if (!this.state.answered) this.state.answered = {}; this.state.answered[Number(ep)] = true; this.write(); }
   // the words of the way: where the site is from the landing, how far, the carry
   words(ep) {
     const r = this.route(ep), w = this.t.world, L = this.landingOf(ep);
@@ -108,15 +112,16 @@ export class Starter {
     this.state.offered[Number(ep)] = Math.round(this.nowH * 100) / 100; this.write();
     const pay = this.payOf(ep), node = (say, choices) => (by ? { say, by, choices } : { say, choices });
     const after = (say) => node(say, [{ text: 'Thanks.', go: done }]);
+    const ans = (go) => () => { this.answer(ep); return go(); }; // (answered: the suggestion is not made again)
     // (r2 join: an open ticket means no night permit at the desk: the keeper says so, once, with the way)
     const P = this.t.permits, owed = P && typeof P.owed === 'function' ? P.owed() : 0;
     const tk = owed > 0 ? ` That ticket of yours first, though: the desk sells no night with one open.` : '';
     return node(`First night out? ${W.way} ${W.easy} Back by lunch the next day. I’ve marked it on your map.${tk}`, [
       { text: 'I’ll go there.', go: () => node(`While you’re there, look over the grate, the latrine and the tent pad for me. $${pay} when you’re back.`, [
-        { text: 'I’ll do that.', go: () => { this.take(ep); return after('Good. Back in two or three days, then.'); } },
-        { text: 'I’ll just camp.', go: () => after('Fair enough. Enjoy it.') },
+        { text: 'I’ll do that.', go: ans(() => { this.take(ep); return after('Good. Back in two or three days, then.'); }) },
+        { text: 'I’ll just camp.', go: ans(() => after('Fair enough. Enjoy it.')) },
       ]) },
-      { text: 'I might go somewhere else.', go: () => after('Suit yourself. It’s on your map if you want it.') },
+      { text: 'I might go somewhere else.', go: ans(() => after('Suit yourself. It’s on your map if you want it.')) },
     ]);
   }
   payOf(ep) { const r = this.route(ep); return STARTER.pay + (r && r.portages && r.portages.length ? STARTER.carry : 0); }
