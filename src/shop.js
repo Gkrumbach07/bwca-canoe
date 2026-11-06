@@ -40,6 +40,7 @@ import { save } from './save.js';
 import { model, itemFor, itemDef, firstFit, acceptsKind, refresh } from './inv-ui.js';
 import { LURE_TAKES, AFRAME_SLEEP } from './items.js'; // content C: the new lures' takes (tuning: the A-frame's night)
 import { PREMIUM, SPECIALTY, specialtyMatch } from './outfitter-kit.js'; // the game-loop round: what each outfitter alone sells, and its specialty
+import { onboarding } from './onboarding.js'; // r3: no canoe at the dock before the staff talk
 import { sheetsSoldAt } from './sheets.js'; // the game-loop round: the sheets each of the fourteen tables sells
 
 const NS = 'shop';
@@ -448,10 +449,13 @@ export class Shop {
       return { ok: true, words: `${it.name}${paid(n)}: with your things${it.slot ? ', and the one you’ll use' : ''}. $${pr.money} in hand.` };
     }
     if (d && d.kind === 'container') {
+      // r3: with your canoe tied at this dock it goes in the canoe (a bucket bought for the leeches rides out with you);
+      // else it waits with your things here
       let made = null;
-      for (let i = 0; i < n; i++) made = inv.addContainer(it.id, 'stash');
+      const dock = !inv.stub && this.canoeAtDock() && inv.containers && inv.containers.filter((c) => c.where === 'canoe').length < 8;
+      for (let i = 0; i < n; i++) made = inv.addContainer(it.id, dock ? 'canoe' : 'stash');
       pr.spend(cost, `${it.name}${at}`); this.apply(); refresh();
-      return { ok: true, cId: made && made.id, words: `${it.name}${paid(n)}: it’s with your things. Fill it, then carry it out. $${pr.money} in hand.` };
+      return { ok: true, cId: made && made.id, words: dock ? `${it.name}${paid(n)}: in your canoe at the dock. $${pr.money} in hand.` : `${it.name}${paid(n)}: it’s with your things. Fill it, then carry it out. $${pr.money} in hand.` };
     }
     // a thing that goes in: where it was dropped, else where there is room, one at a time
     const qty = it.qty || 1, into = new Map();
@@ -489,6 +493,7 @@ export class Shop {
   }
   // the canoe tied at this store's dock (outfitter.js tieUp: set down at the layout's dockSide)
   canoeAtDock() {
+    if (onboarding.noCanoe) return false; // r3: none yet (onboarding.js)
     const o = this.outfitter, s = o && o.berthSide, d = this.player && this.player.carry && this.player.carry.drop;
     return !!(s && d && Math.hypot(d.x - s.x, d.z - s.z) < 1.5);
   }

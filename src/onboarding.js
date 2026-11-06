@@ -27,15 +27,18 @@
 // permit? }. A season from before this round (its profile started, no document) is { done: true, legacy: true }: it
 // keeps its kit and never sees the counter scene.
 import { save } from './save.js';
-import { OWN_KIT, WALT_IDS } from './items.js';
+import { OWN_KIT, WALT_IDS, GUEST_KIT, LOAN, FOOD_KINDS, itemDef } from './items.js';
 import { PRI } from './dialogue.js';
 import { absDay } from './trip.js';
 
 const NS = 'onboard';
 const FOOD_DAYS = 3;                      // the food that comes with the gear: a breakfast and a supper a day
 const GIFT = ['walttent', 'pot', 'waltstove', 'fuel']; // into the old pack, with your own things (items.js OWN_KIT)
+// r3: the new player's pack also takes the loaner life jacket (items.js LOAN.pack); a guest's kit is as it was
+const GIFT_R3 = [...GIFT, ...LOAN.pack];
 // biggest first, so the pack takes it all: the tent, your bag and pad, the tackle box, the pot, the rest
 const ORDER = ['walttent', 'sleepingbag', 'pad', 'tacklebox', 'pot', 'clothes', 'tarp', 'waltstove', 'fuel', 'tablets'];
+const ORDER_R3 = ['walttent', 'sleepingbag', 'pad', 'pfd', 'pot', 'clothes', 'tarp', 'waltstove', 'fuel', 'tablets'];
 // A co-op guest's starter kit (the owner's call 2026-11-05: "friends joining get a basic starting pack"): the new
 // player's kit after the scene, with the plain things for the story's (Walt's pack, tent and stove stay the host's story)
 export const GUEST_PLAIN = { waltpack: 'pack3', walttent: 'aframe', waltstove: 'stove' };
@@ -45,7 +48,12 @@ const ROLE = 'the summer help';
 const DOOR_LINE = 'Got a minute? Come to the counter.';
 const STAFF_LOOK = { age: 'young', shirt: 0x5f7f45, hat: null }; // (E's figure look, as it takes it; ignored without E)
 
-export const blankOnboard = (season = null) => ({ v: 1, step: 'door', done: false, season, nudged: false });
+// r3 (2026-11-05): path, the main path's steps after the talk (food, leeches, the canoe pushed off), each latched true
+// once seen and saved, so a reload brings the same step back; loan, the outfitter's canoe at the dock (none before the
+// talk: the hull is hidden and offers nothing). A season from before r3 has neither, and keeps its canoe.
+export const blankOnboard = (season = null) => ({ v: 1, step: 'door', done: false, season, nudged: false, path: { food: false, leeches: false, canoe: false }, loan: false });
+// the main path's ids (docs/build/r3-contract.md section 3)
+export const PATH_IDS = { talk: 'story:onboard:talk', food: 'story:onboard:food', leeches: 'story:onboard:leeches', canoe: 'story:onboard:canoe' };
 
 export class Onboarding {
   constructor() {
@@ -66,9 +74,13 @@ export class Onboarding {
   }
   newSeason(id = null) { this.dismiss(); this.state = blankOnboard(id); this.write(); }
   // a co-op guest: the visit is no season of theirs, so no scene and no old gear (kv is frozen: nothing is written)
-  skip() { this.dismiss(); this.state = { ...blankOnboard(this.state ? this.state.season : null), step: 'done', done: true, guest: true }; }
+  skip() { this.dismiss(); this.state = { ...blankOnboard(this.state ? this.state.season : null), step: 'done', done: true, guest: true, path: null, loan: true }; }
   write() { if (this.state) save.write(NS, this.state); }
   get done() { return !this.state || !!this.state.done; }
+  // r3: no canoe at the dock yet (a new season before the staff talk gives the loan)
+  get noCanoe() { const s = this.state; return !!(s && s.path && !s.loan && !s.guest && !s.legacy); }
+  // r3: the main path past the talk is under way (its steps still to do)
+  get onPath() { const s = this.state; return !!(s && s.path && !s.guest && !s.legacy && (s.step === 'gear' || s.done) && !(s.path.food && s.path.leeches && s.path.canoe)); }
   get home() { const pr = this.t.profile; return pr && pr.started ? pr.home : null; }
   // the scene still to come at this entry point (home, the season's, not done)
   pending(ep = this.home) { return !!(this.state && !this.state.done && this.home != null && Number(ep) === this.home); }
@@ -121,6 +133,8 @@ export class Onboarding {
 
   // --- each frame: the line at the door, and the staffer standing while the scene is to come ---------------------------
   update() {
+    this.hull();
+    this.tickPath();
     const o = this.t.outfitter, v = o && o.visit;
     if (!v || !this.pending(v.ep)) { if (this.extra) this.dismiss(); return; }
     this.stand(v.ep);
@@ -160,7 +174,10 @@ export class Onboarding {
     const next = st && typeof st.available === 'function' && st.available(ep) ? () => st.talk(ep, close, { by }) : close;
     const keeperNode = { say: grant ? 'And your first permit’s on me: today, from right here. The map of these lakes too.' : 'And the map of these lakes is on the house.', by,
       choices: [{ text: 'Thank you.', go: next }] };
-    return { say: 'It’s in your canoe at the dock. I put your own things in the pack, and three days of food in the barrel.', choices: [{ text: 'Thanks.', go: () => keeperNode }] };
+    if (!this.state.path) return { say: 'It’s in your canoe at the dock. I put your own things in the pack, and three days of food in the barrel.', choices: [{ text: 'Thanks.', go: () => keeperNode }] };
+    // r3: the loan, then only what is still missing (food, leeches): the shelves, never what it is for
+    const pa = this.state.path, miss = [!pa.food ? 'No food in it, though: the provisions shelf is behind you.' : '', !pa.leeches ? 'Leeches are on the tackle shelf.' : ''].filter(Boolean).join(' ');
+    return { say: `There’s one of our canoes at the dock for you, on loan, with a paddle, a life jacket, a barrel and a rod. The old pack’s in it, your own things packed in.${miss ? ` ${miss}` : ''}`, choices: [{ text: 'Thanks.', go: () => keeperNode }] };
   }
   openCounter(landing) { if (landing && typeof this.showCounter === 'function') this.showCounter(landing); }
   // the scene over: the first permit (A), the home sheet (already given with a new season: sheets.giveHome), done
@@ -175,16 +192,94 @@ export class Onboarding {
     this.dismiss();
   }
 
+  // --- r3: the loan, the hull at the dock, the main path ----------------------------------------------------------------
+  // the outfitter's loan into the canoe (items.js LOAN: the barrel, the stringer, the paddle, the rod; the life jacket
+  // went in the pack), then anything bought before the talk out of the crate and the stash into the canoe: food to the
+  // barrel, bait to a bucket, the rest to the pack; a bucket or barrel bought is put in the canoe. → the item ids lent
+  lend(inv) {
+    const q = { quiet: true }, out = [];
+    for (const id of LOAN.canoe) if (inv.addContainer(id, 'canoe', null, q)) out.push(id);
+    for (const id of LOAN.long) if (inv.addLong(id, 'canoe', null, q)) out.push(id);
+    for (const c of inv.containers) if (c.where === 'stash' && c.item !== 'crate' && c.item !== 'pockets') { c.where = 'canoe'; c.at = null; }
+    const crate = inv.crate, inCanoe = (re) => inv.containers.filter((c) => c.where === 'canoe' && re.test(c.item));
+    if (crate) {
+      for (const e of [...crate.grid]) {
+        const d = !e.box && itemDef(e.id);
+        if (!d || OWN_KIT.includes(e.id)) continue;
+        const food = FOOD_KINDS.includes(d.kind), bait = d.kind === 'bait';
+        if (!food && !bait && d.kind !== 'lure') continue;
+        const to = [...(food ? inCanoe(/^barrel/) : []), ...(bait ? inCanoe(/^bucket$/) : []), ...inCanoe(/pack/)];
+        for (const c of to) { const sp = inv.firstFit(c, e.id); if (sp) { inv.move(crate.id, e.uid, c.id, sp.x, sp.y, sp.rot); break; } }
+      }
+    }
+    if (typeof inv.refreshUse === 'function') inv.refreshUse();
+    inv.emit('containers'); inv.emit('long');
+    if (typeof inv.write === 'function') inv.write();
+    return out;
+  }
+  // the hull at the dock is drawn only once there is a canoe (the pointer offers nothing at it: packs.js hullAction)
+  hull() {
+    const p = this.t.player, h = p && p.canoe && p.canoe.hull;
+    if (!h) return;
+    const show = !this.noCanoe;
+    if (h.visible !== show) h.visible = show;
+  }
+  // anything to eat anywhere you own it (bought: the step is done), and leeches
+  hasFood(inv = this.t.inventory) {
+    if (!inv || !inv.containers) return false;
+    for (const c of inv.containers) for (const e of c.grid) { const d = !e.box && itemDef(e.id); if (d && FOOD_KINDS.includes(d.kind) && d.kind !== 'fish') return true; }
+    return false;
+  }
+  hasLeeches(inv = this.t.inventory) { return !!(inv && typeof inv.count === 'function' && inv.count('leeches', { reachable: false }) > 0); }
+  hasBucket(inv = this.t.inventory) { return !!(inv && inv.containers && inv.containers.some((c) => c.item === 'bucket')); }
+  // each frame: a step seen done stays done (saved), so eating the food later never brings the step back
+  tickPath() {
+    const s = this.state, pa = s && s.path;
+    if (!pa || s.guest || s.legacy) return;
+    let ch = false;
+    if (!pa.food && this.hasFood()) { pa.food = true; ch = true; }
+    if (!pa.leeches && this.hasLeeches()) { pa.leeches = true; ch = true; }
+    const p = this.t.player;
+    if (!pa.canoe && s.loan && p && p.mode === 'paddle' && !p.teleporting) { pa.canoe = true; ch = true; }
+    if (ch) this.write();
+  }
+  // The main path for the guide (guide.source('onboarding', …), main.js; docs/build/r3-contract.md section 3): the talk
+  // while it is to come, then the food, the leeches and the canoe, each gone once done. From the saved state alone.
+  guideSpecs(guide) {
+    const s = this.state, ep = this.home;
+    if (!s || s.guest || s.legacy || ep == null || !guide) return [];
+    const out = [], v = this.t.outfitter && this.t.outfitter.visit, atHome = !!(v && Number(v.ep) === ep);
+    if (!s.done) {
+      const sp = this.speaker(ep), named = this.extra && this.extraEp === ep ? this.staffName(ep) : null, who = named || 'the summer help';
+      out.push({ id: PATH_IDS.talk, kind: 'story', tutorial: true, order: 0, ref: 'onboard', title: `Talk to ${who}`, next: `Talk to ${who} at the counter`,
+        target: { kind: 'person', key: sp.key || `staffer:${ep}`, label: who, store: ep, near: 30, pos: guide.speakerPos(sp) } });
+    }
+    const pa = s.path;
+    if (!pa || !(s.step === 'gear' || s.done)) return out;
+    const where = (shelf) => (atHome ? `at the ${shelf}` : `at an outfitter’s ${shelf}`);
+    if (!pa.food) out.push({ id: PATH_IDS.food, kind: 'story', tutorial: true, order: 1, ref: 'onboard:food', title: 'Buy food', next: `Buy food ${where('provisions shelf')}`,
+      target: { kind: 'place', key: `food:${ep}`, label: 'the provisions shelf', store: ep, near: 30, pos: guide.spot(ep, 'food') } });
+    if (!pa.leeches) out.push({ id: PATH_IDS.leeches, kind: 'story', tutorial: true, order: 2, ref: 'onboard:leeches', title: 'Buy leeches',
+      next: this.hasBucket() ? `Buy leeches ${where('tackle shelf')}` : `Buy a leech bucket and leeches ${where('tackle shelf')}`,
+      target: { kind: 'place', key: `tackle:${ep}`, label: 'the tackle shelf', store: ep, near: 30, pos: guide.spot(ep, 'tackle') } });
+    if (!pa.canoe) out.push({ id: PATH_IDS.canoe, kind: 'story', tutorial: true, order: 3, ref: 'onboard:canoe', title: 'To the canoe', next: 'Your canoe is at the dock',
+      target: { kind: 'thing', key: `canoe:${ep}`, label: 'the canoe', store: ep, near: 40, pos: guide.spot(ep, 'canoe') } });
+    return out;
+  }
+
   // --- the gear ----------------------------------------------------------------------------------------------------------
   // The old pack into the canoe (tied at the dock), the tent, the pot, the stove and a canister in it, your own things
   // out of the crate into it, three days of food in the barrel. Once a season. → the item ids given
   give() {
     const inv = this.t.inventory, st = this.state;
     if (!inv || !st || st.step === 'gear' || st.done) return [];
-    const given = packGear(inv, { pack: 'waltpack', gift: GIFT, order: ORDER });
+    const r3 = !!st.path;
+    const given = r3 ? packGear(inv, { pack: 'waltpack', gift: GIFT_R3, order: ORDER_R3, food: 0 }) : packGear(inv, { pack: 'waltpack', gift: GIFT, order: ORDER });
+    if (r3) { given.push(...this.lend(inv)); st.loan = true; }
     st.step = 'gear'; this.write();
+    this.hull();
     const hud = this.t.hud;
-    if (hud && typeof hud.note === 'function') hud.note('The old gear is in your canoe at the dock.', 5);
+    if (hud && typeof hud.note === 'function') hud.note(r3 ? 'A canoe at the dock now, the old gear in it.' : 'The old gear is in your canoe at the dock.', 5);
     const s = this.t.story;
     if (s && typeof s.emit === 'function') s.emit('gear:given', { items: given, ep: this.home, abs: this.abs });
     return given;
@@ -193,7 +288,7 @@ export class Onboarding {
 
 // The pack into the canoe, the gift into it (else kept for you at the outfitters), your own things out of the crate into
 // it, three days of food in the barrel. → the item ids given
-export function packGear(inv, { pack: packId, gift, order }) {
+export function packGear(inv, { pack: packId, gift, order, food = FOOD_DAYS }) {
   const q = { quiet: true }, given = [packId];
   const pack = inv.addContainer(packId, 'canoe', null, q);
   const away = (id) => { try { inv.place(id, 1, { crate: true, all: true, quiet: true }); } catch { /* kept nowhere */ } };
@@ -208,8 +303,8 @@ export function packGear(inv, { pack: packId, gift, order }) {
   }
   // the food: a breakfast and a supper a day, in the barrel (else the pack, else kept for you)
   const barrel = inv.containers.find((c) => /^barrel/.test(c.item) && c.where === 'canoe') || inv.containers.find((c) => /^barrel/.test(c.item));
-  for (let i = 0; i < FOOD_DAYS; i++) for (const m of ['meal:breakfast', 'meal:supper']) { if (!((barrel && inv.put(barrel, m, q)) || inv.put(pack, m, q))) away(m); }
-  given.push(`meal:breakfast×${FOOD_DAYS}`, `meal:supper×${FOOD_DAYS}`);
+  for (let i = 0; i < food; i++) for (const m of ['meal:breakfast', 'meal:supper']) { if (!((barrel && inv.put(barrel, m, q)) || inv.put(pack, m, q))) away(m); }
+  if (food > 0) given.push(`meal:breakfast×${food}`, `meal:supper×${food}`);
   inv.emit('containers');
   if (typeof inv.write === 'function') inv.write();
   return given;
@@ -217,7 +312,7 @@ export function packGear(inv, { pack: packId, gift, order }) {
 // A co-op guest's first visit: the starting kit (inventory.newSeason) and the scene's gear in its plain form: a Duluth
 // pack #3, the A-frame tent, the pot, a canister stove and a canister, three days of food. Nothing of the story. → ids
 export function guestKit(inv) {
-  inv.newSeason();
+  inv.newSeason(GUEST_KIT); // (r3: the old kit: a new player's season starts empty-handed, a friend's does not)
   return packGear(inv, { pack: plain('waltpack'), gift: GIFT.map(plain), order: ORDER.map(plain) });
 }
 

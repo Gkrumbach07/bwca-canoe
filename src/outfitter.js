@@ -940,6 +940,8 @@ export class Outfitter {
     if (core && adv) this.hud.showPlace(`${first ? 'The season begins' : 'Pushing off'} · ${a.name}`, lake, 'Come out at any entry point', 6); // (2026-10-31: no food or purse count: chatter)
     else if (core) this.hud.showPlace(`Sandbox · ${a.name}`, lake, 'No dates', 6);
     else this.hud.note(`${fmtDaysWords(food)} of food in the pack. Off you go.`);
+    // r3 (show only what's missing; nothing blocks): pushing off in an Adventure with nothing to eat says so, once
+    if (core && adv && this.foodWords() === 'no food with you') this.hud.note('No food with you. An outfitter’s provisions shelf has it.', 6);
     this.save();
   }
   // the food you can reach, in the inventory's words ("1 meal and 2 snacks"), else in days
