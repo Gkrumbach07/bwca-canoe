@@ -164,6 +164,8 @@ try {
     H.standAt(at.x + 0.6, at.z + 0.6); H.step(30);
     H.cards.length = 0;
     P.fine('dayuse'); P.issue(); g.guide.sync(); H.step(20);
+    // (r3 replay: a card up for the first night's job, said as the tutorial ends, may have the screen a few seconds first)
+    for (let k = 0; k < 80 && !H.cards.some((c) => /^ticket:/.test(c.id) && c.head === 'New task'); k++) H.step(3);
     const t = g.guide.list().find((e) => e.kind === 'ticket');
     const r = t ? await H.row(t.id) : null;
     return { id: t && t.id, next: t && t.next, cards: t ? H.cardsOf(t.id) : [], gem: t ? !!H.gem(t.id) : false, off: t ? H.off(t.id) : null, row: r, cur: H.cur() };
@@ -185,7 +187,7 @@ try {
     for (let k = 0; k < 80 && !s.layout; k++) { H.step(10); await H.wait(80); }
     H.step(20); g.guide.sync();
     const e = g.guide.get(id), r = e && g.guide.reach(e);
-    if (r) { H.face(r.pos, 3.5); H.step(60); }
+    if (r) { H.face(r.pos, 3.5); H.step(60); for (let k = 0; k < 80 && !H.cards.some((c) => c.id === id && c.head === 'Close by'); k++) H.step(3); } // (r3 replay: behind any card still up)
     return { id, row, next0: e0 && e0.next, far, key: e && e.target && e.target.key, gem: !!H.gem(id), off: H.off(id), cards: H.cardsOf(id), starterNew: null };
   });
   const starterNew = !!talk.starter && four.seq.includes(`event:New task:${talk.starter}`);
