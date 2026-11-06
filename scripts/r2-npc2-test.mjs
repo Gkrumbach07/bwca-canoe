@@ -117,6 +117,21 @@ async function tp(page, x, z, watch = null) {
 async function arrival(page, tag, n = 360) {
   await page.evaluate(async ({ tag, n }) => { const g = window.__game, N = window.__n2; for (let k = 0; k < n; k++) { g.step(1 / 30, 1); N.oddFrame(tag); await new Promise((q) => setTimeout(q, 3)); } }, { tag, n });
 }
+// (on the beach along the bank from their landing, in the open: the water's edge clear of trunks, looking at it)
+async function watchLanding(page, S) {
+  const at = await page.evaluate(({ S }) => {
+    const g = window.__game, W = g.world, T = g.tiles, sx = S.x + S.ux * 2.6, sz = S.z + S.uz * 2.6;
+    for (const al of [11, -11, 14, -14, 8, -8, 18, -18]) for (const up of [0.6, 1.4, 2.4, 0.2]) {
+      const x = sx + S.tx * al + S.ux * up, z = sz + S.tz * al + S.uz * up, sd = W.shoreAt(x, z);
+      if (!(sd > 0.15 && sd < 3)) continue;
+      if (T.treesNear(x, z, 2.5).some((t) => !t.shape && !t.tent && !t.box && Math.hypot(t.x - x, t.z - z) < 2.2)) continue;
+      return { x, z, tx: sx - S.ux * 1.5, tz: sz - S.uz * 1.5 };
+    }
+    for (const [up, al] of [[8, 6], [7, -6], [10, 8], [6, 10], [12, -9]]) { const x = S.x + S.ux * up + S.tx * al, z = S.z + S.uz * up + S.tz * al; if (W.shoreAt(x, z) > 1.5) return { x, z, tx: S.x + S.ux * 3, tz: S.z + S.uz * 3 }; }
+    return { x: S.x + S.ux * 9, z: S.z + S.uz * 9, tx: S.x, tz: S.z };
+  }, { S });
+  await standAt(page, at.x, at.z, at.tx, at.tz, -0.12);
+}
 // the player on foot at (x, z) looking at (tx, tz)
 async function standAt(page, x, z, tx, tz, pitch = -0.12) {
   await page.evaluate(({ x, z, tx, tz, pitch }) => {
@@ -240,11 +255,11 @@ try {
   }
   // --- 1, 6, 7, 9: a party loading at its site's landing, pushing off and paddling away -------------------------------
   if (on('launch')) {
-    const picks = await page.evaluate(({ YEAR }) => {
+    const picks = await page.evaluate(({ YEAR, LS }) => {
       const g = window.__game, P = g.parties; g.day.setClock(YEAR, 193, 6.5); const T = P.today, cands = [];
       for (const { party, k } of P.legsOn(T)) { const pl = P.legPlan(party, k); if (!pl || pl.from.kind !== 'site' || pl.start < 7.2 || pl.start > 11) continue; cands.push({ id: pl.id, start: pl.start, d: Math.hypot(pl.from.x - g.player.x, pl.from.z - g.player.z), from: { x: pl.from.x, z: pl.from.z }, size: party.size, n: pl.crew.boats.length }); }
-      cands.sort((a, b) => (b.n >= 2) - (a.n >= 2) || a.d - b.d); return cands.slice(0, 3);
-    }, { YEAR });
+      cands.sort((a, b) => (b.n >= 2) - (a.n >= 2) || a.d - b.d); return LS ? cands.filter((c) => Math.round(c.from.x) === LS).sort((a, b) => b.n - a.n).slice(0, 3) : cands.slice(0, 3);
+    }, { YEAR, LS: +(process.env.LSITE || 0) });
     let M = null;
     for (const pick of picks) {
       log('launch:', JSON.stringify(pick));
@@ -252,11 +267,10 @@ try {
       for (let k = 0; k < 40 && !(await page.evaluate(({ id }) => { const L = [...window.__game.moves.active.values()].find((x) => x.plan.id === id); return !!(L && L.st && L.persons.length); }, { id: pick.id })); k++) await step(page, 30);
       const ok = await page.evaluate(({ id }) => {
         const g = window.__game, L = [...g.moves.active.values()].find((x) => x.plan.id === id); if (!L || !L.st) return false;
-        const S = L.st.from.L, W = g.world, p = g.player;
-        for (const [up, al] of [[7, 7], [6, -7], [9, 9], [5, 10], [10, -10], [4, 4]]) { const x = S.x + S.ux * up + S.tx * al, z = S.z + S.uz * up + S.tz * al; if (W.shoreAt(x, z) > 1.2) { if (p.mode !== 'walk' && p.stepOut) { p.stepOut(); g.step(1 / 30, 10); } p.x = x; p.z = z; if (p.placeOnGround) p.placeOnGround(); g.chase.setMode('first'); const ch = g.chase; ch.viewYaw = Math.atan2(-(S.z - z), S.x - x); ch.forwardYaw = ch.viewYaw; ch.viewPitch = -0.15; g.step(1 / 30, 4); return true; } }
-        return true;
+        const q = L.st.from.L; return { x: q.x, z: q.z, ux: q.ux, uz: q.uz, tx: q.tx, tz: q.tz };
       }, { id: pick.id });
       if (!ok) continue;
+      await watchLanding(page, ok);
       // every frame through the loading, the push-off and the paddle away; the water route of their first leg taken
       // from them when they push off and held back 15 s (a slow search, as the store's busy hour had it)
       M = await page.evaluate(async ({ id }) => {
@@ -279,11 +293,11 @@ try {
           N.oddFrame('launch'); if (k % 15 === 0 && (sg === 'launch' ? (L.seg.h1 - g.day.hours) * 3600 / 8 < 18 : sg === 'paddle' && k - (blockAt ?? k) < 600)) N.snap('launch', k);
           // the hulls: their step a frame while shown, and any that vanish within 250 m on the water
           L.boats.forEach((b, c) => {
-            const pv = prevB.get(c), sh = !b.hidden && !!b.near;
-            if (sh && pv && pv.sh) out.route.maxStep = Math.max(out.route.maxStep, +Math.hypot(b.x - pv.x, b.z - pv.z).toFixed(2));
+            const pv = prevB.get(b), sh = !b.hidden && !!b.near; // (each hull its own: a leg let go out of sight and made again has new ones)
+            if (sh && pv && pv.sh) { const st = +Math.hypot(b.x - pv.x, b.z - pv.z).toFixed(2); if (st > out.route.maxStep) { out.route.maxStep = st; if (st > 1) out.route.bigAt = { k, c, sg, legNew: L !== out.lastL, blocked: !!window.__blockRoute, sim: !!b.simOn, ext: b.ext ? [+b.ext.x.toFixed(1), +b.ext.z.toFixed(1), !!b.ext.hold] : null, b: [+b.x.toFixed(1), +b.z.toFixed(1)], pv: [+pv.x.toFixed(1), +pv.z.toFixed(1)], lag: +mv.lagOf(L.party.id).toFixed(3), dist: Math.round(b.dist) }; } }
             if (pv && pv.sh && !sh && pv.d < 230 && (L.seg.kind === 'paddle' || L.seg.kind === 'launch')) { out.route.vanished++; if (!out.route.ev) out.route.ev = { d: Math.round(pv.d), seg: L.seg.kind, hidden: !!b.hidden, k }; }
             if (sh && window.__blockRoute) out.route.seenFrames++;
-            prevB.set(c, { x: b.x, z: b.z, sh, d: b.dist });
+            prevB.set(b, { x: b.x, z: b.z, sh, d: b.dist });
             // 9: held at the bank, the ground over her keel
             if (sh && (sg === 'launch' || sg === 'land' || sg === 'landing')) { const e = N.keelIn(b); if (e != null && e > out.keel) { out.keel = +e.toFixed(2); out.keelAt = { sg, c, beached: b.beached != null ? +b.beached.toFixed(2) : null }; } }
             // 6: from the frame all but the stern are in, to the stern in: how far she went off the bank, the stern's feet
@@ -304,11 +318,12 @@ try {
             if (!a.bind || a.boat || a.v > 0.15 || (a.anim && a.anim.lift > 0)) return;
             const sl = N.slope(a.x, a.z); if (sl > out.slopeMax) out.slopeMax = +sl.toFixed(2); if (sl > 0.8) out.steepFrames++;
           });
+          out.lastL = L;
           if (k % 15 === 0) await new Promise((q) => setTimeout(q, 2));
           // (the view on the canoes once they are off)
           if (sg === 'paddle' && L.boats[0] && k % 10 === 0) { const b = L.boats[0], e = new g.THREE.Vector3(); g.camera.getWorldPosition(e); const ch = g.chase; ch.viewYaw = Math.atan2(-(b.z - e.z), b.x - e.x); ch.forwardYaw = ch.viewYaw; }
         }
-        mv.pathOf = orig; window.__blockRoute = false;
+        mv.pathOf = orig; window.__blockRoute = false; delete out.lastL;
         out.push = [...board.values()];
         return out;
       }, { id: pick.id });
@@ -423,7 +438,12 @@ try {
     await page.evaluate(({ YEAR }) => window.__game.day.setClock(YEAR, 192, 17.6), { YEAR }); await tp(page, c.to.x, c.to.z, 'camp arrival');
     // (on the bank 10 m off the camp, looking at it)
     const look = async () => {
-      const at = await page.evaluate(({ pid }) => { const g = window.__game, D = [...g.partyCamps.drawn.values()].find((d) => d.party.id === pid); if (!D) return null; const F = D.site.layout.fire, W = g.world; for (let k = 0; k < 16; k++) { const a = k * 0.4, x = F.x + Math.cos(a) * 11, z = F.z + Math.sin(a) * 11; if (W.shoreAt(x, z) > 1.5) return { x, z, tx: F.x, tz: F.z }; } return { x: F.x + 9, z: F.z, tx: F.x, tz: F.z }; }, { pid });
+      const at = await page.evaluate(({ pid }) => {
+        const g = window.__game, D = [...g.partyCamps.drawn.values()].find((d) => d.party.id === pid); if (!D) return null; const F = D.site.layout.fire, W = g.world, T = g.tiles, w = W.deeperDir(F.x, F.z);
+        // (in the camp's open ground toward the water, clear of trunks, looking back at the fire and the tents)
+        for (const r of [6, 8, 5, 10]) for (const da of [0, 0.5, -0.5, 1, -1]) { const c = Math.cos(da), sn = Math.sin(da), dx = w.x * c - w.z * sn, dz = w.x * sn + w.z * c, x = F.x + dx * r, z = F.z + dz * r; if (W.shoreAt(x, z) > 0.6 && !T.treesNear(x, z, 2).some((t) => !t.shape && !t.tent && !t.box && Math.hypot(t.x - x, t.z - z) < 1.6)) return { x, z, tx: F.x, tz: F.z }; }
+        for (let k = 0; k < 16; k++) { const a = k * 0.4, x = F.x + Math.cos(a) * 11, z = F.z + Math.sin(a) * 11; if (W.shoreAt(x, z) > 1.5) return { x, z, tx: F.x, tz: F.z }; } return { x: F.x + 9, z: F.z, tx: F.x, tz: F.z };
+      }, { pid });
       if (at) await standAt(page, at.x, at.z, at.tx, at.tz, -0.2);
     };
     await look();
@@ -514,10 +534,6 @@ try {
     void legWas;
     return out;
   }, { pid, key, tag, frames, which });
-  const watchLanding = async (S) => {
-    const at = await page.evaluate(({ S }) => { const W = window.__game.world; for (const [up, al] of [[8, 6], [7, -6], [10, 8], [6, 10], [12, -9]]) { const x = S.x + S.ux * up + S.tx * al, z = S.z + S.uz * up + S.tz * al; if (W.shoreAt(x, z) > 1.5) return { x, z }; } return { x: S.x + S.ux * 9, z: S.z + S.uz * 9 }; }, { S });
-    await standAt(page, at.x, at.z, S.x + S.ux * 3, S.z + S.uz * 3, -0.2);
-  };
   if (on('arrive')) {
     const picks = await page.evaluate(({ YEAR }) => {
       const g = window.__game, P = g.parties; g.day.setClock(YEAR, 192, 7.4); const T = P.today, out = [];
@@ -530,7 +546,7 @@ try {
       await page.evaluate(({ c, YEAR }) => window.__game.day.setClock(YEAR, 192, c.arrive - 0.12), { c, YEAR }); await tp(page, c.to.x, c.to.z, 'arrive arrival');
       const S = await page.evaluate(({ id }) => { for (let k = 0; k < 40; k++) { const L = [...window.__game.moves.active.values()].find((x) => x.plan.id === id); if (L && L.st) { const q = L.st.to.L; return { x: q.x, z: q.z, ux: q.ux, uz: q.uz, tx: q.tx, tz: q.tz }; } window.__game.step(1 / 30, 15); } return null; }, { id: c.id });
       if (!S) continue;
-      await watchLanding(S);
+      await watchLanding(page, S);
       // (to the last minute of their landing, then every frame through the hand-over)
       await page.evaluate(({ c, YEAR }) => { const g = window.__game; g.day.setClock(YEAR, 192, c.end - 0.075); g.step(1 / 30, 30); }, { c, YEAR });
       if (process.env.DBG) await page.evaluate(() => { window.__dbgHand = true; });
@@ -553,7 +569,7 @@ try {
       await page.evaluate(({ c, YEAR }) => window.__game.day.setClock(YEAR, 193, c.h0 - 0.06), { c, YEAR }); await tp(page, c.from.x, c.from.z, 'depart arrival');
       const S = await page.evaluate(({ id }) => { for (let k = 0; k < 60; k++) { const L = [...window.__game.moves.active.values()].find((x) => x.plan.id === id); if (L && L.st) { const q = L.st.from.L; return { x: q.x, z: q.z, ux: q.ux, uz: q.uz, tx: q.tx, tz: q.tz }; } window.__game.step(1 / 30, 15); } return null; }, { id: c.id });
       if (!S) continue;
-      await watchLanding(S);
+      await watchLanding(page, S);
       await page.evaluate(({ c, YEAR }) => { const g = window.__game; g.day.setClock(YEAR, 193, c.h0 - 0.012); g.step(1 / 30, 3); }, { c, YEAR });
       R = await HAND(c.pid, c.key, 'depart', 1200, 'out');
       log('depart measured', JSON.stringify(R)); await flushShots(page);
