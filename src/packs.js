@@ -55,6 +55,7 @@ import { inventory as INVENTORY } from './inventory.js';
 import { itemDef } from './items.js';
 import { fmtDist, pounds } from './units.js';
 import { hold } from './hold.js'; // camp 1: the held "Load everything here"
+import { onboarding } from './onboarding.js'; // r3: no canoe at the dock before the staff talk
 
 export const WEIGHTS = { aluminium: 34, royalex: 29, kevlar: 20, gear: 16, foodPack: 2, foodDay: 0.9 }; // kg (the canoes; the rest is the items' own)
 const REACH = 3;            // m from a thing on the ground within which you pick it up or take it too
@@ -477,6 +478,7 @@ export class Packs {
   hullAction() {
     const p = this.player, c = p.carry, d = c && c.drop;
     if (p.mode !== 'walk' || !d || this.busy) return null;
+    if (onboarding.noCanoe) return null; // r3: a new season's dock is empty until the staff talk lends a canoe (onboarding.js)
     if (this.push) return { e: { verb: 'Push it off', held: true, run: () => {} }, q: null, label: 'the canoe' };
     const can = this.canShoulder();
     const shoulder = { verb: 'Shoulder it', held: false, why: can.ok ? null : can.why, needs: can.needs, next: can.next, run: () => { if (this.canShoulder().ok) p.pickUpHull(); }, help: () => this.openBookAtCanoe() };

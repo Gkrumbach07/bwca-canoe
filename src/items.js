@@ -458,14 +458,31 @@ export const LEGACY = { pack: 'pack3', pack2: 'pack4', barrel: 'barrel60', rod: 
 // canvas pack, the old canvas tent, the dented stove, the pot from the back, food for three days). Your own things (the
 // bag, the pad, the clothes, the tarp, the tablets and the tackle box) wait in the outfitters' crate until there is a
 // pack to put them in; the gift packs them for you. (`crate` is the outfitters' crate, inventory.newSeason.)
+// r3 (the owner, 2026-11-05: "When you start, you shouldn't have anything. You shouldn't even have a canoe. There
+// shouldn't be a canoe out there with a bear barrel. That stuff should come only once you talk to them ... they'll give
+// you the gear, but you need food, so you gotta buy food, buy leeches. They don't give you a full set of fishing
+// equipment either"): a new season starts empty-handed. Your own things (the bag, the pad, the clothes, the tarp, the
+// tablets) wait in the outfitters' crate; no canoe at the dock, no paddle, no barrel, no bucket, no tackle box. The staff
+// talk gives the old gear and the outfitter's loan (onboarding.js LOAN); food and leeches are bought at the shelves.
 export const STARTER_KIT = {
-  canoe: ['barrel30', 'bucket', 'stringer'],
+  canoe: [],
   // (the camp pass, 2026-10-31: and the foam pad: the bag and the pad in the tent make a whole night's rest, camp.js)
+  crate: ['sleepingbag', 'pad', 'clothes', 'tarp', 'tablets'],
+  long: [],
+};
+// the kit as it was before r3, kept for a co-op guest (onboarding.js guestKit: "friends joining get a basic starting
+// pack", the owner's call 2026-11-05, unchanged by the empty-handed start: a friend joins mid-trip and needs it all)
+export const GUEST_KIT = {
+  canoe: ['barrel30', 'bucket', 'stringer'],
   crate: ['sleepingbag', 'pad', 'clothes', 'tarp', 'tablets', 'tacklebox'],
   tacklebox: ['lure:jig', 'lure:mepps'],
   bucket: [['leeches', 12]],
   long: ['ash', 'rod'],
 };
+// the outfitter's loan at the staff talk (onboarding.js give): the canoe at the dock (the profile's aluminium, shown
+// then), and in it these: the barrel (empty), the stringer, the ash paddle, the plain rod; the life jacket in the pack.
+// The rod is r3's assumption from the owner's "not a full set": a rod, no tackle box, no lures, no bucket, no leeches.
+export const LOAN = { canoe: ['barrel30', 'stringer'], long: ['ash', 'rod'], pack: ['pfd'] };
 // the things the gift packs into the old pack from the crate, biggest first (onboarding.js)
 export const OWN_KIT = ['sleepingbag', 'pad', 'tacklebox', 'clothes', 'tarp', 'tablets'];
 
@@ -536,6 +553,8 @@ defineItem({ id: 'stove', name: 'Canister stove', short: 'Stove', kind: 'tool', 
 defineItem({ id: 'fuel', name: 'Fuel canister', short: 'Fuel', kind: 'tool', kg: 0.36, price: 6, uses: 10, identity: 'Isobutane, 8 oz', model: 'canister', tint: 0x2f68a8 });
 
 // clothes for the weather and the bugs
+// r3: the outfitter's loaner life jacket (onboarding.js LOAN); the paddler is drawn in one already (figure.js pfd)
+defineItem({ id: 'pfd', name: 'Life jacket', short: 'Life jacket', kind: 'gear', w: 2, h: 2, kg: 0.7, price: 0, icon: 'clothes', identity: 'Orange nylon and foam · the outfitter’s, on loan' });
 defineItem({ id: 'rainjacket', name: 'Rain jacket', short: 'Rain jacket', kind: 'gear', w: 2, h: 1, kg: 0.45, price: 30, identity: 'Coated nylon, a hood', model: 'jacket', tint: 0xc99a2e, onYou: [O('In rain', 'wet through ×0.15')] });
 defineItem({ id: 'headnet', name: 'Head net', short: 'Head net', kind: 'gear', kg: 0.04, price: 5, identity: 'No-see-um mesh, over a cap', model: 'headnet', onYou: [O('Bugs', '×0.35')] });
 

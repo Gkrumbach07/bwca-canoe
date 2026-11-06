@@ -97,6 +97,8 @@ try {
   await page.click('#btn-start');
   await page.waitForFunction(() => { const g = window.__game; return g.title.state === 'game' && !g.player.teleporting && !!g.outfitter.visit; }, null, { timeout: 180000, polling: 250 });
   await page.evaluate(() => { const g = window.__game; window.__f2.closeAll(); g.day.setClock(g.day.year, g.day.doy, 9); window.__f2.step(30); });
+  // (r3: the empty-handed start: the staff talk's gear and the loaned canoe at the dock, as the talk gives them)
+  await page.evaluate(() => { const g = window.__game, ob = g.onboarding; if (ob && ob.pending()) { ob.give(); ob.finish(ob.home, false); } window.__f2.step(10); });
 
   // --- 1. a push-off taken back says so, and the permit is yours again ---------------------------------------------------
   const tb = await page.evaluate(async (home) => {

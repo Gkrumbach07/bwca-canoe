@@ -36,7 +36,7 @@ try {
   const season = (ep, mode) => page.evaluate(async ({ ep, mode }) => {
     const g = window.__game, H = window.__v, t = g.title; H.closeAll(); t.setPick(mode);
     await t.newSeason(g.world.entryPoints.find((e) => e.ep === ep), { confirm: false, start: { year: 2026, doy: 180 } }); t.close();
-    if (g.onboarding && g.onboarding.pending && g.onboarding.pending()) g.onboarding.finish(g.onboarding.home, false);
+    if (g.onboarding && g.onboarding.pending && g.onboarding.pending()) { g.onboarding.give(); g.onboarding.finish(g.onboarding.home, false); } // (r3: the talk's gear and the loaned canoe first)
     const L = await H.built(ep); await H.arrived(); H.closeAll(); g.day.setClock(2026, 180, 11);
     const p = g.player; H.step(30);
     return L ? { ep, door: +Math.hypot(p.x - L.door.x, p.z - L.door.z).toFixed(1), steps: L.steps ? +Math.hypot(p.x - L.steps.x, p.z - L.steps.z).toFixed(1) : null, y: +(p.y - (L.floorY ?? 0)).toFixed(2), floorY: L.floorY, mode: p.mode, onFoot: !!p.onFoot, shore: +g.world.shoreAt(p.x, p.z).toFixed(1), at: { x: Math.round(p.x), z: Math.round(p.z) } } : { ep, built: false };

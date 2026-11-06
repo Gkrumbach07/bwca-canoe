@@ -183,16 +183,16 @@ export class Inventory {
   mk(item, where, at = null) { const d = itemDef(item); return { id: this.uid('c'), item, name: d ? d.name : item, grid: [], where, at, in: null, hand: null }; }
 
   // --- a new season, and the migration of an older one -------------------------------------------------------------
-  // The starting kit (items.js STARTER_KIT): the 30 L food barrel, empty (the content join); the leech bucket with a
-  // dozen; the stringer; the ash paddle and the rod, in the canoe tied up at the home store's dock; and your own things
-  // (the bag, the pad, the clothes, the tarp, the tablets and the tackle box with a jig and a Mepps) kept in the
-  // outfitters' crate until the old pack from the back room takes them (gl-c, onboarding.js).
-  newSeason() {
+  // The starting kit (items.js STARTER_KIT): your own things (the bag, the pad, the clothes, the tarp, the tablets) kept
+  // in the outfitters' crate until the old pack from the back room takes them (gl-c, onboarding.js).
+  // r3 (the owner, 2026-11-05): a new season starts empty-handed (items.js STARTER_KIT: your own things in the crate,
+  // nothing else); a co-op guest's kit passes the old one (items.js GUEST_KIT, onboarding.js guestKit).
+  newSeason(kit = STARTER_KIT) {
     this.containers = []; this.long = []; this.n = 1;
     this.season = this.profile ? this.profile.seasonId : null;
     this.ensureFixed();
-    const K = STARTER_KIT, made = { crate: this.crate }; // (gl-c: your own things wait in the crate till the old pack comes, onboarding.js)
-    for (const it of K.canoe) made[it] = this.addContainer(it, 'canoe', null, { quiet: true });
+    const K = kit || STARTER_KIT, made = { crate: this.crate }; // (gl-c: your own things wait in the crate till the old pack comes, onboarding.js)
+    for (const it of K.canoe || []) made[it] = this.addContainer(it, 'canoe', null, { quiet: true });
     for (const [host, list] of Object.entries(K)) {
       if (host === 'canoe' || host === 'long') continue;
       for (const x of list) {
@@ -202,7 +202,7 @@ export class Inventory {
         if (made[host]) this.put(made[host].id, id, { qty, quiet: true });
       }
     }
-    for (const id of K.long) this.addLong(id, 'canoe', null, { quiet: true });
+    for (const id of K.long || []) this.addLong(id, 'canoe', null, { quiet: true });
     this.refreshUse();
     this.emit('season');
     this.write();

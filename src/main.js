@@ -115,6 +115,7 @@ import { story } from './story-hooks.js'; // gl-c: the story's event bus and sav
 import { onboarding } from './onboarding.js'; // gl-c: the home counter's first visit, the old gear
 import { starter } from './starter.js'; // the start round: each outfitter's first night out, the season's sky and its kind first days
 import { walt } from './walt.js'; // gl-c: the notebook in the old tent
+import { guide } from './guide.js'; // r3: the registry of what is on the go (the journal's Tasks, the tracker, the locator)
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -1242,6 +1243,24 @@ async function main() {
     };
     window.__game.starter = starter;
   }
+  // r3 contract (docs/build/r3-contract.md): the guide, one registry of what is on the go (the board's notices, the
+  // starter job, the ranger's tickets, the main path's steps), read by the journal's Tasks page, the pop-up tracker on the
+  // left and the golden locator. Worked out from its sources after the tasks each frame; nothing of it is saved.
+  {
+    guide.attach({ tasks, permits: window.__game.permits || null, onboarding, outfitter, player, profile, title });
+    const updG = tasks.update.bind(tasks);
+    tasks.update = (dt) => { updG(dt); try { guide.update(dt); } catch (e) { if (!guide.warnedU) { guide.warnedU = true; console.warn('guide', e); } } };
+    window.__game.guide = guide;
+  }
+  // ==== r3 A (start + onboarding): its one block goes below this line ====
+  // r3 A: the main path from the onboarding's saved state (onboarding.js guideSpecs: the talk, the food, the leeches, the
+  // canoe at the dock), in place of the guide's placeholder; a reload brings the same step back
+  guide.source('onboarding', () => onboarding.guideSpecs(guide));
+
+  // ==== r3 B (journal + tracker): its one block goes below this line ====
+
+  // ==== r3 C (golden locator): its one block goes below this line ====
+
   window.__game.siteFeature = siteFeature; // (scripts/r2-starter-routes.mjs: a site's kind of shore)
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
 
