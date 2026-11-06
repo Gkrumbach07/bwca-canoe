@@ -63,7 +63,7 @@ const HELPERS = () => {
   // the body's top (skinned, the hat included) and its root
   const box = new T.Box3(), R = new T.Vector3();
   H.top = (b) => { b.group.updateWorldMatrix(true, true); box.setFromObject(b.group, true); b.fig.bones.root.getWorldPosition(R); return { top: box.max.y, x: R.x, z: R.z }; };
-  H.staffer = () => { const h = g.onboarding.extra, v = h && h.person; if (!v) return null; const f = H.storeFigs().find((q) => q.v === v); return f || { v, undrawn: true }; };
+  H.staffer = () => { const h = g.onboarding.extra, v = h && h.person; if (!v) return null; const f = H.storeFigs().find((q) => q.v === v || q.v.key === v.key); return f || { v, undrawn: true }; }; // (by key: the roster's record can be made afresh)
   H.gem = (id) => g.locator.shown().find((q) => q.id === id && !q.gone) || null;
   // a watch of n frames at the store: who stands on the berth's deck, party hulls in it, party people on it
   H.dockWatch = async (n) => {
@@ -174,7 +174,9 @@ try {
     const c = L.centre || L.door, dx = from.x - c.x, dz = from.z - c.z, n = Math.hypot(dx, dz) || 1;
     H.standAt(from.x + (dx / n) * 1.5, from.z + (dz / n) * 1.5); H.step(10);
     if (g.chase.setMode) g.chase.setMode('first');
-    return { x: g.player.x, z: g.player.z };
+    // (in when someone of the store's is on their way through the door or the yard by it: up to 3 game minutes)
+    let wait = 0; for (; wait < 5400; wait++) { g.step(1 / 30, 1); if (H.storeFigs().some((f) => f.walking && !f.extra && Math.hypot(f.f.x - L.door.x, f.f.z - L.door.z) < 6)) break; }
+    return { x: g.player.x, z: g.player.z, wait };
   });
   await page.keyboard.down('KeyW');
   const four = await ev(async () => {
@@ -252,11 +254,32 @@ try {
       for (const p of H.partyPeople()) if (Math.hypot(p.x - s.x, p.z - s.z) < 10) { out.onSite++; if (out.onEv.length < 4) out.onEv.push({ k, key: p.key, actor: true }); }
       if (k % 60 === 0) await H.wait(2);
     }
+    // the nearest neighbour's camp, from beside it (their people are drawn within 60 m): standing feet on the ground
+    let best = null, bd = Infinity;
+    for (const D of g.partyCamps.drawn.values()) { const c = g.parties.live.get(D.key), st = c && c.site; if (st) { const d = Math.hypot(st.x - s.x, st.z - s.z); if (d < bd) { bd = d; best = st; } } }
+    out.neighbourAt = best ? Math.round(bd) : null;
+    if (best) {
+      if (bd > 300) { await g.player.teleport(best.x + 12, best.z + 12); await H.settle(); } else H.standAt(best.x + 12, best.z + 12);
+      for (let k = 0; k < 900; k++) {
+        g.step(1 / 30, 1);
+        if (k % 10) continue;
+        for (const f of H.storeFigs()) {
+          if (!f.party) continue;
+          out.neighbours++;
+          if (f.walking || (f.f.spec && f.f.spec.pose === 'sit') || f.b.floorY != null) continue;
+          const bn = f.b.fig.bones; f.b.group.updateWorldMatrix(true, true); bn.footL.getWorldPosition(A0); bn.footR.getWorldPosition(B0);
+          const lo = Math.min(A0.y - G(A0.x, A0.z), B0.y - G(B0.x, B0.z)); out.standing++;
+          if (Math.abs(lo) > out.worst) out.worst = +Math.abs(lo).toFixed(3);
+          if (Math.abs(lo) > 0.15) { out.floating++; if (out.fev.length < 4) out.fev.push({ k, key: f.key, lo: +lo.toFixed(2) }); }
+        }
+        if (k % 60 === 0) await H.wait(2);
+      }
+    }
     return out;
   });
   await shot('6-starter-night');
   if (six.none) result(`6 the starter night (${six.none}: skipped)`, true, six);
-  else result('6 the starter night: no party on your site, the neighbours\' people on the ground', six.campsOn === 0 && six.onSite === 0 && six.floating <= Math.max(2, six.standing * 0.01), six);
+  else result('6 the starter night: no party on your site, the neighbours\' people on the ground', six.campsOn === 0 && six.onSite === 0 && (six.neighbourAt == null || six.standing > 0) && six.floating <= Math.max(2, six.standing * 0.01), six);
 
   result('7 no page errors', errors.length === 0, { errors: errors.slice(0, 5) });
 } catch (e) {
