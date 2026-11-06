@@ -868,7 +868,7 @@ export class Actors {
     // the near hulls: boats within 250 m and carriers within a figure's reach, nearest first, six at most
     const hullWant = [];
     for (const b of this.boats) if (!b.hidden && b.dist < (b.near ? NEAR_R[1] : NEAR_R[0])) hullWant.push(b);
-    for (const p of this.people) if (p.mode === 'carry' && p.dist < (p.hull ? FIG_R[1] : FIG_R[0])) hullWant.push(p);
+    for (const p of this.people) if (p.mode === 'carry' && !p.hidden && p.dist < (p.hull ? FIG_R[1] : FIG_R[0])) hullWant.push(p);
     hullWant.sort((a, b) => a.pri - b.pri);
     const keepH = new Set(hullWant.slice(0, NEAR_HULLS));
     for (const a of [...this.boats, ...this.people]) if ((a.near || a.hull) && !keepH.has(a)) this.freeHull(a);
@@ -876,7 +876,7 @@ export class Actors {
     // the figures: within 60 m (kept to 66), a boat's crew only with its hull drawn, nearest first, eight at most
     // (a boat's crew all together or none, so no hull goes by with half its crew)
     const units = [];
-    for (const p of this.people) if (!p.boat && p.dist < (p.bind ? FIG_R[1] : FIG_R[0])) units.push({ pri: p.pri, ps: [p] });
+    for (const p of this.people) if (!p.boat && !p.hidden && p.dist < (p.bind ? FIG_R[1] : FIG_R[0])) units.push({ pri: p.pri, ps: [p] }); // (r2 2: hidden: the camp has them)
     for (const b of this.boats) if (b.near && !b.hidden && b.crew.length && b.dist < (b.crew.some((c) => c.bind) ? FIG_R[1] : FIG_R[0])) units.push({ pri: b.pri, ps: b.crew });
     units.sort((a, b) => a.pri - b.pri);
     // (p2 C: as many as the pool has free besides those already drawn: a shared pool, npcs.js's eight, lends what the

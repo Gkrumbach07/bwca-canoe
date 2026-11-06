@@ -369,7 +369,8 @@ export class PartyCamps {
     const T = this.parties.today, h = this.day.hours, ph = this.phase(D.stay, T, h), S = D.spots, show = this.shows(D.stay);
     const n = show.people ? Math.min(3, D.v.members.length) : 0; // (p2 C: on the way in or gone out, they are the moving party's)
     D.arrive = T === D.stay.start ? this.times(D.stay).arrive : D.stay.land;
-    this.canoesOn(D, show.canoes);
+    this.canoesOn(D, show.canoes || !!D.holdCanoes); // (r2 2: held on the bank till the party lifts them: party-moves.js departOf)
+    if (n && T === D.stay.start && !D.handIn) { D.handIn = true; this.handIn(D, h, n); }
     const wet = this.weather && /rain|storm/.test(this.weather.state || '');
     let at = [];
     const sm = this.people && this.people.smart;
@@ -389,6 +390,18 @@ export class PartyCamps {
     }
     this.markIn(D);
     D.phase = ph;
+  }
+  // r2 2: the afternoon they come in, the camp's people start where the party's stand as the camp takes them (the moving
+  // party's actors, party-moves.js), and walk from there to what the camp has them at; they had popped to its places
+  handIn(D, h, n) {
+    const M = this.moves; if (!M || !M.active) return;
+    const L = [...M.active.values()].find((x) => x.party === D.party && x.plan.to.kind === 'site' && x.plan.to.key === D.key && x.persons.length);
+    if (!L) return;
+    const G = (x, z) => this.tiles.groundAt(x, z);
+    for (let k = 0; k < n; k++) {
+      const a = L.persons[k], f = D.figs[k]; if (!a || !f || a.boat || !(a.bind || a.dist < 200)) continue;
+      f.x = a.x; f.z = a.z; f.y = G(a.x, a.z); f.heading = a.heading; f.placed = true; f.out = true; f.at = null; f.path = null; f.lastH = h; f.spec = { pose: 'stand', lean: 0.02, wave: 0 };
+    }
   }
   // r2 2: who of them is not up now is in a tent (the next out comes out of its door)
   markIn(D) { for (const f of D.figs) if (f.out && !D.v.figs.includes(f)) { f.out = false; f.path = null; f.emerge = 0; } }

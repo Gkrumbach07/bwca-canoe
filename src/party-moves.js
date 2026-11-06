@@ -78,6 +78,10 @@ const BOARD = { walk: 3.2, step: 1.6, gap: 0.1, first: 3.4, total: 11 }; // s: t
 // r2 2: the last in (the stern) pushes her off first: hands on the gunwale, a step after her as she goes, the bank foot
 // pushing; she slides out PUSH.out m off the bank before they step in (s, m)
 const PUSH = { dur: 1.6, out: 0.85, step: 0.4 };
+// r2 2: the hand-over with the camp: a canoe carried up or down at HAND.carry m/s (real), lifted or set down over
+// HAND.lift s, the walk to her HAND.reach s; the others walk at HAND.walk, out of a tent after HAND.emerge s, and those
+// the camp does not draw into one over the landing's last HAND.tent s
+const HAND = { carry: 1.0, lift: 0.6, reach: 2.8, walk: 1.1, emerge: 1.2, tent: 14 };
 const OUT = { first: 2.0, step: 1.5, gap: 0.15, walk: 3.0 };            // s: the first out, each step out, the walk to their place
 const SEAT_X = { stern: SEATS.stern.x, bow: SEATS.bow.x, mid: -0.42 };
 const SLOT_ALONG = 6.2;      // m between canoes lying along the bank
@@ -691,7 +695,7 @@ export class PartyMoves {
     return { x: Hs.x + (Hs.sx - Hs.x) * k, z: Hs.z + (Hs.sz - Hs.z) * k, heading: Hs.face + wrapPi(Hs.h - Hs.face) * smooth((u - 0.2) / 0.7), v: 0.35 * Math.sin(Math.PI * u), mode: 'stand', pack: false, anim: { crouch: 0.35 + 0.55 * smooth(u * 1.4) }, footY: null, lift };
   }
   // r2: where person i is at hour h of seg s (null: the old ways, the carry's walks and the spots), or { seat } in the hull
-  bankPose(L, s, i, h, seat) {
+  bankPose(L, s, i, h, seat, lag = 0) {
     if (!seat) return null;
     const kind = s.kind, n = L.persons.length;
     // the order in the canoe: the bow in first and out first, the stern last in (pushing off) and last out
@@ -700,9 +704,12 @@ export class PartyMoves {
     const boardEnd = kind === 'launch' || kind === 'landing' ? s.h1 : null;
     if (boardEnd != null) {
       const S = s.S, tb = BOARD.total - (boardEnd - h) * 3600 / CLOCK; // (s into the boarding; < 0 before it)
+      // (lag: r2 2, the real seconds of the morning's hand-over before their jobs at the landing begin; a stern who
+      // carried her down begins by her)
+      const from = lag && L.depart && L.depart.carry.has(i) ? 'hull' : 'bank';
       if (tb < 0) {
         const t0 = kind === 'launch' ? s.h0 : s.h0;
-        return { job: this.jobAt(L, S, i, (h - t0) * 3600 / CLOCK, 'bank', false, kind === 'landing' && s.lunch) };
+        return { job: this.jobAt(L, S, i, Math.max(0, (h - t0) * 3600 / CLOCK - lag), from, false, kind === 'landing' && s.lunch) };
       }
       const Hs = this.sideOf(L, seat.c, seat.seat, S, i), last = k === order.length - 1, push = last ? PUSH.dur : 0, stIn = BOARD.first + jit + k * (BOARD.step + BOARD.gap) + push;
       if (tb >= stIn + BOARD.step) return { seat: true };
@@ -713,7 +720,7 @@ export class PartyMoves {
         return { push: u, job: { x: Hp.x, z: Hp.z, heading: Hs.face, v: PUSH.step / (push * 0.6) * Math.sin(Math.PI * clamp((u - 0.15) / 0.6, 0, 1)) * (st < 1 ? 1 : 0), mode: 'stand', pack: false, anim: { crouch: 0.45 + 0.25 * Math.sin(Math.PI * u), arms: { kind: 'push', t: u * push }, push: u } } };
       }
       // to the side of the canoe from wherever the job had them, then a hand on the gunwale till it is their turn
-      const P0 = this.jobAt(L, S, i, (boardEnd - BOARD.total / 3600 * CLOCK - s.h0) * 3600 / CLOCK, 'bank', false, kind === 'landing' && s.lunch);
+      const P0 = this.jobAt(L, S, i, Math.max(0, (boardEnd - BOARD.total / 3600 * CLOCK - s.h0) * 3600 / CLOCK - lag), from, false, kind === 'landing' && s.lunch);
       const k2 = Math.min(1, tb / BOARD.walk), d = Math.hypot(Hs.x - P0.x, Hs.z - P0.z);
       if (k2 < 1) return { job: { x: P0.x + (Hs.x - P0.x) * smooth(k2), z: P0.z + (Hs.z - P0.z) * smooth(k2), heading: d > 0.3 ? headingOf(Hs.x - P0.x, Hs.z - P0.z) : Hs.face, v: (d / BOARD.walk) * 1.5 * Math.sin(Math.PI * k2), mode: 'walk', pack: false, anim: null } };
       return { job: { x: Hs.x, z: Hs.z, heading: Hs.face, v: 0, mode: 'stand', pack: false, anim: { crouch: 0.5 } } };
@@ -733,6 +740,131 @@ export class PartyMoves {
       return { job: { x: Hs.x + (o.x - Hs.x) * smooth(k2), z: Hs.z + (o.z - Hs.z) * smooth(k2), heading: d > 0.3 ? headingOf(o.x - Hs.x, o.z - Hs.z) : o.h, v: (d / OUT.walk) * 1.5 * Math.sin(Math.PI * k2), mode: 'walk', pack: false, anim: null } };
     }
     return null;
+  }
+  // --- r2 2: the hand-over with the camp (party-camps.js) ------------------------------------------------------------
+  // The owner's leftover: the camp's canoes on the bank had gone and the party's had come in the water at the landing in
+  // one frame (and back again as they came in), the people popping between the camp's places and the party's. Now: on
+  // the morning they go, each canoe's stern lifts her off the bank where the camp had her and carries her down to the
+  // water, setting her in by her place, and the others walk down from where the camp's people stood (or out of a tent's
+  // door, those who were not up); on the afternoon they come in, each stern carries his canoe up to where the camp lays
+  // it, the camp's people start where the party's stand, and those the camp does not draw walk into a tent.
+  campOf(L, which) {
+    const C = this.partyCamps, e = L.plan[which];
+    if (!C || !e || e.kind !== 'site') return null;
+    const D = C.drawn.get(e.key);
+    return D && D.party === L.party ? D : null;
+  }
+  // the morning they go (made as the launch begins): each person comes from where the camp last drew them, once the camp
+  // no longer does (or out of a tent's door, one it did not draw); each canoe's stern first to her on the bank, and when
+  // all the sterns are by theirs they lift them together (the camp's canoes are one mesh) and carry them down
+  departOf(L, s, h) {
+    if (L.depart !== undefined) return L.depart;
+    const D = this.campOf(L, 'from');
+    // (only from the start of it: come on them later (a clock moved on, a teleport), their canoes are in the water already)
+    if (!D || !D.canoeAt || (h - s.h0) * 3600 / CLOCK > 6) return (L.depart = null);
+    const out = { D, tents: D.tentList || [], carry: new Map(), walk: new Map(), liftT: null };
+    const n = L.plan.crew.boats.length;
+    L.plan.crew.boats.forEach((crew, c) => {
+      const cn = D.canoeAt[c], i = crew[0], seat = L.seatOf.get(i); if (!cn || !seat) return;
+      const o = this.slot(s.S, c, n, { x: 0, z: 0, h: 0 }), Y = this.sideOf(L, c, 'mid', s.S), Hs = this.sideOf(L, c, seat.seat, s.S, i);
+      const at = { x: cn.x - cn.wx * 0.75, z: cn.z - cn.wz * 0.75 }, d = Math.hypot(Y.x - at.x, Y.z - at.z), dur = Math.max(3, d / HAND.carry); // (by her on the land side)
+      out.carry.set(i, { c, at, from: { x: at.x, z: at.z }, to: { x: Y.x, z: Y.z, h: o.h }, side: { x: Hs.x, z: Hs.z, h: Hs.face }, dur });
+    });
+    D.holdCanoes = out.carry.size > 0; // (the camp keeps them on the bank till they are lifted)
+    return (L.depart = out);
+  }
+  // where person i walks from, taken the frame the camp lets them go (t: real s into the launch)
+  departWalk(L, s, i, t) {
+    const X = L.depart, D = X.D, f = D.figs[i], cr = X.carry.get(i);
+    let from = null, emerge = 0;
+    if (f && f.placed && Number.isFinite(f.lastH) && Math.abs((this.day ? this.day.hours : 0) - f.lastH) < 0.02 && f.out !== undefined) from = { x: f.x, z: f.z };
+    if (!from && X.tents.length) { const tn = X.tents[i % X.tents.length], din = tn.size.b * 0.45; from = { x: tn.x + tn.fdx * din, z: tn.z + tn.fdz * din }; emerge = HAND.emerge; }
+    const to = cr ? cr.at : this.spot(s.S, i, { x: 0, z: 0, h: 0 }, L);
+    if (!from) from = { x: to.x, z: to.z };
+    const d = Math.hypot(to.x - from.x, to.z - from.z);
+    return { t0: t, from, to, emerge, dur: d > 0.3 ? Math.max(1.6, d / HAND.walk) : 0 };
+  }
+  // person i's pose in the first part of a launch from a site: { hide } while the camp still draws them; null once it is
+  // over (the jobs at the landing go on)
+  departPose(L, s, i, t) {
+    const X = L.depart; if (!X) return null;
+    const D = X.D, f = D.figs[i];
+    let w = X.walk.get(i);
+    if (!w) {
+      if (f && D.v.figs.includes(f)) return { hide: true }; // (the camp's still)
+      w = this.departWalk(L, s, i, t); X.walk.set(i, w);
+      // (every stern by his canoe: the lift's moment, together)
+      if (X.carry.size && [...X.carry.keys()].every((j) => X.walk.has(j))) X.liftT = Math.max(...[...X.carry.keys()].map((j) => { const q = X.walk.get(j); return q.t0 + q.emerge + q.dur; }), t) + 0.4;
+    }
+    const tw = t - w.t0;
+    const walkPose = () => {
+      if (tw < w.emerge) return { x: w.from.x, z: w.from.z, heading: headingOf(w.to.x - w.from.x, w.to.z - w.from.z), v: 0, mode: 'stand', pack: false, anim: { crouch: 0.9 } };
+      const k = smooth((tw - w.emerge) / Math.max(1e-6, w.dur));
+      return { x: w.from.x + (w.to.x - w.from.x) * k, z: w.from.z + (w.to.z - w.from.z) * k, heading: Math.hypot(w.to.x - w.from.x, w.to.z - w.from.z) > 0.3 ? headingOf(w.to.x - w.from.x, w.to.z - w.from.z) : 0, v: k < 1 ? (Math.hypot(w.to.x - w.from.x, w.to.z - w.from.z) / w.dur) * 1.5 * Math.sin(Math.PI * k) : 0, mode: k < 1 ? 'walk' : 'stand', pack: false, anim: k >= 1 ? { crouch: 0.6 } : null };
+    };
+    const cr = X.carry.get(i);
+    if (cr) {
+      if (X.liftT == null || t < X.liftT) return walkPose(); // (to her, and a hand on her till the others are by theirs)
+      if (D.holdCanoes) { D.holdCanoes = false; if (this.partyCamps) this.partyCamps.canoesOn(D, false); }
+      const tl = t - X.liftT, down = HAND.lift + cr.dur, settle = down + 1.6;
+      if (tl >= settle) return null;
+      if (tl >= down) { const k = smooth((tl - down) / (settle - down)); return { x: cr.to.x + (cr.side.x - cr.to.x) * k, z: cr.to.z + (cr.side.z - cr.to.z) * k, heading: cr.side.h, v: 0.5 * Math.sin(Math.PI * k), mode: 'walk', pack: false }; } // (set her in, and to her stern)
+      const k = smooth((tl - HAND.lift) / cr.dur), x = cr.from.x + (cr.to.x - cr.from.x) * k, z = cr.from.z + (cr.to.z - cr.from.z) * k;
+      const hd = Math.hypot(cr.to.x - x, cr.to.z - z) > 0.6 ? headingOf(cr.to.x - x, cr.to.z - z) : cr.to.h;
+      return { x, z, heading: hd, v: tl > HAND.lift ? (Math.hypot(cr.to.x - cr.from.x, cr.to.z - cr.from.z) / cr.dur) * 1.5 * Math.sin(Math.PI * clamp((tl - HAND.lift) / cr.dur, 0, 1)) : 0, mode: 'carry', pack: false, hull: L.plan.crew.hulls[cr.c] };
+    }
+    if (tw < w.emerge + w.dur) return walkPose();
+    return null;
+  }
+  // the seconds of the landing's jobs a person has lost to the morning's hand-over (their job clock starts when they are down)
+  departLag(L, i) {
+    const X = L.depart; if (!X) return 0; const w = X.walk.get(i); if (!w) return 0;
+    const cr = X.carry.get(i); if (cr) return X.liftT == null ? 1e3 : X.liftT + HAND.lift + cr.dur + 1.6;
+    return w.t0 + w.emerge + w.dur;
+  }
+  // the afternoon they come in: canoe c's carry up to the camp's place for her (t: real s left of the landing), or null
+  arriveOf(L, s) {
+    if (L.arrive !== undefined) return L.arrive;
+    const D = this.campOf(L, 'to');
+    if (!D || !D.canoeAt) return null; // (the camp not drawn yet: asked again next frame)
+    const out = { D, carry: new Map(), tents: D.tentList || [], drawn: Math.min(3, L.persons.length) };
+    const n = L.plan.crew.boats.length;
+    L.plan.crew.boats.forEach((crew, c) => {
+      const cn = D.canoeAt[c], i = crew[0], seat = L.seatOf.get(i); if (!cn || !seat) return;
+      const o = this.slot(s.S, c, n, { x: 0, z: 0, h: 0 }), Y = this.sideOf(L, c, 'mid', s.S), d = Math.hypot(Y.x - cn.x, Y.z - cn.z), dur = Math.max(3, d / HAND.carry);
+      void o;
+      out.carry.set(i, { c, from: { x: Y.x, z: Y.z }, to: { x: cn.x, z: cn.z, h: headingOf(cn.tx, cn.tz) }, dur, up: dur + HAND.lift + HAND.reach });
+    });
+    return (L.arrive = out);
+  }
+  arrivePose(L, s, i, tl, h) {
+    const X = this.arriveOf(L, s); if (!X) return null;
+    const cr = X.carry.get(i);
+    if (cr) {
+      // (up to her by her place in the water over HAND.reach s, lifted over HAND.lift, carried up over dur, and held there
+      // till the camp has her: tl the landing's real seconds left)
+      if (tl > cr.up) return null;
+      if (!cr.fixed) { const Y = this.sideOf(L, cr.c, 'mid', s.S); cr.from = { x: Y.x, z: Y.z }; cr.fixed = true; } // (by her middle as she lies when he goes to her)
+      if (tl > cr.dur + HAND.lift) { const J = this.jobPoseAt(L, s, i, h - (cr.up - tl) * CLOCK / 3600), k = smooth((cr.up - tl) / HAND.reach); return { x: J.x + (cr.from.x - J.x) * k, z: J.z + (cr.from.z - J.z) * k, heading: headingOf(cr.from.x - J.x, cr.from.z - J.z), v: (Math.hypot(cr.from.x - J.x, cr.from.z - J.z) / HAND.reach) * 1.5 * Math.sin(Math.PI * k), mode: 'walk', pack: false }; }
+      const u = smooth(clamp(1 - tl / cr.dur, 0, 1)), px = cr.from.x + (cr.to.x - cr.from.x) * u, pz = cr.from.z + (cr.to.z - cr.from.z) * u;
+      const hd = u < 0.9 ? headingOf(cr.to.x - cr.from.x, cr.to.z - cr.from.z) : cr.to.h;
+      return { x: px, z: pz, heading: hd, v: u > 0 && u < 1 ? (Math.hypot(cr.to.x - cr.from.x, cr.to.z - cr.from.z) / cr.dur) * 1.5 * Math.sin(Math.PI * u) : 0, mode: 'carry', pack: false, hull: L.plan.crew.hulls[cr.c] };
+    }
+    // (those the camp does not draw: into a tent, the last moments)
+    if (i >= X.drawn && X.tents.length && tl < HAND.tent) {
+      const tn = X.tents[i % X.tents.length], din = tn.size.b * 0.45, P = { x: tn.x + tn.fdx * din, z: tn.z + tn.fdz * din };
+      const J = this.jobPoseAt(L, s, i, h - (HAND.tent - tl) * CLOCK / 3600), u = smooth((HAND.tent - tl) / (HAND.tent - 1.2));
+      return { x: J.x + (P.x - J.x) * u, z: J.z + (P.z - J.z) * u, heading: headingOf(P.x - J.x, P.z - J.z), v: u < 1 ? Math.hypot(P.x - J.x, P.z - J.z) / (HAND.tent - 1.2) : 0, mode: u < 1 ? 'walk' : 'stand', pack: false, anim: u >= 1 ? { crouch: 0.9 } : null };
+    }
+    return null;
+  }
+  // where a person's job at a landing has them at hour h (its walk's start for the hand-over's)
+  jobPoseAt(L, s, i, h) { const seat = L.seatOf.get(i), bp = seat ? this.bankPose(L, s, i, h, seat) : null; if (bp && bp.job) return bp.job; if (bp && bp.step) return bp.step; const o = this.spot(s.S, i, { x: 0, z: 0, h: 0 }, L); return { x: o.x, z: o.z, heading: o.h }; }
+  // is canoe c carried by its stern now (hidden from the water)?
+  carriedNow(L, s, c, h) {
+    if (s.kind === 'launch' && L.depart) { const X = L.depart; for (const cr of X.carry.values()) if (cr.c === c) return X.liftT == null || (h - s.h0) * 3600 / CLOCK < X.liftT + HAND.lift + cr.dur; }
+    if (s.kind === 'land' && L.arrive) { const tl = (s.h1 - h) * 3600 / CLOCK; for (const cr of L.arrive.carry.values()) if (cr.c === c) return tl <= cr.dur + HAND.lift; }
+    return false;
   }
   // r2 2: where the stern stands pushing her off, u 0..1 through the push: from the bank beside her (where the push
   // began, kept: the hull slides away from it) a step after her toward her seat
@@ -765,6 +897,13 @@ export class PartyMoves {
   place(L, h, jump, budget) {
     const plan = L.plan, s = this.segAt(L, h), n = L.boats.length, rate = this.rate, crew = plan.crew;
     L.seg = s;
+    // (r2 2: before they push off from a site the camp has them all, canoes and people: nothing of the party drawn, or
+    // they had stood twice over for the last moments, at the fire and at the landing)
+    const early = h < plan.segs[0].h0 && plan.from.kind === 'site' && !!this.campOf(L, 'from');
+    for (const a of L.persons) a.hidden = early;
+    if (early) { for (const b of L.boats) b.hide(); return; }
+    if (s.kind === 'launch' && plan.from.kind === 'site' && L.seatOf) this.departOf(L, s, h);
+    if (s.kind === 'land' && plan.to.kind === 'site' && L.seatOf) this.arriveOf(L, s);
     const water = s.kind === 'paddle' || s.kind === 'drift', path = water ? this.pathOf(L, s, budget) : null;
     // (the next water leg's path too, while there is time this frame)
     if (budget) { const i = plan.segs.indexOf(s); for (let j = i + 1; j < plan.segs.length && j < i + 4; j++) { const q = plan.segs[j]; if (q.kind === 'paddle') { this.pathOf(L, q, budget); break; } } }
@@ -784,6 +923,7 @@ export class PartyMoves {
         if (B && t >= B.lift && t < B.down) { b.hide(); continue; }
         const o = this.slot(B && t >= B.down ? s.B : s.A, c, n, _s); st = { x: o.x, z: o.z, h: o.h, v: 0 };
       } else {
+        if (this.carriedNow(L, s, c, h)) { b.hide(); continue; } // (r2 2: on her stern's shoulders, down from the camp or up to it)
         const o = this.slot(s.S, c, n, _s); st = { x: o.x, z: o.z, h: o.h, v: 0 };
         // (r2 2: pushed off the bank by her stern before they paddle: out from it, rocking as the push starts)
         const pu = L.ready && L.seatOf ? this.pushOf(L, s, c, h) : 0;
@@ -798,8 +938,13 @@ export class PartyMoves {
     L.persons.forEach((a, i) => {
       const seat = L.seatOf.get(i);
       if (inBoat && seat) { a.walking = null; const b = L.boats[seat.c]; if (a.boat !== b || a.seat !== seat.seat) b.seatCrew(a, seat.seat); return; }
+      // r2 2: the hand-over with the camp: down from it on the morning they go, up to it as they come in
+      const HP = s.kind === 'launch' && L.depart ? this.departPose(L, s, i, (h - s.h0) * 3600 / CLOCK) : s.kind === 'land' && L.arrive ? this.arrivePose(L, s, i, (s.h1 - h) * 3600 / CLOCK, h) : null;
+      if (HP && HP.hide) { a.hidden = true; a.walking = null; const o = this.spot(s.S, i, _s, L); a.drive({ x: o.x, z: o.z, heading: o.h, v: 0, mode: 'stand', snap: true }); return; }
+      a.hidden = false;
+      if (HP) { a.walking = null; steps.delete(i); a.drive({ x: HP.x, z: HP.z, heading: HP.heading, v: HP.v, mode: HP.mode, pack: HP.pack, hull: HP.hull, anim: HP.anim || null, snap: jump }); return; }
       // r2: at the bank: their job there, getting in one at a time, and out
-      const bp = this.bankPose(L, s, i, h, seat);
+      const bp = this.bankPose(L, s, i, h, seat, s.kind === 'launch' ? this.departLag(L, i) : 0);
       if (bp) {
         a.walking = null;
         const b = L.boats[seat.c];

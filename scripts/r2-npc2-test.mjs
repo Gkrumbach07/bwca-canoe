@@ -268,7 +268,7 @@ try {
             const crew = L.plan.crew.boats[c] || [], inN = b.crew.length, S0 = L.st.from.L;
             if (sg === 'launch' && crew.length) {
               const r = board.get(c) || { c, n: crew.length };
-              if (inN === crew.length - 1 && r.x0 == null) { r.x0 = b.x; r.z0 = b.z; }
+              if (inN === crew.length - 1 && r.x0 == null && !b.hidden) { r.x0 = b.x; r.z0 = b.z; }
               if (r.x0 != null && inN < crew.length) {
                 const stern = L.persons.find((a, i) => crew.includes(i) && !a.boat);
                 if (stern && stern.bind) { const f = N.figs().find((q) => q.a === stern); if (f) { const q = N.feet(f); r.footMin = Math.min(r.footMin ?? 9, q.lo); r.pushSeen = (r.pushSeen || 0) + (stern.anim && stern.anim.arms && stern.anim.arms.kind === 'push' ? 1 : 0); } }
@@ -441,6 +441,98 @@ try {
     log('camp morning', JSON.stringify({ appear: mo.appear, through: mo.through, walkFrames: mo.walkFrames }));
     check(8, 'a camp walk never goes through a tent or the fire ring', walks.walkFrames + mo.walkFrames > 100 && walks.through + mo.through === 0, { walkFrames: walks.walkFrames + mo.walkFrames, through: walks.through + mo.through, ev: walks.ev.concat(mo.ev).slice(0, 6) });
     check(5, 'in the morning they come out of a tent (each appears in a tent’s door)', mo.appear.length > 0 && mo.appear.every((q) => q.fromTent), mo.appear);
+  }
+
+  // --- 2: the hand-over between a party and its camp, as they come in and as they go ---------------------------------
+  // Each frame: every hull there is (a party canoe in the water, one on someone's shoulders, the camp's on the bank); one
+  // appearing where no hull was a moment before (2.5 m), or going from where none is now, is a pop. And the people: the
+  // camp's first drawn where the party's last stood (or the party's first where the camp's last stood, or in a tent)
+  const HAND = (pid, key, tag, frames, which) => page.evaluate(async ({ pid, key, tag, frames, which }) => {
+    const g = window.__game, N = window.__n2, mv = g.moves, C = g.partyCamps, p = g.player;
+    const out = { frames: 0, pops: 0, popEv: [], people: [], doubles: 0, dropped: null, hulls: 0 };
+    let prevH = null, prevParty = null, prevCamp = null, legWas = true;
+    const camp = () => { const D = C.drawn.get(key); return D && D.party.id === pid ? D : null; };
+    for (let k = 0; k < frames; k++) {
+      g.step(1 / 30, 1); out.frames++; N.oddFrame(tag);
+      const L = [...mv.active.values()].find((x) => x.party.id === pid && (which === 'in' ? x.plan.to.key === key : x.plan.from.key === key));
+      const D = camp(), H = [];
+      if (L) {
+        for (const b of L.boats) if (!b.hidden && b.near) H.push({ x: b.x, z: b.z, w: 'water' });
+        for (const a of L.persons) if (a.mode === 'carry' && a.hull && !a.hidden) H.push({ x: a.x, z: a.z, w: 'shoulders' });
+      }
+      if (D && D.canoesIn) for (const o of D.canoeObs) H.push({ x: o.x, z: o.z, w: 'bank' });
+      out.hulls = Math.max(out.hulls, H.length);
+      const nearMe = (q) => Math.hypot(q.x - p.x, q.z - p.z) < 70;
+      if (prevH) {
+        for (const q of H) if (nearMe(q) && !prevH.some((o) => Math.hypot(o.x - q.x, o.z - q.z) < 2.5)) { out.pops++; if (out.popEv.length < 6) out.popEv.push({ k, appear: q.w }); }
+        for (const o of prevH) if (nearMe(o) && !H.some((q) => Math.hypot(o.x - q.x, o.z - q.z) < 2.5)) { out.pops++; if (out.popEv.length < 6) out.popEv.push({ k, gone: o.w }); }
+      }
+      prevH = H;
+      // the people: who of the party is drawn on foot, who of the camp
+      const party = L ? L.persons.filter((a) => a.bind && !a.boat).map((a) => ({ x: a.x, z: a.z })) : [];
+      const campF = D ? D.v.figs.filter(Boolean).map((f) => ({ x: f.x, z: f.z })) : [];
+      const tents = D ? D.obstacles.filter((o) => o.tent) : [];
+      const inTent = (q) => tents.some((t) => { const dx = q.x - t.x, dz = q.z - t.z, a = dx * t.ux + dz * t.uz, b = -dx * t.uz + dz * t.ux; return Math.abs(a) < t.hx + 0.2 && Math.abs(b) < t.hz + 0.2; });
+      if (party.length && campF.length) out.doubles++;
+      if (which === 'in' && prevParty && prevParty.length && !party.length && campF.length) {
+        // (the party let go this frame: the camp's people where the party's were)
+        out.dropped = k;
+        for (const q of campF) { const d = Math.min(...prevParty.map((o) => Math.hypot(o.x - q.x, o.z - q.z))); out.people.push(+d.toFixed(2)); }
+      }
+      if (which === 'out' && prevCamp && prevCamp.length && !campF.length && party.length) {
+        out.dropped = k;
+        for (const q of party) { const d = Math.min(...prevCamp.map((o) => Math.hypot(o.x - q.x, o.z - q.z))); out.people.push(inTent(q) ? 0 : +d.toFixed(2)); }
+      }
+      prevParty = party; prevCamp = campF; legWas = !!L;
+      if (k % 15 === 0) await new Promise((q) => setTimeout(q, 2));
+    }
+    void legWas;
+    return out;
+  }, { pid, key, tag, frames, which });
+  const watchLanding = async (S) => {
+    const at = await page.evaluate(({ S }) => { const W = window.__game.world; for (const [up, al] of [[8, 6], [7, -6], [10, 8], [6, 10], [12, -9]]) { const x = S.x + S.ux * up + S.tx * al, z = S.z + S.uz * up + S.tz * al; if (W.shoreAt(x, z) > 1.5) return { x, z }; } return { x: S.x + S.ux * 9, z: S.z + S.uz * 9 }; }, { S });
+    await standAt(page, at.x, at.z, S.x + S.ux * 3, S.z + S.uz * 3, -0.2);
+  };
+  if (on('arrive')) {
+    const picks = await page.evaluate(({ YEAR }) => {
+      const g = window.__game, P = g.parties; g.day.setClock(YEAR, 192, 7.4); const T = P.today, out = [];
+      for (const { party, k } of P.legsOn(T)) { const pl = P.legPlan(party, k); if (!pl || pl.to.kind !== 'site' || pl.arrive < 12 || pl.arrive > 17.5 || pl.crew.boats.length < 2) continue; out.push({ id: pl.id, pid: party.id, key: pl.to.key, arrive: pl.arrive, end: pl.end, to: { x: pl.to.x, z: pl.to.z }, d: Math.hypot(pl.to.x - g.player.x, pl.to.z - g.player.z) }); }
+      out.sort((a, b) => a.d - b.d); return out.slice(0, 3);
+    }, { YEAR });
+    let R = null;
+    for (const c of picks) {
+      log('arrive:', JSON.stringify(c));
+      await page.evaluate(({ c, YEAR }) => window.__game.day.setClock(YEAR, 192, c.arrive - 0.04), { c, YEAR }); await tp(page, c.to.x, c.to.z, 'arrive arrival');
+      const S = await page.evaluate(({ id }) => { for (let k = 0; k < 40; k++) { const L = [...window.__game.moves.active.values()].find((x) => x.plan.id === id); if (L && L.st) { const q = L.st.to.L; return { x: q.x, z: q.z, ux: q.ux, uz: q.uz, tx: q.tx, tz: q.tz }; } window.__game.step(1 / 30, 15); } return null; }, { id: c.id });
+      if (!S) continue;
+      await watchLanding(S);
+      // (to the last minute of their landing, then every frame through the hand-over)
+      await page.evaluate(({ c, YEAR }) => { const g = window.__game; g.day.setClock(YEAR, 192, c.end - 0.075); g.step(1 / 30, 30); }, { c, YEAR });
+      R = await HAND(c.pid, c.key, 'arrive', 1500, 'in');
+      log('arrive measured', JSON.stringify(R));
+      if (R.dropped != null) break;
+    }
+    check(2, 'as they come in, no canoe pops between the water and the camp’s bank; the camp’s people start where the party’s stood (<= 0.6 m)', R && R.dropped != null && R.pops === 0 && R.people.length > 0 && R.people.every((d) => d <= 0.6), R);
+  }
+  if (on('depart')) {
+    const picks = await page.evaluate(({ YEAR }) => {
+      const g = window.__game, P = g.parties; g.day.setClock(YEAR, 193, 6.5); const T = P.today, out = [];
+      for (const { party, k } of P.legsOn(T)) { const pl = P.legPlan(party, k); if (!pl || pl.from.kind !== 'site' || pl.start < 7.4 || pl.start > 11 || pl.crew.boats.length < 2) continue; out.push({ id: pl.id, pid: party.id, key: pl.from.key, h0: pl.segs[0].h0, from: { x: pl.from.x, z: pl.from.z }, d: Math.hypot(pl.from.x - g.player.x, pl.from.z - g.player.z) }); }
+      out.sort((a, b) => a.d - b.d); return out.slice(0, 3);
+    }, { YEAR });
+    let R = null;
+    for (const c of picks) {
+      log('depart:', JSON.stringify(c));
+      await page.evaluate(({ c, YEAR }) => window.__game.day.setClock(YEAR, 193, c.h0 - 0.06), { c, YEAR }); await tp(page, c.from.x, c.from.z, 'depart arrival');
+      const S = await page.evaluate(({ id }) => { for (let k = 0; k < 60; k++) { const L = [...window.__game.moves.active.values()].find((x) => x.plan.id === id); if (L && L.st) { const q = L.st.from.L; return { x: q.x, z: q.z, ux: q.ux, uz: q.uz, tx: q.tx, tz: q.tz }; } window.__game.step(1 / 30, 15); } return null; }, { id: c.id });
+      if (!S) continue;
+      await watchLanding(S);
+      await page.evaluate(({ c, YEAR }) => { const g = window.__game; g.day.setClock(YEAR, 193, c.h0 - 0.012); g.step(1 / 30, 3); }, { c, YEAR });
+      R = await HAND(c.pid, c.key, 'depart', 1200, 'out');
+      log('depart measured', JSON.stringify(R));
+      if (R.dropped != null) break;
+    }
+    check(2, 'as they go, no canoe pops off the camp’s bank into the water, nobody stands twice over; the party’s people start where the camp’s stood or in a tent (<= 0.6 m)', R && R.dropped != null && R.pops === 0 && R.doubles === 0 && R.people.length > 0 && R.people.every((d) => d <= 0.6), R);
   }
 
   // --- 12: over all of it, a standing foot far off the ground a lone frame -------------------------------------------
