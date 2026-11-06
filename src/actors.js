@@ -402,6 +402,7 @@ class Person {
     st.crouch = an ? an.crouch || 0 : 0;
     st.hustle = false; st.mode = this.mode === 'carry' ? 'carry' : 'walk';
     st.held = (this.anim && this.anim.held) || null; // (round 2: a hand with a thing in it hangs carrying it, under the canoe too)
+    st.carryFrom = (this.mode === 'carry' && this.anim && this.anim.carryFrom) || null; // (r2 2 verify: a lift or a set-down: poses.js carry)
     const s = B.s, F = B.frame, R = B.root, yb = (air && Number.isFinite(an.y) ? an.y : this.y) + 0.1;
     // (r2: standing, the half step or the turn on the spot of an idle with life; and a look at you, near)
     const L = B.pb.life, px = this.x + (L ? L.ox : 0), pz = this.z + (L ? L.oz : 0), hd = this.heading + (L ? L.oh : 0);

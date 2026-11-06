@@ -466,6 +466,7 @@ const _aim = V(), _v = V(), _v2 = V(), _v3 = V(), _ra = V(), _rb = V();
 // The gait of one body: walk(dt, moveKind, fz) and carry(dt, hull) pose it for the frame (the figure placed at the rig's
 // origin first); the rest are what canoe.js's own moves (a vault, a climb, sitting) read: the feet (loco.feet, ankles,
 // fq, tq), the frames (toWorld, toLocal), the sole (ankleAt, footFrameQ). heal() starts it all afresh.
+const _cfM = new THREE.Matrix4(), _cfI = new THREE.Matrix4(), _cfP = new THREE.Vector3(), _cfQ = new THREE.Quaternion(), _cfS = new THREE.Vector3();
 export function makeGait(body) {
   const { P, J, rig, state, idle } = body;
   const ground = body.ground;
@@ -864,6 +865,17 @@ export function makeGait(body) {
     // the stride's roll, more with no hand to damp it
     const free = (held.R ? 1 : 0) + (held.L ? 1 : 0), strideRoll = (0.015 + 0.01 * free) * Math.sin(Math.PI * 2 * g.phase) * g.mw;
     hull.rotation.set(Math.PI + strideRoll + 0.07 * wob + lean, yawC, 0.09 + (state.carryBow || 0) + 0.05 * Math.sin(Math.PI * stg) + 0.03 * Math.abs(lean), 'YZX');
+    // (r2 2 verify: lifted up or set down: from where she lies (state.carryFrom: her pivot's place and turn in the world)
+    // to the shoulders as k goes 0 to 1, rolled over on the way; she had leapt from the bank or the water to the shoulders
+    // in a frame, a metre up and a metre over)
+    const cf = state.carryFrom;
+    if (cf && cf.k < 1) {
+      rig.updateWorldMatrix(true, false);
+      _cfM.compose(_cfP.set(cf.p.x, cf.p.y, cf.p.z), _cfQ.set(cf.q.x, cf.q.y, cf.q.z, cf.q.w), _cfS.set(1, 1, 1)).premultiply(_cfI.copy(rig.matrixWorld).invert());
+      _cfM.decompose(_cfP, _cfQ, _cfS);
+      const k = Math.max(0, cf.k);
+      hull.position.copy(_cfP.lerp(hull.position, k)); hull.quaternion.copy(_cfQ.slerp(hull.quaternion, k));
+    }
     hull.updateMatrix();
     // a thing in a hand: that arm hangs and carries it
     const hang = ['L', 'R'].filter((k) => held[k]);

@@ -37,6 +37,7 @@
 import * as THREE from 'three';
 import { MOVE } from './parties.js';
 import { trailOf } from './actors.js';
+import { FLOAT_OFFSET } from './poses.js';
 import { PRI } from './dialogue.js';
 import { mulberry32 } from './rng.js';
 import { CLOCK } from './pace.js'; // r2: the one clock (game seconds a real one): a boarding's steps are timed in real seconds
@@ -82,7 +83,7 @@ const PUSH = { dur: 1.6, out: 0.85, step: 0.4 };
 // r2 2: the hand-over with the camp: a canoe carried up or down at HAND.carry m/s (real), lifted or set down over
 // HAND.lift s, the walk to her HAND.reach s; the others walk at HAND.walk, out of a tent after HAND.emerge s, and those
 // the camp does not draw into one over the landing's last HAND.tent s
-const HAND = { carry: 1.0, lift: 0.6, reach: 2.8, walk: 1.1, emerge: 1.2, tent: 14 };
+const HAND = { carry: 1.0, lift: 0.6, reach: 2.8, walk: 1.1, emerge: 1.2, tent: 14, flip: 1.4 }; // (flip: r2 2 verify, s to roll her up onto the shoulders or down off them)
 const OUT = { first: 2.0, step: 1.5, gap: 0.15, walk: 3.0 };            // s: the first out, each step out, the walk to their place
 const SEAT_X = { stern: SEATS.stern.x, bow: SEATS.bow.x, mid: -0.42 };
 const SLOT_ALONG = 6.2;      // m between canoes lying along the bank
@@ -797,7 +798,7 @@ export class PartyMoves {
       const cn = D.canoeAt[c], i = crew[0], seat = L.seatOf.get(i); if (!cn || !seat) return;
       const o = this.slot(s.S, c, n, { x: 0, z: 0, h: 0 }), Y = this.sideOf(L, c, 'mid', s.S), Hs = this.sideOf(L, c, seat.seat, s.S, i);
       const at = { x: cn.x - cn.wx * 0.75, z: cn.z - cn.wz * 0.75 }, d = Math.hypot(Y.x - at.x, Y.z - at.z), dur = Math.max(3, d / HAND.carry); // (by her on the land side)
-      out.carry.set(i, { c, at, from: { x: at.x, z: at.z }, to: { x: Y.x, z: Y.z, h: o.h }, side: { x: Hs.x, z: Hs.z, h: Hs.face }, dur });
+      out.carry.set(i, { c, at, from: { x: at.x, z: at.z }, to: { x: Y.x, z: Y.z, h: o.h }, side: { x: Hs.x, z: Hs.z, h: Hs.face }, dur, camp: this.campPose(cn) });
     });
     D.holdCanoes = out.carry.size > 0; // (the camp keeps them on the bank till they are lifted)
     return (L.depart = out);
@@ -834,13 +835,18 @@ export class PartyMoves {
     const cr = X.carry.get(i);
     if (cr) {
       if (X.liftT == null || t < X.liftT) return walkPose(); // (to her, and a hand on her till the others are by theirs)
-      if (D.holdCanoes) { D.holdCanoes = false; if (this.partyCamps) this.partyCamps.canoesOn(D, false); }
-      const tl = t - X.liftT, down = HAND.lift + cr.dur, settle = down + 1.6;
+      // (r2 2 verify: rolled up off the bank onto his shoulders over HAND.flip s, carried down, and rolled off them into the
+      // water by her place over HAND.flip more; she had jumped from the bank to his shoulders, and from them into the water.
+      // The camp's canoes let go a moment into the lift, his (the same, where they lie) drawn by then: a frame of none)
+      const F = HAND.flip, tl = t - X.liftT;
+      if (D.holdCanoes && tl > 0.1) { D.holdCanoes = false; if (this.partyCamps) this.partyCamps.canoesOn(D, false); }
+      const down = F + cr.dur, set = down + F, settle = set + 1.6, hull = L.plan.crew.hulls[cr.c];
       if (tl >= settle) return null;
-      if (tl >= down) { const k = smooth((tl - down) / (settle - down)); return { x: cr.to.x + (cr.side.x - cr.to.x) * k, z: cr.to.z + (cr.side.z - cr.to.z) * k, heading: cr.side.h, v: 0.5 * Math.sin(Math.PI * k), mode: 'walk', pack: false }; } // (set her in, and to her stern)
-      const k = smooth((tl - HAND.lift) / cr.dur), x = cr.from.x + (cr.to.x - cr.from.x) * k, z = cr.from.z + (cr.to.z - cr.from.z) * k;
-      const hd = Math.hypot(cr.to.x - x, cr.to.z - z) > 0.6 ? headingOf(cr.to.x - x, cr.to.z - z) : cr.to.h;
-      return { x, z, heading: hd, v: tl > HAND.lift ? (Math.hypot(cr.to.x - cr.from.x, cr.to.z - cr.from.z) / cr.dur) * 1.5 * Math.sin(Math.PI * clamp((tl - HAND.lift) / cr.dur, 0, 1)) : 0, mode: 'carry', pack: false, hull: L.plan.crew.hulls[cr.c] };
+      if (tl >= set) { const k = smooth((tl - set) / (settle - set)); return { x: cr.to.x + (cr.side.x - cr.to.x) * k, z: cr.to.z + (cr.side.z - cr.to.z) * k, heading: cr.side.h, v: 0.5 * Math.sin(Math.PI * k), mode: 'walk', pack: false }; } // (to her stern)
+      if (tl >= down) { const W = cr.water || (cr.water = this.waterPose(L, s, cr.c)); return { x: cr.to.x, z: cr.to.z, heading: cr.to.h, v: 0, mode: 'carry', pack: false, hull, anim: { carryFrom: { p: W.p, q: W.q, k: 1 - smooth((tl - down) / F) } } }; }
+      const k = smooth((tl - F) / cr.dur), x = cr.from.x + (cr.to.x - cr.from.x) * k, z = cr.from.z + (cr.to.z - cr.from.z) * k;
+      const hd = tl < F ? headingOf(cr.camp.fx, cr.camp.fz) : Math.hypot(cr.to.x - x, cr.to.z - z) > 0.6 ? headingOf(cr.to.x - x, cr.to.z - z) : cr.to.h;
+      return { x, z, heading: hd, v: tl > F ? (Math.hypot(cr.to.x - cr.from.x, cr.to.z - cr.from.z) / cr.dur) * 1.5 * Math.sin(Math.PI * clamp((tl - F) / cr.dur, 0, 1)) : 0, mode: 'carry', pack: false, hull, anim: tl < F ? { carryFrom: { p: cr.camp.p, q: cr.camp.q, k: smooth(tl / F) } } : null };
     }
     if (tw < w.emerge + w.dur) return walkPose();
     return null;
@@ -848,7 +854,7 @@ export class PartyMoves {
   // the seconds of the landing's jobs a person has lost to the morning's hand-over (their job clock starts when they are down)
   departLag(L, i) {
     const X = L.depart; if (!X) return 0; const w = X.walk.get(i); if (!w) return 0;
-    const cr = X.carry.get(i); if (cr) return X.liftT == null ? 1e3 : X.liftT + HAND.lift + cr.dur + 1.6;
+    const cr = X.carry.get(i); if (cr) return X.liftT == null ? 1e3 : X.liftT + 2 * HAND.flip + cr.dur + 1.6;
     return w.t0 + w.emerge + w.dur;
   }
   // the afternoon they come in: canoe c's carry up to the camp's place for her (t: real s left of the landing), or null
@@ -862,7 +868,8 @@ export class PartyMoves {
       const cn = D.canoeAt[c], i = crew[0], seat = L.seatOf.get(i); if (!cn || !seat) return;
       const o = this.slot(s.S, c, n, { x: 0, z: 0, h: 0 }), Y = this.sideOf(L, c, 'mid', s.S), d = Math.hypot(Y.x - cn.x, Y.z - cn.z), dur = Math.max(3, d / HAND.carry);
       void o;
-      out.carry.set(i, { c, from: { x: Y.x, z: Y.z }, to: { x: cn.x, z: cn.z, h: headingOf(cn.tx, cn.tz) }, dur, up: dur + HAND.lift + HAND.reach });
+      // (r2 2 verify: set down from beside where she will lie, on her land side, not from under her)
+      out.carry.set(i, { c, from: { x: Y.x, z: Y.z }, to: { x: cn.x - cn.wx * 0.75, z: cn.z - cn.wz * 0.75, h: headingOf(cn.tx, cn.tz) }, dur, up: dur + 2 * HAND.flip + HAND.reach, camp: this.campPose(cn) });
     });
     return (L.arrive = out);
   }
@@ -874,11 +881,19 @@ export class PartyMoves {
       // till the camp has her: tl the landing's real seconds left)
       if (tl > cr.up) return null;
       // (by her middle as she lies, followed while he goes to her and taken as he lifts her)
-      if (tl > cr.dur + HAND.lift || !cr.fixed) { const Y = this.sideOf(L, cr.c, 'mid', s.S); cr.from = { x: Y.x, z: Y.z }; if (tl <= cr.dur + HAND.lift) cr.fixed = true; }
-      if (tl > cr.dur + HAND.lift) { const J = this.jobPoseAt(L, s, i, h - (cr.up - tl) * CLOCK / 3600), k = smooth((cr.up - tl) / HAND.reach); return { x: J.x + (cr.from.x - J.x) * k, z: J.z + (cr.from.z - J.z) * k, heading: headingOf(cr.from.x - J.x, cr.from.z - J.z), v: (Math.hypot(cr.from.x - J.x, cr.from.z - J.z) / HAND.reach) * 1.5 * Math.sin(Math.PI * k), mode: 'walk', pack: false }; }
-      const u = smooth(clamp(1 - tl / cr.dur, 0, 1)), px = cr.from.x + (cr.to.x - cr.from.x) * u, pz = cr.from.z + (cr.to.z - cr.from.z) * u;
+      const F = HAND.flip, hull = L.plan.crew.hulls[cr.c];
+      if (tl > cr.dur + 2 * F || !cr.fixed) {
+        const Y = this.sideOf(L, cr.c, 'mid', s.S); cr.from = { x: Y.x, z: Y.z };
+        if (tl <= cr.dur + 2 * F) { cr.fixed = true; const b = L.boats[cr.c]; cr.water = b && !b.hidden && b.root ? { p: { x: b.root.position.x, y: b.root.position.y, z: b.root.position.z }, q: b.root.quaternion.clone() } : this.waterPose(L, s, cr.c); }
+      }
+      if (tl > cr.dur + 2 * F) { const J = this.jobPoseAt(L, s, i, h - (cr.up - tl) * CLOCK / 3600), k = smooth((cr.up - tl) / HAND.reach); return { x: J.x + (cr.from.x - J.x) * k, z: J.z + (cr.from.z - J.z) * k, heading: headingOf(cr.from.x - J.x, cr.from.z - J.z), v: (Math.hypot(cr.from.x - J.x, cr.from.z - J.z) / HAND.reach) * 1.5 * Math.sin(Math.PI * k), mode: 'walk', pack: false }; }
+      // (r2 2 verify: rolled up out of the water over HAND.flip, carried up, and rolled off his shoulders onto the bank where
+      // the camp lays her over the last HAND.flip: the camp's canoe then is she, where she lies)
+      const lift = tl > cr.dur + F, lower = tl <= F;
+      const u = smooth(clamp(1 - (tl - F) / cr.dur, 0, 1)), px = cr.from.x + (cr.to.x - cr.from.x) * u, pz = cr.from.z + (cr.to.z - cr.from.z) * u;
       const hd = u < 0.9 ? headingOf(cr.to.x - cr.from.x, cr.to.z - cr.from.z) : cr.to.h;
-      return { x: px, z: pz, heading: hd, v: u > 0 && u < 1 ? (Math.hypot(cr.to.x - cr.from.x, cr.to.z - cr.from.z) / cr.dur) * 1.5 * Math.sin(Math.PI * u) : 0, mode: 'carry', pack: false, hull: L.plan.crew.hulls[cr.c] };
+      const cf = lift && cr.water ? { p: cr.water.p, q: cr.water.q, k: smooth((cr.dur + 2 * F - tl) / F) } : lower ? { p: cr.camp.p, q: cr.camp.q, k: smooth(tl / F) } : null;
+      return { x: px, z: pz, heading: hd, v: u > 0 && u < 1 ? (Math.hypot(cr.to.x - cr.from.x, cr.to.z - cr.from.z) / cr.dur) * 1.5 * Math.sin(Math.PI * u) : 0, mode: 'carry', pack: false, hull, anim: cf ? { carryFrom: cf } : null };
     }
     // (those the camp does not draw: into a tent, the last moments)
     if (i >= X.drawn && X.tents.length && tl < HAND.tent) {
@@ -892,9 +907,27 @@ export class PartyMoves {
   jobPoseAt(L, s, i, h) { const seat = L.seatOf.get(i), bp = seat ? this.bankPose(L, s, i, h, seat) : null; if (bp && bp.job) return bp.job; if (bp && bp.step) return bp.step; const o = this.spot(s.S, i, { x: 0, z: 0, h: 0 }, L); return { x: o.x, z: o.z, heading: o.h }; }
   // is canoe c carried by its stern now (hidden from the water)?
   carriedNow(L, s, c, h) {
-    if (s.kind === 'launch' && L.depart) { const X = L.depart; for (const cr of X.carry.values()) if (cr.c === c) return X.liftT == null || (h - s.h0) * 3600 / CLOCK < X.liftT + HAND.lift + cr.dur; }
-    if (s.kind === 'land' && L.arrive) { const tl = (s.h1 - h) * 3600 / CLOCK; for (const cr of L.arrive.carry.values()) if (cr.c === c) return tl <= cr.dur + HAND.lift; }
+    if (s.kind === 'launch' && L.depart) { const X = L.depart; for (const cr of X.carry.values()) if (cr.c === c) return X.liftT == null || (h - s.h0) * 3600 / CLOCK < X.liftT + 2 * HAND.flip + cr.dur; }
+    if (s.kind === 'land' && L.arrive) { const tl = (s.h1 - h) * 3600 / CLOCK; for (const cr of L.arrive.carry.values()) if (cr.c === c) return tl <= cr.dur + 2 * HAND.flip; }
     return false;
+  }
+  // r2 2 verify: who carries canoe c in the hand-over now (a person's index), and where she rides as he carries her (or
+  // lifts or sets her down: his anim's carryFrom) when he is not drawn with her: the carried hull's place and turn as
+  // poses.js carry has it, over his feet
+  carrierOf(L, s, c) { const X = s.kind === 'launch' ? L.depart : s.kind === 'land' ? L.arrive : null; if (X) for (const [i, cr] of X.carry) if (cr.c === c) return i; return -1; }
+  carriedPose(a) {
+    const T = this.tiles, gy = T && T.groundAt ? T.groundAt(a.x, a.z) : 0, fx = Math.cos(a.heading), fz = -Math.sin(a.heading);
+    const p = new THREE.Vector3(a.x + fx * 0.035, gy + 1.46, a.z + fz * 0.035), q = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI, a.heading, 0.09, 'YZX'));
+    const cf = a.anim && a.anim.carryFrom;
+    if (cf && cf.k < 1) { const k = Math.max(0, cf.k); p.set(cf.p.x + (p.x - cf.p.x) * k, cf.p.y + (p.y - cf.p.y) * k, cf.p.z + (p.z - cf.p.z) * k); q.copy(new THREE.Quaternion(cf.q.x, cf.q.y, cf.q.z, cf.q.w).slerp(q, k)); }
+    return { p, q };
+  }
+  // r2 2 verify: a canoe's pose (her pivot's place and turn) overturned on the bank where the camp lays her, and afloat in
+  // her slot at a landing: the ends of a lift onto the shoulders or a set-down off them (poses.js carry's carryFrom)
+  campPose(cn) { const q = cn.q || new THREE.Quaternion(); const f = new THREE.Vector3(1, 0, 0).applyQuaternion(q); return { p: { x: cn.x, y: cn.y ?? 0, z: cn.z }, q, fx: f.x, fz: f.z }; }
+  waterPose(L, s, c) {
+    const o = this.slot(s.S, c, L.boats.length, { x: 0, z: 0, h: 0 }), lv = this.world.levelAt ? this.world.levelAt(o.x, o.z) : 0;
+    return { p: { x: o.x, y: lv + FLOAT_OFFSET, z: o.z }, q: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), o.h) };
   }
   // r2 2: where the stern stands pushing her off, u 0..1 through the push: from the bank beside her (where the push
   // began, kept: the hull slides away from it) a step after her toward her seat
@@ -953,7 +986,16 @@ export class PartyMoves {
         if (B && t >= B.lift && t < B.down) { b.hide(); continue; }
         const o = this.slot(B && t >= B.down ? s.B : s.A, c, n, _s); st = { x: o.x, z: o.z, h: o.h, v: 0 };
       } else {
-        if (this.carriedNow(L, s, c, h)) { b.hide(); continue; } // (r2 2: on her stern's shoulders, down from the camp or up to it)
+        if (this.carriedNow(L, s, c, h)) { // (r2 2: on her stern's shoulders, down from the camp or up to it)
+          // (r2 2 verify: drawn there only while he is drawn with her; past a figure's reach (60 m), or the figures all
+          // lent elsewhere, she is drawn herself where he carries her: she had gone from the water for the whole carry,
+          // 40 s and more, seen from 105 m)
+          const a = L.persons[this.carrierOf(L, s, c)];
+          if (!a || a.hidden || a.mode !== 'carry' || (a.hull && a.bind)) { b.hide(); continue; } // (the camp's still, or on his shoulders)
+          const P = this.carriedPose(a); if (b.packsK == null) b.packsK = b.packs; b.packs = 0; // (empty, overturned)
+          b.ext = null; b.hidden = false; b.placeAt({ x: P.p.x, z: P.p.z, heading: a.heading, y: P.p.y, q: P.q }); continue;
+        }
+        if (b.packsK != null) { b.packs = b.packsK; b.packsK = null; }
         const o = this.slot(s.S, c, n, _s); st = { x: o.x, z: o.z, h: o.h, v: 0 };
         // (r2 2: pushed off the bank by her stern before they paddle: out from it, rocking as the push starts)
         const pu = L.ready && L.seatOf ? this.pushOf(L, s, c, h) : 0;
