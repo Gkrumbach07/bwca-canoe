@@ -124,7 +124,8 @@ export function drawCounterMap(canvas, { world, here, rows = [], hot = null, san
   }
 
   // the primitive areas: a fine dashed line, the one chosen at the desk washed and named in pencil
-  sketchPmas(ctx, X, Y, { stroke: 'rgba(82, 76, 98, .55)', width: 1, dash: [3, 2.5], focus: pma, wash: 'rgba(82, 76, 98, .14)', focusStroke: 'rgba(70, 64, 86, .95)' });
+  // (r2 replay: the eleven not picked had been a faint dash lost in the lakes at this scale: a light wash under each too)
+  sketchPmas(ctx, X, Y, { stroke: 'rgba(82, 76, 98, .7)', width: 1, dash: [3, 2.5], focus: pma, wash: 'rgba(82, 76, 98, .14)', focusStroke: 'rgba(70, 64, 86, .95)', fill: 'rgba(82, 76, 98, .07)' });
   if (pf) {
     ctx.font = 'italic 500 13px Alegreya, Georgia, serif';
     const tw = ctx.measureText(pf.name).width;

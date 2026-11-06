@@ -179,7 +179,8 @@ export class StartMap {
       try { ctx.drawImage(wv.canvas, (left - wv.x0) / wv.mPerPx, (top - wv.z0) / wv.mPerPx, v.cw / v.s / wv.mPerPx, v.ch / v.s / wv.mPerPx, 0, 0, v.cw, v.ch); } catch { /* off the picture */ }
     }
     // the primitive areas, a fine pale dash (public, as on every map: map-render.js)
-    sketchPmas(ctx, (x) => this.toScreen(x, 0).x, (z) => this.toScreen(0, z).y, { stroke: 'rgba(243, 236, 221, .55)', width: 1, dash: [3, 2] });
+    // (r2 replay: at the whole wilderness's scale a dash was lost in the lakes' speckle: a faint wash and a solid line)
+    sketchPmas(ctx, (x) => this.toScreen(x, 0).x, (z) => this.toScreen(0, z).y, { stroke: 'rgba(243, 236, 221, .8)', width: 1.25, dash: [], fill: 'rgba(243, 236, 221, .16)' });
     // every entry point, a faint dot (the ones no outfitter stands on: trailheads, with B)
     const on = new Set(this.homes.map((h) => h.ep));
     ctx.fillStyle = 'rgba(243, 236, 221, .45)';

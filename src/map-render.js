@@ -661,13 +661,13 @@ export function paintPmaNames(ctx, world, v, W, H, { k = 1, lettered = [], onMin
   return lettered;
 }
 // the outlines on a sketch with its own projection (the counter's side map, the start map): X(x), Y(z) → canvas px
-export function sketchPmas(ctx, X, Y, { stroke = INK.pma, width = 1, dash = [4, 2.5], focus = null, wash = INK.pmaWash, focusStroke = null } = {}) {
+export function sketchPmas(ctx, X, Y, { stroke = INK.pma, width = 1, dash = [4, 2.5], focus = null, wash = INK.pmaWash, focusStroke = null, fill = null } = {}) {
   ctx.save();
   ctx.lineJoin = 'round';
   for (const p of PMAS) {
     const on = p.id === focus;
     ctx.beginPath(); p.poly.forEach(([x, z], i) => (i ? ctx.lineTo(X(x), Y(z)) : ctx.moveTo(X(x), Y(z)))); ctx.closePath();
-    if (on && wash) { ctx.fillStyle = wash; ctx.fill(); }
+    if (on && wash) { ctx.fillStyle = wash; ctx.fill(); } else if (fill) { ctx.fillStyle = fill; ctx.fill(); } // (r2 replay: every one washed, where a dash alone is lost)
     ctx.setLineDash(dash); ctx.strokeStyle = on && focusStroke ? focusStroke : stroke; ctx.lineWidth = on ? width * 1.8 : width; ctx.stroke();
   }
   ctx.restore();
