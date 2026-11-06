@@ -1272,6 +1272,16 @@ async function main() {
   }
 
   // ==== r3 C (golden locator): its one block goes below this line ====
+  // the golden locator (locator.js): a gem over what guide.marks() names, drawn after the camera has moved (through
+  // pointer.update, which runs behind the title card too: the shell hides it). Imported here, not at the top, so the
+  // three round-3 blocks merge without touching the import list.
+  {
+    const { locator } = await import('./locator.js');
+    locator.attach({ scene, camera, guide, world, talk, photo });
+    const updL = pointer.update.bind(pointer);
+    pointer.update = (dt, shell) => { updL(dt, shell); try { locator.update(dt, shell); } catch (e) { if (!locator.warnedU) { locator.warnedU = true; console.warn('locator', e); } } };
+    window.__game.locator = locator;
+  }
 
   window.__game.siteFeature = siteFeature; // (scripts/r2-starter-routes.mjs: a site's kind of shore)
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
