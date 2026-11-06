@@ -95,6 +95,7 @@ import { FORAGE, inSeason } from './forage.js'; // content B: the berries in sea
 import { itemDef } from './items.js'; // content B: a keeper's one-of-a-kind (stream C's), given when its def is in the build
 import { Smart, STEP as SMART_STEP } from './smart.js'; // gl-e: people act (smart objects)
 import { grounding as GROUND } from './grounding.js'; // gl-e: lines only about what is true
+import { guide } from './guide.js'; // r3 final: the main path's step kept clear of the store's people (act)
 import { MOVE } from './parties.js'; // gl-e: a party's canoes go in the water MOVE.launch before the put-in
 
 const NS = 'people';
@@ -107,6 +108,8 @@ const TALK_R = 2.0;           // metres within which E talks
 const TALK_FACE = 0.5;        // cos of how squarely you must face someone to talk to them (60°)
 const LOOK_R = 4.5;           // metres within which a visitor looks at you
 const KEEPER_LOOK_R = 8;      // the keeper watches you anywhere in the store
+const DECK_CLEAR = 1.2;       // m: no store spot on the dock this near your berth's deck point (a party loaded 0.9 m off it)
+const STEP_CLEAR = 1.6;       // m: no store spot this near the main path's step's target (act: the shelf, the staffer)
 const BODY_KEEP = 0.62;       // metres the walker is held off a standing person (their body and his)
 const SEAT_KEEP = 0.7;        // and off a sitting one's knees
 const STANDING_CHAT = 0.05;   // standing for the first word of the day with a keeper
@@ -1645,7 +1648,11 @@ export class People {
     for (const v of list) if (v.extra) for (const f of v.figs) for (const o of this.smart.at(where)) o.slots.forEach((q, k) => { if (Math.hypot(q.x - f.x, q.z - f.z) < 0.6) (blocked || (blocked = new Set())).add(`${o.id}#${k}`); });
     // (r3 final: nobody of the store's loads, unloads or fishes at a berth that is yours or a friend's: the empty dock
     // before the staff talk lends the canoe, the loaned canoe tied there after, a friend's berth held for theirs)
-    for (const d of this.takenDecks(ep, L)) for (const o of this.smart.at(where)) o.slots.forEach((q, k) => { if (q.deck && Math.hypot(q.x - d.x, q.z - d.z) < 0.6) (blocked || (blocked = new Set())).add(`${o.id}#${k}`); });
+    for (const d of this.takenDecks(ep, L)) for (const o of this.smart.at(where)) o.slots.forEach((q, k) => { if (q.deck && Math.hypot(q.x - d.x, q.z - d.z) < DECK_CLEAR) (blocked || (blocked = new Set())).add(`${o.id}#${k}`); });
+    // (r3 final: and the main path's step in this store kept clear: nobody of the store's takes a spot by what the gem is
+    // over (the tackle shelf, the food shelf, the summer help at the counter's end), so they never stand between you and
+    // it and the dot goes to it, not to Dave browsing in front of it; the counter's pay slots by the staffer the same)
+    { const q = this.stepAt(L); if (q) for (const o of this.smart.at(where)) o.slots.forEach((sl, k) => { if (Math.hypot(sl.x - q.x, sl.z - q.z) < STEP_CLEAR) (blocked || (blocked = new Set())).add(`${o.id}#${k}`); }); }
     const m = this.smart.assign(where, people, clock, blocked);
     for (const [v, f] of figs) {
       if (f.held) { // talked to: stop, and turn to you
@@ -1675,6 +1682,13 @@ export class People {
       if (f.path && f.path.length) this.walkOn(f, dt, this.giveWay(L, figs, f, dt));
     }
     this.keepApart(figs, dt);
+  }
+  // the main path's step's target when it is in or about this store ({ x, z }), else null (guide.js)
+  stepAt(L) {
+    try {
+      const cur = guide.current(), tg = cur && cur.target, q = tg && typeof tg.pos === 'function' ? tg.pos() : null;
+      return q && Number.isFinite(q.x) && L && L.centre && Math.hypot(q.x - L.centre.x, q.z - L.centre.z) < 16 ? q : null;
+    } catch { return null; }
   }
   // the decks of a store's berths kept for you or a friend (outfitter.js: this visit's berth, otherCanoes in a room)
   takenDecks(ep, L) {

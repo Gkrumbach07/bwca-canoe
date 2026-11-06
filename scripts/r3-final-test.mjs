@@ -72,15 +72,17 @@ const HELPERS = () => {
   H.top = (b) => { b.group.updateWorldMatrix(true, true); box.setFromObject(b.group, true); b.fig.bones.root.getWorldPosition(R); return { top: box.max.y, x: R.x, z: R.z }; };
   H.staffer = () => { const h = g.onboarding.extra, v = h && h.person; if (!v) return null; const f = H.storeFigs().find((q) => q.v === v || q.v.key === v.key); return f || { v, undrawn: true }; }; // (by key: the roster's record can be made afresh)
   H.gem = (id) => g.locator.shown().find((q) => q.id === id && !q.gone) || null;
+  // the store's people standing (not walking) within r of a point, the keeper and the staffer aside
+  H.standers = (q, r) => H.storeFigs().filter((f) => !f.extra && !f.v.keeper && !f.walking && Math.hypot(f.f.x - q.x, f.f.z - q.z) < r).map((f) => ({ key: f.key, act: f.f.act || null, d: +Math.hypot(f.f.x - q.x, f.f.z - q.z).toFixed(2) }));
   // a watch of n frames at the store: who stands on the berth's deck, party hulls in it, party people on it
   H.dockWatch = async (n) => {
-    const B = H.berth(), out = { frames: 0, onDeck: 0, deckEv: [], hullIn: 0, hullEv: [], partyOn: 0, store: 0, loaders: 0, minHull: 99, minParty: 99 };
+    const B = H.berth(), out = { frames: 0, onDeck: 0, deckEv: [], loadNear: 0, nearEv: [], hullIn: 0, hullEv: [], partyOn: 0, store: 0, loaders: 0, minHull: 99, minParty: 99 };
     for (let k = 0; k < n; k++) {
       g.step(1 / 30, 1); out.frames++;
       const fs = H.storeFigs().filter((q) => !q.extra && !q.v.keeper);
       out.store = Math.max(out.store, fs.length);
       for (const q of fs) {
-        if (q.f.act === 'load' || q.f.act === 'unload' || q.f.act === 'fish') out.loaders++;
+        if (q.f.act === 'load' || q.f.act === 'unload' || q.f.act === 'fish') { out.loaders++; if (B.deck && !q.walking && Math.hypot(q.f.x - B.deck.x, q.f.z - B.deck.z) < 1.1) { out.loadNear++; if (out.nearEv.length < 5) out.nearEv.push({ k, key: q.key, act: q.f.act, d: +Math.hypot(q.f.x - B.deck.x, q.f.z - B.deck.z).toFixed(2) }); } }
         if (B.deck && !q.walking && Math.hypot(q.f.x - B.deck.x, q.f.z - B.deck.z) < 0.6) { out.onDeck++; if (out.deckEv.length < 5) out.deckEv.push({ k, key: q.key, act: q.f.act, at: q.f.at }); }
       }
       for (const b of g.actors.boats) { const d = Math.hypot(b.x - B.side.x, b.z - B.side.z); out.minHull = Math.min(out.minHull, +d.toFixed(2)); if (d < 3) { out.hullIn++; if (out.hullEv.length < 5) out.hullEv.push({ k, key: b.key, d: +d.toFixed(2) }); } }
@@ -132,7 +134,7 @@ try {
     return { hull, done, berth: B, ...w };
   });
   await shot('1-empty-dock');
-  result('1 the empty dock: no canoe before the talk, nobody on your berth, no party canoe in it', !one.hull && !one.done && one.onDeck === 0 && one.hullIn === 0 && one.partyOn === 0 && one.store > 0, one);
+  result('1 the empty dock: no canoe before the talk, nobody on your berth, no party canoe in it', !one.hull && !one.done && one.onDeck === 0 && one.loadNear === 0 && one.hullIn === 0 && one.partyOn === 0 && one.store > 0, one);
 
   // 2 the staffer and the gem, a long watch through the idle poses
   const two = await ev(async () => {
@@ -140,9 +142,10 @@ try {
     g.guide.sync(); const cur = g.guide.current();
     const r = cur && g.guide.reach(cur); if (r) H.face(r.pos, 3.4, 0.12);
     H.step(30);
-    const out = { cur: cur && cur.id, frames: 0, drawn: 0, minClear: 99, maxOff: 0, maxDrift: 0, gemFrames: 0, clipEv: [] };
+    const out = { cur: cur && cur.id, frames: 0, drawn: 0, minClear: 99, maxOff: 0, maxDrift: 0, gemFrames: 0, clipEv: [], byHer: 0, byEv: [] };
     for (let k = 0; k < 1800; k++) {
       g.step(1 / 30, 1); out.frames++;
+      if (k > 300 && k % 10 === 0) for (const q of H.standers(sp, 1.0)) { out.byHer++; if (out.byEv.length < 5) out.byEv.push({ k, ...q }); }
       const s = H.staffer(); if (!s || s.undrawn) continue;
       out.drawn++;
       const t = H.top(s.b); out.maxDrift = Math.max(out.maxDrift, +Math.hypot(t.x - sp.x, t.z - sp.z).toFixed(3));
@@ -229,7 +232,16 @@ try {
     return { done: g.onboarding.state.done, hull: g.player.canoe.hull.visible, dropAt: drop && B.side ? +Math.hypot(drop.x - B.side.x, drop.z - B.side.z).toFixed(2) : null, ...w };
   });
   await shot('5-loaned-canoe');
-  result('5 after the talk the loaned canoe lies in your berth, nobody of the store\'s on its deck, no party canoe in it', five.done && five.hull && five.dropAt != null && five.dropAt < 1.5 && five.onDeck === 0 && five.hullIn === 0 && five.partyOn === 0, five);
+  const fiveB = await ev(async () => {
+    const g = window.__game, H = window.__r3f; g.guide.sync(); const cur = g.guide.current(), r = cur && g.guide.reach(cur);
+    if (!r) return { cur: cur && cur.id, none: true };
+    H.face(r.pos, 3.0, 0.0); H.step(300);
+    const out = { cur: cur.id, by: 0, ev: [] };
+    for (let k = 0; k < 900; k++) { g.step(1 / 30, 1); if (k % 10) continue; for (const q of H.standers(r.pos, 1.2)) { out.by++; if (out.ev.length < 5) out.ev.push({ k, ...q }); } if (k % 60 === 0) await H.wait(2); }
+    return out;
+  });
+  result('5b the step after the talk (the food shelf): nobody of the store\'s standing at it', fiveB.cur === 'story:onboard:food' && fiveB.by === 0, fiveB);
+  result('5 after the talk the loaned canoe lies in your berth, nobody of the store\'s on its deck, no party canoe in it', five.done && five.hull && five.dropAt != null && five.dropAt < 1.5 && five.onDeck === 0 && five.loadNear === 0 && five.hullIn === 0 && five.partyOn === 0, five);
 
   // 6 the starter night: the site to yourself, the neighbours on the ground
   const six = await ev(async () => {
