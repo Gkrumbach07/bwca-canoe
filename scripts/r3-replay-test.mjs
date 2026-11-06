@@ -208,12 +208,16 @@ try {
     H.cards.length = 0;
     const d = H.d(); if (d.convo) { d.choose(0); H.step(2); await H.wait(30); } // I'll do that
     if (g.starter.pending) await g.starter.pending;
+    // (the job taken, the talk escaped at its last line: the card stays the talk's, the job's news waits for its end)
+    H.shut(); H.step(250);
+    const held = { tr: g.tracker.state(), done: g.onboarding.state.done, job: g.tasks.active.some((t) => t.kind === 'starter') };
     await H.talkTo(/^$/); // (on to the talk's end)
     if (g.outfitter.open) g.outfitter.hide();
     H.step(250);
-    return { first: !!first, mid, again: !!again, job: !!job, done: g.onboarding.state.done, avail: g.starter.available(home), active: g.tasks.active.filter((t) => t.kind === 'starter').map((t) => t.id) };
+    return { first: !!first, mid, again: !!again, job: !!job, held, done: g.onboarding.state.done, avail: g.starter.available(home), active: g.tasks.active.filter((t) => t.kind === 'starter').map((t) => t.id) };
   });
   result('starter: the first-night suggestion escaped is made again, and its job taken', st.first && !st.mid.talking && st.mid.avail && !st.mid.done && st.mid.active === 0 && st.again && st.job && st.done && !st.avail && st.active.length === 1, st);
+  result('hold: with the job taken and the talk escaped before its end, the card stays "Finish talking" (the job said after)', st.held.job && !st.held.done && st.held.tr.shown && st.held.tr.id === 'story:onboard:talk' && /^Finish talking/.test(st.held.tr.next || ''), st.held);
 
   // tracker-first (playtest 1 minor 4): as the talk ends, the first card a new player reads is the tutorial's next step
   // (food), and the starter job's "New task" comes after it (cards recorded from the job's yes to 250 frames on)
@@ -382,11 +386,14 @@ try {
     t.checks = { ...(t.checks || {}), grate: true }; g.guide.sync(); H.step(30);
     e = g.guide.get(id); r = e && g.guide.reach(e);
     const parts = g.guide.partsOf(t), lat = parts && parts.latrine;
-    return { id, grateKey, key: e && e.target && e.target.key, next: e && e.next, fade: r && r.fade, d: r && Math.round(r.d), latD: lat ? Math.round(Math.hypot(lat.x - g.player.x, lat.z - g.player.z)) : null, gem: H.gem(id), seq: H.seq(), tr: g.tracker.state() };
+    // (and at the latrine itself, up its trail: the line is still "Look over the latrine", not "Paddle to the site")
+    let atLat = null;
+    if (lat) { const p = g.player, back = { x: p.x, z: p.z }; H.face({ x: lat.x, z: lat.z }, 2.5); H.step(20); g.guide.sync(); atLat = { next: g.guide.get(id).next, d: Math.round(Math.hypot(lat.x - s.x, lat.z - s.z)) }; H.standAt(back.x, back.z); H.step(10); }
+    return { id, grateKey, atLat, key: e && e.target && e.target.key, next: e && e.next, fade: r && r.fade, d: r && Math.round(r.d), latD: lat ? Math.round(Math.hypot(lat.x - g.player.x, lat.z - g.player.z)) : null, gem: H.gem(id), seq: H.seq(), tr: g.tracker.state() };
   });
   if (lt.none) result('latrine (no starter job on this home: skipped)', true, lt);
   else result('latrine: the grate checked, the latrine\'s gem at full on the site and the tracker "Next: Look over the latrine"',
-    /grate/.test(lt.grateKey || '') && /latrine/.test(lt.key || '') && /latrine/.test(lt.next || '') && lt.fade === 1 && lt.gem && lt.gem.opacity > 0.9 && lt.seq.includes(`event:Next:${lt.id}`) && lt.tr.shown && /latrine/.test(lt.tr.next || ''), lt);
+    /grate/.test(lt.grateKey || '') && /latrine/.test(lt.key || '') && /latrine/.test(lt.next || '') && lt.fade === 1 && lt.gem && lt.gem.opacity > 0.9 && lt.seq.includes(`event:Next:${lt.id}`) && lt.tr.shown && /latrine/.test(lt.tr.next || '') && (!lt.atLat || /^Look over the latrine/.test(lt.atLat.next)), lt);
 
   // leave-early (playtest 2 major 3): a second season: the gear taken, the talk escaped, then paddled away from the
   // landing: the keeper's part is done for you (the first permit), so no day-use ticket waits

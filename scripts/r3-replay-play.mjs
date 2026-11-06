@@ -61,6 +61,7 @@ try {
   page.on('pageerror', (e) => { errors.push(e.message); log('pageerror', e.message); });
   const shot = async (name, caption) => { await page.evaluate(() => window.__pl.step(4)); await page.waitForTimeout(250); const f = path.join(SHOTS, `r3-replay-${name}.png`); await page.screenshot({ path: f }); shots.push({ f, caption }); log('shot', name, '·', caption); };
   const ev = (fn, a) => page.evaluate(fn, a);
+  await page.exposeFunction('__plShot', async (name) => { const f = path.join(SHOTS, `r3-replay-${name}.png`); await page.screenshot({ path: f }); log('shot', name); });
   await page.goto(APP, { timeout: 180000 });
   await page.waitForFunction(() => { const g = window.__game; return g && g.title && g.guide && g.tracker && g.locator && g.onboarding && g.starter && typeof g.step === 'function' && g.title.state === 'title'; }, null, { timeout: 300000, polling: 500 });
   await ev(HELPERS);
@@ -116,7 +117,7 @@ try {
     return { done: g.onboarding.state.done, permit: g.onboarding.state.permit, held: g.permits.held().map((h) => `${h.kind}:${h.ep}`), job: g.tasks.active.filter((t) => t.kind === 'starter').map((t) => t.id), screen: H.screen() };
   });
   log('talk done', JSON.stringify(fin));
-  const escOk = lines.filter((l) => l.at).every((l) => !l.talking && l.cur && /^story:onboard:talk$/.test(l.cur.id) && /(Talk|Finish talking) to .+ at the counter/.test(l.tracker) && l.gems.includes('story:onboard:talk*'));
+  const escOk = lines.filter((l) => l.at).every((l) => !l.talking && l.cur && /^story:onboard:talk$/.test(l.cur.id) && /(Talk|Finish talking) to .+ at the counter/.test(l.tracker) && l.gems.includes('story:onboard:talk*') && l.gems.length === 1);
   result('play 2: every line of the talk escaped: the gem and the card stay on the staffer; the job still taken at the end', lines.filter((l) => l.at).length >= 6 && escOk && fin.done && fin.job.length === 1, { n: lines.length, lines: lines.map((l) => `${l.at || (l.ended ? 'END' : '?')} → ${l.tracker || ''}`) });
 
   // shot 7 (the canoe appearing): at the dock the loaned canoe is there now
@@ -188,12 +189,13 @@ try {
   await shot('10-site-grate', 'At the site: the gem over the grate');
   const checked = await ev(async () => {
     const g = window.__game, H = window.__pl, home = g.profile.home, t = g.tasks.active.find((x) => x.kind === 'starter' && x.from === home), out = [];
-    for (const k of ['grate', 'latrine', 'pad']) { const parts = g.guide.partsOf(t), q = parts && parts[k]; if (q) { H.face({ x: q.x, z: q.z }, 3); H.step(30); } out.push({ k, next: H.cur() ? null : g.guide.get(`task:${t.id}`).next, gem: !!g.locator.shown().find((m) => m.id === `task:${t.id}`), fade: (() => { const e = g.guide.get(`task:${t.id}`), r = e && g.guide.reach(e); return r ? +r.fade.toFixed(2) : null; })() }); t.checks = { ...(t.checks || {}), [k]: true }; if (g.tasks.kinds && g.tasks.kinds.starter && typeof g.tasks.kinds.starter.update === 'function') { try { g.tasks.kinds.starter.update(g.tasks, t, 0.1); } catch { /* */ } } H.step(30); }
+    // (SETUP: each part checked through its kind's check, the dot's E on it, standing 2.5 m off it)
+    for (const k of ['grate', 'latrine', 'pad']) { const parts = g.guide.partsOf(t), q = parts && parts[k]; if (q) { H.face({ x: q.x, z: q.z }, 2.5, -0.15); H.step(40); } const e0 = g.guide.get(`task:${t.id}`), r0 = e0 && g.guide.reach(e0); out.push({ k, next: e0 && e0.next, gem: !!g.locator.shown().find((m) => m.id === `task:${t.id}`), fade: r0 ? +r0.fade.toFixed(2) : null }); if (k === 'latrine') await window.__plShot('10b-latrine'); try { g.tasks.kinds.starter.check(g.tasks, t, k); } catch (err) { out.push({ err: String(err) }); } H.step(30); }
     H.step(60);
     return { out, status: t.status, next: g.guide.get(`task:${t.id}`) && g.guide.get(`task:${t.id}`).next, cards: H.cards.slice(-5) };
   });
   log('checked', JSON.stringify(checked));
-  result('play 6: at the site each part\'s gem shows at full in turn (grate, latrine, pad)', site.gems.some((x) => /^task:/.test(x)) && checked.out.every((o) => o.gem && o.fade === 1), checked);
+  result('play 6: at the site each part\'s gem shows at full in turn (grate, latrine, pad), each line "Look over the …"; the job done', site.gems.some((x) => /^task:/.test(x)) && checked.out.every((o) => o.gem && o.fade === 1 && /^Look over the /.test(o.next || '')) && checked.status === 'done', checked);
 
   // the night (SETUP: the clock to 22:40)
   await ev(() => { const g = window.__game, H = window.__pl; g.day.setClock(g.day.year, g.day.doy, 22.67); H.step(120); });
@@ -206,7 +208,7 @@ try {
     await g.player.teleport(L.x, L.z); await H.settle();
     for (let i = 0; i < 40; i++) { H.step(10); await H.wait(40); }
     const Lo = g.outfitter.layout(ep), at = Lo && (Lo.counter || Lo.centre);
-    if (at && g.player.mode !== 'paddle') { H.standAt(at.x + 0.6, at.z + 0.6); H.step(90); }
+    if (at) { H.standAt(at.x + 0.6, at.z + 0.6); H.step(90); } // (SETUP: out at the dock and up to the counter)
     return { m0, money: g.profile.money, claimed: (g.tasks.claimed || []).slice(-2), active: g.tasks.active.filter((t) => t.kind === 'starter').map((t) => t.status), visit: !!g.outfitter.visit, mode: g.player.mode, notes: H.notes.slice(-4), screen: H.screen() };
   });
   log('home', JSON.stringify(home));

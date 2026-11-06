@@ -124,7 +124,7 @@ export class Tracker {
     if (!tut) this.tutId = null;
     else if (tut.id !== this.tutId) { this.tutId = tut.id; this.tutLeft = TRACKER.tutFirstS; }
     if (this.tutLeft > 0) this.tutLeft -= step;
-    const hold = !!(tut && this.tutLeft > 0);
+    const hold = !!(tut && (this.tutLeft > 0 || tut.hold)); // (a step may hold news itself: the talk under way)
     if (this.ev) { this.ev.left -= step; if (this.ev.left <= 0 || !G.get(this.ev.id)) this.ev = null; }
     // (r3 replay: a "Next" or "Close by" card read for a moment gives way to a new task: news is never kept waiting long)
     if (this.ev && this.ev.head !== 'New task' && this.ev.head !== 'Done' && TRACKER.showS - this.ev.left >= 1.5 && this.queue.some((x) => x.head === 'New task')) this.ev = null;

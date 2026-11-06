@@ -132,7 +132,7 @@ export class Guide {
       // r3 replay: { x, z, r } a place the target belongs to (a campsite): anywhere inside it the target shows at full
       within: g.within && Number.isFinite(g.within.x) && Number.isFinite(g.within.z) ? { x: g.within.x, z: g.within.z, r: Math.min(GUIDE.nearMax, Number(g.within.r) || GUIDE.siteNear) } : null,
     } : null;
-    return { id: String(s.id), kind, title: String(s.title || ''), next: cap(stop(s.next)), target, tutorial: !!s.tutorial, order: Number.isFinite(s.order) ? s.order : 0, done: !!s.done, source: s.source || src, ref: s.ref ?? null };
+    return { id: String(s.id), kind, title: String(s.title || ''), next: cap(stop(s.next)), target, tutorial: !!s.tutorial, hold: !!s.hold, order: Number.isFinite(s.order) ? s.order : 0, done: !!s.done, source: s.source || src, ref: s.ref ?? null };
   }
   get loading() { const ti = this.t.title; return !!(ti && ti.state && ti.state !== 'game'); }
   sync() {
@@ -260,7 +260,9 @@ export class Guide {
     if (k && typeof k.next === 'function') { const w = k.next(T, t); if (w) return w; } // (a kind may say its own)
     if (t.kind === 'starter' || t.kind === 'campsite') {
       const s = T.world && T.world.campsites ? T.world.campsites[t.site] : null, p = this.t.player;
-      if (!s || !p || Math.hypot(s.x - p.x, s.z - p.z) > GUIDE.siteNear) {
+      // (r3 replay: at the site is near its middle or near the part still to check: a latrine up its trail is 60 m out)
+      const np0 = s && p ? this.nextPart(t) : null, atPart = !!(np0 && Math.hypot(np0.at.x - p.x, np0.at.z - p.z) <= GUIDE.siteNear);
+      if (!s || !p || (Math.hypot(s.x - p.x, s.z - p.z) > GUIDE.siteNear && !atPart)) {
         const r = typeof T.targetOf === 'function' ? T.targetOf(t) : null, label = ((r && r.label) || 'the campsite').replace(/: .*/, '');
         const lake = t.lakeId && typeof T.lakeName === 'function' ? T.lakeName(t.lakeId) : '';
         return `Paddle to ${label}${lake && !/lake/i.test(label) ? ` on ${lake}` : ''}`;

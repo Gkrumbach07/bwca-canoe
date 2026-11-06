@@ -297,7 +297,8 @@ export class Onboarding {
       const sp = this.speaker(ep), who = this.staffName(ep);
       // (escape-proof: the talk left at any line stays the step; once the gear is given the keeper's word is still to come)
       const gave = s.step === 'gear';
-      out.push({ id: PATH_IDS.talk, kind: 'story', tutorial: true, order: 0, ref: 'onboard', title: `Talk to ${who}`, next: gave ? `Finish talking to ${who} at the counter` : `Talk to ${who} at the counter`,
+      // (r3 replay: hold, while the talk is under way, other news waits behind its card: the job it gives is said after it)
+      out.push({ id: PATH_IDS.talk, kind: 'story', tutorial: true, hold: gave, order: 0, ref: 'onboard', title: `Talk to ${who}`, next: gave ? `Finish talking to ${who} at the counter` : `Talk to ${who} at the counter`,
         target: { kind: 'person', key: sp.key || `staffer:${ep}`, label: who, store: ep, near: 30, pos: guide.speakerPos(sp) } });
     }
     const pa = s.path;
