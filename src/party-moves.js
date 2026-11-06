@@ -695,13 +695,24 @@ export class PartyMoves {
     const k = smooth(u), lift = smooth((u - 0.25) / 0.45);
     return { x: Hs.x + (Hs.sx - Hs.x) * k, z: Hs.z + (Hs.sz - Hs.z) * k, heading: Hs.face + wrapPi(Hs.h - Hs.face) * smooth((u - 0.2) / 0.7), v: 0.35 * Math.sin(Math.PI * u), mode: 'stand', pack: false, anim: { crouch: 0.35 + 0.55 * smooth(u * 1.4) }, footY: null, lift };
   }
+  // the seconds canoe c's boarding (and getting out) runs behind the board's start: r2 2 verify, the canoes one after
+  // another in an order of their own (three sterns had pushed off together, side by side in a row), each still in by
+  // the board's end
+  boardJit(L, c) {
+    const J = L.jits || (L.jits = []);
+    if (J[c] != null) return J[c];
+    const boats = L.plan.crew.boats, n = boats.length, r = (k) => mulberry32((hashStr(`${L.party.id}:${k}:b`) ^ 0x2545) >>> 0)();
+    const rank = [...Array(n).keys()].sort((a, b) => r(a) - r(b)).indexOf(c), seats = (boats[c] || []).length || 2;
+    const cap = BOARD.total - 0.2 - (BOARD.first + (seats - 1) * (BOARD.step + BOARD.gap) + PUSH.dur + BOARD.step);
+    return (J[c] = Math.max(-0.2, Math.min(cap, rank * 0.8 + (r(c) - 0.5) * 0.4)));
+  }
   // r2: where person i is at hour h of seg s (null: the old ways, the carry's walks and the spots), or { seat } in the hull
   bankPose(L, s, i, h, seat, lag = 0) {
     if (!seat) return null;
     const kind = s.kind, n = L.persons.length;
     // the order in the canoe: the bow in first and out first, the stern last in (pushing off) and last out
     const crewOf = L.plan.crew.boats[seat.c] || [], order = crewOf.map((j) => L.seatOf.get(j)).sort((x, y) => ORDER[x.seat] - ORDER[y.seat]).map((q) => q.seat), k = Math.max(0, order.indexOf(seat.seat));
-    const jit = (mulberry32((hashStr(`${L.party.id}:${seat.c}:b`) ^ 0x2545) >>> 0)() - 0.5) * 0.5;
+    const jit = this.boardJit(L, seat.c);
     const boardEnd = kind === 'launch' || kind === 'landing' ? s.h1 : null;
     if (boardEnd != null) {
       const S = s.S, tb = BOARD.total - (boardEnd - h) * 3600 / CLOCK; // (s into the boarding; < 0 before it)
@@ -720,11 +731,20 @@ export class PartyMoves {
         const u = (tb - stIn + push) / push, Hp = this.pushStand(L, s, i, Hs, u), st = smooth((u - 0.15) / 0.6);
         return { push: u, job: { x: Hp.x, z: Hp.z, heading: Hs.face, v: PUSH.step / (push * 0.6) * Math.sin(Math.PI * clamp((u - 0.15) / 0.6, 0, 1)) * (st < 1 ? 1 : 0), mode: 'stand', pack: false, anim: { crouch: 0.45 + 0.25 * Math.sin(Math.PI * u), arms: { kind: 'push', t: u * push }, push: u } } };
       }
-      // to the side of the canoe from wherever the job had them, then a hand on the gunwale till it is their turn
-      const P0 = this.jobAt(L, S, i, Math.max(0, (boardEnd - BOARD.total / 3600 * CLOCK - s.h0) * 3600 / CLOCK - lag), from, false, kind === 'landing' && s.lunch);
-      const k2 = Math.min(1, tb / BOARD.walk), d = Math.hypot(Hs.x - P0.x, Hs.z - P0.z);
+      // to the side of the canoe from wherever the job had them, then a hand on the gunwale till it is their turn.
+      // (r2 2 verify, the owner's "a perfect row half-seated at canoes": everyone had left their job on the same instant,
+      // come to the side together and waited there crouched at 0.5, all facing her square, two to six of them in one
+      // line along the bank for up to 2 s. Now each goes down when their own turn is near (the bow first, the stern
+      // last), stands by her a moment their own way, and bends to the gunwale only just before stepping in)
+      const rw = mulberry32((hashStr(`${L.party.id}:${i}:wait`) ^ 0x51ed) >>> 0), early = 0.5 + 1.1 * rw(), turn = (rw() - 0.5) * 0.7;
+      const by = stIn - push, walkAt = Math.max(0, Math.min(by - BOARD.walk - early, BOARD.total - BOARD.walk));
+      const t1 = (h0) => Math.max(0, (h0 - s.h0) * 3600 / CLOCK - lag);
+      if (tb < walkAt) return { job: this.jobAt(L, S, i, t1(h), from, false, kind === 'landing' && s.lunch) };
+      const P0 = this.jobAt(L, S, i, t1(boardEnd - (BOARD.total - walkAt) / 3600 * CLOCK), from, false, kind === 'landing' && s.lunch);
+      const k2 = Math.min(1, (tb - walkAt) / BOARD.walk), d = Math.hypot(Hs.x - P0.x, Hs.z - P0.z);
       if (k2 < 1) return { job: { x: P0.x + (Hs.x - P0.x) * smooth(k2), z: P0.z + (Hs.z - P0.z) * smooth(k2), heading: d > 0.3 ? headingOf(Hs.x - P0.x, Hs.z - P0.z) : Hs.face, v: (d / BOARD.walk) * 1.5 * Math.sin(Math.PI * k2), mode: 'walk', pack: false, anim: null } };
-      return { job: { x: Hs.x, z: Hs.z, heading: Hs.face, v: 0, mode: 'stand', pack: false, anim: { crouch: 0.5 } } };
+      const bend = smooth((tb - (by - 0.75)) / 0.55);
+      return { job: { x: Hs.x, z: Hs.z, heading: Hs.face + turn * (1 - bend), v: 0, mode: 'stand', pack: false, anim: bend > 0.01 ? { crouch: 0.5 * bend } : null } };
     }
     if (kind === 'carry' || kind === 'land') {
       const S = kind === 'carry' ? s.A : s.S, t = (h - s.h0) * 3600 / CLOCK, st = OUT.first + jit * 0.5 + k * (OUT.step + OUT.gap);
@@ -882,7 +902,7 @@ export class PartyMoves {
     if (s.kind !== 'launch' && s.kind !== 'landing') return 0;
     const crewOf = L.plan.crew.boats[c] || []; if (!crewOf.length) return 0;
     const seats = crewOf.map((j) => L.seatOf.get(j)).filter(Boolean).sort((x, y) => ORDER[x.seat] - ORDER[y.seat]), k = seats.length - 1;
-    const jit = (mulberry32((hashStr(`${L.party.id}:${c}:b`) ^ 0x2545) >>> 0)() - 0.5) * 0.5, tb = BOARD.total - (s.h1 - h) * 3600 / CLOCK;
+    const jit = this.boardJit(L, c), tb = BOARD.total - (s.h1 - h) * 3600 / CLOCK;
     const t0 = BOARD.first + jit + k * (BOARD.step + BOARD.gap);
     return smooth((tb - t0) / PUSH.dur);
   }
