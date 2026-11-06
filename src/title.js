@@ -15,6 +15,7 @@ import { save, slots } from './save.js';
 import { SeasonsPanel } from './seasons.js'; // round A-D
 import { Wizard, START_HOUR } from './wizard.js';
 import { placeOf } from './outfitters.js'; // round 2 markers: a season begins at the store's dock
+import { onboarding } from './onboarding.js'; // r3: a new season is empty-handed until the staff talk
 
 const $ = (id) => document.getElementById(id);
 const DRIFT_RATE = 0.045;   // rad/s round the canoe
@@ -249,6 +250,7 @@ export class Title {
   }
   // "the aluminium canoe, two packs and a barrel"
   gearWords(pr) {
+    if (onboarding.noCanoe) return 'no gear yet'; // (r3: before the staff talk the dock is empty and the profile's kit a name only)
     let canoe = '';
     try { const k = pr.kit && pr.kit.canoe; canoe = k === 'kevlar' ? 'the Kevlar canoe' : k ? 'the aluminium canoe' : ''; } catch { canoe = ''; }
     const has = (id) => { try { return pr.has(id); } catch { return false; } };
