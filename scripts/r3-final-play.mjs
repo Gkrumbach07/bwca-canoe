@@ -238,8 +238,9 @@ try {
     if (!s.pos) return { none: true, s };
     // (the gem from the middle of the store, looked at; then up to the shelf)
     await ev((q) => { const g = window.__game, H = window.__p; if (g.chase.mode !== 'first') g.chase.setMode('first'); H.aimAt(q, q.y); H.step(30); H.aimAt(q, q.y); H.step(4); }, s.pos);
-    const gem = await gemCheck(id, `${name}-gem`, n, cap);
+    let gem = await gemCheck(id, `${name}-gem`, n, cap);
     await ev(() => { const g = window.__game; if (g.chase.mode !== 'third') g.chase.setMode('third'); window.__p.step(6); });
+    if (gem.none) { if (n) sheet.pop(); await ev((q) => { const H = window.__p; H.face(q, 3.2, 0.1); H.step(20); }, s.pos); gem = await gemCheck(id, `${name}-gem`, n, cap); } // (too near the camera there: from a step back)
     await walkTo(s.pos, 1.8);
     const blockers = await ev((q) => window.__p.near(q, 1.0).filter((x) => !x.walking), s.pos);
     await ev((q) => { const H = window.__p; H.aimAt(q, q.y - 0.3); H.step(6); }, s.pos);
@@ -346,6 +347,8 @@ try {
     g.day.setClock(g.day.year, g.day.doy, 20.4); H.step(60);
     let best = null, bd = Infinity;
     for (let k = 0; k < 20 && !best; k++) { for (const D of g.partyCamps.drawn.values()) { const c = g.parties.live.get(D.key), st = c && c.site; if (st) { const d = Math.hypot(st.x - s.x, st.z - s.z); if (d < bd && d > 20) { bd = d; best = st; } } } if (!best) H.step(60); }
+    // (none drawn from here tonight: the nearest party camped anywhere, from the parties' own list)
+    if (!best) for (const c of g.parties.live.values()) { const st = c && c.site; if (st && Number.isFinite(st.x)) { const d = Math.hypot(st.x - s.x, st.z - s.z); if (d < bd && d > 20) { bd = d; best = st; } } }
     if (!best) return { none: true };
     if (bd > 250) { await g.player.teleport(best.x, best.z); await H.settle(); for (let k = 0; k < 40; k++) { H.step(10); await H.wait(40); } }
     // stand off their camp, then off the nearest of their people drawn, looking at them
