@@ -586,7 +586,7 @@ export function attachTaskKinds2(o = {}) {
   // r2 replay: a site's grate, latrine and tent pad on the dot (on foot the E is the dot's: pointer.js eats an E
   // pointed at nothing, so the notice's "Check the grate" line alone could never be acted on)
   if (o.pointer && typeof o.pointer.register === 'function' && tasks && !G.partsOn) { G.partsOn = true; o.pointer.register(partTargets(tasks)); }
-  if (typeof window !== 'undefined' && window.__game) window.__game.taskKinds2 = { kinds: KINDS2, checkPart: (t, part) => checkPart(tasks, t, part), askParty: (t, party) => askParty(tasks, t, party) };
+  if (typeof window !== 'undefined' && window.__game) window.__game.taskKinds2 = { kinds: KINDS2, checkPart: (t, part) => checkPart(tasks, t, part), askParty: (t, party) => askParty(tasks, t, party), partsOf: (t) => (tasks ? partsOf(tasks, t) : null) }; // (r3: partsOf for guide.js, the locator's next part of a site check)
   return { kinds: KINDS2 };
 }
 void plural;
