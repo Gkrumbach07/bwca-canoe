@@ -1102,6 +1102,7 @@ export function moveKeepers(s) {
   s.moved = 1;
   return true;
 }
+const HEAD_V = new THREE.Vector3();
 export class People {
   constructor({ world, scene, player, day, hud, tasks, outfitter = null, profile = null, weather = null, registry = null, mat }) {
     this.world = world; this.scene = scene; this.player = player; this.day = day; this.hud = hud; this.tasks = tasks; this.outfitter = outfitter; this.profile = profile; this.weather = weather; this.registry = registry;
@@ -1422,8 +1423,8 @@ export class People {
         const h = this;
         return speaker || (speaker = { key: rec.key, person: rec.key, name, role: role || '',
           pos(out) {
-            const v = h.person, r = v ? self.speakerOf(v, 0).pos(out) : null;
-            if (r) return r;
+            const v = h.person, r = v ? self.speakerOf(v, 0).pos(HEAD_V) : null; // (into a Vector3: the guide's out is a plain { set })
+            if (r) return out.set(r.x, r.y, r.z);
             const q = rec.spot; if (!q || typeof q !== 'object' || !Number.isFinite(q.x)) return null;
             const L = storeLayout(ep), y = Number.isFinite(q.y) ? q.y : L && Number.isFinite(L.floorY) ? L.floorY : L ? self.groundAt(L, q.x, q.z) : 0;
             return out.set(q.x, y + 1.62, q.z);
