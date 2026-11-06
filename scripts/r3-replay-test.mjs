@@ -123,7 +123,18 @@ try {
   });
   result('coop: no canoe published or given before the loan', !cp.none && cp.noCanoe && cp.d === undefined && (cp.cn === null || cp.cn === 'no pub') && (cp.desc === null || cp.desc === 'no boat'), cp);
 
-  // [slot:name]
+  // name (playtests 1 and 2 minor: "Talk to Shelby" turned into "Talk to the summer help" out of the yard): the step
+  // keeps the staffer's name when the staffer is not standing (out on the lake, past the yard)
+  const nm = await page.evaluate(async () => {
+    const g = window.__game, H = window.__rp, ob = g.onboarding, ep = g.profile.home;
+    const inside = H.cur();
+    ob.dismiss(); g.guide.sync();
+    const away = { title: g.guide.get('story:onboard:talk').title, next: g.guide.get('story:onboard:talk').next };
+    H.step(10);
+    return { inside, away, name: ob.staffName(ep) };
+  });
+  result('name: the staffer\'s name stays in the step with the staffer out of sight', nm.inside && nm.inside.title === `Talk to ${nm.name}` && nm.away.title === `Talk to ${nm.name}` && nm.away.next.includes(nm.name), nm);
+
   // [slot:bye]
   // gear-esc (playtest 2 major 3, playtests 1 and 3 on the gems): the gear taken and the talk escaped at the canoe line:
   // the staffer stays the step and the only story gem; no food, leeches or canoe step (entry, gem or card) until the

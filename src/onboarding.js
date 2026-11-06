@@ -267,7 +267,9 @@ export class Onboarding {
     if (!s || s.guest || s.legacy || ep == null || !guide) return [];
     const out = [], v = this.t.outfitter && this.t.outfitter.visit, atHome = !!(v && Number(v.ep) === ep);
     if (!s.done) {
-      const sp = this.speaker(ep), named = this.extra && this.extraEp === ep ? this.staffName(ep) : null, who = named || 'the summer help';
+      // (r3 replay: the staffer's own name everywhere, in the store or out on the lake: it never turns back into "the summer
+      // help" once you step out of the yard)
+      const sp = this.speaker(ep), who = this.staffName(ep);
       // (escape-proof: the talk left at any line stays the step; once the gear is given the keeper's word is still to come)
       const gave = s.step === 'gear';
       out.push({ id: PATH_IDS.talk, kind: 'story', tutorial: true, order: 0, ref: 'onboard', title: `Talk to ${who}`, next: gave ? `Finish talking to ${who} at the counter` : `Talk to ${who} at the counter`,
