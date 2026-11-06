@@ -253,6 +253,8 @@
 :is(.pp-spread, .pp) .pp-todo.k-side .t, :is(.pp-spread, .pp) .pp-todo.k-side .nx { color: var(--pp-side); }
 :is(.pp-spread, .pp) .pp-todo.k-story.on .t { color: #5a3606; }
 :is(.pp-spread, .pp) .pp-todo.k-side.on .t { color: #1e4244; }
+:is(.pp-spread, .pp) button.pp-todo.k-story:hover .t { color: #5a3606; }
+:is(.pp-spread, .pp) button.pp-todo.k-side:hover .t { color: #1e4244; }
 :is(.pp-spread, .pp) .pp-gi { display: inline-block; width: 18px; height: 20px; flex: none; }
 :is(.pp-spread, .pp) .pp-todo > .pp-gi { position: absolute; left: calc(var(--pp-margin) - 29px); top: 4px; }
 /* the gem: a cut diamond, a light facet over a deeper one, a dark rim (the gold alone would not read on the paper) */
