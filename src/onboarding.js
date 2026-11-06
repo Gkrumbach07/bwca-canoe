@@ -241,6 +241,24 @@ export class Onboarding {
     for (const c of inv.containers) for (const e of c.grid) { const d = !e.box && itemDef(e.id); if (d && FOOD_KINDS.includes(d.kind) && d.kind !== 'fish') return true; }
     return false;
   }
+  // r3 replay: meals to cook anywhere you own them (a night out wants a supper and a breakfast: one oatmeal is not the step)
+  meals(inv = this.t.inventory) {
+    let n = 0;
+    if (!inv || !inv.containers) return 0;
+    for (const c of inv.containers) for (const e of c.grid) { const d = !e.box && itemDef(e.id); if (d && d.kind === 'meal') n += e.qty || 1; }
+    return n;
+  }
+  // the food step's line: only what is missing (the money when a meal is past it; the second meal when one is bought)
+  foodNext(ep, atHome) {
+    const where = atHome ? 'at the provisions shelf' : 'at an outfitter’s provisions shelf';
+    const pr = this.t.profile, money = Math.floor((pr && pr.money) || 0), shop = this.t.outfitter && this.t.outfitter.shop;
+    let cheap = null;
+    if (money < 10 && shop && typeof shop.stock === 'function') {
+      try { for (const it of shop.stock(ep)) { const d = itemDef(it.id); if (d && d.kind === 'meal' && Number.isFinite(it.price)) cheap = cheap == null ? it.price : Math.min(cheap, it.price); } } catch { cheap = null; }
+    }
+    if (cheap != null && money < cheap) return `A meal is $${cheap} and you have $${money}: the board has paid work`;
+    return this.meals() === 1 ? `One meal so far: buy another ${where}` : `Buy food ${where}`;
+  }
   hasLeeches(inv = this.t.inventory) { return !!(inv && typeof inv.count === 'function' && inv.count('leeches', { reachable: false }) > 0); }
   hasBucket(inv = this.t.inventory) { return !!(inv && inv.containers && inv.containers.some((c) => c.item === 'bucket')); }
   // each frame: a step seen done stays done (saved), so eating the food later never brings the step back
@@ -248,7 +266,7 @@ export class Onboarding {
     const s = this.state, pa = s && s.path;
     if (!pa || s.guest || s.legacy) return;
     let ch = false;
-    if (!pa.food && this.hasFood()) { pa.food = true; ch = true; }
+    if (!pa.food && this.meals() >= 2) { pa.food = true; ch = true; }
     if (!pa.leeches && this.hasLeeches()) { pa.leeches = true; ch = true; }
     const p = this.t.player;
     if (!pa.canoe && s.loan && p && p.mode === 'paddle' && !p.teleporting) { pa.canoe = true; ch = true; }
@@ -287,7 +305,7 @@ export class Onboarding {
     // gem or line points at the shelves or the canoe while the keeper's word is still to come)
     if (!pa || !s.done) return out;
     const where = (shelf) => (atHome ? `at the ${shelf}` : `at an outfitter’s ${shelf}`);
-    if (!pa.food) out.push({ id: PATH_IDS.food, kind: 'story', tutorial: true, order: 1, ref: 'onboard:food', title: 'Buy food', next: `Buy food ${where('provisions shelf')}`,
+    if (!pa.food) out.push({ id: PATH_IDS.food, kind: 'story', tutorial: true, order: 1, ref: 'onboard:food', title: 'Buy food', next: this.foodNext(ep, atHome),
       target: { kind: 'place', key: `food:${ep}`, label: 'the provisions shelf', store: ep, near: 30, pos: guide.spot(ep, 'food') } });
     if (!pa.leeches) out.push({ id: PATH_IDS.leeches, kind: 'story', tutorial: true, order: 2, ref: 'onboard:leeches', title: 'Buy leeches',
       next: `Buy leeches ${where('tackle shelf')}`,

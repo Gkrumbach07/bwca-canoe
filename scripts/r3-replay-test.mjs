@@ -219,8 +219,28 @@ try {
   });
   result('gem-depth: the near gem is drawn over what stands in front of it (r3-locator-test counts the programs)', gd.near && gd.near.xray === true, gd); // (the program count: r3-locator-test's own check)
 
-  // [slot:money]
-  // [slot:food-two]
+  // money (playtest 2 major 4: broke before food, a dead end): with less money than a meal the food step says what is
+  // missing, the money, and where paid work is, not "Buy food"
+  const mo = await page.evaluate(async () => {
+    const g = window.__game, H = window.__rp, pr = g.profile, m0 = Math.floor(pr.money);
+    pr.spend(m0 - 1, 'r3 replay test'); H.step(10);
+    const broke = H.cur();
+    pr.earn(m0 - 1, 'r3 replay test'); H.step(10);
+    return { m0, broke, back: H.cur(), money: pr.money };
+  });
+  result('money: broke before food, the step says the money is short and where paid work is', mo.broke && mo.broke.id === 'story:onboard:food' && /\$1\b/.test(mo.broke.next) && /board/.test(mo.broke.next) && mo.back && /^Buy food at the provisions shelf\.$/.test(mo.back.next) && mo.money === mo.m0, mo);
+
+  // food-two (playtest 1 minor 9: one $3 oatmeal finished "Buy food"): one meal leaves the step open with the second
+  // meal as what is missing; a supper and a breakfast close it
+  const ft = await page.evaluate(async () => {
+    const g = window.__game, H = window.__rp, S = g.outfitter.shop, ep = g.profile.home;
+    const a = S.buyItem('meal:breakfast', ep); H.step(10);
+    const one = H.cur();
+    const b = S.buyItem('meal:supper', ep); H.step(10);
+    return { a: a.ok, b: b.ok, one, two: H.cur(), path: { ...g.onboarding.state.path } };
+  });
+  result('food-two: one meal keeps the step open ("one meal so far"); a second closes it', ft.a && ft.b && ft.one && ft.one.id === 'story:onboard:food' && /^One meal so far/.test(ft.one.next) && ft.two && ft.two.id === 'story:onboard:leeches' && ft.path.food, ft);
+
   // [slot:bark-tracker]
   // [slot:tutorial-end]
   // [slot:ticket-words]
