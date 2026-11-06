@@ -110,7 +110,19 @@ try {
   });
   result('swim: at the empty berth before the talk, no canoe named and none to climb into', !sw.none && sw.noCanoe && !/canoe/i.test(sw.prompt) && sw.inn === false && sw.mode === 'swim' && sw.step !== 'gear', sw);
 
-  // [slot:coop]
+  // coop (playtest 2, major 2): before the loan the host's canoe is neither published to friends (the pose's d, the
+  // share's cn) nor given in a swap (coop-boat describe)
+  const cp = await page.evaluate(async () => {
+    const g = window.__game, c = g.coop;
+    if (!c) return { none: true };
+    let pose = null, cn = 'none', desc = 'none';
+    try { pose = c.poseMsg(); } catch (e) { pose = { err: String(e) }; }
+    try { const sh = g.coopShare; const pub = sh && typeof sh.pubNow === 'function' ? sh.pubNow() : null; cn = pub ? pub.cn : 'no pub'; } catch (e) { cn = String(e); }
+    try { desc = c.boat && typeof c.boat.describe === 'function' ? c.boat.describe(false) : 'no boat'; } catch (e) { desc = String(e); }
+    return { noCanoe: g.onboarding.noCanoe, d: pose && pose.d, cn, desc };
+  });
+  result('coop: no canoe published or given before the loan', !cp.none && cp.noCanoe && cp.d === undefined && (cp.cn === null || cp.cn === 'no pub') && (cp.desc === null || cp.desc === 'no boat'), cp);
+
   // [slot:name]
   // [slot:bye]
   // [slot:gear-esc]

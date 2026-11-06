@@ -40,6 +40,7 @@
 //   coop.g.more(modules)                main.js hands the camp modules over once they are built
 import * as THREE from 'three';
 import { kv } from './store.js';
+import { onboarding } from './onboarding.js'; // r3 replay: no canoe published before the staff talk lends one
 import { dress, SHIRTS } from './npcs.js';
 import { mulberry32 } from './rng.js';
 import { wrapPi } from './poses.js';
@@ -552,7 +553,7 @@ export class Coop {
     const s = Number.isFinite(st.stroke) ? st.stroke : 0;
     if (s < this.lastStroke - 0.5) this.strokeN++;
     this.lastStroke = s;
-    const drop = p.carry && p.carry.drop, cap = p.mode === 'swim' && p.swim && p.swim.hull; // (a capsize: the hull beside you)
+    const drop = !onboarding.noCanoe && p.carry && p.carry.drop, cap = p.mode === 'swim' && p.swim && p.swim.hull; // (a capsize: the hull beside you; r3 replay: no canoe before the loan, so a friend's screen draws none)
     let pk = 1; try { pk = g.packs ? g.packs.count : 1; } catch { pk = 1; }
     const m = {
       t: 'pose', ts: Math.round(performance.now()), x: r2(p.x), z: r2(p.z), h: r3(p.heading), m: p.mode,

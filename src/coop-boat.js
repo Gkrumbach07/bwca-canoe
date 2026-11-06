@@ -27,6 +27,7 @@
 //
 //   const boat = new CoopBoat(coop)   (main.js, after CoopShare); coop.boat; boat.stats(); boat.take(peerId, verb)
 import { itemDef } from './items.js';
+import { onboarding } from './onboarding.js'; // r3 replay: no canoe before the loan
 import { HULL_REACH } from './inventory.js';
 import { refresh as uiRefresh, note as uiNote } from './inv-ui.js';
 import { hold } from './hold.js';
@@ -101,7 +102,7 @@ export class CoopBoat {
   describe(take = false) {
     const g = this.g, p = g.player, inv = g.inventory;
     if (!p || !inv) return null;
-    const over = p.mode === 'swim' && p.swim && p.swim.hull, d = p.carry && p.carry.drop;
+    const over = p.mode === 'swim' && p.swim && p.swim.hull, d = !onboarding.noCanoe && p.carry && p.carry.drop; // (r3 replay: none before the loan)
     let rec;
     if (over && Number.isFinite(over.cx)) rec = { k: 'over', x: r2(over.cx), z: r2(over.cz), heading: r3(over.heading || 0) };
     else if (d && Number.isFinite(d.x) && (p.mode === 'walk' || p.mode === 'swim')) rec = { k: 'drop', x: r2(d.x), z: r2(d.z), heading: r3(d.heading || 0) };

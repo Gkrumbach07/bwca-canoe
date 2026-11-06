@@ -38,6 +38,7 @@
 import { Vector3 } from 'three';
 import { ContainerView } from './containers.js';
 import { itemDef } from './items.js';
+import { onboarding } from './onboarding.js'; // r3 replay: no canoe before the loan
 import { tentPose } from './props.js';
 import { tentOf } from './tent.js';
 import { REACH, HULL_REACH } from './inventory.js';
@@ -201,7 +202,7 @@ export class CoopShare {
     const fires = [];
     if (g.fires) for (const b of inv.containers) if (b.item === 'firefuel' && b.at && b.at.fuel) { const r = g.fires.record(b.at.fuel); if (r) fires.push(r); }
     // our canoe when it is not under us or on our shoulders: beached, set down, tied at a dock, floating capsized beside us
-    const p = g.player, d = p && p.carry && p.carry.drop, cap = p && p.mode === 'swim' && p.swim && p.swim.hull;
+    const p = g.player, d = !onboarding.noCanoe && p && p.carry && p.carry.drop, cap = p && p.mode === 'swim' && p.swim && p.swim.hull; // (r3 replay: no canoe before the loan)
     const cn = cap && Number.isFinite(cap.cx) ? { x: cap.cx, z: cap.cz, heading: cap.heading || 0 }
       : d && Number.isFinite(d.x) && p.mode !== 'paddle' && p.mode !== 'carry' ? { x: d.x, z: d.z, heading: d.heading || 0 } : null;
     // what cooks on our grates and in our pots there (cook.js jobs), for a friend's fire card
