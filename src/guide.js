@@ -187,7 +187,8 @@ export class Guide {
     const push = (e, main) => { const r = this.reach(e); if (r && r.show && r.fade > 0) out.push({ id: e.id, entry: e, pos: r.pos, fade: r.fade, main, d: r.d }); };
     if (cur) push(cur, true);
     const rest = [];
-    for (const e of this.entries.values()) if (e !== cur && !e.done && e.target) rest.push(e);
+    // (r3 replay: a tutorial step not yet the step gets no gem: one main gem, each step in its turn, as the tracker says it)
+    for (const e of this.entries.values()) if (e !== cur && !e.done && e.target && !(e.kind === 'story' && e.tutorial)) rest.push(e);
     rest.sort((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind]);
     for (const e of rest) { if (out.length >= GUIDE.marksMax) break; push(e, false); }
     return out;

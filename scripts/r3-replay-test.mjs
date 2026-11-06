@@ -161,7 +161,18 @@ try {
   result('starter: the first-night suggestion escaped is made again, and its job taken', st.first && !st.mid.talking && st.mid.avail && !st.mid.done && st.mid.active === 0 && st.again && st.job && st.done && !st.avail && st.active.length === 1, st);
 
   // [slot:tracker-first]
-  // [slot:marks-one]
+  // marks-one (playtests 1, 2 and 3: three gold gems at once): with food the step, only the food shelf has a story gem
+  // (the leeches and the canoe get theirs in their turn), standing between the shelves
+  const mk = await page.evaluate(async () => {
+    const g = window.__game, H = window.__rp, cur = H.cur();
+    const e = cur && g.guide.get(cur.id), r = e && g.guide.reach(e);
+    if (r) { H.face(r.pos, 3); H.step(60); }
+    const marks = g.guide.marks().map((m) => m.id), gems = g.locator.shown().filter((q) => !q.gone).map((q) => q.id);
+    return { cur: cur && cur.id, marks, gems, open: H.ids().filter((id) => /^story:onboard:/.test(id)) };
+  });
+  result('marks-one: one story gem, over the step\'s place (no gem yet on the leeches or the canoe)',
+    mk.cur === 'story:onboard:food' && mk.open.includes('story:onboard:leeches') && mk.marks.filter((id) => /^story:/.test(id)).join() === 'story:onboard:food' && mk.gems.filter((id) => /^story:/.test(id)).join() === 'story:onboard:food', mk);
+
   // [slot:gem-depth]
   // [slot:money]
   // [slot:food-two]
