@@ -834,7 +834,7 @@ export class PartyMoves {
     };
     const cr = X.carry.get(i);
     if (cr) {
-      if (X.liftT == null || t < X.liftT) return walkPose(); // (to her, and a hand on her till the others are by theirs)
+      if (X.liftT == null || t < X.liftT) { const q = walkPose(); if (q.mode === 'stand') q.heading = headingOf(cr.camp.fx, cr.camp.fz); return q; } // (to her, and a hand on her till the others are by theirs: r2 2 verify, facing along her, to roll her up over her keel)
       // (r2 2 verify: rolled up off the bank onto his shoulders over HAND.flip s, carried down, and rolled off them into the
       // water by her place over HAND.flip more; she had jumped from the bank to his shoulders, and from them into the water.
       // The camp's canoes let go a moment into the lift, his (the same, where they lie) drawn by then: a frame of none)
@@ -866,7 +866,10 @@ export class PartyMoves {
     const n = L.plan.crew.boats.length;
     L.plan.crew.boats.forEach((crew, c) => {
       const cn = D.canoeAt[c], i = crew[0], seat = L.seatOf.get(i); if (!cn || !seat) return;
-      const o = this.slot(s.S, c, n, { x: 0, z: 0, h: 0 }), Y = this.sideOf(L, c, 'mid', s.S), d = Math.hypot(Y.x - cn.x, Y.z - cn.z), dur = Math.max(3, d / HAND.carry);
+      // (r2 2 verify: the carry, its two rolls and the walk to her all after they are out of the canoes and up the bank, a
+      // long carry a little quicker: begun sooner, he had been taken from his seat to walk to her)
+      const room = (s.h1 - s.h0) * 3600 / CLOCK - (OUT.first + 3 * (OUT.step + OUT.gap) + OUT.walk + 1) - 2 * HAND.flip - HAND.reach;
+      const o = this.slot(s.S, c, n, { x: 0, z: 0, h: 0 }), Y = this.sideOf(L, c, 'mid', s.S), d = Math.hypot(Y.x - cn.x, Y.z - cn.z), dur = Math.max(3, d / 1.8, Math.min(d / HAND.carry, room));
       void o;
       // (r2 2 verify: set down from beside where she will lie, on her land side, not from under her)
       out.carry.set(i, { c, from: { x: Y.x, z: Y.z }, to: { x: cn.x - cn.wx * 0.75, z: cn.z - cn.wz * 0.75, h: headingOf(cn.tx, cn.tz) }, dur, up: dur + 2 * HAND.flip + HAND.reach, camp: this.campPose(cn) });
@@ -884,14 +887,16 @@ export class PartyMoves {
       const F = HAND.flip, hull = L.plan.crew.hulls[cr.c];
       if (tl > cr.dur + 2 * F || !cr.fixed) {
         const Y = this.sideOf(L, cr.c, 'mid', s.S); cr.from = { x: Y.x, z: Y.z };
-        if (tl <= cr.dur + 2 * F) { cr.fixed = true; const b = L.boats[cr.c]; cr.water = b && !b.hidden && b.root ? { p: { x: b.root.position.x, y: b.root.position.y, z: b.root.position.z }, q: b.root.quaternion.clone() } : this.waterPose(L, s, cr.c); }
+        if (tl <= cr.dur + 2 * F) { cr.fixed = true; const b = L.boats[cr.c]; cr.water = b && !b.hidden && b.root ? { p: { x: b.root.position.x, y: b.root.position.y, z: b.root.position.z }, q: b.root.quaternion.clone(), h: b.heading } : this.waterPose(L, s, cr.c); }
       }
-      if (tl > cr.dur + 2 * F) { const J = this.jobPoseAt(L, s, i, h - (cr.up - tl) * CLOCK / 3600), k = smooth((cr.up - tl) / HAND.reach); return { x: J.x + (cr.from.x - J.x) * k, z: J.z + (cr.from.z - J.z) * k, heading: headingOf(cr.from.x - J.x, cr.from.z - J.z), v: (Math.hypot(cr.from.x - J.x, cr.from.z - J.z) / HAND.reach) * 1.5 * Math.sin(Math.PI * k), mode: 'walk', pack: false }; }
+      // (r2 2 verify: the last of the walk turned to lie along her, so the lift is a roll over her keel, not a swing of her end
+      // up past his head)
+      if (tl > cr.dur + 2 * F) { const J = this.jobPoseAt(L, s, i, h - (cr.up - tl) * CLOCK / 3600), k = smooth((cr.up - tl) / HAND.reach), bt = L.boats[cr.c], bh = bt && !bt.hidden ? bt.heading : null; return { x: J.x + (cr.from.x - J.x) * k, z: J.z + (cr.from.z - J.z) * k, heading: k > 0.75 && bh != null ? bh : headingOf(cr.from.x - J.x, cr.from.z - J.z), v: (Math.hypot(cr.from.x - J.x, cr.from.z - J.z) / HAND.reach) * 1.5 * Math.sin(Math.PI * k), mode: 'walk', pack: false }; }
       // (r2 2 verify: rolled up out of the water over HAND.flip, carried up, and rolled off his shoulders onto the bank where
       // the camp lays her over the last HAND.flip: the camp's canoe then is she, where she lies)
       const lift = tl > cr.dur + F, lower = tl <= F;
       const u = smooth(clamp(1 - (tl - F) / cr.dur, 0, 1)), px = cr.from.x + (cr.to.x - cr.from.x) * u, pz = cr.from.z + (cr.to.z - cr.from.z) * u;
-      const hd = u < 0.9 ? headingOf(cr.to.x - cr.from.x, cr.to.z - cr.from.z) : cr.to.h;
+      const hd = lift && cr.water ? cr.water.h : u < 0.9 ? headingOf(cr.to.x - cr.from.x, cr.to.z - cr.from.z) : cr.to.h;
       const cf = lift && cr.water ? { p: cr.water.p, q: cr.water.q, k: smooth((cr.dur + 2 * F - tl) / F) } : lower ? { p: cr.camp.p, q: cr.camp.q, k: smooth(tl / F) } : null;
       return { x: px, z: pz, heading: hd, v: u > 0 && u < 1 ? (Math.hypot(cr.to.x - cr.from.x, cr.to.z - cr.from.z) / cr.dur) * 1.5 * Math.sin(Math.PI * u) : 0, mode: 'carry', pack: false, hull, anim: cf ? { carryFrom: cf } : null };
     }
@@ -927,7 +932,7 @@ export class PartyMoves {
   campPose(cn) { const q = cn.q || new THREE.Quaternion(); const f = new THREE.Vector3(1, 0, 0).applyQuaternion(q); return { p: { x: cn.x, y: cn.y ?? 0, z: cn.z }, q, fx: f.x, fz: f.z }; }
   waterPose(L, s, c) {
     const o = this.slot(s.S, c, L.boats.length, { x: 0, z: 0, h: 0 }), lv = this.world.levelAt ? this.world.levelAt(o.x, o.z) : 0;
-    return { p: { x: o.x, y: lv + FLOAT_OFFSET, z: o.z }, q: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), o.h) };
+    return { p: { x: o.x, y: lv + FLOAT_OFFSET, z: o.z }, q: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), o.h), h: o.h };
   }
   // r2 2: where the stern stands pushing her off, u 0..1 through the push: from the bank beside her (where the push
   // began, kept: the hull slides away from it) a step after her toward her seat
