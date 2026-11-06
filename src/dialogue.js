@@ -171,6 +171,9 @@ export class Dialogue {
     const W = window.innerWidth, H = window.innerHeight, cam = this.camera;
     cam.updateMatrixWorld();
     const placed = [];
+    // (r3 replay: the tracker's card on the left is kept clear as a bark is (a visitor's bark lay across its lines))
+    const tr = document.getElementById('tracker');
+    if (tr && tr.classList.contains('on')) { const r = tr.getBoundingClientRect(); if (r.width > 0) placed.push({ x: r.left, y: r.top, w: r.width, h: r.height }); }
     for (const b of this.on) {
       const head = this.headOf(b.sp, _v);
       if (!b.w || !b.h) { const r = b.box.getBoundingClientRect(); b.w = r.width; b.h = r.height; }

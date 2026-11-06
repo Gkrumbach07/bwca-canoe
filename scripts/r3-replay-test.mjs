@@ -263,7 +263,24 @@ try {
   result('titles: the step\'s page says each thing once (title not the next line, no place line it already names)',
     tl.cur && tl.cur.id === 'story:onboard:leeches' && tl.title && tl.next && !bare(tl.next).startsWith(bare(tl.title)) && tl.where === null, tl);
 
-  // [slot:bark-tracker]
+  // bark-tracker (playtests 1 minor 11 and 3 minor 4): a bark pinned to the left edge never lies across the tracker card
+  const bt = await page.evaluate(async () => {
+    const g = window.__game, H = window.__rp, d = H.d(), cam = g.camera, p = g.player;
+    H.step(10);
+    const tr = document.getElementById('tracker'), on = tr.classList.contains('on'), r = tr.getBoundingClientRect();
+    // a voice behind you on the left: pinned to the left edge (dialogue.js layout)
+    cam.updateMatrixWorld();
+    const at = new g.THREE.Vector3(-4, -0.2, 1.5).applyMatrix4(cam.matrixWorld); // (camera space: left of you and behind)
+    const sp = { key: 'rp:voice', name: 'A voice', role: '', pos: (out) => out.copy(at) };
+    d.bark(sp, 'Lovely morning for it, isn’t it? The loons were at it all night out past the point.', { pri: 9, secs: 6 });
+    H.step(6); await H.wait(60);
+    const b = (d.on || []).find((x) => x.sp && x.sp.key === 'rp:voice');
+    const w = b && b.where, box = b && b.el ? b.el.firstElementChild.getBoundingClientRect() : null;
+    const hit = !!(box && on && box.left < r.right && box.right > r.left && box.top < r.bottom && box.bottom > r.top);
+    return { on, tr: r.toJSON(), where: w, box: box && box.toJSON(), hit };
+  });
+  result('bark-tracker: a bark pinned left keeps clear of the tracker card', bt.on && bt.where && !bt.hit, bt);
+
   // ticket-words (playtest 3 minor 10): the card's heads read alike ("New task", no colon), and a ticket's line does not
   // say "(I)" over the card's own "I for your journal"; the ticket's gem is over the counter
   const tw = await page.evaluate(async () => {
