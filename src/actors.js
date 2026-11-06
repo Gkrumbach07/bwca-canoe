@@ -656,7 +656,10 @@ class Boat {
       const nb = need(KEEL_A), ns = need(-KEEL_A), nm = need(0);
       if (Math.max(nb, ns, nm) > y) {
         const yb = Math.max(y, nb), ys = Math.max(y, ns), sl = clamp((yb - ys) / (2 * KEEL_A), -0.35, 0.35);
-        y = Math.max((yb + ys) / 2, nm); pitch = -Math.atan(sl); // (placeRoot turns by -pitch: the bow up for a slope up to it)
+        // (r2 2 verify: each end held over its own ground at the slope she is turned to: a bank steeper than the 0.35 she may
+        // take had left the bow's keel in it (0.15 m), as the ends' middle height alone does once the slope is clamped)
+        const sn = sl / Math.hypot(1, sl);
+        y = Math.max(yb - sn * KEEL_A, ys + sn * KEEL_A, nm); pitch = -Math.atan(sl); // (placeRoot turns by -pitch: the bow up for a slope up to it)
         this.beached = sl;
       } else this.beached = 0;
     }
