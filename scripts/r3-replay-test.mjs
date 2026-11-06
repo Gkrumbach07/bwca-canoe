@@ -317,7 +317,7 @@ try {
     return { st, next: t && t.next, gem: t ? !!H.gem(t.id) : false, off: t ? H.off(t.id) : null };
   });
   result('ticket-words: "New task" with no colon, no "(I)" in the ticket\'s line, the gem over the counter',
-    tw.st && /^New task /.test(tw.st.text) && !/New task:/.test(tw.st.text) && tw.next && !/\(I\)/.test(tw.next) && (tw.st.text.match(/journal/g) || []).length <= 2 && tw.gem && tw.off < 0.6, tw);
+    tw.st && tw.st.head === 'New task' && /^New task(?!:)/.test(tw.st.text) && tw.next && !/\(I\)/.test(tw.next) && (tw.st.text.match(/journal/g) || []).length <= 2 && tw.gem && tw.off < 0.6, tw);
 
   // journal-more (playtest 3 minor 8): at 1280×720 a Tasks list longer than the page fades at its foot ("more") while
   // there is more below, and not once scrolled to the end
@@ -358,11 +358,11 @@ try {
     g.packs.getIn(p.carry.drop); for (let i = 0; i < 40 && p.mode !== 'paddle'; i++) { H.step(5); await H.wait(20); }
     H.step(40);
     const mid = g.tracker.state();
-    H.step(300);
-    return { lee: lee.ok, canoeStep, mode: p.mode, seq: H.seq(), mid, after: g.tracker.state(), cur: H.cur() };
+    H.step(500);
+    return { lee: lee.ok, canoeStep, mode: p.mode, seq: H.seq(), job: H.cards.find((c) => c.mode === 'event' && c.head === 'Next' && /^task:/.test(c.id)) || null, mid, after: g.tracker.state(), cur: H.cur() };
   });
   result('tutorial-end: in the canoe the tutorial ends and the tracker says the job\'s next line once',
-    te.lee && te.canoeStep && te.canoeStep.id === 'story:onboard:canoe' && te.mode === 'paddle' && te.seq.some((s) => /^event:Next:task:/.test(s)) && te.mid.shown && /^Paddle to /.test(te.mid.next || '') && !te.after.shown && !(te.cur && /^story:onboard/.test(te.cur.id)), te);
+    te.lee && te.canoeStep && te.canoeStep.id === 'story:onboard:canoe' && te.mode === 'paddle' && te.job && /^Paddle to /.test(te.job.next || '') && te.seq.filter((s) => /^event:Next:task:/.test(s)).length === 1 && !te.after.shown && !(te.cur && /^story:onboard/.test(te.cur.id)), te);
 
   // latrine (playtests 1 minor 5 and 3 minor 12): at the starter site, the grate checked: the latrine's gem shows at full
   // anywhere on the site, and the tracker says "Next: Look over the latrine" (the "Close by" card never shows a line that
