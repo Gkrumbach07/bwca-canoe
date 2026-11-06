@@ -235,9 +235,10 @@ try {
   const shelfBuy = async (id, want, name, n, cap) => {
     const s = await ev((id) => { const g = window.__game, H = window.__p, L = g.outfitter.layout(g.profile.home), c = L.centre || L.counter; H.standAt(c.x, c.z); H.step(20); const e = g.guide.get(id), r = e && g.guide.reach(e); return { pos: r && { x: r.pos.x, y: r.pos.y, z: r.pos.z }, cur: window.__p.cur() }; }, id);
     if (!s.pos) return { none: true, s };
-    await walkTo(s.pos, 2.4);
-    await ev((q) => { const H = window.__p; H.face(q, 2.8, 0.05); H.step(30); }, s.pos);
+    // (the gem from the middle of the store, looked at; then up to the shelf)
+    await ev((q) => { const H = window.__p; H.aimAt(q, q.y); H.step(30); H.aimAt(q, q.y); H.step(4); }, s.pos);
     const gem = await gemCheck(id, `${name}-gem`, n, cap);
+    await walkTo(s.pos, 1.8);
     const blockers = await ev((q) => window.__p.near(q, 1.0).filter((x) => !x.walking), s.pos);
     await ev((q) => { const H = window.__p; H.aimAt(q, q.y - 0.3); H.step(6); }, s.pos);
     let tgt = await ev(() => window.__p.screen().target); const firstTgt = tgt;
