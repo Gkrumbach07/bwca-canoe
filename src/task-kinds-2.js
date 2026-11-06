@@ -539,6 +539,36 @@ registerKind('pma', {
   doneWords() { return 'the trail mapped'; },
 });
 
+// the dot's targets for a campsite check's parts (campsite, starter): each part not yet looked over, within the dot's
+// reach, a low box over it (no mesh of its own: a soft pool of light under it); E checks it, as the notice's line says
+const PART_BOX = { grate: [0.6, 0.35, 0.6], latrine: [0.6, 0.5, 0.6], pad: [1.2, 0.25, 1.2] };
+function partTargets(T) {
+  return (ray, near) => {
+    const out = [], p = T.player;
+    if (!p || !T.active || !onFoot(p)) return out;
+    for (const t of T.active) {
+      if (t.status !== 'open' || (t.kind !== 'campsite' && t.kind !== 'starter')) continue;
+      const s = T.world.campsites[t.site];
+      if (!s || near.flat(s.x, s.z) > 60) continue;
+      const at = partsOf(T, t), checks = t.checks || {};
+      if (!at) continue;
+      for (const k of PARTS) {
+        const q = at[k];
+        if (!q || checks[k] || near.flat(q.x, q.z) > PART_REACH) continue;
+        const [hx, hy, hz] = PART_BOX[k], y = typeof p.groundAt === 'function' ? p.groundAt(q.x, q.z) : near.y;
+        const b = { x: q.x, y: y + hy, z: q.z, hx, hy, hz }, hit = near.box(b);
+        if (!hit) continue;
+        // (ahead of whatever else is on the same spot, the fire ring's card on the grate, while it is still to check:
+        // then the ring is back)
+        out.push({ dist: hit.t, miss: hit.miss * 0.3 - 0.5, target: { kind: 'sitepart', ref: `site:${t.id}:${k}`, label: `the ${PART_LABEL[k]}`, box: b,
+          e: { verb: 'Check', run: () => { const K = KINDS[t.kind]; if (K && K.check) K.check(T, t, k); } } } });
+      }
+    }
+    return out;
+  };
+}
+const PART_REACH = 3.2; // m: a part a step or two off, low on the ground (the dot's own 2.6 and a little: litter's reach)
+
 // --- wiring (main.js, the gl-d block) ----------------------------------------------------------------------------------
 export const KINDS2 = ['creel', 'campsite', 'beaver', 'iceout', 'colour', 'lastcheck', 'pma', 'starter'];
 export function attachTaskKinds2(o = {}) {
@@ -553,6 +583,9 @@ export function attachTaskKinds2(o = {}) {
     const otg = photo.onTheGo.bind(photo);
     photo.onTheGo = () => [...otg(), ...(tasks ? tasks.active.filter((t) => t.kind === 'colour' && t.status === 'open') : [])];
   }
+  // r2 replay: a site's grate, latrine and tent pad on the dot (on foot the E is the dot's: pointer.js eats an E
+  // pointed at nothing, so the notice's "Check the grate" line alone could never be acted on)
+  if (o.pointer && typeof o.pointer.register === 'function' && tasks && !G.partsOn) { G.partsOn = true; o.pointer.register(partTargets(tasks)); }
   if (typeof window !== 'undefined' && window.__game) window.__game.taskKinds2 = { kinds: KINDS2, checkPart: (t, part) => checkPart(tasks, t, part), askParty: (t, party) => askParty(tasks, t, party) };
   return { kinds: KINDS2 };
 }

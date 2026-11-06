@@ -1154,7 +1154,7 @@ async function main() {
   // word heard by a creel survey, a visitor's gift kept when the tally pays their notice, the board's dot label, and
   // two moments.
   {
-    attachTaskKinds2({ tasks, photo, parties, partyCamps, moves, npcs, outfitter, trip });
+    attachTaskKinds2({ tasks, photo, parties, partyCamps, moves, npcs, outfitter, trip, pointer });
     record.weather = weather; record.parties = parties;
     // a party's word on their trip is a creel survey's answer: stream E's npcs.onTalk when it is there, else the camps'
     // word (party-camps.js) and the canoes' talk (party-moves.js)
