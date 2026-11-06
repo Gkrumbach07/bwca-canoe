@@ -22,10 +22,14 @@
 //   locator.enabled = false     hides it (a debug switch: the guide's show rule is the setting)
 
 import * as THREE from 'three';
+import { storeLayouts } from './props.js';
 
 export const LOCATOR = {
   gap: 0.3,           // m: the gem's lower point over the target's top (the guide's pos), however big the gem: at the main
                       // size its centre is half a metre up
+  gapPerson: 0.06,    // m over a person: the guide's speaker point is already a hand over the head, so the gem rides just
+                      // above the hat, Sims-like, and under a store's beams
+  ceiling: 2.38,      // m over a store's floor: the gem's top kept under this indoors (camera.js SIGHT.ceiling is 2.55)
   low: 0.62,          // the lower point's depth below the centre, in gem heights (gemGeometry)
   bob: 0.06,          // m: the bob's half height (less than the gap)
   bobHz: 0.45,        // bobs a second
@@ -36,7 +40,7 @@ export const LOCATOR = {
   appear: 0.3,        // s to fade and swell in
   vanish: 0.25,       // s to shrink away when its entry goes
   closeCam: 1.1,      // m: nearer the camera than this it is hidden (it never fills the view)
-  water: 0.75,        // m over the water at least, when the target is over water (the canoe tied at the dock)
+  water: 0.6,         // m over the water at least, when the target is over water (the canoe tied at the dock)
   shades: [0xffe58a, 0xf2b01e, 0xb57a0a], // light, mid and dark facets: the gold
 };
 
@@ -94,7 +98,9 @@ export class Locator {
     const m = new THREE.Mesh(this.geometry, mats);
     m.name = 'r3-locator-gem';
     m.castShadow = false; m.receiveShadow = false;
-    m.renderOrder = 5; // after the other see-through things near it (the ghosts, the pointer's rim)
+    // drawn after every other see-through thing (the water is 10, the rise rings 12, the steam 17): it writes no depth,
+    // so anything see-through drawn after it painted over it (over the lake the canoe's gem was lost under the water)
+    m.renderOrder = 30;
     m.visible = false;
     this.group.add(m);
     return m;
@@ -104,13 +110,15 @@ export class Locator {
   lifted(p) {
     const w = this.t.world;
     let y = p.y;
+    let roof = Infinity;
     try {
       if (w && typeof w.shoreAt === 'function' && typeof w.levelAt === 'function' && w.shoreAt(p.x, p.z) < 0) {
         const lv = w.levelAt(p.x, p.z);
         if (Number.isFinite(lv)) y = Math.max(y, lv + LOCATOR.water);
       }
     } catch { /* the water not known here: the guide's y */ }
-    return { x: p.x, y, z: p.z };
+    try { for (const L of storeLayouts()) if (L && typeof L.inside === 'function' && L.inside(p.x, p.z)) { roof = L.floorY + LOCATOR.ceiling; break; } } catch { /* no stores */ }
+    return { x: p.x, y, z: p.z, roof };
   }
   hidden(shell) {
     if (!this.enabled || shell) return true;
@@ -133,6 +141,7 @@ export class Locator {
       let s = this.slots.get(m.id);
       if (!s) { s = { mesh: this.mesh(), a: 0, gone: false, spin: Math.random() * Math.PI * 2 }; this.slots.set(m.id, s); }
       s.gone = false; s.main = !!m.main; s.fade = m.fade; s.pos = this.lifted(m.pos);
+      s.person = !!(m.entry && m.entry.target && m.entry.target.kind === 'person');
       s.a = Math.min(1, s.a + dt / LOCATOR.appear);
     }
     for (const [id, s] of this.slots) {
@@ -150,7 +159,8 @@ export class Locator {
       const dc = cp ? Math.hypot(p.x - cp.x, p.y + 0.5 - cp.y, p.z - cp.z) : 10;
       const k = smooth(s.a), grow = Math.min(LOCATOR.grow[1], Math.max(1, dc / LOCATOR.grow[0]));
       const h = (s.main ? LOCATOR.size : LOCATOR.sizeSide) * grow * (s.gone ? k : 0.6 + 0.4 * k);
-      const y = p.y + LOCATOR.gap + LOCATOR.low * h + bob; // the point clear of the top, the bob (less than the gap) included
+      let y = p.y + (s.person ? LOCATOR.gapPerson : LOCATOR.gap) + LOCATOR.low * h + bob; // the point clear of the top, the bob included
+      y = Math.min(y, p.roof - 0.38 * h); // indoors its top under the beams
       const op = (s.fade ?? 1) * k;
       s.spin += dt * LOCATOR.spin;
       me.position.set(p.x, y, p.z);
