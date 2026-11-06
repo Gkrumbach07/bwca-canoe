@@ -134,6 +134,8 @@ const LOT_WANTS = { in: { load: 3, wait: 1 }, out: { unload: 2.5, load: 1, wait:
 const WALK_V = 1.15;                 // m/s (real) a person walks between things in a store
 const WALK_SPEC = Object.freeze({ pose: 'walk' });
 const AISLE = { back: -1.7, front: 2.5 }; // the store's cross aisles (b, its own frame): behind the shelves and before them
+const DOOR_WAIT = 6;                  // s (r2 2): the longest anyone waits to give way (at the door, or to someone in the way)
+const APART = 0.5;                    // m (r2 2): a walker is kept this far from anyone (shoulder to shoulder)
 const DOOR_A = -0.25;                // the door (a)
 const ST_HD = 4.0;                   // the store's front wall (b): props.js ST.hD
 // what each wants to be at, by weight (smart.js ranks them each five minutes)
@@ -1367,7 +1369,15 @@ export class People {
     const who = e.dir === 'in' ? `${pv.who}, going in today` : `${pv.who}, just off the water`;
     const v = { key: `visit:${p.id}`, ep, arch, name, first: pv.members[0].name, last: pv.last, city: pv.city, vars: { ...pv.vars, town: (placeFacts(ep, this.world) || {}).town || 'Ely', road: 'the road', district: districtOf(ep) },
       who, trip: p, partyId: p.id, dir: e.dir, until: e.to, crew: pv.members.map((m, i) => ({ i, name: m.name, where: where(i) })), figNames: pv.members.map((m) => m.name), figs: [], inParty: true };
-    v.figs = pv.members.map((m, i) => ({ x: home.x, z: home.z, y: home.y, heading: home.heading, look: m.look, spec: { pose: 'stand', lean: 0.02 }, where: where(i), member: i, fresh: true }));
+    // (r2 2: each at their own place as they come, not all at the door's one point: the first in the doorway, the rest
+    // beside it on the porch, or round the lot's; they had walked off out of one another)
+    const at = (i) => {
+      if (!i) return home;
+      const k = Math.ceil(i / 2), sd = i % 2 ? 1 : -1;
+      if (!lot && L.axes) { const w = this.frameOf(L).w(DOOR_A + sd * 0.8 * k, 4.55); return { x: w.x, z: w.z, y: home.y, heading: home.heading }; }
+      const a = i * 2.4; return { x: home.x + Math.cos(a) * 0.8 * k, z: home.z + Math.sin(a) * 0.8 * k, y: home.y, heading: home.heading };
+    };
+    v.figs = pv.members.map((m, i) => { const q = at(i); return { x: q.x, z: q.z, y: q.y, heading: q.heading, look: m.look, spec: { pose: 'stand', lean: 0.02 }, where: where(i), member: i, fresh: true }; });
     if (lot) v.lot = true;
     v.hasTask = e.dir === 'out' && seeded(hashKey(p.id), 0x7a5c)() < STORE_P.task;
     return v;
@@ -1617,16 +1627,68 @@ export class People {
       } else if (f.fresh) { f.fresh = false; } // (nothing free: they stay where they stand)
       else if (!a && !f.path && f.spec && f.spec.pose !== 'sit') this.wander(L, figs, f, dt); // (r2: nor frozen there)
       if (a) f.wHome = null;
-      if (f.path && f.path.length) this.walkOn(f, dt);
+      if (f.path && f.path.length) this.walkOn(f, dt, this.giveWay(L, figs, f, dt));
+    }
+    this.keepApart(figs, dt);
+  }
+  // r2 2: nobody walks through anyone (the owner's leftover: a party going in at the door walked through each other).
+  // At the door one at a time: someone about to go in or out waits outside it while another is in it coming the other
+  // way, or too close ahead going theirs; elsewhere a walker slows behind someone in the way going their way, and the
+  // one of two meeting head on with the later key waits a moment for the other to step by (keepApart). A wait gives up
+  // after DOOR_WAIT s. True: hold this step
+  giveWay(L, figs, f, dt) {
+    const q = f.path && f.path[0]; if (!q) return false;
+    const dx = q.x - f.x, dz = q.z - f.z, d = Math.hypot(dx, dz) || 1, ux = dx / d, uz = dz / d;
+    const inDoor = L.axes ? this.doorZone(L) : null, mine = inDoor ? inDoor(f.x, f.z) : false;
+    const ahead = { x: f.x + ux * Math.min(1.1, d + 0.4), z: f.z + uz * Math.min(1.1, d + 0.4) };
+    const toDoor = inDoor && !mine && inDoor(ahead.x, ahead.z);
+    let hold = false;
+    for (const [, g] of figs) {
+      if (g === f || (g.spec && g.spec.pose === 'sit')) continue;
+      const ox = g.x - f.x, oz = g.z - f.z, od = Math.hypot(ox, oz), walking = !!(g.path && g.path.length);
+      if (toDoor && walking && inDoor(g.x, g.z)) {
+        const gq = g.path[0], gx = gq.x - g.x, gz = gq.z - g.z, same = gx * ux + gz * uz > 0;
+        if (!same || od < 1.1) { hold = true; break; }
+      }
+      if (od > 0.95 || od < 1e-4) continue;
+      const fwd = (ox * ux + oz * uz) / od; if (fwd < 0.35) continue; // (not in front of them)
+      if (walking) {
+        const gq = g.path[0], gx = gq.x - g.x, gz = gq.z - g.z, gl = Math.hypot(gx, gz) || 1, dot = (gx * ux + gz * uz) / gl;
+        if (dot > 0.3 && od < 0.85) { hold = true; break; } // (behind someone going their way)
+        if (dot < -0.3 && f.key > g.key && od < 0.95) { hold = true; break; } // (head on: the later waits, the other steps by)
+      }
+    }
+    f.waitT = hold ? (f.waitT || 0) + dt : 0;
+    return hold && f.waitT < DOOR_WAIT;
+  }
+  // the door of the store (its own frame): from the front aisle inside, through the doorway, onto the porch
+  doorZone(L) {
+    const c = this.doorZ || (this.doorZ = new WeakMap());
+    let fn = c.get(L);
+    if (!fn) { const fr = this.frameOf(L); fn = (x, z) => { const q = fr.ab(x, z); return Math.abs(q.a - DOOR_A) < 0.85 && q.b > AISLE.front - 0.4 && q.b < 4.9; }; c.set(L, fn); }
+    return fn;
+  }
+  // and those within APART of a walker eased off to either side of them (the walker steps round, never through)
+  keepApart(figs, dt) {
+    const k = Math.min(1, dt * 10);
+    for (let i = 0; i < figs.length; i++) for (let j = i + 1; j < figs.length; j++) {
+      const a = figs[i][1], b = figs[j][1], wa = !!(a.path && a.path.length), wb = !!(b.path && b.path.length);
+      if (!wa && !wb) continue;
+      const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz);
+      if (d >= APART || d < 1e-4) continue;
+      const push = (APART - d) * (wa && wb ? k : 1), nx = dx / d, nz = dz / d, sa = wa && wb ? 0.5 : wa ? 1 : 0, sb = 1 - sa;
+      if (sa && !(a.spec && a.spec.pose === 'sit')) { a.x -= nx * push * sa; a.z -= nz * push * sa; }
+      if (sb && !(b.spec && b.spec.pose === 'sit')) { b.x += nx * push * sb; b.z += nz * push * sb; }
     }
   }
   settle(f) { const g = f.goal; if (!g) return; f.x = g.x; f.z = g.z; f.y = g.y; f.heading = g.heading; f.spec = g.spec; f.path = null; }
-  walkOn(f, dt) {
+  walkOn(f, dt, hold = false) {
     // r2: away from a standstill and into the stop at a walker's pace (it had started and stopped at full speed), the
     // stride the gait's by the speed made good (Body.pose), so the feet keep to the ground
     let rem = 0, ax = f.x, az = f.z;
     for (const q of f.path) { rem += Math.hypot(q.x - ax, q.z - az); ax = q.x; az = q.z; if (rem > 3) break; }
-    const want = Math.min(WALK_V, 0.25 + Math.sqrt(2 * 1.1 * Math.max(0, rem)));
+    const want = hold ? 0 : Math.min(WALK_V, 0.25 + Math.sqrt(2 * 1.1 * Math.max(0, rem))); // (r2 2: held: giving way, stopped)
+    if (hold) { f.wv = Math.max(0, (f.wv || 0) - 3.5 * dt); if (!(f.wv > 0.02)) { f.spec = WALK_SPEC; return; } }
     f.wv = (f.wv || 0) + clamp(want - (f.wv || 0), -2.5 * dt, 1.5 * dt);
     let left = Math.max(0.05, f.wv) * dt;
     while (left > 0 && f.path.length) {
