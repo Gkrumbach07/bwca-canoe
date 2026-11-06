@@ -107,7 +107,8 @@ try {
     return { said: r.said.length, done: g.onboarding.state.done, evs: H.evs('story:onboard:talk'), cur: g.guide.current() && g.guide.current().id,
       starter: st && { id: st.id, next: st.next, target: st.target && st.target.kind, evs: H.evs(st.id) } };
   });
-  result('3a the talk through: the step is gone', three.done && three.evs.includes('gone') && three.cur === null, three);
+  // (r3 A's main path: past the talk the food step is current, the empty-handed start's next line)
+  result('3a the talk through: the step is gone', three.done && three.evs.includes('gone') && (three.cur === null || three.cur === 'story:onboard:food'), three);
   result('3b the starter job is an entry with what next', three.starter && /^Paddle to .+\.$/.test(three.starter.next) && three.starter.target === 'thing' && three.starter.evs.includes('add'), three.starter);
 
   // 4 at the starter site
@@ -157,7 +158,7 @@ try {
     const evs = H.ev.slice(n0).map((q) => `${q.evt}:${q.id}`);
     return { cur: cur && cur.id, next: cur && cur.next, mk, done, cur2: cur2 && cur2.id, replaced, after: G.current() && G.current().id, evs, sources: G.stats().sources };
   });
-  result('6 hand-held entries and a replaced source', six.cur === 'story:test' && six.next === 'Go here.' && six.mk[0] === 'story:test' && six.done && six.cur2 === null && six.replaced === 'story:a' && six.after === null
+  result('6 hand-held entries and a replaced source', six.cur === 'story:test' && six.next === 'Go here.' && six.mk[0] === 'story:test' && six.done && (six.cur2 === null || /^story:onboard:/.test(six.cur2)) && six.replaced === 'story:a' && six.after === null
     && ['add:story:test', 'done:story:test', 'gone:story:test', 'add:story:a', 'gone:story:a'].every((x) => six.evs.includes(x)), six);
   result('no page errors', errors.length === 0, { errors: errors.slice(0, 5) });
 } catch (e) {

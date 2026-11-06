@@ -66,7 +66,8 @@ export class Onboarding {
   attach(t = {}) {
     Object.assign(this.t, t);
     const pr = this.t.profile, s = save.read(NS);
-    if (s && s.v === 1) this.state = { ...blankOnboard(), ...s };
+    // (r3: a season saved before the empty-handed start has no path: it keeps its canoe and gets no main-path steps)
+    if (s && s.v === 1) this.state = { ...blankOnboard(), ...s, ...(s.path === undefined ? { path: null, loan: true } : {}) };
     else if (pr && pr.started) { this.state = { ...blankOnboard(pr.seasonId), step: 'done', done: true, legacy: true }; this.write(); } // an old season
     else this.state = null; // no season yet: one begins on the title
     if (pr && typeof pr.onChange === 'function') pr.onChange((what) => { if (what === 'season') this.newSeason(pr.seasonId); });
