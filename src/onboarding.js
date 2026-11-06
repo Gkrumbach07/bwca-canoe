@@ -47,6 +47,9 @@ export const STAFF = ['Jess', 'Tanner', 'Marcy', 'Kyle', 'Brooke', 'Dani', 'Cody
 const ROLE = 'the summer help';
 const DOOR_LINE = 'Got a minute? Come to the counter.';
 const STAFF_LOOK = { age: 'young', shirt: 0x5f7f45, hat: null }; // (E's figure look, as it takes it; ignored without E)
+// r3 replay: the gear taken and the talk left before the keeper's word, then paddled this far from the landing: the
+// keeper's part is done for you (the first permit, the home sheet), so leaving early never costs a ticket
+const LEAVE_R = 80;
 
 // r3 (2026-11-05): path, the main path's steps after the talk (food, leeches, the canoe pushed off), each latched true
 // once seen and saved, so a reload brings the same step back; loan, the outfitter's canoe at the dock (none before the
@@ -243,6 +246,19 @@ export class Onboarding {
     const p = this.t.player;
     if (!pa.canoe && s.loan && p && p.mode === 'paddle' && !p.teleporting) { pa.canoe = true; ch = true; }
     if (ch) this.write();
+    if (s.step === 'gear' && !s.done && s.loan && p && p.mode === 'paddle' && !p.teleporting) this.leaving(p);
+  }
+  // r3 replay: the talk left after the gear (an Esc at the canoe line) and paddled away: the keeper waves you off with the
+  // first permit, as the talk's end would have given it (the starter route can still be asked for at the counter)
+  leaving(p) {
+    const ep = this.home, o = this.t.outfitter, L = ep != null && o && typeof o.landing === 'function' ? o.landing(ep) : null;
+    if (!L || Math.hypot(p.x - L.x, p.z - L.z) < LEAVE_R) return false;
+    const P = this.permits(), grant = !!(P && typeof P.grant === 'function');
+    const shop = o.shop, keeper = shop && typeof shop.keeperName === 'function' ? shop.keeperName(ep) : null;
+    this.finish(ep, grant);
+    const hud = this.t.hud;
+    if (hud && typeof hud.note === 'function') hud.note(`${keeper || 'The keeper'} waves from the dock: ${grant ? 'your first permit’s on the house' : 'the map’s on the house'}.`, 6);
+    return true;
   }
   // The main path for the guide (guide.source('onboarding', …), main.js; docs/build/r3-contract.md section 3): the talk
   // while it is to come, then the food, the leeches and the canoe, each gone once done. From the saved state alone.
@@ -258,7 +274,9 @@ export class Onboarding {
         target: { kind: 'person', key: sp.key || `staffer:${ep}`, label: who, store: ep, near: 30, pos: guide.speakerPos(sp) } });
     }
     const pa = s.path;
-    if (!pa || !(s.step === 'gear' || s.done)) return out;
+    // (r3 replay: the steps after the talk come once it is over: an Esc after the gear keeps the staffer the step, and no
+    // gem or line points at the shelves or the canoe while the keeper's word is still to come)
+    if (!pa || !s.done) return out;
     const where = (shelf) => (atHome ? `at the ${shelf}` : `at an outfitter’s ${shelf}`);
     if (!pa.food) out.push({ id: PATH_IDS.food, kind: 'story', tutorial: true, order: 1, ref: 'onboard:food', title: 'Buy food', next: `Buy food ${where('provisions shelf')}`,
       target: { kind: 'place', key: `food:${ep}`, label: 'the provisions shelf', store: ep, near: 30, pos: guide.spot(ep, 'food') } });

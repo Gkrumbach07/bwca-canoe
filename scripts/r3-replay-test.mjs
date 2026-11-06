@@ -125,7 +125,20 @@ try {
 
   // [slot:name]
   // [slot:bye]
-  // [slot:gear-esc]
+  // gear-esc (playtest 2 major 3, playtests 1 and 3 on the gems): the gear taken and the talk escaped at the canoe line:
+  // the staffer stays the step and the only story gem; no food, leeches or canoe step (entry, gem or card) until the
+  // keeper's word is done
+  const ge = await page.evaluate(async () => {
+    const g = window.__game, H = window.__rp;
+    const at = await H.talkTo(/one of our canoes at the dock/);
+    H.shut(); H.step(60);
+    const ids = H.ids(), story = ids.filter((id) => /^story:/.test(id));
+    const gems = g.locator.shown().map((q) => q.id);
+    return { at: !!at, step: g.onboarding.state.step, story, gems, cur: H.cur(), tr: g.tracker.state(), hull: g.player.canoe.hull.visible };
+  });
+  result('gear-esc: an Esc after the gear keeps the staffer the only step and gem; nothing points at the shelves or canoe yet',
+    ge.at && ge.step === 'gear' && ge.story.length === 1 && ge.story[0] === 'story:onboard:talk' && !ge.gems.some((id) => /onboard:(food|leeches|canoe)/.test(id)) && ge.cur && /^Finish talking to .+ at the counter\.$/.test(ge.cur.next) && ge.tr.shown && ge.tr.id === 'story:onboard:talk' && ge.hull === true, ge);
+
   // [slot:keeper-role]
 
   // starter (playtest 1, major 1): the keeper's first-night suggestion escaped before any answer is made again, and the
@@ -158,7 +171,28 @@ try {
   // [slot:journal-more]
   // [slot:fish-next]
   // [slot:latrine]
-  // [slot:leave-early]
+  // leave-early (playtest 2 major 3): a second season: the gear taken, the talk escaped, then paddled away from the
+  // landing: the keeper's part is done for you (the first permit), so no day-use ticket waits
+  const page2 = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
+  await boot(page2);
+  await newSeason(page2);
+  const le = await page2.evaluate(async () => {
+    const g = window.__game, H = window.__rp, p = g.player, ep = g.profile.home;
+    await H.talkTo(/one of our canoes at the dock/); H.shut();
+    const before = { step: g.onboarding.state.step, done: g.onboarding.state.done };
+    g.packs.getIn(p.carry.drop); for (let i = 0; i < 40 && p.mode !== 'paddle'; i++) { H.step(5); await H.wait(20); }
+    H.step(30);
+    const atDock = { mode: p.mode, done: g.onboarding.state.done };
+    const r = g.starter.route(ep), way = r && r.way, q = way ? way[Math.min(way.length - 1, Math.max(1, Math.floor(way.length / 3)))] : null;
+    const L = g.outfitter.landing(ep);
+    if (q) { p.x = q[0]; p.z = q[1]; } else { p.x = L.x + 120; }
+    H.step(30);
+    const P = g.permits, today = P && typeof P.held === 'function' ? P.held() : null;
+    return { before, atDock, far: Math.round(Math.hypot(p.x - L.x, p.z - L.z)), mode: p.mode, done: g.onboarding.state.done, permit: g.onboarding.state.permit != null, notes: H.notes.slice(-4), cur: H.cur(), today: today && (Array.isArray(today) ? today.length : true) };
+  });
+  result('leave-early: the talk left after the gear and paddled off: the keeper\'s part is done (the first permit), with a word',
+    le.before.step === 'gear' && !le.before.done && le.atDock.mode === 'paddle' && !le.atDock.done && le.far >= 80 && le.done && le.permit && le.notes.some((n) => /first permit/.test(n)) && !(le.cur && le.cur.id === 'story:onboard:talk'), le);
+
 
   result('no page errors', errors.length === 0, { errors: errors.slice(0, 5) });
 } catch (e) {
