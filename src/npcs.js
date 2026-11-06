@@ -1412,8 +1412,23 @@ export class People {
     // (into the store's people as they stand, if settled: nobody else is moved)
     { const r = this.rosters.get(ep), L = storeLayout(ep); if (r && L) r.splice(1, 0, ...this.extraPeople(ep, L, [rec])); }
     const self = this;
+    let speaker = null;
     return {
       get person() { const r = self.rosters.get(ep) || null; return r ? r.find((v) => v.key === rec.key) || null : null; },
+      // (r3 final: the talk's speaker and the guide's gem over the drawn head, as anyone's in the store (speakerOf): the
+      // idles move the head, a half step the feet; the gem rode a fixed point over the spot and dipped into the hat by
+      // 4 cm. The person looked up each time: the store's roster is made afresh. Not drawn: over the spot.)
+      get speaker() {
+        const h = this;
+        return speaker || (speaker = { key: rec.key, person: rec.key, name, role: role || '',
+          pos(out) {
+            const v = h.person, r = v ? self.speakerOf(v, 0).pos(out) : null;
+            if (r) return r;
+            const q = rec.spot; if (!q || typeof q !== 'object' || !Number.isFinite(q.x)) return null;
+            const L = storeLayout(ep), y = Number.isFinite(q.y) ? q.y : L && Number.isFinite(L.floorY) ? L.floorY : L ? self.groundAt(L, q.x, q.z) : 0;
+            return out.set(q.x, y + 1.62, q.z);
+          } });
+      },
       say(text) { const v = this.person; return v ? self.bark(v, 0, text, PRI.reply) : (self.hud ? self.hud.note(`${name}: “${text}”`, 6) : null); },
       remove() { const l = self.extrasAt.get(ep) || []; const i = l.indexOf(rec); if (i >= 0) l.splice(i, 1); const r = self.rosters.get(ep); if (r) { const j = r.findIndex((v) => v.extra === rec); if (j >= 0) r.splice(j, 1); } },
     };
