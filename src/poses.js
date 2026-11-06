@@ -186,10 +186,12 @@ export function fadeStep(fig, o, dt) {
   o.t += dt;
   const u = Math.min(1, o.t / Math.max(1e-3, o.dur)), w = u * u * (3 - 2 * u);
   if (u >= 1) { o.on = false; return; }
-  const b = fig.bones;
+  const b = fig.bones, r = b.root;
+  // (r2 verify: a body placed afresh far from where the fade began, a camp's member set at a new job after a clock jump
+  // while also getting up from the bench, is not slid there through the ground: the fade is let go)
+  if (o.t <= dt + 1e-6) { fig.group.updateWorldMatrix(true, true); r.getWorldPosition(_fv); if (_fv.distanceTo(o.root) > 1.2) { o.on = false; return; } }
   BONE_LIST.forEach((n, i) => { if (n === 'root') return; const q = b[n].quaternion; q.copy(_fq.copy(o.q[i]).slerp(q, w)); });
   // the root: its turn eased from the old, its place from where it was in the world
-  const r = b.root;
   r.quaternion.copy(_fq.copy(o.q[0]).slerp(r.quaternion, w));
   const par = r.parent;
   if (par) { par.updateWorldMatrix(true, false); _fv.copy(o.root).applyMatrix4(_fm.copy(par.matrixWorld).invert()); r.position.lerpVectors(_fv, r.position, w); }

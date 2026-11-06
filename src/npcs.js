@@ -1632,7 +1632,11 @@ export class People {
     while (left > 0 && f.path.length) {
       const q = f.path[0], dx = q.x - f.x, dz = q.z - f.z, d = Math.hypot(dx, dz);
       if (d <= left) { f.x = q.x; f.z = q.z; f.y = q.y; left -= d; f.walked = (f.walked || 0) + d; f.path.shift(); continue; }
-      const k = left / d; f.x += dx * k; f.z += dz * k; f.y += (q.y - f.y) * k; f.walked = (f.walked || 0) + left;
+      // (r2 verify: over open ground a walk keeps to the ground under it, not to the straight line between its points: a
+      // camp's walk from the bench down to the shore had them in the air over every hollow, the line taken for a floor;
+      // onto a floor, a step or the dock, the line)
+      const G = this.ground, open = G && !(f.y > G(f.x, f.z) + 0.12) && !(q.y > G(q.x, q.z) + 0.12);
+      const k = left / d; f.x += dx * k; f.z += dz * k; f.y = open ? G(f.x, f.z) : f.y + (q.y - f.y) * k; f.walked = (f.walked || 0) + left;
       const want = Math.atan2(-dz, dx); f.heading += clamp(wrapPi(want - f.heading), -6 * dt, 6 * dt);
       left = 0;
     }
