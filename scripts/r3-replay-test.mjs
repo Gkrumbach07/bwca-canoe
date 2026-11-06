@@ -162,7 +162,17 @@ try {
   result('gear-esc: an Esc after the gear keeps the staffer the only step and gem; nothing points at the shelves or canoe yet',
     ge.at && ge.step === 'gear' && ge.story.length === 1 && ge.story[0] === 'story:onboard:talk' && !ge.gems.some((id) => /onboard:(food|leeches|canoe)/.test(id)) && ge.cur && /^Finish talking to .+ at the counter\.$/.test(ge.cur.next) && ge.tr.shown && ge.tr.id === 'story:onboard:talk' && ge.hull === true, ge);
 
-  // [slot:keeper-role]
+  // keeper-role (playtests 1, 2 and 3 minor: "Ruth Aho · the summer help"): the keeper's line in the staffer's talk
+  // carries the keeper's name and not the staffer's role
+  const kr = await page.evaluate(async () => {
+    const g = window.__game, H = window.__rp, ep = g.profile.home, keeper = g.outfitter.shop.keeperName(ep);
+    const at = await H.talkTo(/first permit|map of these lakes/);
+    const panel = H.d().panel, name = (panel.querySelector('.head .name') || {}).textContent || '', role = (panel.querySelector('.head .role') || {}).textContent || '';
+    H.shut();
+    return { at: !!at, keeper, name, role };
+  });
+  result('keeper-role: the keeper\'s line is headed with the keeper\'s name, not "the summer help"', kr.at && kr.name === kr.keeper && !/summer help/.test(kr.role), kr);
+
 
   // starter (playtest 1, major 1): the keeper's first-night suggestion escaped before any answer is made again, and the
   // job can still be taken (starter.js wrote offered as the line was built, so available() was false from then on)
