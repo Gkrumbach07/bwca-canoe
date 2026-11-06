@@ -58,16 +58,21 @@ const PROBE = () => {
   // the dot aimed at a figure from 1.7 m off (as r2-npc-verify.mjs ring): what it names
   const H = new THREE.Vector3(), K = new THREE.Vector3();
   function ring(key) {
-    const f = figs().find((x) => x.key === key); if (!f) return null;
-    const p = g.player, ch = g.chase, bn = f.fig.bones, fx = f.f ? f.f.x : f.a.x, fz = f.f ? f.f.z : f.a.z;
-    if (p.mode === 'walk') { const dx = p.x - fx, dz = p.z - fz, d = Math.hypot(dx, dz) || 1; p.x = fx + (dx / d) * 1.7; p.z = fz + (dz / d) * 1.7; if (p.placeOnGround) p.placeOnGround(); g.step(1 / 30, 2); }
-    f.fig.group.updateWorldMatrix(true, true); bn.head.getWorldPosition(H); bn.footL.getWorldPosition(A); bn.footR.getWorldPosition(B);
-    g.camera.getWorldPosition(K);
-    const mx = (A.x + B.x) / 2, mz = (A.z + B.z) / 2, cy = (H.y + Math.min(A.y, B.y)) / 2;
-    ch.viewYaw = Math.atan2(-(mz - K.z), mx - K.x); ch.forwardYaw = ch.viewYaw; ch.viewPitch = Math.atan2(cy - K.y, Math.hypot(mx - K.x, mz - K.z));
-    for (let i = 0; i < 4; i++) g.step(1 / 30, 1);
-    const t = g.pointer.target;
-    return { key, kind: t ? t.kind : null, label: t && t.kind === 'person' ? t.label : null };
+    let last = null;
+    for (let tr = 0; tr < 6; tr++) {
+      const f = figs().find((x) => x.key === key); if (!f) return last;
+      const p = g.player, ch = g.chase, bn = f.fig.bones, fx = f.f ? f.f.x : f.a.x, fz = f.f ? f.f.z : f.a.z;
+      if (p.mode === 'walk') { const a = tr * 1.05 + 0.3, x = fx + Math.cos(a) * 1.7, z = fz + Math.sin(a) * 1.7; if (g.world.shoreAt(x, z) < 0.8 && tr < 5) continue; p.x = x; p.z = z; if (p.placeOnGround) p.placeOnGround(); g.chase.setMode('first'); g.step(1 / 30, 2); }
+      f.fig.group.updateWorldMatrix(true, true); bn.head.getWorldPosition(H); bn.footL.getWorldPosition(A); bn.footR.getWorldPosition(B);
+      g.camera.getWorldPosition(K);
+      const mx = (A.x + B.x) / 2, mz = (A.z + B.z) / 2, cy = (H.y + Math.min(A.y, B.y)) / 2;
+      ch.viewYaw = Math.atan2(-(mz - K.z), mx - K.x); ch.forwardYaw = ch.viewYaw; ch.viewPitch = Math.atan2(cy - K.y, Math.hypot(mx - K.x, mz - K.z));
+      for (let i = 0; i < 4; i++) g.step(1 / 30, 1);
+      const t = g.pointer.target;
+      last = { key, kind: t ? t.kind : null, label: t && t.kind === 'person' ? t.label : null, mode: p.mode, d: +Math.hypot(p.x - fx, p.z - fz).toFixed(2), on: g.pointer.on, title: g.title.state, tp: !!p.teleporting, cm: g.chase.mode, out: g.outfitter && g.outfitter.open };
+      if (t && t.kind === 'person') return last;
+    }
+    return last;
   }
   // 12: a standing foot far off the ground a lone frame (not walking, not stepping in, not on a floor or a seat)
   const odd = { n: 0, frames: 0, worst: 0, ev: [] };
@@ -76,7 +81,7 @@ const PROBE = () => {
     for (const f of figs()) {
       if (f.floor || f.sit || f.walking || (f.a && f.a.anim && (f.a.anim.lift > 0 || f.a.anim.push))) continue;
       const q = feet(f), e = Math.max(-0.35 * f.sc - q.lo, q.lo - 0.45 * f.sc);
-      if (e > 0) { odd.n++; const w = Math.max(-q.lo, q.lo); if (w > odd.worst) odd.worst = +w.toFixed(2); if (odd.ev.length < 8) odd.ev.push({ tag, key: f.key, lo: +q.lo.toFixed(2), det: T.detail.stats.installed }); }
+      if (e > 0) { odd.n++; const w = Math.max(-q.lo, q.lo); if (w > odd.worst) odd.worst = +w.toFixed(2); if (odd.ev.length < 8) odd.ev.push({ tag, key: f.key, lo: +q.lo.toFixed(2), det: T.detail.stats.installed, ...(f.a ? { mode: f.a.mode, v: +(f.a.v || 0).toFixed(2), anim: f.a.anim ? JSON.stringify(f.a.anim).slice(0, 80) : null, y: +f.a.y.toFixed(2), g: +G(f.a.x, f.a.z).toFixed(2), sl: +slope(f.a.x, f.a.z).toFixed(2), seg: (() => { const L = [...g.moves.active.values()].find((x) => x.persons.includes(f.a)); return L && L.seg ? L.seg.kind : null; })(), dbg: (() => { const bn = f.fig.bones; bn.footL.getWorldPosition(A); bn.footR.getWorldPosition(B); bn.root.getWorldPosition(R); const gl = f.a.bind.gait && f.a.bind.gait.loco; return { fl: [+A.x.toFixed(2), +A.y.toFixed(2), +A.z.toFixed(2), +G(A.x, A.z).toFixed(2)], fr: [+B.x.toFixed(2), +B.y.toFixed(2), +B.z.toFixed(2), +G(B.x, B.z).toFixed(2)], root: [+R.x.toFixed(2), +R.y.toFixed(2), +R.z.toFixed(2)], ax: [+f.a.x.toFixed(2), +f.a.z.toFixed(2)], s: f.a.bind.s, init: gl ? gl.init : null, lf: gl ? ['L', 'R'].map((k) => gl.feet[k] && [+(gl.feet[k].pos.x * f.a.bind.s).toFixed(2), +(gl.feet[k].pos.y * f.a.bind.s).toFixed(2), +(gl.feet[k].pos.z * f.a.bind.s).toFixed(2), gl.feet[k].swing ? 1 : 0]) : null }; })() } : { pose: f.f.spec && f.f.spec.pose, y: f.f.y }) }); }
     }
   }
   // 9: a party hull's keel against the ground under it (bow, middle, stern): how far the ground stands over it
@@ -87,11 +92,20 @@ const PROBE = () => {
     for (const [x, y] of KP) { V3.set(x, y, 0).applyMatrix4(b.root.matrixWorld); e = Math.max(e, G(V3.x, V3.z) - V3.y); }
     return e;
   }
-  window.__n2 = { figs, feet, shown, slope, G, ring, odd, oddFrame, keelIn };
+  // a frame of the canvas as drawn (just after a step, so the drawing buffer still holds it), kept for the strips
+  const shots = [];
+  function snap(tag, k) { if (!window.__n2shots) return; try { shots.push({ tag, k, url: g.renderer.domElement.toDataURL('image/jpeg', 0.72) }); } catch { /* none */ } }
+  window.__n2 = { figs, feet, shown, slope, G, ring, odd, oddFrame, keelIn, snap, shots };
 };
 
 const browser = await launch();
 let shotN = 0;
+// the frames a section kept (n2.snap) written out: <shots>/n2-<tag>-<k>.jpg
+async function flushShots(page) {
+  if (!SHOTS) return;
+  const list = await page.evaluate(() => window.__n2.shots.splice(0));
+  for (const q of list) writeFileSync(path.join(SHOTS, `n2-${q.tag}-${String(q.k).padStart(5, '0')}.jpg`), Buffer.from(q.url.split(',')[1], 'base64'));
+}
 async function shot(page, name) { if (!SHOTS) return; await page.screenshot({ path: path.join(SHOTS, `n2-${String(shotN++).padStart(2, '0')}-${name}.png`) }); }
 async function tp(page, x, z, watch = null) {
   await page.evaluate(({ x, z }) => { const g = window.__game; window.__tpDone = false; g.player.teleport(x, z).finally(() => { window.__tpDone = true; }); }, { x, z });
@@ -119,6 +133,7 @@ try {
   const page = await openGame(browser, { quiet: true, ctx });
   await seasonAt(page, { ep: 25, year: YEAR, doy: 192, hours: 7.4 });
   await page.evaluate(PROBE);
+  if (SHOTS) await page.evaluate(() => { window.__n2shots = true; });
   await page.evaluate(() => window.__game.renderer.setAnimationLoop(null));
   // the home store's yard (Moose Lake), as it is at the start
   const yard = await page.evaluate(() => { const o = window.__game.outfitter, L = (o.visit && o.visit.L) || o.layout(25), r = (q) => q && { x: q.x, z: q.z, y: q.y }; return { door: r(L.door), steps: r(L.stepsFoot), dockFoot: r(L.dockFoot), dockDeck: r(L.dockDeck), centre: r(L.centre) }; });
@@ -173,8 +188,8 @@ try {
     // frame (the lowest foot of those standing, against the ground as it is after the frame)
     const m = await page.evaluate(async () => {
       const g = window.__game, D = g.tiles.detail, N = window.__n2, out = { frames: 0, installFrames: 0, worstInstall: 0, worstOther: 0, ev: [] };
-      const meas = () => { let w = 0, who = null; for (const f of N.figs()) { if (f.floor || f.sit || f.walking) continue; const q = N.feet(f), e = Math.max(0.03 * f.sc - q.lo, q.lo - 0.3 * f.sc, 0); if (e > w) { w = e; who = f.key; } } return { w, who }; };
-      for (let r = 0; r < 6; r++) {
+      const meas = () => { let w = 0, who = null; for (const f of N.figs()) { if (f.floor || f.sit) continue; const q = N.feet(f), e = f.walking ? Math.max(-0.1 * f.sc - q.lo, 0) : Math.max(0.03 * f.sc - q.lo, q.lo - 0.3 * f.sc, 0); if (e > w) { w = e; who = f.key; } } return { w, who }; };
+      for (let r = 0; r < 9; r++) {
         D.setEnabled(false); g.step(1 / 30, 3); D.setEnabled(true);
         for (let k = 0; k < 400; k++) {
           await new Promise((q) => setTimeout(q, 4)); // (the workers' chunks come back between frames)
@@ -201,6 +216,13 @@ try {
     await page.evaluate(({ c, YEAR }) => window.__game.day.setClock(YEAR, 192, 19.0), { c, YEAR }); await tp(page, c.to.x, c.to.z, 'camp arrival');
     await step(page, 200);
     await standAt(page, c.to.x + 3, c.to.z + 3, c.to.x, c.to.z);
+    // (whatever the earlier sections left up, a card or a word, let it go: the dot is off under it)
+    const why = await page.evaluate(async () => {
+      const g = window.__game, P = g.pointer, h = g.hud;
+      for (let k = 0; k < 300 && !P.usable(false); k++) { if (h && h.paper && h.closePaper) h.closePaper(); if (h && h.big && h.closeBig) h.closeBig(); if (g.input) { g.input.once.add && g.input.once.add('Escape'); } g.step(1 / 30, 1); await new Promise((q) => setTimeout(q, 2)); }
+      return { usable: P.usable(false), paper: !!(h && h.paper), big: !!(h && h.big), talking: !!(g.dialogue && g.dialogue.talking), quiet: !!(P.quiet && P.quiet()) };
+    });
+    log('names: the dot', JSON.stringify(why));
     const r = await page.evaluate(async ({ pid }) => {
       const g = window.__game, N = window.__n2, D = [...g.partyCamps.drawn.values()].find((d) => d.party.id === pid); if (!D) return { none: true };
       const out = [];
@@ -208,7 +230,7 @@ try {
         if (!D.v.figs[k]) continue;
         const f = D.v.figs[k], p = g.player; p.x = f.x + 3; p.z = f.z + 1; if (p.placeOnGround) p.placeOnGround(); g.step(1 / 30, 3);
         const q = N.ring(`npc:${D.v.key}#${k}`);
-        out.push({ k, label: q ? q.label : null, kind: q ? q.kind : 'undrawn', own: D.v.figNames[k] });
+        out.push({ k, label: q ? q.label : null, kind: q ? q.kind : 'undrawn', own: D.v.figNames[k], q });
       }
       return out;
     }, { pid: c.id.split('#')[0] });
@@ -254,7 +276,7 @@ try {
           if (blockAt != null && k - blockAt > 450) window.__blockRoute = false;
           if (window.__blockRoute) out.route.blockedFrames++;
           g.step(1 / 30, 1); out.frames++;
-          N.oddFrame('launch');
+          N.oddFrame('launch'); if (k % 15 === 0 && (sg === 'launch' ? (L.seg.h1 - g.day.hours) * 3600 / 8 < 18 : sg === 'paddle' && k - (blockAt ?? k) < 600)) N.snap('launch', k);
           // the hulls: their step a frame while shown, and any that vanish within 250 m on the water
           L.boats.forEach((b, c) => {
             const pv = prevB.get(c), sh = !b.hidden && !!b.near;
@@ -290,7 +312,7 @@ try {
         out.push = [...board.values()];
         return out;
       }, { id: pick.id });
-      log('launch measured', JSON.stringify(M));
+      log('launch measured', JSON.stringify(M)); await flushShots(page);
       if (M && M.seg.launch > 300 && M.seg.paddle > 300) break;
     }
     if (!M) check(1, 'launch scenario', false, 'none');
@@ -370,7 +392,7 @@ try {
       const was = new Map();
       for (let k = 0; k < 9000; k++) {
         g.step(1 / 30, 1); out.frames++;
-        if (k % 3 === 0) N.oddFrame('store');
+        if (k % 3 === 0) N.oddFrame('store'); if (k % 300 === 0) N.snap('store', k);
         const fs = N.figs().filter((f) => f.src === 'store');
         const pos = fs.map((f) => ({ key: f.key, x: f.f.x, z: f.f.z, w: f.walking, nd: Math.hypot(f.f.x - door.x, f.f.z - door.z) < 3.2, st: `${f.f.path ? f.f.path.length : 0}/${f.f.spec && f.f.spec.pose}/${f.f.at}/${f.f.where}/${(f.f.wv || 0).toFixed(2)}` }));
         for (const q of pos) { if (q.w) out.walkers++; const w0 = was.get(q.key); if (w0 != null && !w0 && q.nd) out.doorPass++; was.set(q.key, q.nd); }
@@ -385,7 +407,7 @@ try {
       }
       return out;
     }, { door: yard.door });
-    log('store door', JSON.stringify(m));
+    log('store door', JSON.stringify(m)); await flushShots(page);
     check(11, 'two people walking in the store and its yard never walk through each other (apart >= 0.3 m)', m.pairs > 2000 && m.close === 0, m);
   }
 
@@ -413,7 +435,7 @@ try {
       const inTent = (x, z, m) => tents.findIndex((t) => { const dx = x - t.x, dz = z - t.z, a = dx * t.ux + dz * t.uz, b = -dx * t.uz + dz * t.ux; return Math.abs(a) < t.hx + m && Math.abs(b) < t.hz + m; });
       let prev = new Set(D.v.figs.filter(Boolean)); const born = new Map();
       for (let k = 0; k < frames; k++) {
-        g.step(1 / 30, 1); out.frames++; N.oddFrame(tag);
+        g.step(1 / 30, 1); out.frames++; N.oddFrame(tag); if (tag === 'camp morning' && k > 300 && k < 700 && k % 12 === 0) N.snap('morning', k); if (tag !== 'camp morning' && k % 150 === 0) N.snap('campwalk', k);
         const now = new Set(D.v.figs.filter(Boolean));
         for (const f of now) if (!prev.has(f)) { const ti = inTent(f.x, f.z, 0); out.appear.push({ k, fromTent: ti >= 0, d: +Math.hypot(f.x - F.x, f.z - F.z).toFixed(1) }); born.set(f, { k, ti }); }
         prev = now;
@@ -438,7 +460,7 @@ try {
     await page.evaluate(({ YEAR }) => { const g = window.__game; g.day.setClock(YEAR, 192, 22.4); g.step(1 / 30, 60); g.day.setClock(YEAR, 193, 6.47); g.step(1 / 30, 3); }, { YEAR });
     await look();
     const mo = await WATCH(1500, 'camp morning');
-    log('camp morning', JSON.stringify({ appear: mo.appear, through: mo.through, walkFrames: mo.walkFrames }));
+    log('camp morning', JSON.stringify({ appear: mo.appear, through: mo.through, walkFrames: mo.walkFrames })); await flushShots(page);
     check(8, 'a camp walk never goes through a tent or the fire ring', walks.walkFrames + mo.walkFrames > 100 && walks.through + mo.through === 0, { walkFrames: walks.walkFrames + mo.walkFrames, through: walks.through + mo.through, ev: walks.ev.concat(mo.ev).slice(0, 6) });
     check(5, 'in the morning they come out of a tent (each appears in a tent’s door)', mo.appear.length > 0 && mo.appear.every((q) => q.fromTent), mo.appear);
   }
@@ -453,7 +475,7 @@ try {
     let prevH = null, prevParty = null, prevCamp = null, legWas = true;
     const camp = () => { const D = C.drawn.get(key); return D && D.party.id === pid ? D : null; };
     for (let k = 0; k < frames; k++) {
-      g.step(1 / 30, 1); out.frames++; N.oddFrame(tag);
+      g.step(1 / 30, 1); out.frames++; N.oddFrame(tag); if (k % 20 === 0) N.snap(tag, k);
       const L = [...mv.active.values()].find((x) => x.party.id === pid && (which === 'in' ? x.plan.to.key === key : x.plan.from.key === key));
       const D = camp(), H = [];
       if (L) {
@@ -470,10 +492,12 @@ try {
       prevH = H;
       // the people: who of the party is drawn on foot, who of the camp
       const party = L ? L.persons.filter((a) => a.bind && !a.boat).map((a) => ({ x: a.x, z: a.z })) : [];
+      // (one of the party drawn on foot moved over 0.6 m in a frame: a jump)
+      if (L) for (const a of L.persons) { const q = out.lastP || (out.lastP = new Map()), o = q.get(a); if (a.bind && !a.boat && o && o.on) { const d = Math.hypot(a.x - o.x, a.z - o.z); if (d > 0.6) { out.jumps = (out.jumps || 0) + 1; if (!out.jumpEv) out.jumpEv = []; if (out.jumpEv.length < 5) out.jumpEv.push({ k, d: +d.toFixed(2), i: L.persons.indexOf(a), seg: L.seg && L.seg.kind, mode: a.mode }); } } q.set(a, { x: a.x, z: a.z, on: !!(a.bind && !a.boat) }); }
       const campF = D ? D.v.figs.filter(Boolean).map((f) => ({ x: f.x, z: f.z })) : [];
       const tents = D ? D.obstacles.filter((o) => o.tent) : [];
       const inTent = (q) => tents.some((t) => { const dx = q.x - t.x, dz = q.z - t.z, a = dx * t.ux + dz * t.uz, b = -dx * t.uz + dz * t.ux; return Math.abs(a) < t.hx + 0.2 && Math.abs(b) < t.hz + 0.2; });
-      if (party.length && campF.length) out.doubles++;
+      if (L && D && L.persons.some((a, i) => a.bind && !a.boat && D.figs[i] && D.v.figs.includes(D.figs[i]))) out.doubles++; // (one of them drawn twice: the camp's and the party's)
       if (which === 'in' && prevParty && prevParty.length && !party.length && campF.length) {
         // (the party let go this frame: the camp's people where the party's were)
         out.dropped = k;
@@ -509,10 +533,10 @@ try {
       // (to the last minute of their landing, then every frame through the hand-over)
       await page.evaluate(({ c, YEAR }) => { const g = window.__game; g.day.setClock(YEAR, 192, c.end - 0.075); g.step(1 / 30, 30); }, { c, YEAR });
       R = await HAND(c.pid, c.key, 'arrive', 1500, 'in');
-      log('arrive measured', JSON.stringify(R));
+      log('arrive measured', JSON.stringify(R)); await flushShots(page);
       if (R.dropped != null) break;
     }
-    check(2, 'as they come in, no canoe pops between the water and the camp’s bank; the camp’s people start where the party’s stood (<= 0.6 m)', R && R.dropped != null && R.pops === 0 && R.people.length > 0 && R.people.every((d) => d <= 0.6), R);
+    check(2, 'as they come in, no canoe pops between the water and the camp’s bank; the camp’s people start where the party’s stood (<= 0.6 m)', R && R.dropped != null && R.pops === 0 && !R.jumps && R.people.length > 0 && R.people.every((d) => d <= 0.6), R);
   }
   if (on('depart')) {
     const picks = await page.evaluate(({ YEAR }) => {
@@ -529,10 +553,10 @@ try {
       await watchLanding(S);
       await page.evaluate(({ c, YEAR }) => { const g = window.__game; g.day.setClock(YEAR, 193, c.h0 - 0.012); g.step(1 / 30, 3); }, { c, YEAR });
       R = await HAND(c.pid, c.key, 'depart', 1200, 'out');
-      log('depart measured', JSON.stringify(R));
+      log('depart measured', JSON.stringify(R)); await flushShots(page);
       if (R.dropped != null) break;
     }
-    check(2, 'as they go, no canoe pops off the camp’s bank into the water, nobody stands twice over; the party’s people start where the camp’s stood or in a tent (<= 0.6 m)', R && R.dropped != null && R.pops === 0 && R.doubles === 0 && R.people.length > 0 && R.people.every((d) => d <= 0.6), R);
+    check(2, 'as they go, no canoe pops off the camp’s bank into the water, nobody stands twice over; the party’s people start where the camp’s stood or in a tent (<= 0.6 m)', R && R.dropped != null && R.pops === 0 && !R.jumps && R.doubles === 0 && R.people.length > 0 && R.people.every((d) => d <= 0.6), R);
   }
 
   // --- 12: over all of it, a standing foot far off the ground a lone frame -------------------------------------------

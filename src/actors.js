@@ -299,6 +299,7 @@ class Person {
     this.leaveBoat(); this.mover = null; this.ext = true; this.anim = anim;
     this.footY = Number.isFinite(y) ? y : null;
     if (snap) { this.heading = heading; if (this.bind && this.bind.gait) this.bind.gait.heal(); this.fadeSnap = null; } // (r2: a jump: the feet planted afresh where they land)
+    else if (this.bind && this.bind.gait && Math.abs(x - this.x) + Math.abs(z - this.z) > 0.9) this.bind.gait.heal(); // (r2 2: and so for any step of over a metre in a frame, called a jump or not: a foot left planted two metres back had held the hips a metre under the ground)
     this.mode = mode === 'carry' ? 'carry' : mode === 'walk' ? 'walk' : mode === 'swim' ? 'swim' : 'stand';
     if (this.mode === 'swim') pack = false;
     this.hullColour = this.mode === 'carry' ? (HULL_PALETTES[hull] ? hull : 'aluminium') : null;

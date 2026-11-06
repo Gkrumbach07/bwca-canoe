@@ -63,7 +63,8 @@ export const MOVES = {
   spread: 8,         // m between canoes crossing open water
   stagger: 9,        // m one behind the next out there
   catchUp: 0.6,      // game hours of delay made up an hour while you are not by them
-  near: 150,         // m: by them (a delay is not made up, a landing's spots checked for trunks)
+  near: 150,         // m: by them (a delay is not made up)
+  fixR: 320,         // m (r2 2): a landing's places checked for trunks and steep ground this near you (its tiles in, its people not yet drawn)
   pathMs: 1.5,       // ms a frame for the water paths' searches
   actR: 1300,        // m: a party this near is in the actor layer (its far hulls show to 1.2 km)
   dormR: 1400,       // and let go of it past this
@@ -639,7 +640,7 @@ export class PartyMoves {
     if (i >= 0 && S) {
       const key = `${S.kind}:${S.L.x | 0}:${c}:${seat}:${i}`, fixes = L.sideFix || (L.sideFix = new Map());
       let fx2 = fixes.get(key);
-      if (!fx2 && Math.hypot(H.x - this.player.x, H.z - this.player.z) < MOVES.near && this.tiles && this.tiles.groundAt) {
+      if (!fx2 && Math.hypot(H.x - this.player.x, H.z - this.player.z) < MOVES.fixR && this.tiles && this.tiles.groundAt) {
         fx2 = { da: 0, dn: 0 };
         const at = (da, dn) => this.slopeAt(H.x + fx * (sx + along0 + da) + nx * (off0 + dn), H.z + fz * (sx + along0 + da) + nz * (off0 + dn));
         if (at(0, 0) > FIRM.max) {
@@ -1042,7 +1043,7 @@ export class PartyMoves {
       if (L.routeWait) lag.lag += gh; // (r2 2: waiting at the bank or afloat for the route: the plan waits with them)
       L.lastH = he;
       if (L.plan.to.stay) { if (L.seg && (L.seg.kind === 'land' || (L.seg.kind === 'paddle' && L.seg.u1 === 1)) && this.distTo(L) < 900) this.parties.seenIn.add(L.plan.to.stay.id); }
-      if (L.st && this.distTo(L) < MOVES.near) for (const S of [L.st.from, L.st.to, ...[...L.st.carry.values()].flatMap((c) => [c.A, c.B])]) if (!S.checked && Math.hypot(S.L.x - p.x, S.L.z - p.z) < MOVES.near) this.checkSpots(S);
+      if (L.st) for (const S of [L.st.from, L.st.to, ...[...L.st.carry.values()].flatMap((c) => [c.A, c.B])]) if (!S.checked && Math.hypot(S.L.x - p.x, S.L.z - p.z) < MOVES.fixR) this.checkSpots(S);
     }
     this.holdOff(dt);
     // (a delay of a party no longer followed is made up out of sight, then forgotten)
