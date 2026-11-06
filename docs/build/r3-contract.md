@@ -213,3 +213,29 @@ Seam fixes:
 - **Rigs:** r3-journal-test, r2-tickets and r2-join latch the main path walked before checking "past the tutorial" or
   "the ticket heads the Tasks list" (story steps head the list while the tutorial runs, by the contract's order).
 - **New rig** `scripts/r3-join-test.mjs`: the seams on the real path (no stand-ins).
+
+## 9. The replay (claude/r3-replay)
+
+Three playtests of `claude/r3-join` (466ad56) found 4 majors and about 20 minors. Each fix is its own commit, with a
+check in `scripts/r3-replay-test.mjs`, which plays one season in order (and a second for a talk left unfinished).
+`scripts/r3-replay-play.mjs` plays the tutorial end to end, every talk escaped at every line, and writes the contact
+sheet `docs/build/shots/r3-contact.png`.
+
+What changed in the contract:
+- **guide.js** (edited this round, as the join asked): `marks()` leaves out tutorial story steps that are not
+  `current()` (one main gem); a target may carry `within: { x, z, r }`, the place it belongs to, inside which it shows
+  at full (a campsite check's parts); an entry may carry `hold` (other news waits behind its card: the talk under way);
+  a catch notice not caught yet says "Catch one, then bring it to the board at …"; a ticket's line no longer says "(I)".
+- **The main path:** the food, leeches and canoe steps open when the talk is done (not at the gear); the food step takes
+  two meals and says only what is missing (the second meal, or the money: "A meal is $2 and you have $1: the board has
+  paid work."); titles "Food for the trip", "Leeches", "The loaned canoe"; the staffer's name everywhere.
+- **Leaving early:** with the gear taken and the talk unfinished, paddling 80 m from the landing does the keeper's part
+  (the first permit) with a word. The starter route can still be asked for at the counter.
+- **The starter suggestion** counts as made once answered (`starter.state.answered`), so an Esc on it brings it back.
+- **No canoe before the loan** anywhere: the swim prompt and `swimIn`, the pack page's tab, the arrival note, the
+  co-op pose (the berth is sent with `nc`: held for the loan, not drawn), the share's `cn` and coop-boat's swap.
+- **Tracker:** a new tutorial step is said first (other news waits `TRACKER.tutFirstS`); a "Next" or "Close by" card
+  gives way to a new task after 1.5 s; a task's changed line is said while its place is in reach; the tutorial's end
+  says what is next once; no colon after "New task".
+- **Locator:** within 9 m of the camera a gem skips the depth test (your own hat, the lamp shade); no new program.
+- **One voice on arrival:** the keeper's season line is not said while the staffer's talk is to come.
