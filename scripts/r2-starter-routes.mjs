@@ -210,11 +210,14 @@ async function main() {
     const cands = await page.evaluate(async ([ep, nights]) => {
       const g = window.__game, w = g.world, S = window.__starter, e = w.entryPoints.find((x) => x.ep === ep), P = g.parties;
       const R = 6500;
-      const r = await S.search({ x: e.x, z: e.z }, R);
+      // (r3 base: from the store's own dock, where a season, a ride and a pickup come in (outfitters.js placeOf, round 2
+      // markers), not the entry point's put-in: Slim Lake's store stands 800 m off on another lake)
+      const P0 = g.outfitters.placeOf(ep), from = P0 && P0.dock && Number.isFinite(P0.dock.x) ? P0.dock : e;
+      const r = await S.search({ x: from.x, z: from.z }, R);
       if (!r || r.error) return { error: r ? r.error : 'tiles' };
       const out = [];
       w.campsites.forEach((s, i) => {
-        const d = Math.hypot(s.x - e.x, s.z - e.z); if (d > R - 600) return;
+        const d = Math.hypot(s.x - from.x, s.z - from.z); if (d > R - 600) return;
         const A = s.access, lx = A && A.landing ? A.landing[0] : s.x, lz = A && A.landing ? A.landing[1] : s.z;
         const way = S.wayTo(lx, lz); if (!way) return;
         const lakeId = P.siteLake[i] || g.tasks.lakeNear(s.x, s.z);

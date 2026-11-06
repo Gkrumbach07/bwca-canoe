@@ -113,7 +113,9 @@ try {
       const g = window.__game, w = g.world, S = window.__starter, e = w.entryPoints.find((x) => x.ep === ep), s = w.campsites[r.site], H = window.__r2;
       if (!s) return { ok: false, why: 'no site' };
       const key = s.key || `${Math.round(s.x)}:${Math.round(s.z)}`;
-      await S.search({ x: e.x, z: e.z }, 6500);
+      const P0 = g.outfitters.placeOf(ep), from = P0 && P0.dock && Number.isFinite(P0.dock.x) ? P0.dock : e; // (r3 base: the store's dock, where you come in)
+      await S.search({ x: from.x, z: from.z }, 6500);
+      if (Math.hypot(r.way[0][0] - from.x, r.way[0][1] - from.z) > 60) return { ok: false, why: 'the pencilled way does not start at the store\'s dock', way0: r.way[0], dock: [from.x, from.z] };
       const A = s.access, way = S.wayTo(A && A.landing ? A.landing[0] : s.x, A && A.landing ? A.landing[1] : s.z);
       if (!way) return { ok: false, why: 'not reached by water' };
       // there: the layout (a tent pad, a fire ring), and the canoe afloat at its landing
