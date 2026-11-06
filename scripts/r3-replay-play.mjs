@@ -30,6 +30,8 @@ const HELPERS = () => {
   H.settle = async (ms = 30000) => { const t0 = performance.now(); while (g.player.teleporting && performance.now() - t0 < ms) { H.step(10); await H.wait(30); } H.step(20); };
   H.standAt = (x, z, heading = 0) => {
     const p = g.player;
+    // (out of the canoe where it lies: the hull left as the drop, as landing leaves it)
+    if (!p.carry || !p.carry.drop) p.carry = { trail: null, drop: { x: p.x, z: p.z, heading: p.heading }, hitCooldown: 0, from: null, choice: false };
     p.landing = null; p.ashore = null; p.swim = null; p.speed = 0; p.yawRate = 0; p.mode = 'walk';
     p.x = x; p.z = z; p.heading = heading;
     p.foot = { y: p.groundAt(x, z), vy: 0, air: false, t: 0, land: 0, near: null };
@@ -85,7 +87,7 @@ try {
   await shot('02-staffer-gem', `The gem over ${s2.cur ? s2.cur.title.replace(/^Talk to /, '') : 'the staffer'}`);
 
   // --- the talk, every line escaped before it is answered (Escape and 1 by key) ---------------------------------------
-  const lines = [];
+  const lines = [], heard = new Set();
   for (let k = 0; k < 14; k++) {
     const opened = await ev(() => window.__pl.open());
     if (!opened) { lines.push({ k, opened: false }); break; }
@@ -93,7 +95,7 @@ try {
     for (let i = 0; i < 12; i++) {
       const say = await ev(() => window.__pl.say());
       if (say == null) break;
-      if (!lines.some((l) => l.at === say)) { at = say; break; }
+      if (!heard.has(say)) { at = say; heard.add(say); break; }
       await page.keyboard.press('Digit1'); await ev(async () => { const H = window.__pl; H.step(3); await H.wait(40); if (window.__game.starter.pending) await window.__game.starter.pending; });
     }
     if (!at) { lines.push({ k, ended: true, screen: await ev(() => window.__pl.screen()) }); break; }
@@ -111,7 +113,7 @@ try {
     if (!g.onboarding.state.done) { H.open(); for (let i = 0; i < 16 && d.convo; i++) { d.choose(0); H.step(3); await H.wait(40); if (g.starter.pending) await g.starter.pending; } }
     if (g.outfitter.open) g.outfitter.hide();
     H.step(30);
-    return { done: g.onboarding.state.done, job: g.tasks.active.filter((t) => t.kind === 'starter').map((t) => t.id), screen: H.screen() };
+    return { done: g.onboarding.state.done, permit: g.onboarding.state.permit, held: g.permits.held().map((h) => `${h.kind}:${h.ep}`), job: g.tasks.active.filter((t) => t.kind === 'starter').map((t) => t.id), screen: H.screen() };
   });
   log('talk done', JSON.stringify(fin));
   const escOk = lines.filter((l) => l.at).every((l) => !l.talking && l.cur && /^story:onboard:talk$/.test(l.cur.id) && /(Talk|Finish talking) to .+ at the counter/.test(l.tracker) && l.gems.includes('story:onboard:talk*'));
@@ -135,7 +137,8 @@ try {
   result('play 3: food then leeches, each the step in turn with its one gem', food.s.cur && food.s.cur.id === 'story:onboard:food' && food.s.gems.filter((x) => /story/.test(x)).join() === 'story:onboard:food*' && food.b.r.every(Boolean)
     && lee.s.cur && lee.s.cur.id === 'story:onboard:leeches' && lee.s.gems.filter((x) => /story/.test(x)).join() === 'story:onboard:leeches*' && lee.b.r.every(Boolean), { food: food.s, lee: lee.s, money: lee.b.money });
 
-  // the journal's five kinds (SETUP: a ranger's ticket written, a board notice taken, a side story held by hand)
+  // the journal's five kinds (SETUP: a ranger's ticket written (its "ranger's canoe pulls alongside" note is this setup's),
+  // a board notice taken, a side story held by hand)
   const five = await ev(async () => {
     const g = window.__game, H = window.__pl, T = g.tasks, P = g.permits, ep = g.profile.home;
     P.fine('dayuse'); P.issue();
