@@ -74,11 +74,15 @@ const RAW_MAX = 36;
 // carried down to it, kneeling to load, a hand on the gunwale, a word with someone); they get in one at a time, the bow
 // first, the stern last and pushing off, each a walk to the side, a step over the gunwale and down to the kneel, the
 // hull rocking; and out again the same way. Real seconds (the clock's game seconds over CLOCK).
-const BOARD = { walk: 3.2, step: 1.6, gap: 0.1, first: 3.4, total: 9 }; // s: the walk to the side, each step in, the board's length
+const BOARD = { walk: 3.2, step: 1.6, gap: 0.1, first: 3.4, total: 11 }; // s: the walk to the side, each step in, the board's length
+// r2 2: the last in (the stern) pushes her off first: hands on the gunwale, a step after her as she goes, the bank foot
+// pushing; she slides out PUSH.out m off the bank before they step in (s, m)
+const PUSH = { dur: 1.6, out: 0.85, step: 0.4 };
 const OUT = { first: 2.0, step: 1.5, gap: 0.15, walk: 3.0 };            // s: the first out, each step out, the walk to their place
 const SEAT_X = { stern: SEATS.stern.x, bow: SEATS.bow.x, mid: -0.42 };
 const SLOT_ALONG = 6.2;      // m between canoes lying along the bank
 const ORDER = { bow: 0, mid: 1, stern: 2 }; // who gets in first (the bow) and out first (the bow)
+const FIRM = { max: 0.8, ok: 0.7, reach: 2.4 }; // r2 2: ground steeper than max is not stood on: the nearest no steeper than ok, within reach (m)
 export const PATH_DEBUG = { on: false, log: [] }; // (the tests')    // fine tiles fetched for the paths beyond those loaded, kept
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const smooth = (t) => { t = clamp(t, 0, 1); return t * t * (3 - 2 * t); };
@@ -466,7 +470,24 @@ export class PartyMoves {
         if (!hit) break;
         s.x -= S.L.ux * 0.6; s.z -= S.L.uz * 0.6; // (down toward the water, clear of the trunk)
       }
+      // r2 2: and off ground too steep to stand on (a foot cannot reach the bank's face under a slope over 0.8): the nearest
+      // ground within 2.4 m that is on the bank, clear of trunks and no steeper than 0.7
+      const f = this.firm(s.x, s.z, (x, z) => this.sdAt(x, z) > 0.6 && !T.treesNear(x, z, 1.2).some((t) => !t.shape && !t.tent && !t.box && Math.hypot(t.x - x, t.z - z) < (t.r || 0.3) + 0.45));
+      if (f) { s.x = f.x; s.z = f.z; }
     }
+  }
+  // r2 2: the slope of the ground at (x, z) (rise over run, over a metre)
+  slopeAt(x, z) { const T = this.tiles; if (!T || !T.groundAt) return 0; const G = (a, b) => T.groundAt(a, b); return Math.hypot(G(x + 0.5, z) - G(x - 0.5, z), G(x, z + 0.5) - G(x, z - 0.5)); }
+  // a place to stand near (x, z) when the ground there is steeper than FIRM.max: the nearest no steeper than FIRM.ok
+  // (and ok(x, z), when given) within FIRM.reach; null when (x, z) will do or nothing near will
+  firm(x, z, ok = null) {
+    if (!(this.slopeAt(x, z) > FIRM.max)) return null;
+    for (let r = 0.4; r <= FIRM.reach + 1e-6; r += 0.4) {
+      let best = null, bs = Infinity;
+      for (let k = 0; k < 12; k++) { const a = (k / 12) * Math.PI * 2, px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r, sl = this.slopeAt(px, pz); if (sl <= FIRM.ok && sl < bs && (!ok || ok(px, pz))) { bs = sl; best = { x: px, z: pz }; } }
+      if (best) return best;
+    }
+    return null;
   }
   prepare(L) {
     const plan = L.plan, P = this.parties, w = this.world;
@@ -607,7 +628,25 @@ export class PartyMoves {
     // (the bank's side of her as she lies in her slot, kept while she swings: square to her keel)
     const o = this.slot(S, c, L.boats.length, _sd), ox = Math.cos(o.h), oz = -Math.sin(o.h), sd = -oz * S.L.ux + ox * S.L.uz;
     const sg = Math.abs(sd) < 0.3 ? 1 : Math.sign(sd), nx = -fz * sg, nz = fx * sg;
-    const r = i >= 0 ? mulberry32((hashStr(`${L.party.id}:${i}:side`) ^ 0x3c6e) >>> 0) : null, off = r ? 0.72 + 0.3 * r() : 0.85, along = r ? (r() - 0.5) * 0.5 : 0; // (each their own place by her)
+    const r = i >= 0 ? mulberry32((hashStr(`${L.party.id}:${i}:side`) ^ 0x3c6e) >>> 0) : null, off0 = r ? 0.72 + 0.3 * r() : 0.85, along0 = r ? (r() - 0.5) * 0.5 : 0; // (each their own place by her)
+    // (r2 2: never on a bank steeper than FIRM.max: along her side, or a little further off her, to where a foot reaches;
+    // chosen once each place, near you)
+    let along = along0, off = off0;
+    if (i >= 0 && S) {
+      const key = `${S.kind}:${S.L.x | 0}:${c}:${seat}:${i}`, fixes = L.sideFix || (L.sideFix = new Map());
+      let fx2 = fixes.get(key);
+      if (!fx2 && Math.hypot(H.x - this.player.x, H.z - this.player.z) < MOVES.near && this.tiles && this.tiles.groundAt) {
+        fx2 = { da: 0, dn: 0 };
+        const at = (da, dn) => this.slopeAt(H.x + fx * (sx + along0 + da) + nx * (off0 + dn), H.z + fz * (sx + along0 + da) + nz * (off0 + dn));
+        if (at(0, 0) > FIRM.max) {
+          let best = null;
+          for (const dn of [0, 0.3, -0.15, 0.6]) for (const da of [0, 0.4, -0.4, 0.8, -0.8, 1.2, -1.2]) { const sl = at(da, dn); if (sl <= FIRM.ok && (!best || Math.abs(da) + Math.abs(dn) * 1.5 < best.c)) best = { da, dn, c: Math.abs(da) + Math.abs(dn) * 1.5 }; }
+          if (best) { fx2.da = best.da; fx2.dn = best.dn; }
+        }
+        fixes.set(key, fx2);
+      }
+      if (fx2) { along += fx2.da; off += fx2.dn; }
+    }
     return { x: H.x + fx * (sx + along) + nx * off, z: H.z + fz * (sx + along) + nz * off, face: headingOf(-nx, -nz), sx: H.x + fx * sx, sz: H.z + fz * sx, floor: H.y + floorAt(sx) + 0.02, h: H.h, side: Math.sign(nx * -fz + nz * fx) || 1, b: H.b };
   }
   // what one of them is doing at the bank t real seconds into it (from 'bank': their place up it, or 'hull': by the
@@ -665,9 +704,14 @@ export class PartyMoves {
         const t0 = kind === 'launch' ? s.h0 : s.h0;
         return { job: this.jobAt(L, S, i, (h - t0) * 3600 / CLOCK, 'bank', false, kind === 'landing' && s.lunch) };
       }
-      const Hs = this.sideOf(L, seat.c, seat.seat, S, i), stIn = BOARD.first + jit + k * (BOARD.step + BOARD.gap);
+      const Hs = this.sideOf(L, seat.c, seat.seat, S, i), last = k === order.length - 1, push = last ? PUSH.dur : 0, stIn = BOARD.first + jit + k * (BOARD.step + BOARD.gap) + push;
       if (tb >= stIn + BOARD.step) return { seat: true };
-      if (tb >= stIn) return { step: this.stepPose(Hs, (tb - stIn) / BOARD.step), Hs, u: (tb - stIn) / BOARD.step };
+      if (tb >= stIn) { const Hp = push ? this.pushStand(L, s, i, Hs, 1) : Hs; return { step: this.stepPose(Hp, (tb - stIn) / BOARD.step), Hs: Hp, u: (tb - stIn) / BOARD.step }; }
+      // (r2 2: the push: by her stern, bent to the gunwale, a step after her as she slides off, the other foot pushing)
+      if (push && tb >= stIn - push) {
+        const u = (tb - stIn + push) / push, Hp = this.pushStand(L, s, i, Hs, u), st = smooth((u - 0.15) / 0.6);
+        return { push: u, job: { x: Hp.x, z: Hp.z, heading: Hs.face, v: PUSH.step / (push * 0.6) * Math.sin(Math.PI * clamp((u - 0.15) / 0.6, 0, 1)) * (st < 1 ? 1 : 0), mode: 'stand', pack: false, anim: { crouch: 0.45 + 0.25 * Math.sin(Math.PI * u), arms: { kind: 'push', t: u * push }, push: u } } };
+      }
       // to the side of the canoe from wherever the job had them, then a hand on the gunwale till it is their turn
       const P0 = this.jobAt(L, S, i, (boardEnd - BOARD.total / 3600 * CLOCK - s.h0) * 3600 / CLOCK, 'bank', false, kind === 'landing' && s.lunch);
       const k2 = Math.min(1, tb / BOARD.walk), d = Math.hypot(Hs.x - P0.x, Hs.z - P0.z);
@@ -690,6 +734,24 @@ export class PartyMoves {
     }
     return null;
   }
+  // r2 2: where the stern stands pushing her off, u 0..1 through the push: from the bank beside her (where the push
+  // began, kept: the hull slides away from it) a step after her toward her seat
+  pushStand(L, s, i, Hs, u) {
+    const A = L.pushAt || (L.pushAt = new Map()), key = `${s.h0}:${i}`;
+    let a = A.get(key);
+    if (!a) { a = { x: Hs.x, z: Hs.z }; A.set(key, a); if (A.size > 24) A.delete(A.keys().next().value); }
+    const dx = Hs.sx - a.x, dz = Hs.sz - a.z, d = Math.hypot(dx, dz) || 1, k = PUSH.step * smooth((u - 0.15) / 0.6);
+    return { ...Hs, x: a.x + (dx / d) * Math.min(k, d * 0.6), z: a.z + (dz / d) * Math.min(k, d * 0.6) };
+  }
+  // how far canoe c is pushed off the bank at hour h of a boarding seg s (0..1: its stern's push; 1 once she is pushed)
+  pushOf(L, s, c, h) {
+    if (s.kind !== 'launch' && s.kind !== 'landing') return 0;
+    const crewOf = L.plan.crew.boats[c] || []; if (!crewOf.length) return 0;
+    const seats = crewOf.map((j) => L.seatOf.get(j)).filter(Boolean).sort((x, y) => ORDER[x.seat] - ORDER[y.seat]), k = seats.length - 1;
+    const jit = (mulberry32((hashStr(`${L.party.id}:${c}:b`) ^ 0x2545) >>> 0)() - 0.5) * 0.5, tb = BOARD.total - (s.h1 - h) * 3600 / CLOCK;
+    const t0 = BOARD.first + jit + k * (BOARD.step + BOARD.gap);
+    return smooth((tb - t0) / PUSH.dur);
+  }
   // a person's walk over a carry: [spot, ...the trail, spot] each way, its point and the way ahead
   walkLine(L, s, i, dir) {
     const key = `${s.p}:${i}:${dir}`, cache = L.walks || (L.walks = new Map());
@@ -710,13 +772,24 @@ export class PartyMoves {
     for (let c = 0; c < n; c++) {
       const b = L.boats[c];
       let st = null;
-      if (water && (!path || path.none)) { b.hide(); L.pathless = !path; continue; } // (its path still being found, or none: not drawn)
+      // (its route over the water still being searched: r2 2, held where she lies, the party waiting for it on its clock
+      // (update: L.routeWait), so she goes off along it from where she is once it is found. She had been hidden, then
+      // thrown onto it at the plan's place, 130 m on, in view; one not drawn yet stays hidden and is placed then. None
+      // found at all: not drawn, no canoe crosses the land)
+      if (water && !path && !b.hidden && b.ext) { L.routeWait = true; b.drive({ x: b.x, z: b.z, heading: b.heading, v: 0, sim: true, hold: true }); continue; }
+      if (water && (!path || path.none)) { b.hide(); L.pathless = !path; continue; }
       if (water) st = this.boatOnWater(L, s, c, n, h, _b, path);
       else if (s.kind === 'carry') {
         const ci = L.plan.crew.boats[c][0], t = ((L.base ?? h) - s.h0) * 3600 - ((L.dl && L.dl.get(ci)) || 0), B = s.sched.boats[c]; // (the canoe's carrier's own clock)
         if (B && t >= B.lift && t < B.down) { b.hide(); continue; }
         const o = this.slot(B && t >= B.down ? s.B : s.A, c, n, _s); st = { x: o.x, z: o.z, h: o.h, v: 0 };
-      } else { const o = this.slot(s.S, c, n, _s); st = { x: o.x, z: o.z, h: o.h, v: 0 }; }
+      } else {
+        const o = this.slot(s.S, c, n, _s); st = { x: o.x, z: o.z, h: o.h, v: 0 };
+        // (r2 2: pushed off the bank by her stern before they paddle: out from it, rocking as the push starts)
+        const pu = L.ready && L.seatOf ? this.pushOf(L, s, c, h) : 0;
+        if (pu > 0) { st.x -= s.S.L.ux * PUSH.out * pu; st.z -= s.S.L.uz * PUSH.out * pu; }
+        const pk = L.pushK || (L.pushK = new Map()); if (pu > 0.05 && !(pk.get(c) > 0.05) && !jump) b.impulse(0.12); pk.set(c, pu);
+      }
       b.drive({ x: st.x, z: st.z, heading: st.h, v: L.held ? 0 : st.v * rate, snap: jump, sim: true, aim: water ? st.aim : null, cruise: water ? (st.cruise || 0) * rate : 0, hold: !water || L.held });
     }
     // the people
@@ -818,9 +891,10 @@ export class PartyMoves {
       // (well off, a far hull at most: placed every third frame, in turn)
       L.n = (L.n || 0) + 1;
       if (far > 320 && !jumped && L.lastH != null && !L.wasPathless && (L.n + L.party.slot) % 3 !== 0) continue;
-      L.pathless = false;
+      L.pathless = false; L.routeWait = false;
       this.place(L, he, jumped || L.lastH == null || L.wasPathless, budget);
       L.wasPathless = L.pathless;
+      if (L.routeWait) lag.lag += gh; // (r2 2: waiting at the bank or afloat for the route: the plan waits with them)
       L.lastH = he;
       if (L.plan.to.stay) { if (L.seg && (L.seg.kind === 'land' || (L.seg.kind === 'paddle' && L.seg.u1 === 1)) && this.distTo(L) < 900) this.parties.seenIn.add(L.plan.to.stay.id); }
       if (L.st && this.distTo(L) < MOVES.near) for (const S of [L.st.from, L.st.to, ...[...L.st.carry.values()].flatMap((c) => [c.A, c.B])]) if (!S.checked && Math.hypot(S.L.x - p.x, S.L.z - p.z) < MOVES.near) this.checkSpots(S);
