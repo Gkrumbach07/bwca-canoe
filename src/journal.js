@@ -350,7 +350,8 @@ export class Journal {
       const e = p.t.guide, k = e.kind, fresh = this.shownFlyer !== p.key;
       this.shownFlyer = p.key;
       const label = k === 'story' ? 'The season’s story' : k === 'side' ? 'A side story' : k === 'starter' ? 'The first job' : 'A task';
-      const where = e.target && e.target.label && !e.done ? `<p class="pp-qwhere"><i aria-hidden="true">${GLYPH.where}</i> ${esc(up(e.target.label))}</p>` : '';
+      // (r3 replay: the place line only when the next line does not already name it: "Buy food at the provisions shelf.")
+      const where = e.target && e.target.label && !e.done && !String(e.next || '').toLowerCase().includes(String(e.target.label).toLowerCase().replace(/^the /, '')) ? `<p class="pp-qwhere"><i aria-hidden="true">${GLYPH.where}</i> ${esc(up(e.target.label))}</p>` : '';
       left = `<div class="pp-scroll pp-quest k-${k}${fresh ? ' fresh' : ''}">
         <p class="pp-qkind">${k === 'story' || k === 'side' ? gemIcon(k) : ''}${label}</p>
         <h3 class="pp-qtitle">${esc(e.title || 'A task')}</h3>

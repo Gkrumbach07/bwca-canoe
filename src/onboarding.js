@@ -305,12 +305,12 @@ export class Onboarding {
     // gem or line points at the shelves or the canoe while the keeper's word is still to come)
     if (!pa || !s.done) return out;
     const where = (shelf) => (atHome ? `at the ${shelf}` : `at an outfitter’s ${shelf}`);
-    if (!pa.food) out.push({ id: PATH_IDS.food, kind: 'story', tutorial: true, order: 1, ref: 'onboard:food', title: 'Buy food', next: this.foodNext(ep, atHome),
+    if (!pa.food) out.push({ id: PATH_IDS.food, kind: 'story', tutorial: true, order: 1, ref: 'onboard:food', title: 'Food for the trip', next: this.foodNext(ep, atHome),
       target: { kind: 'place', key: `food:${ep}`, label: 'the provisions shelf', store: ep, near: 30, pos: guide.spot(ep, 'food') } });
-    if (!pa.leeches) out.push({ id: PATH_IDS.leeches, kind: 'story', tutorial: true, order: 2, ref: 'onboard:leeches', title: 'Buy leeches',
+    if (!pa.leeches) out.push({ id: PATH_IDS.leeches, kind: 'story', tutorial: true, order: 2, ref: 'onboard:leeches', title: 'Leeches',
       next: `Buy leeches ${where('tackle shelf')}`,
       target: { kind: 'place', key: `tackle:${ep}`, label: 'the tackle shelf', store: ep, near: 30, pos: guide.spot(ep, 'tackle') } });
-    if (!pa.canoe) out.push({ id: PATH_IDS.canoe, kind: 'story', tutorial: true, order: 3, ref: 'onboard:canoe', title: 'To the canoe', next: 'Your canoe is at the dock',
+    if (!pa.canoe) out.push({ id: PATH_IDS.canoe, kind: 'story', tutorial: true, order: 3, ref: 'onboard:canoe', title: 'The loaned canoe', next: 'Your canoe is at the dock',
       target: { kind: 'thing', key: `canoe:${ep}`, label: 'the canoe', store: ep, near: 40, pos: guide.spot(ep, 'canoe') } });
     return out;
   }

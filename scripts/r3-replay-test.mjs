@@ -241,6 +241,20 @@ try {
   });
   result('food-two: one meal keeps the step open ("one meal so far"); a second closes it', ft.a && ft.b && ft.one && ft.one.id === 'story:onboard:food' && /^One meal so far/.test(ft.one.next) && ft.two && ft.two.id === 'story:onboard:leeches' && ft.path.food, ft);
 
+  // titles (playtest 3 minor 9: "Buy food" / "Buy food at the provisions shelf." / "The provisions shelf"): a story
+  // step's journal page says its words once: a title of its own, the next line, and no place line the next line names
+  const tl = await page.evaluate(async () => {
+    const g = window.__game, H = window.__rp, cur = H.cur(), J = g.journal;
+    J.showTask(cur && cur.id); H.step(4); await H.wait(80);
+    const q = (s) => { const n = document.querySelector(`#journal ${s}`); return n ? n.textContent.trim() : null; };
+    const r = { cur, title: q('.pp-qtitle'), next: q('.pp-qnext'), where: q('.pp-qwhere') };
+    J.close(); H.step(4);
+    return r;
+  });
+  const bare = (s) => String(s || '').toLowerCase().replace(/[.]/g, '');
+  result('titles: the step\'s page says each thing once (title not the next line, no place line it already names)',
+    tl.cur && tl.cur.id === 'story:onboard:leeches' && tl.title && tl.next && !bare(tl.next).startsWith(bare(tl.title)) && tl.where === null, tl);
+
   // [slot:bark-tracker]
   // [slot:tutorial-end]
   // [slot:ticket-words]
