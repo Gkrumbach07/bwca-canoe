@@ -129,6 +129,8 @@ export class Guide {
       key: String(g.key ?? s.id), label: String(g.label || ''), pos: g.pos,
       near: Math.min(GUIDE.nearMax, Number.isFinite(g.near) ? g.near : GUIDE.near),
       store: g.store === 'any' ? 'any' : g.store != null && Number.isFinite(Number(g.store)) ? Number(g.store) : null,
+      // r3 replay: { x, z, r } a place the target belongs to (a campsite): anywhere inside it the target shows at full
+      within: g.within && Number.isFinite(g.within.x) && Number.isFinite(g.within.z) ? { x: g.within.x, z: g.within.z, r: Math.min(GUIDE.nearMax, Number(g.within.r) || GUIDE.siteNear) } : null,
     } : null;
     return { id: String(s.id), kind, title: String(s.title || ''), next: cap(stop(s.next)), target, tutorial: !!s.tutorial, order: Number.isFinite(s.order) ? s.order : 0, done: !!s.done, source: s.source || src, ref: s.ref ?? null };
   }
@@ -177,9 +179,10 @@ export class Guide {
     const d = Math.hypot(pos.x - p.x, pos.z - p.z);
     const v = this.t.outfitter && this.t.outfitter.visit;
     const inStore = !!(tg.store != null && v && (tg.store === 'any' || Number(v.ep) === tg.store) && d <= GUIDE.storeR);
-    const show = inStore || d <= tg.near;
+    const W = tg.within, inside = !!(W && Math.hypot(W.x - p.x, W.z - p.z) <= W.r);
+    const show = inStore || inside || d <= tg.near;
     const R = inStore ? GUIDE.storeR : tg.near;
-    const fade = !show ? 0 : d <= R * GUIDE.full ? 1 : Math.max(0, Math.min(1, (R - d) / (R * (1 - GUIDE.full))));
+    const fade = !show ? 0 : inside || d <= R * GUIDE.full ? 1 : Math.max(0, Math.min(1, (R - d) / (R * (1 - GUIDE.full))));
     return { pos, d, show, fade, inStore };
   }
   marks() {
@@ -279,7 +282,8 @@ export class Guide {
       const s = T.world && T.world.campsites ? T.world.campsites[t.site] : null;
       if (!s) return null;
       const np = this.nextPart(t);
-      return { kind: 'thing', key: `${t.id}:${np ? np.part : 'site'}`, label: np ? `the ${PART_LABEL[np.part]}` : 'the campsite', near: GUIDE.siteNear,
+      // (r3 replay: at the site every part shows at full: the latrine up its trail, 59 m off, read as nothing at 0.03)
+      return { kind: 'thing', key: `${t.id}:${np ? np.part : 'site'}`, label: np ? `the ${PART_LABEL[np.part]}` : 'the campsite', near: GUIDE.siteNear, within: { x: s.x, z: s.z, r: GUIDE.siteNear },
         pos: () => { const n = this.nextPart(t), q = n ? n.at : s; return { x: q.x, y: this.groundY(q.x, q.z) + (n ? 0.5 : 1.4), z: q.z }; } };
     }
     if (k && k.handsIn && typeof T.fishFor === 'function' && T.fishFor(t)) return { kind: 'place', key: `board:${t.from}`, label: 'the board', store: t.from, near: 20, pos: this.spot(t.from, 'board') };

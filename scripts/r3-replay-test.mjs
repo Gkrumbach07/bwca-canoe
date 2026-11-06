@@ -298,7 +298,30 @@ try {
   result('tutorial-end: in the canoe the tutorial ends and the tracker says the job\'s next line once',
     te.lee && te.canoeStep && te.canoeStep.id === 'story:onboard:canoe' && te.mode === 'paddle' && te.seq.some((s) => /^event:Next:task:/.test(s)) && te.mid.shown && /^Paddle to /.test(te.mid.next || '') && !te.after.shown && !(te.cur && /^story:onboard/.test(te.cur.id)), te);
 
-  // [slot:latrine]
+  // latrine (playtests 1 minor 5 and 3 minor 12): at the starter site, the grate checked: the latrine's gem shows at full
+  // anywhere on the site, and the tracker says "Next: Look over the latrine" (the "Close by" card never shows a line that
+  // changed under it)
+  const lt = await page.evaluate(async () => {
+    const g = window.__game, H = window.__rp, home = g.profile.home;
+    const t = g.tasks.active.find((x) => x.kind === 'starter' && x.from === home);
+    if (!t) return { none: true };
+    const id = `task:${t.id}`, s = g.starter.route(home).siteRec, A = s.access;
+    await g.player.teleport(A && A.landing ? A.landing[0] : s.x, A && A.landing ? A.landing[1] : s.z); await H.settle();
+    for (let k = 0; k < 80 && !s.layout; k++) { H.step(10); await H.wait(80); }
+    H.step(20); g.guide.sync();
+    let e = g.guide.get(id), r = e && g.guide.reach(e);
+    if (r) { H.face(r.pos, 3); H.step(60); }
+    const grateKey = e && e.target && e.target.key;
+    H.cards.length = 0;
+    t.checks = { ...(t.checks || {}), grate: true }; g.guide.sync(); H.step(30);
+    e = g.guide.get(id); r = e && g.guide.reach(e);
+    const parts = g.guide.partsOf(t), lat = parts && parts.latrine;
+    return { id, grateKey, key: e && e.target && e.target.key, next: e && e.next, fade: r && r.fade, d: r && Math.round(r.d), latD: lat ? Math.round(Math.hypot(lat.x - g.player.x, lat.z - g.player.z)) : null, gem: H.gem(id), seq: H.seq(), tr: g.tracker.state() };
+  });
+  if (lt.none) result('latrine (no starter job on this home: skipped)', true, lt);
+  else result('latrine: the grate checked, the latrine\'s gem at full on the site and the tracker "Next: Look over the latrine"',
+    /grate/.test(lt.grateKey || '') && /latrine/.test(lt.key || '') && /latrine/.test(lt.next || '') && lt.fade === 1 && lt.gem && lt.gem.opacity > 0.9 && lt.seq.includes(`event:Next:${lt.id}`) && lt.tr.shown && /latrine/.test(lt.tr.next || ''), lt);
+
   // leave-early (playtest 2 major 3): a second season: the gear taken, the talk escaped, then paddled away from the
   // landing: the keeper's part is done for you (the first permit), so no day-use ticket waits
   const page2 = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
