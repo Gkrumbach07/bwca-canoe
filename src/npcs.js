@@ -1619,6 +1619,9 @@ export class People {
     // (a slot where someone another module stood stays theirs: extraAt)
     let blocked = null;
     for (const v of list) if (v.extra) for (const f of v.figs) for (const o of this.smart.at(where)) o.slots.forEach((q, k) => { if (Math.hypot(q.x - f.x, q.z - f.z) < 0.6) (blocked || (blocked = new Set())).add(`${o.id}#${k}`); });
+    // (r3 final: nobody of the store's loads, unloads or fishes at a berth that is yours or a friend's: the empty dock
+    // before the staff talk lends the canoe, the loaned canoe tied there after, a friend's berth held for theirs)
+    for (const d of this.takenDecks(ep, L)) for (const o of this.smart.at(where)) o.slots.forEach((q, k) => { if (q.deck && Math.hypot(q.x - d.x, q.z - d.z) < 0.6) (blocked || (blocked = new Set())).add(`${o.id}#${k}`); });
     const m = this.smart.assign(where, people, clock, blocked);
     for (const [v, f] of figs) {
       if (f.held) { // talked to: stop, and turn to you
@@ -1648,6 +1651,18 @@ export class People {
       if (f.path && f.path.length) this.walkOn(f, dt, this.giveWay(L, figs, f, dt));
     }
     this.keepApart(figs, dt);
+  }
+  // the decks of a store's berths kept for you or a friend (outfitter.js: this visit's berth, otherCanoes in a room)
+  takenDecks(ep, L) {
+    const o = this.outfitter, bs = L && Array.isArray(L.dockBerths) ? L.dockBerths : [];
+    if (!o || !bs.length) return [];
+    const sides = [];
+    const v = o.visit; if (v && Number(v.ep) === Number(ep)) sides.push((v.berth && v.berth.side) || L.dockSide || null);
+    else if (Number(ep) === Number(this.profile && this.profile.home) && L.dockSide) sides.push(L.dockSide); // (home: the canoe's own berth)
+    try { if (typeof o.otherCanoes === 'function') sides.push(...o.otherCanoes()); } catch { /* a room's */ }
+    const out = [];
+    for (const s of sides) { if (!s || !Number.isFinite(s.x)) continue; let b = null, bd = 2.6; for (const q of bs) { const d = q.side ? Math.hypot(q.side.x - s.x, q.side.z - s.z) : Infinity; if (d < bd) { bd = d; b = q; } } if (b && b.deck) out.push(b.deck); } // (the nearest berth: the two sides of the dock lie close)
+    return out;
   }
   // r2 2: nobody walks through anyone (the owner's leftover: a party going in at the door walked through each other).
   // At the door one at a time: someone about to go in or out waits outside it while another is in it coming the other
