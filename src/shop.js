@@ -457,6 +457,12 @@ export class Shop {
       pr.spend(cost, `${it.name}${at}`); this.apply(); refresh();
       return { ok: true, cId: made && made.id, words: dock ? `${it.name}${paid(n)}: in your canoe at the dock. $${pr.money} in hand.` : `${it.name}${paid(n)}: it’s with your things. Fill it, then carry it out. $${pr.money} in hand.` };
     }
+    // r3: leeches with no bucket to put them in: the foam bucket comes with them (the owner: "you kind of just start with
+    // the leeches"; a new season has no bucket), in the canoe at the dock when there is one, else with your things here
+    let freeBucket = null;
+    if (d && d.kind === 'bait' && !spot && !inv.stub && typeof inv.addContainer === 'function' && inv.containers && !inv.containers.some((c) => c.item === 'bucket')) {
+      freeBucket = inv.addContainer('bucket', this.canoeAtDock() ? 'canoe' : 'stash');
+    }
     // a thing that goes in: where it was dropped, else where there is room, one at a time
     const qty = it.qty || 1, into = new Map();
     let got = 0;
@@ -480,6 +486,7 @@ export class Shop {
         return { ok: true, cId: h.id, words: `${it.name}${paid(1)}: loose in the canoe at the dock. $${pr.money} in hand.` };
       }
     }
+    if (!got && freeBucket && typeof inv.remove === 'function') inv.remove('bucket');
     if (!got) {
       const name = lowerA(it.name);
       return { ok: false, why: 'room', words: spot ? `${cap(name)} won’t go there.` : `No room for ${name} in anything you have. Make some room, or a bigger pack or barrel is on the shelves.` };
@@ -489,7 +496,8 @@ export class Shop {
     this.apply(); refresh();
     const cs = [...into.keys()].map((c) => containerWord(inv, c));
     const what = got > 1 ? `${got} × ${lowerName(it.name)}` : it.name;
-    return { ok: true, cId: [...into.keys()][0], words: `${cap(what)}${paid(got)}, into the ${cs.join(' and the ')}.${got < n ? ' No room for more.' : ''} $${pr.money} in hand.` };
+    const bucketW = freeBucket ? ' The bucket comes with them.' : '';
+    return { ok: true, cId: [...into.keys()][0], words: `${cap(what)}${paid(got)}, into the ${cs.join(' and the ')}.${bucketW}${got < n ? ' No room for more.' : ''} $${pr.money} in hand.` };
   }
   // the canoe tied at this store's dock (outfitter.js tieUp: set down at the layout's dockSide)
   canoeAtDock() {

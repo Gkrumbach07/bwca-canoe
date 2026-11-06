@@ -251,7 +251,9 @@ export class Onboarding {
     const out = [], v = this.t.outfitter && this.t.outfitter.visit, atHome = !!(v && Number(v.ep) === ep);
     if (!s.done) {
       const sp = this.speaker(ep), named = this.extra && this.extraEp === ep ? this.staffName(ep) : null, who = named || 'the summer help';
-      out.push({ id: PATH_IDS.talk, kind: 'story', tutorial: true, order: 0, ref: 'onboard', title: `Talk to ${who}`, next: `Talk to ${who} at the counter`,
+      // (escape-proof: the talk left at any line stays the step; once the gear is given the keeper's word is still to come)
+      const gave = s.step === 'gear';
+      out.push({ id: PATH_IDS.talk, kind: 'story', tutorial: true, order: 0, ref: 'onboard', title: `Talk to ${who}`, next: gave ? `Finish talking to ${who} at the counter` : `Talk to ${who} at the counter`,
         target: { kind: 'person', key: sp.key || `staffer:${ep}`, label: who, store: ep, near: 30, pos: guide.speakerPos(sp) } });
     }
     const pa = s.path;
@@ -260,7 +262,7 @@ export class Onboarding {
     if (!pa.food) out.push({ id: PATH_IDS.food, kind: 'story', tutorial: true, order: 1, ref: 'onboard:food', title: 'Buy food', next: `Buy food ${where('provisions shelf')}`,
       target: { kind: 'place', key: `food:${ep}`, label: 'the provisions shelf', store: ep, near: 30, pos: guide.spot(ep, 'food') } });
     if (!pa.leeches) out.push({ id: PATH_IDS.leeches, kind: 'story', tutorial: true, order: 2, ref: 'onboard:leeches', title: 'Buy leeches',
-      next: this.hasBucket() ? `Buy leeches ${where('tackle shelf')}` : `Buy a leech bucket and leeches ${where('tackle shelf')}`,
+      next: `Buy leeches ${where('tackle shelf')}`,
       target: { kind: 'place', key: `tackle:${ep}`, label: 'the tackle shelf', store: ep, near: 30, pos: guide.spot(ep, 'tackle') } });
     if (!pa.canoe) out.push({ id: PATH_IDS.canoe, kind: 'story', tutorial: true, order: 3, ref: 'onboard:canoe', title: 'To the canoe', next: 'Your canoe is at the dock',
       target: { kind: 'thing', key: `canoe:${ep}`, label: 'the canoe', store: ep, near: 40, pos: guide.spot(ep, 'canoe') } });

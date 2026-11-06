@@ -1253,6 +1253,9 @@ async function main() {
     window.__game.guide = guide;
   }
   // ==== r3 A (start + onboarding): its one block goes below this line ====
+  // r3 A: the main path from the onboarding's saved state (onboarding.js guideSpecs: the talk, the food, the leeches, the
+  // canoe at the dock), in place of the guide's placeholder; a reload brings the same step back
+  guide.source('onboarding', () => onboarding.guideSpecs(guide));
 
   // ==== r3 B (journal + tracker): its one block goes below this line ====
 
