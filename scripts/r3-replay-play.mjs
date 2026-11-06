@@ -134,6 +134,10 @@ try {
     log('bought', JSON.stringify(b));
     return { s, b };
   };
+  // (V, the view key: first person in the narrow store, as the playtesters' over-the-shoulder view filled with the hat)
+  const view0 = await ev(() => window.__game.player.chase.mode);
+  if (view0 !== 'first') { await page.keyboard.press('KeyV'); await ev(() => window.__pl.step(10)); }
+  log('view', view0, '→', await ev(() => window.__game.player.chase.mode));
   const food = await shelf('story:onboard:food', ['meal:breakfast', 'meal:supper', 'meal:breakfast', 'meal:supper'], '05-food-shelf', 'Buy food: the gem over the provisions shelf');
   const lee = await shelf('story:onboard:leeches', ['leeches'], '06-tackle-shelf', 'Then leeches: the gem moves to the tackle shelf');
   result('play 3: food then leeches, each the step in turn with its one gem', food.s.cur && food.s.cur.id === 'story:onboard:food' && food.s.gems.filter((x) => /story/.test(x)).join() === 'story:onboard:food*' && food.b.r.every(Boolean)
@@ -160,6 +164,7 @@ try {
   log('ticket', JSON.stringify(tk));
   await ev(() => { const g = window.__game, f = g.permits.tickets()[0]; if (f) g.permits.payTicket(f.id); g.guide.remove('side:replay:loons'); window.__pl.step(10); }); // (paid, so the night's permit is not held back)
 
+  if (view0 !== 'first' && (await ev(() => window.__game.player.chase.mode)) === 'first') { await page.keyboard.press('KeyV'); await ev(() => window.__pl.step(10)); }
   // the canoe: in at the dock and paddled off with W (SETUP: getIn, the dot's E)
   const off = await ev(async () => {
     const g = window.__game, H = window.__pl, p = g.player, d = p.carry.drop;
