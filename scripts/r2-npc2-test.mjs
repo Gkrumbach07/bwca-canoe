@@ -93,10 +93,15 @@ const PROBE = () => {
 const browser = await launch();
 let shotN = 0;
 async function shot(page, name) { if (!SHOTS) return; await page.screenshot({ path: path.join(SHOTS, `n2-${String(shotN++).padStart(2, '0')}-${name}.png`) }); }
-async function tp(page, x, z) {
+async function tp(page, x, z, watch = null) {
   await page.evaluate(({ x, z }) => { const g = window.__game; window.__tpDone = false; g.player.teleport(x, z).finally(() => { window.__tpDone = true; }); }, { x, z });
   for (let k = 0; k < 600 && !(await page.evaluate(() => window.__tpDone)); k++) await page.evaluate(() => window.__game.step(1 / 30, 3));
-  await page.evaluate(() => window.__game.step(1 / 30, 20));
+  if (watch) await arrival(page, watch); else await page.evaluate(() => window.__game.step(1 / 30, 20));
+}
+// 12: just come (a teleport's tiles in, the detail chunks still coming in under everyone): every frame watched, the
+// workers let answer between frames
+async function arrival(page, tag, n = 360) {
+  await page.evaluate(async ({ tag, n }) => { const g = window.__game, N = window.__n2; for (let k = 0; k < n; k++) { g.step(1 / 30, 1); N.oddFrame(tag); await new Promise((q) => setTimeout(q, 3)); } }, { tag, n });
 }
 // the player on foot at (x, z) looking at (tx, tz)
 async function standAt(page, x, z, tx, tz, pitch = -0.12) {
@@ -173,7 +178,7 @@ try {
         D.setEnabled(false); g.step(1 / 30, 3); D.setEnabled(true);
         for (let k = 0; k < 400; k++) {
           await new Promise((q) => setTimeout(q, 4)); // (the workers' chunks come back between frames)
-          const i0 = D.stats.installed; g.step(1 / 30, 1); const inst = D.stats.installed - i0, q = meas(); out.frames++;
+          const i0 = D.stats.installed; g.step(1 / 30, 1); const inst = D.stats.installed - i0, q = meas(); out.frames++; N.oddFrame(inst ? 'terrain: a chunk in' : 'terrain');
           if (inst) { out.installFrames++; if (q.w > out.worstInstall) out.worstInstall = +q.w.toFixed(3); if (q.w > 0.15 && out.ev.length < 6) out.ev.push({ w: +q.w.toFixed(2), who: q.who, inst }); }
           else if (q.w > out.worstOther) out.worstOther = +q.w.toFixed(3);
           if (k > 60 && !inst && D.pending && !D.pending()) break;
@@ -193,7 +198,7 @@ try {
       out.sort((a, b) => a.d - b.d); return out[0] || null;
     }, { YEAR });
     log('names camp:', JSON.stringify(c));
-    await page.evaluate(({ c, YEAR }) => window.__game.day.setClock(YEAR, 192, 19.0), { c, YEAR }); await tp(page, c.to.x, c.to.z);
+    await page.evaluate(({ c, YEAR }) => window.__game.day.setClock(YEAR, 192, 19.0), { c, YEAR }); await tp(page, c.to.x, c.to.z, 'camp arrival');
     await step(page, 200);
     await standAt(page, c.to.x + 3, c.to.z + 3, c.to.x, c.to.z);
     const r = await page.evaluate(async ({ pid }) => {
@@ -221,7 +226,7 @@ try {
     let M = null;
     for (const pick of picks) {
       log('launch:', JSON.stringify(pick));
-      await page.evaluate(({ c, YEAR }) => window.__game.day.setClock(YEAR, 193, c.start - 0.07), { c: pick, YEAR }); await tp(page, pick.from.x, pick.from.z);
+      await page.evaluate(({ c, YEAR }) => window.__game.day.setClock(YEAR, 193, c.start - 0.07), { c: pick, YEAR }); await tp(page, pick.from.x, pick.from.z, 'launch arrival');
       for (let k = 0; k < 40 && !(await page.evaluate(({ id }) => { const L = [...window.__game.moves.active.values()].find((x) => x.plan.id === id); return !!(L && L.st && L.persons.length); }, { id: pick.id })); k++) await step(page, 30);
       const ok = await page.evaluate(({ id }) => {
         const g = window.__game, L = [...g.moves.active.values()].find((x) => x.plan.id === id); if (!L || !L.st) return false;
@@ -254,9 +259,9 @@ try {
           L.boats.forEach((b, c) => {
             const pv = prevB.get(c), sh = !b.hidden && !!b.near;
             if (sh && pv && pv.sh) out.route.maxStep = Math.max(out.route.maxStep, +Math.hypot(b.x - pv.x, b.z - pv.z).toFixed(2));
-            if (pv && pv.sh && !sh && (L.seg.kind === 'paddle' || L.seg.kind === 'launch')) out.route.vanished++;
+            if (pv && pv.sh && !sh && pv.d < 230 && (L.seg.kind === 'paddle' || L.seg.kind === 'launch')) { out.route.vanished++; if (!out.route.ev) out.route.ev = { d: Math.round(pv.d), seg: L.seg.kind, hidden: !!b.hidden, k }; }
             if (sh && window.__blockRoute) out.route.seenFrames++;
-            prevB.set(c, { x: b.x, z: b.z, sh });
+            prevB.set(c, { x: b.x, z: b.z, sh, d: b.dist });
             // 9: held at the bank, the ground over her keel
             if (sh && (sg === 'launch' || sg === 'land' || sg === 'landing')) { const e = N.keelIn(b); if (e != null && e > out.keel) { out.keel = +e.toFixed(2); out.keelAt = { sg, c, beached: b.beached != null ? +b.beached.toFixed(2) : null }; } }
             // 6: from the frame all but the stern are in, to the stern in: how far she went off the bank, the stern's feet
@@ -358,7 +363,7 @@ try {
   if (on('store')) {
     const h = await page.evaluate(({ YEAR }) => { const g = window.__game, N = g.npcs, P = g.parties; g.day.setClock(YEAR, 192, 7.4); let best = 8.4, n = -1; for (let h = 7.5; h <= 11.5; h += 0.05) { const k = N.storeParties(25, P.today, h).reduce((a, e) => a + Math.min(3, e.party.size), 0); if (k > n) { n = k; best = h; } } return best; }, { YEAR });
     await page.evaluate(({ h, YEAR }) => window.__game.day.setClock(YEAR, 192, h - 0.2), { h, YEAR });
-    await tp(page, yard.steps ? yard.steps.x + 5 : yard.door.x + 6, yard.steps ? yard.steps.z + 5 : yard.door.z + 6);
+    await tp(page, yard.steps ? yard.steps.x + 5 : yard.door.x + 6, yard.steps ? yard.steps.z + 5 : yard.door.z + 6, 'store arrival');
     await standAt(page, yard.steps ? yard.steps.x + 6 : yard.door.x + 7, yard.steps ? yard.steps.z + 6 : yard.door.z + 7, yard.door.x, yard.door.z, -0.1);
     const m = await page.evaluate(async ({ door }) => {
       const g = window.__game, N = window.__n2, out = { frames: 0, walkers: 0, pairs: 0, close: 0, min: 9, minDoor: 9, ev: [], doorPass: 0 };
@@ -382,6 +387,68 @@ try {
     }, { door: yard.door });
     log('store door', JSON.stringify(m));
     check(11, 'two people walking in the store and its yard never walk through each other (apart >= 0.3 m)', m.pairs > 2000 && m.close === 0, m);
+  }
+
+  // --- 5, 8: a camp's evening walks, the night in the tents, the morning out of them --------------------------------
+  if (on('camp')) {
+    const c = await page.evaluate(({ YEAR }) => {
+      const g = window.__game, P = g.parties; g.day.setClock(YEAR, 192, 7.4); const T = P.today, out = [];
+      for (const { party, k } of P.legsOn(T)) { const pl = P.legPlan(party, k); if (!pl || pl.to.kind !== 'site' || pl.arrive > 16.5 || party.size < 3) continue; const st = pl.to.stay; if (!st || st.end <= T) continue; out.push({ id: pl.id, arrive: pl.arrive, to: { x: pl.to.x, z: pl.to.z }, d: Math.hypot(pl.to.x - g.player.x, pl.to.z - g.player.z) }); }
+      out.sort((a, b) => a.d - b.d); return out[0] || null;
+    }, { YEAR });
+    log('camp:', JSON.stringify(c));
+    const pid = c.id.split('#')[0];
+    await page.evaluate(({ YEAR }) => window.__game.day.setClock(YEAR, 192, 17.6), { YEAR }); await tp(page, c.to.x, c.to.z, 'camp arrival');
+    // (on the bank 10 m off the camp, looking at it)
+    const look = async () => {
+      const at = await page.evaluate(({ pid }) => { const g = window.__game, D = [...g.partyCamps.drawn.values()].find((d) => d.party.id === pid); if (!D) return null; const F = D.site.layout.fire, W = g.world; for (let k = 0; k < 16; k++) { const a = k * 0.4, x = F.x + Math.cos(a) * 11, z = F.z + Math.sin(a) * 11; if (W.shoreAt(x, z) > 1.5) return { x, z, tx: F.x, tz: F.z }; } return { x: F.x + 9, z: F.z, tx: F.x, tz: F.z }; }, { pid });
+      if (at) await standAt(page, at.x, at.z, at.tx, at.tz, -0.2);
+    };
+    await look();
+    const WATCH = async (frames, tag) => page.evaluate(async ({ pid, frames, tag }) => {
+      const g = window.__game, N = window.__n2, D = [...g.partyCamps.drawn.values()].find((d) => d.party.id === pid);
+      const out = { frames: 0, walkFrames: 0, through: 0, ev: [], appear: [], tag };
+      if (!D) { out.none = true; return out; }
+      const tents = D.obstacles.filter((o) => o.tent), F = D.site.layout.fire;
+      const inTent = (x, z, m) => tents.findIndex((t) => { const dx = x - t.x, dz = z - t.z, a = dx * t.ux + dz * t.uz, b = -dx * t.uz + dz * t.ux; return Math.abs(a) < t.hx + m && Math.abs(b) < t.hz + m; });
+      let prev = new Set(D.v.figs.filter(Boolean)); const born = new Map();
+      for (let k = 0; k < frames; k++) {
+        g.step(1 / 30, 1); out.frames++; N.oddFrame(tag);
+        const now = new Set(D.v.figs.filter(Boolean));
+        for (const f of now) if (!prev.has(f)) { const ti = inTent(f.x, f.z, 0); out.appear.push({ k, fromTent: ti >= 0, d: +Math.hypot(f.x - F.x, f.z - F.z).toFixed(1) }); born.set(f, { k, ti }); }
+        prev = now;
+        for (const f of now) {
+          if (!(f.path && f.path.length)) continue;
+          out.walkFrames++;
+          const b = born.get(f), ti = inTent(f.x, f.z, -0.1), fire = Math.hypot(f.x - F.x, f.z - F.z) < 0.6;
+          if ((ti >= 0 && !(b && b.ti === ti && k - b.k < 150)) || fire) { out.through++; if (out.ev.length < 5) out.ev.push({ k, tent: ti, fire }); }
+        }
+        if (k % 15 === 0) await new Promise((q) => setTimeout(q, 2));
+      }
+      return out;
+    }, { pid, frames, tag });
+    const walks = { frames: 0, walkFrames: 0, through: 0, ev: [] }, outs = [];
+    for (const hh of [17.7, 18.6, 19.4, 20.3, 21.0]) {
+      await page.evaluate(({ hh, YEAR }) => { const g = window.__game; g.day.setClock(YEAR, 192, hh); g.step(1 / 30, 40); }, { hh, YEAR });
+      const r = await WATCH(900, `camp ${hh}`);
+      walks.frames += r.frames; walks.walkFrames += r.walkFrames; walks.through += r.through; walks.ev.push(...r.ev.slice(0, 2));
+    }
+    log('camp walks', JSON.stringify(walks));
+    // the night in the tents, then the morning: who comes out, and from where
+    await page.evaluate(({ YEAR }) => { const g = window.__game; g.day.setClock(YEAR, 192, 22.4); g.step(1 / 30, 60); g.day.setClock(YEAR, 193, 6.47); g.step(1 / 30, 3); }, { YEAR });
+    await look();
+    const mo = await WATCH(1500, 'camp morning');
+    log('camp morning', JSON.stringify({ appear: mo.appear, through: mo.through, walkFrames: mo.walkFrames }));
+    check(8, 'a camp walk never goes through a tent or the fire ring', walks.walkFrames + mo.walkFrames > 100 && walks.through + mo.through === 0, { walkFrames: walks.walkFrames + mo.walkFrames, through: walks.through + mo.through, ev: walks.ev.concat(mo.ev).slice(0, 6) });
+    check(5, 'in the morning they come out of a tent (each appears in a tent’s door)', mo.appear.length > 0 && mo.appear.every((q) => q.fromTent), mo.appear);
+  }
+
+  // --- 12: over all of it, a standing foot far off the ground a lone frame -------------------------------------------
+  if (on('launch') || on('store') || on('camp') || on('arrive') || on('depart') || on('names') || on('terrain')) {
+    const odd = await page.evaluate(() => window.__n2.odd);
+    // (traced: the lone frame's foot off the ground was a detail chunk installed under the people after they had stood
+    // on the old ground that frame: the terrain section's chunks in, and every arrival, are where it showed)
+    check(12, 'no standing foot 0.35 m under or 0.45 m over the ground in any frame watched (arrivals, chunks coming in)', odd.frames > 1000 && odd.n === 0, odd);
   }
 
   if (SHOTS) writeFileSync(path.join(SHOTS, 'r2-npc2-test.json'), JSON.stringify(results, null, 1));

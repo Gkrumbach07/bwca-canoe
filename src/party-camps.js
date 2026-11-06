@@ -60,6 +60,7 @@ const HULLS = [0xa9aca8, 0xa9aca8, 0xa9aca8, 0xc5a46e, 0xc5a46e, 0x5b7a5a, 0x9c4
 // p2 C: the hull colours they paddle (parties.js crewOf, hull.js HULL_PALETTES' outsides), so a camp's canoes on the bank
 // are the ones that came in
 const HULL_HEX = { aluminium: 0xa4a9ac, kevlar: 0xc0954c, forest: 0x46542f };
+const TENT_OUT = 1.2; // s (r2 2): stooped in a tent's door before walking out of it
 const ALL = Object.freeze({ camp: true, canoes: true, people: true });
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const C = (hex) => new THREE.Color(hex);
@@ -319,7 +320,8 @@ export class PartyCamps {
     const v = this.people.partyPerson(party);
     v.live = true; v.hear = CAMPS.hear; v.figs = [];
     const D = { key, c, party, stay: c.stay, site, v, mesh, obstacles, spots, canoeMesh, canoeObs, canoesIn: false, fireKey: `party:${party.id}`, d: Math.hypot(site.x - this.player.x, site.z - this.player.z), canoes: canoes.length, tents: tents.length,
-      figs: v.members.map((m) => ({ x: 0, z: 0, y: 0, heading: 0, look: m.look, spec: { pose: 'stand', lean: 0.02, wave: 0 } })), wave: null, fireR: mulberry32(((c.stay.seed >>> 0) ^ 0xf17e) >>> 0)() };
+      figs: v.members.map((m) => ({ x: 0, z: 0, y: 0, heading: 0, look: m.look, spec: { pose: 'stand', lean: 0.02, wave: 0 } })), wave: null, fireR: mulberry32(((c.stay.seed >>> 0) ^ 0xf17e) >>> 0)(),
+      tentList: tents, canoeAt: canoes.map((q) => ({ x: q.x, z: q.z, tx: q.tx, tz: q.tz, wx: q.wx, wz: q.wz })), born: this.now, ring: { x: F.x, z: F.z }, bench: L.bench ? { x: L.bench.x, z: L.bench.z } : null }; // (r2 2: for the walks round them, the way out of a tent, the canoes carried up and down)
     this.drawn.set(key, D);
     this.place(D);
     this.canoesOn(D, this.shows(D.stay).canoes);
@@ -382,10 +384,43 @@ export class PartyCamps {
       const s = at[k];
       if (!s) continue;
       const f = D.figs[k];
-      this.goTo(f, s, s, s.seat ? { pose: 'sit', seat: s.seat } : { pose: 'stand', lean: 0.02, wave: f.spec.wave || 0 }, G);
+      this.goTo(f, s, s, s.seat ? { pose: 'sit', seat: s.seat } : { pose: 'stand', lean: 0.02, wave: f.spec.wave || 0 }, G, D);
       v.figs[k] = f;
     }
+    this.markIn(D);
     D.phase = ph;
+  }
+  // r2 2: who of them is not up now is in a tent (the next out comes out of its door)
+  markIn(D) { for (const f of D.figs) if (f.out && !D.v.figs.includes(f)) { f.out = false; f.path = null; f.emerge = 0; } }
+  // r2 2: a walk about the camp from a to b, round what stands in it: the tents, the canoes on the bank, the fire ring and
+  // the bench (as circles, a body's width off them); a circle a or b is in does not count (out of a tent's door, to a seat)
+  campRoute(D, a, b, G) {
+    const C = [];
+    for (const t of D.tentList || []) C.push({ x: t.x, z: t.z, r: 0.85 * Math.hypot(t.size.a, t.size.b) + 0.35 });
+    if (D.canoesIn) for (const q of D.canoeAt || []) for (const u of [-1.7, 0, 1.7]) C.push({ x: q.x + q.tx * u, z: q.z + q.tz * u, r: 0.8 });
+    if (D.ring) C.push({ x: D.ring.x, z: D.ring.z, r: 1.0 });
+    if (D.bench) C.push({ x: D.bench.x, z: D.bench.z, r: 0.75 });
+    const inside = (p, c) => Math.hypot(p.x - c.x, p.z - c.z) < c.r;
+    const skip = C.filter((c) => inside(a, c) || inside(b, c));
+    const out = [];
+    const go = (p, q, depth) => {
+      // the first circle the line from p to q goes through
+      const dx = q.x - p.x, dz = q.z - p.z, L2 = dx * dx + dz * dz || 1e-6;
+      let hit = null, ht = Infinity;
+      for (const c of C) {
+        if (skip.includes(c)) continue;
+        const t = clamp(((c.x - p.x) * dx + (c.z - p.z) * dz) / L2, 0, 1), mx = p.x + dx * t, mz = p.z + dz * t;
+        if (Math.hypot(mx - c.x, mz - c.z) < c.r - 0.02 && t < ht) { ht = t; hit = { c, mx, mz }; }
+      }
+      if (!hit || depth > 3) { out.push({ x: q.x, z: q.z, y: G(q.x, q.z) }); return; }
+      // round it on the side the line passes nearer to
+      let nx = hit.mx - hit.c.x, nz = hit.mz - hit.c.z, nl = Math.hypot(nx, nz);
+      if (nl < 1e-3) { nx = -dz; nz = dx; nl = Math.hypot(nx, nz) || 1; }
+      const w = { x: hit.c.x + (nx / nl) * (hit.c.r + 0.25), z: hit.c.z + (nz / nl) * (hit.c.r + 0.25) };
+      go(p, w, depth + 1); go(w, q, depth + 1);
+    };
+    go(a, b, 0);
+    return out;
   }
   // gl-e: a camp's smart objects (smart.js): the fire (cook), the bench and the logs (sit), the canoes at the landing
   // (unload, load) and the shore by them (fish), the tents' doors (tent); who is at which by the hour of their stay
@@ -406,21 +441,39 @@ export class PartyCamps {
       const a = m.get(`${v.key}#${k}`); if (!a) continue;
       const s = a.obj.slots[a.slot], f = D.figs[k], id = `${a.obj.id}#${a.slot}`;
       f.act = a.act;
-      this.goTo(f, s, id, s.seat ? { pose: 'sit', seat: s.seat } : a.act === 'cook' || a.act === 'load' || a.act === 'unload' ? { pose: 'stoop', wave: 0 } : a.act === 'fish' ? { pose: 'stand', lean: 0.05, hands: 'front', pitch: 0.25, wave: 0 } : { pose: 'stand', lean: 0.02, wave: f.spec.wave || 0 }, G);
+      this.goTo(f, s, id, s.seat ? { pose: 'sit', seat: s.seat } : a.act === 'cook' || a.act === 'load' || a.act === 'unload' ? { pose: 'stoop', wave: 0 } : a.act === 'fish' ? { pose: 'stand', lean: 0.05, hands: 'front', pitch: 0.25, wave: 0 } : { pose: 'stand', lean: 0.02, wave: f.spec.wave || 0 }, G, D);
       v.figs[k] = f;
     }
+    this.markIn(D);
   }
   // r2: a member to their spot s for the job (id: the spot's key). The owner, 2026-11-05: "when they go from task to
   // task" they had jumped there (4 m and a half turn from the bench to the fire, 51 m to the shore to fish): now they
   // get up and walk there (npcs.js walkOn: the store people's walk, eased in and out, the gait's feet), and settle into
   // the job's pose at the end. Placed at once only the first time (the camp just drawn) or from far off.
-  goTo(f, s, id, spec, G) {
+  goTo(f, s, id, spec, G, D = null) {
     const y = G(s.x, s.z), h = this.day ? this.day.hours : 0, was = f.lastH;
     f.lastH = h; // (placed a moment ago, not from hours back: the clock moved on, a Rest, the camp just drawn: placed at once)
+    // r2 2: one who was in a tent (the night, the rain, not one of those up) comes out of its door: inside it, stooped a
+    // moment, and out (they had appeared at the fire); placed at once only when the camp was just drawn or you are far
+    let emerging = false;
+    if (D && f.out === false && D.tentList && D.tentList.length && this.now - D.born > 0.002 && Math.hypot(this.player.x - D.site.x, this.player.z - D.site.z) < 160) {
+      const tn = D.tentList.reduce((b, q) => (Math.hypot(q.x - s.x, q.z - s.z) < Math.hypot(b.x - s.x, b.z - s.z) ? q : b), D.tentList[0]);
+      const din = tn.size.b * 0.45, x = tn.x + tn.fdx * din, z = tn.z + tn.fdz * din;
+      f.x = x; f.z = z; f.y = G(x, z); f.heading = headingTo(tn.fdx, tn.fdz); f.placed = true; f.at = null; f.emerge = TENT_OUT; f.spec = { pose: 'stoop', wave: 0 }; f.path = null;
+      f.tentDoor = { x: tn.x + tn.fdx * (tn.size.b + 0.7), z: tn.z + tn.fdz * (tn.size.b + 0.7) };
+      emerging = true;
+    }
+    f.out = true;
     if (f.at !== id) {
-      const d = Math.hypot(s.x - f.x, s.z - f.z), walk = f.placed && was != null && Math.abs(h - was) < 0.02 && Number.isFinite(d) && d > 0.35 && d < 60 && this.people && typeof this.people.walkOn === 'function';
+      const d = Math.hypot(s.x - f.x, s.z - f.z), walk = f.placed && (emerging || (was != null && Math.abs(h - was) < 0.02)) && Number.isFinite(d) && d > 0.35 && d < 60 && this.people && typeof this.people.walkOn === 'function';
       f.at = id; f.home = s.heading;
-      if (walk) { f.goal = { x: s.x, z: s.z, y, heading: s.heading, spec }; f.path = [{ x: s.x, z: s.z, y }]; return; }
+      if (walk) {
+        f.goal = { x: s.x, z: s.z, y, heading: s.heading, spec };
+        // (r2 2: round the tents, the canoes on the bank, the fire ring and the bench, not through them; out of a tent by its door first)
+        const from = f.tentDoor && f.emerge > 0 ? f.tentDoor : f;
+        f.path = (f.emerge > 0 ? [{ x: f.tentDoor.x, z: f.tentDoor.z, y: G(f.tentDoor.x, f.tentDoor.z) }] : []).concat(D ? this.campRoute(D, from, s, G) : [{ x: s.x, z: s.z, y }]);
+        return;
+      }
       f.heading = s.heading; f.path = null;
     }
     if (f.path && f.goal) { f.goal.spec = spec; return; } // (on the way there)
@@ -458,7 +511,10 @@ export class PartyCamps {
         if (D.wave.t >= CAMPS.greetFor) D.wave = null;
       }
       // (r2: those on their way to a new spot walk on)
-      for (const f of D.figs) if (f.path && f.path.length && this.people && this.people.walkOn) { this.people.walkOn(f, dt); if (!f.path) f.placed = true; }
+      for (const f of D.figs) {
+        if (f.emerge > 0) { f.emerge -= dt; if (f.emerge > 0) continue; } // (r2 2: a moment stooped in the tent's door, then out)
+        if (f.path && f.path.length && this.people && this.people.walkOn) { this.people.walkOn(f, dt); if (!f.path) f.placed = true; }
+      }
       // the greeter turns to you while they greet, and back to what they were doing after
       for (let k = 0; k < D.figs.length; k++) {
         const f = D.figs[k]; if (!f.at || f.home == null || f.path) continue;
