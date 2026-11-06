@@ -1102,7 +1102,7 @@ export function moveKeepers(s) {
   s.moved = 1;
   return true;
 }
-const HEAD_V = new THREE.Vector3();
+const HEAD_V = new THREE.Vector3(), TOP_BOX = new THREE.Box3();
 export class People {
   constructor({ world, scene, player, day, hud, tasks, outfitter = null, profile = null, weather = null, registry = null, mat }) {
     this.world = world; this.scene = scene; this.player = player; this.day = day; this.hud = hud; this.tasks = tasks; this.outfitter = outfitter; this.profile = profile; this.weather = weather; this.registry = registry;
@@ -1423,7 +1423,15 @@ export class People {
         const h = this;
         return speaker || (speaker = { key: rec.key, person: rec.key, name, role: role || '',
           pos(out) {
-            const v = h.person, r = v ? self.speakerOf(v, 0).pos(HEAD_V) : null; // (into a Vector3: the guide's out is a plain { set })
+            // drawn: the head, and the top of the hat over it (measured once on the skinned body), less the guide's hand
+            // over a speaker's point (guide.speakerPos +0.35), so the gem's point rides just over the hat
+            const v = h.person, b = v ? self.bodies.find((x) => x.who && !x.lent && x.who.person === v && x.who.fig === 0) : null;
+            if (b && b.group.visible) {
+              b.group.updateWorldMatrix(true, true); b.fig.bones.head.getWorldPosition(HEAD_V);
+              if (rec.topOf !== b || !Number.isFinite(rec.topOff)) { TOP_BOX.setFromObject(b.group, true); rec.topOff = Math.max(0.12, Math.min(0.45, TOP_BOX.max.y - HEAD_V.y)); rec.topOf = b; }
+              return out.set(HEAD_V.x, HEAD_V.y + rec.topOff + 0.02 - 0.35, HEAD_V.z);
+            }
+            const r = v ? self.speakerOf(v, 0).pos(HEAD_V) : null; // (into a Vector3: the guide's out is a plain { set })
             if (r) return out.set(r.x, r.y, r.z);
             const q = rec.spot; if (!q || typeof q !== 'object' || !Number.isFinite(q.x)) return null;
             const L = storeLayout(ep), y = Number.isFinite(q.y) ? q.y : L && Number.isFinite(L.floorY) ? L.floorY : L ? self.groundAt(L, q.x, q.z) : 0;

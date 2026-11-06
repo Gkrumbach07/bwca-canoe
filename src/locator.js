@@ -43,6 +43,7 @@ export const LOCATOR = {
   xray: 9,            // m: nearer the camera than this it is drawn over what stands in front of it (your own hat and
                       // shoulders, the staffer's lamp shade): close by, the gem is never lost behind the near things; past it
                       // the world hides it as ever (depthTest only: no new program)
+  minPerson: 0.14,    // m tall at least: over a tall person under a store's beams the gem shrinks to fit, no smaller
   water: 0.6,         // m over the water at least, when the target is over water (the canoe tied at the dock)
   shades: [0xffe58a, 0xf2b01e, 0xb57a0a], // light, mid and dark facets: the gold
 };
@@ -161,8 +162,14 @@ export class Locator {
       const me = s.mesh, p = s.pos;
       const dc = cp ? Math.hypot(p.x - cp.x, p.y + 0.5 - cp.y, p.z - cp.z) : 10;
       const k = smooth(s.a), grow = Math.min(LOCATOR.grow[1], Math.max(1, dc / LOCATOR.grow[0]));
-      const h = (s.main ? LOCATOR.size : LOCATOR.sizeSide) * grow * (s.gone ? k : 0.6 + 0.4 * k);
+      let h = (s.main ? LOCATOR.size : LOCATOR.sizeSide) * grow * (s.gone ? k : 0.6 + 0.4 * k);
       let y = p.y + (s.person ? LOCATOR.gapPerson : LOCATOR.gap) + LOCATOR.low * h + bob; // the point clear of the top, the bob included
+      // (r3 final: over a tall person indoors the beams left no room for the whole gem and pushed it into the hat (4 cm,
+      // a summer help with a hat under the 2.38 m ceiling): there it is smaller and still, its point kept over the head)
+      if (s.person && Number.isFinite(p.roof)) {
+        const room = p.roof - (p.y + LOCATOR.gapPerson);
+        if (room < h + LOCATOR.bob) { h = Math.max(LOCATOR.minPerson, Math.min(h, room)); y = p.y + LOCATOR.gapPerson + LOCATOR.low * h; }
+      }
       y = Math.min(y, p.roof - 0.38 * h); // indoors its top under the beams
       const op = (s.fade ?? 1) * k;
       s.spin += dt * LOCATOR.spin;
