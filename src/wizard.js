@@ -24,7 +24,8 @@ const START_HOUR = 9;                 // a season begins at nine in the morning,
 const OPEN = [4, 9];                  // the months a season can start in: May to October (Sandbox: any)
 const WAY = { adventure: 'Adventure: open trips, buy food, take notices', sandbox: 'Sandbox: the same lakes, with no limits' };
 // items.js STARTER_KIT, in words (gl-c: no pack or tent of your own; the rentals are out, and the store sees to it)
-const KIT_WORDS = 'an aluminium canoe, an ash paddle, a food barrel, your sleeping bag, pad and clothes, a tarp, water tablets, a jig, a Mepps and a dozen leeches';
+// r3 (the owner, 2026-11-05): a new season starts empty-handed; the staff at the counter lend the rest (onboarding.js)
+const KIT_WORDS = 'your sleeping bag, pad and clothes, a tarp and water tablets';
 const fahrenheit = (c) => Math.round(c * 9 / 5 + 32);
 const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
 
@@ -248,7 +249,7 @@ export class Wizard {
       ['Starting', `${longDate(d.year, d.doy)}, ${d.year}, at ${START_HOUR} am, at the store’s door`],
       ['', this.bringsWords(d.doy)],
       ['The way', WAY[this.mode]],
-      ['To start', `$${START_MONEY} and the kit: ${KIT_WORDS}`],
+      ['To start', `$${START_MONEY} and your own things: ${KIT_WORDS}`],
     ];
     if (this.t.newIn) rows.push(['', 'The season under way is kept in its slot.']);
     const h = ep ? this.map.home(ep.ep) : null;

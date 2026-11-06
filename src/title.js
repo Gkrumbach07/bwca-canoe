@@ -368,7 +368,7 @@ export class Title {
     else if (season) e.hint.textContent = `The season${tripDays}`;
     else e.hint.textContent = '';
     const room = season && slots.usable ? slots.firstEmpty() : 0; // round A-D: an empty slot keeps the season under way
-    if (e.newHint) e.newHint.textContent = season ? (room ? `in slot ${room}: this season is kept` : pause ? '' : 'forgets the season under way') : `a fresh start, with $40 and the kit`;
+    if (e.newHint) e.newHint.textContent = season ? (room ? `in slot ${room}: this season is kept` : pause ? '' : 'forgets the season under way') : `a fresh start, with $40 and your own things`;
     e.newTrip.classList.toggle('current', !pause && !season);
     this.showRight(null);
   }
