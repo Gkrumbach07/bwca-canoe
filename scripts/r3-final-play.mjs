@@ -167,8 +167,8 @@ try {
     const b = (o.visit && o.visit.berth) || { side: L.dockSide, deck: L.dockDeck }, foot = L.dockFoot || L.dockLand || L.door;
     // from out along the dock, back toward its foot and the store: the berth in the near ground, the yard beyond
     const c = L.centre || L.door, ux = b.side.x - c.x, uz = b.side.z - c.z, n = Math.hypot(ux, uz) || 1;
-    H.standAt(b.side.x + (ux / n) * 1.5 - 0.0, b.side.z + (uz / n) * 1.5); if (g.player.mode !== 'walk' || g.world.shoreAt(g.player.x, g.player.z) < 0) H.standAt((b.deck || foot).x, (b.deck || foot).z);
-    H.look(H.yawTo(foot), -0.12); H.step(30);
+    void ux; void uz; void n;
+    const dk = b.deck || foot; H.standAt(dk.x, dk.z); H.look(H.yawTo(c), -0.04); H.step(30);
     const out = { hull: g.player.canoe.hull.visible, deck: [], inView: 0 };
     for (let k = 0; k < 1800; k++) {
       g.step(1 / 30, 1);
@@ -186,8 +186,9 @@ try {
   result('2 the empty dock at the busiest hour: no canoe, nobody of the store\'s loading at your berth, people about', !dock.hull && !dock.hullAfter && dock.deck.length === 0 && dock.inView > 0, dock);
 
   // --- the gem over the staffer, the default camera ------------------------------------------------------------------
-  await ev(() => { const g = window.__game, H = window.__p, sp = g.onboarding.spot(g.profile.home); if (g.chase.mode !== 'third') g.chase.setMode('third'); H.face(sp, 4.0, 0.0); H.step(90); });
-  const gStaff = await gemCheck('story:onboard:talk', '02-gem-staffer', 2, 'The gem over the summer help, the default camera, 4 m');
+  await ev(() => { const g = window.__game, H = window.__p, sp = g.onboarding.spot(g.profile.home); if (g.chase.mode !== 'first') g.chase.setMode('first'); H.face(sp, 3.6, 0.1); H.step(90); });
+  const gStaff = await gemCheck('story:onboard:talk', '02-gem-staffer', 2, 'The gem over the summer help (first person, 3.6 m)');
+  await ev(() => { const g = window.__game; if (g.chase.mode !== 'third') g.chase.setMode('third'); window.__p.step(10); });
   const staff = await ev(() => { const s = window.__p.staffer(); return s && !s.undrawn ? { name: s.v.name, top: +window.__p.top(s.b).top.toFixed(2) } : null; });
   result('3 the gem over the staffer: she is drawn, the gem visible over her hat', staff && visible(gStaff) && gStaff.y - 0.62 * gStaff.s >= staff.top - 0.01, { gStaff, staff });
 
@@ -226,7 +227,7 @@ try {
   result('7 the talk finished: the loaned canoe, the starter job, the food step next', fin.done && fin.hull && fin.job.length === 1 && fin.cur && fin.cur.id === 'story:onboard:food', { op, fin });
 
   // --- the canoe appearing at the berth ------------------------------------------------------------------------------
-  const appear = await ev(() => { const g = window.__game, H = window.__p, d = g.player.carry.drop; if (g.chase.mode !== 'third') g.chase.setMode('third'); H.face(d, 6, -0.18); H.step(40); return { hull: g.player.canoe.hull.visible, near: H.near(d, 1.4).filter((x) => !x.walking) }; });
+  const appear = await ev(() => { const g = window.__game, H = window.__p, d = g.player.carry.drop; if (g.outfitter.open) g.outfitter.hide(); if (g.chase.mode !== 'third') g.chase.setMode('third'); H.face(d, 6, -0.18); H.step(40); return { hull: g.player.canoe.hull.visible, near: H.near(d, 1.4).filter((x) => !x.walking) }; });
   await shot('06-canoe-appears', 6, 'After the talk: the loaned canoe at your berth');
   result('8 the loaned canoe drawn at your berth, nobody standing on it', appear.hull && appear.near.length === 0, appear);
 
@@ -234,7 +235,8 @@ try {
   const shelfBuy = async (id, want, name, n, cap) => {
     const s = await ev((id) => { const g = window.__game, H = window.__p, L = g.outfitter.layout(g.profile.home), c = L.centre || L.counter; H.standAt(c.x, c.z); H.step(20); const e = g.guide.get(id), r = e && g.guide.reach(e); return { pos: r && { x: r.pos.x, y: r.pos.y, z: r.pos.z }, cur: window.__p.cur() }; }, id);
     if (!s.pos) return { none: true, s };
-    await walkTo(s.pos, 1.8);
+    await walkTo(s.pos, 2.4);
+    await ev((q) => { const H = window.__p; H.face(q, 2.8, 0.05); H.step(30); }, s.pos);
     const gem = await gemCheck(id, `${name}-gem`, n, cap);
     const blockers = await ev((q) => window.__p.near(q, 1.0).filter((x) => !x.walking), s.pos);
     await ev((q) => { const H = window.__p; H.aimAt(q, q.y - 0.3); H.step(6); }, s.pos);
@@ -268,6 +270,7 @@ try {
   log('setting out', JSON.stringify(out0));
   const toCanoe = await ev(([h, pick]) => { const g = window.__game, H = window.__p, L = g.outfitter.layout(g.profile.home), f = L.dockFoot || L.dockLand || L.door, d = g.player.carry.drop; g.day.setClock(g.day.year, g.day.doy, pick ? pick.launch + (pick.start - pick.launch) * 0.35 : h - 0.05); H.step(90); H.standAt(f.x, f.z); H.step(20); return { d: { x: d.x, z: d.z }, cur: H.cur(), h: +g.day.hours.toFixed(3) }; }, [hour.best, out0.pick]);
   await walkTo(toCanoe.d, 2.2);
+  await ev((q) => { const H = window.__p; H.face(q, 4.0, -0.15); H.step(30); }, toCanoe.d);
   const canoeGem = await gemCheck('story:onboard:canoe', '07a-canoe-gem');
   await ev((q) => { const H = window.__p; H.aimAt(q, window.__game.player.foot ? window.__game.player.foot.y - 0.3 : null); H.step(6); }, toCanoe.d);
   await page.keyboard.press('KeyE');
@@ -279,7 +282,12 @@ try {
     const g = window.__game, H = window.__p, L = g.outfitter.layout(g.profile.home), f = L.dockFoot || L.dockLand || L.door;
     H.step(10); H.look(H.yawTo(f), -0.08); H.step(20);
     let n = H.figsInView(), k = 0;
-    for (; k < 600 && n < 2; k++) { g.step(1 / 30, 1); if (k % 10 === 0) n = H.figsInView(); }
+    for (; k < 600 && n < 2; k++) {
+      g.step(1 / 30, 1);
+      if (k % 10) continue;
+      const pp = H.partyPeople(); if (pp.length) { const cx = pp.reduce((a, q) => a + q.x, 0) / pp.length, cz = pp.reduce((a, q) => a + q.z, 0) / pp.length; H.look(H.yawTo({ x: cx, z: cz }), -0.06); g.step(1 / 30, 2); }
+      n = H.figsInView();
+    }
     return { n, k, mode: g.player.mode, party: H.partyPeople().length, h: +g.day.hours.toFixed(3) };
   });
   await shot('07-push-off', 7, 'Pushed off: the store’s people and a party’s crew about the dock');
@@ -296,10 +304,12 @@ try {
     const p = g.player, W = g.world;
     if (b.d > 60) { for (const [a, r] of [[0, 30], [1.6, 30], [3.1, 30], [4.7, 30], [0.8, 45], [2.4, 45]]) { const x = b.x + Math.cos(a) * r, z = b.z + Math.sin(a) * r; if (W.shoreAt(x, z) < -4) { p.x = x; p.z = z; p.speed = 0; p.yawRate = 0; break; } } }
     for (let i = 0; i < 6; i++) { const c = H.paddling().find((q) => q.id === b.id) || b; p.heading = H.yawTo(c); H.look(H.yawTo(c), -0.05); H.step(5); await H.wait(20); }
+    if (g.chase.mode !== 'first') { g.chase.setMode('first'); for (let i = 0; i < 4; i++) { const c = H.paddling().find((q) => q.id === b.id) || b; H.look(H.yawTo(c), -0.04); H.step(4); } }
     const c = H.paddling().find((q) => q.id === b.id) || b;
     return { id: b.id, d: +Math.hypot(c.x - p.x, c.z - p.z).toFixed(1), k, mode: p.mode, inView: H.onScreen(c.x, (W.levelAt ? W.levelAt(c.x, c.z) : 0) + 0.5, c.z) };
   });
-  await shot('08-party-paddling', 8, 'A party paddling out from the store');
+  await shot('08-party-paddling', 8, 'A party paddling out from the store (first person)');
+  await ev(() => { const g = window.__game; if (g.chase.mode !== 'third') g.chase.setMode('third'); window.__p.step(6); });
   result('12 a party paddling, in view', !paddle.none && paddle.inView && paddle.d < 80, paddle);
 
   // --- the starter site: the grate's gem, the parts by E, the neighbours at dusk, the night ----------------------------
@@ -313,8 +323,9 @@ try {
     const id = t ? `task:${t.id}` : null, e = id && g.guide.get(id), r = e && g.guide.reach(e);
     return { id, pos: r && { x: r.pos.x, y: r.pos.y, z: r.pos.z }, site: { x: s.x, z: s.z } };
   });
-  await ev(([pos]) => { const g = window.__game, H = window.__p; if (g.chase.mode !== 'third') g.chase.setMode('third'); H.face(pos, 5, 0.0); H.step(90); }, [site.pos]);
-  const grate = site.pos ? await gemCheck(site.id, '09-grate-gem', 9, 'At the starter site: the gem over the grate, 5 m') : { none: true };
+  await page.waitForTimeout(6000); // (the lake's name card fades)
+  await ev(([pos]) => { const g = window.__game, H = window.__p; if (g.chase.mode !== 'third') g.chase.setMode('third'); H.face(pos, 4, -0.05); H.step(150); }, [site.pos]);
+  const grate = site.pos ? await gemCheck(site.id, '09-grate-gem', 9, 'At the starter site: the gem over the grate, 4 m') : { none: true };
   result('13 the grate\'s gem at the starter site, visible at the default camera', visible(grate), grate);
   const parts = [];
   for (const k of ['grate', 'latrine', 'pad']) {
@@ -333,13 +344,16 @@ try {
     for (let k = 0; k < 20 && !best; k++) { for (const D of g.partyCamps.drawn.values()) { const c = g.parties.live.get(D.key), st = c && c.site; if (st) { const d = Math.hypot(st.x - s.x, st.z - s.z); if (d < bd && d > 20) { bd = d; best = st; } } } if (!best) H.step(60); }
     if (!best) return { none: true };
     if (bd > 250) { await g.player.teleport(best.x, best.z); await H.settle(); for (let k = 0; k < 40; k++) { H.step(10); await H.wait(40); } }
-    // stand off their camp toward the water, looking at it
+    // stand off their camp, then off the nearest of their people drawn, looking at them
     const L = best.layout, fire = L && L.fire ? L.fire : best;
-    let at = null; for (const [a, r] of [[0, 14], [1.57, 14], [3.14, 14], [4.71, 14], [0.8, 18], [2.4, 18], [3.9, 18], [5.5, 18]]) { const x = fire.x + Math.cos(a) * r, z = fire.z + Math.sin(a) * r; if (g.world.shoreAt(x, z) > 1.5) { at = { x, z }; break; } }
-    if (at) H.standAt(at.x, at.z); else H.standAt(fire.x + 10, fire.z);
-    H.look(H.yawTo(fire), -0.08); H.step(120);
+    H.standAt(fire.x + 12, fire.z); H.step(120);
+    const pf = H.storeFigs().filter((f) => f.party).sort((a, b) => Math.hypot(a.f.x - fire.x, a.f.z - fire.z) - Math.hypot(b.f.x - fire.x, b.f.z - fire.z))[0];
+    const q = pf ? { x: pf.f.x, z: pf.f.z } : fire;
+    let at = null; for (const r of [8, 11, 6, 14]) { for (let i = 0; i < 12 && !at; i++) { const a = (i / 12) * Math.PI * 2, x = q.x + Math.cos(a) * r, z = q.z + Math.sin(a) * r; if (g.world.shoreAt(x, z) > 1.5 && Math.abs(g.player.groundAt(x, z) - g.player.groundAt(q.x, q.z)) < 2.5) at = { x, z }; } if (at) break; }
+    if (at) H.standAt(at.x, at.z);
+    H.look(H.yawTo(q), -0.06); H.step(60); H.look(H.yawTo(pf ? { x: pf.f.x, z: pf.f.z } : q), -0.06); H.step(6);
     const people = H.storeFigs().filter((f) => f.party && H.onScreen(f.f.x, (f.f.y || 0) + 1, f.f.z)).length;
-    return { d: Math.round(bd), people };
+    return { d: Math.round(bd), people, at: !!at, pf: pf ? pf.key : null };
   }, site.site);
   await shot('10-neighbours-dusk', 10, 'The neighbours’ camp at dusk (20:24)');
   result('15 the neighbours\' camp at dusk, its people in view', !nb.none && nb.people > 0, nb);
