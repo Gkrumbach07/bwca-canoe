@@ -236,7 +236,7 @@ registerKind('campsite', {
   pay(t) { return Math.min(PAY_MAX, 16 + 4 * (t.hops ?? 1) + Math.round(1.2 * (t.km || 0))); },
   update(T, t) {
     const p = T.player, s = T.world.campsites[t.site];
-    if (!s || !onFoot(p) || Math.hypot(s.x - p.x, s.z - p.z) > 40 || p.prompt) return;
+    if (!s || !onFoot(p) || Math.hypot(s.x - p.x, s.z - p.z) > SITE_GATE || p.prompt) return; // (r3 final: the part's own 2.6 m below)
     const at = partsOf(T, t); if (!at) return;
     const checks = t.checks || (t.checks = {});
     // a site with no latrine box to find (an old one, the box gone): nothing there to check
@@ -549,7 +549,9 @@ function partTargets(T) {
     for (const t of T.active) {
       if (t.status !== 'open' || (t.kind !== 'campsite' && t.kind !== 'starter')) continue;
       const s = T.world.campsites[t.site];
-      if (!s || near.flat(s.x, s.z) > 60) continue;
+      // (r3 final: a cheap gate only: the reach is each part's own (PART_REACH). A latrine down its trail stands 64 m
+      // from the site's middle, and the old 60 m gate here left it never a target: the first night's job could not end)
+      if (!s || near.flat(s.x, s.z) > SITE_GATE) continue;
       const at = partsOf(T, t), checks = t.checks || {};
       if (!at) continue;
       for (const k of PARTS) {
@@ -567,6 +569,7 @@ function partTargets(T) {
     return out;
   };
 }
+const SITE_GATE = 150; // m from a site's middle: past this none of its parts is looked for (a latrine trail runs 60 m and more)
 const PART_REACH = 3.2; // m: a part a step or two off, low on the ground (the dot's own 2.6 and a little: litter's reach)
 
 // --- wiring (main.js, the gl-d block) ----------------------------------------------------------------------------------

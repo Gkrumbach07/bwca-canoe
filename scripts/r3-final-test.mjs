@@ -12,6 +12,13 @@
 //   6 the starter night: at the starter site in the evening no party camps on it or stands on it, the neighbours'
 //     people are drawn on the ground (standing feet within 0.15 m of it)
 //   7 no page errors
+//   8 the latrine down its trail, 60 m and more from the site's middle, checked by the dot's E like the grate and the
+//     pad: the starter job ends from the keys (the checker: the dot offered only the latrine's seat)
+//   9 a crowded store (the pool short: bodies lent out, you at the door, more people than bodies): the staffer and the
+//     keeper drawn every frame (the checker: an 8-person party took every body, the gem over empty air)
+//  10 the staffer's door line placed clear of her gem on screen (the checker: "Got a minute?" lay over it)
+//  (and in 1/5: nobody of the store's loading within 1.1 m of your berth's deck; in 2 and 5b: nobody of the store's
+//   standing by the main path's step: the staffer, the food shelf)
 //
 //   APP=http://localhost:5301 node scripts/r3-final-test.mjs [--home 31] [--shots <dir>]
 import { createRequire } from 'node:module';
@@ -280,6 +287,33 @@ try {
   await shot('6-starter-night');
   if (six.none) result(`6 the starter night (${six.none}: skipped)`, true, six);
   else result('6 the starter night: no party on your site, the neighbours\' people on the ground', six.campsOn === 0 && six.onSite === 0 && (six.neighbourAt == null || six.standing > 0) && six.floating <= Math.max(2, six.standing * 0.01), six);
+
+  // 8 the site's three parts by the dot's E (stood 2 m off each, first person, aimed at it): the latrine down its trail too
+  const eight = [];
+  await ev(async () => {
+    const g = window.__game, H = window.__r3f, t = g.tasks.active.find((x) => x.kind === 'starter'), s = t && g.world.campsites[t.site];
+    if (s && Math.hypot(s.x - g.player.x, s.z - g.player.z) > 150) { await g.player.teleport(s.x + 3, s.z + 3); await H.settle(); for (let k = 0; k < 80 && !s.layout; k++) { H.step(10); await H.wait(80); } }
+  });
+  for (const k of ['latrine', 'grate', 'pad']) {
+    const pr = await ev((k) => {
+      const g = window.__game, H = window.__r3f, t = g.tasks.active.find((x) => x.kind === 'starter'); if (!t) return { none: 'no job' };
+      g.day.setClock(g.day.year, g.day.doy, 18);
+      const s = g.world.campsites[t.site], q = g.guide.partsOf(t) && g.guide.partsOf(t)[k]; if (!q) return { none: 'no part' };
+      if (g.chase.setMode && g.chase.mode !== 'first') g.chase.setMode('first');
+      H.face({ x: q.x, z: q.z }, 2.0, -0.5); H.step(30);
+      const cam = g.camera, gy = g.player.groundAt(q.x, q.z), dd = Math.hypot(q.x - cam.position.x, q.z - cam.position.z), yaw = Math.atan2(-(q.z - g.player.z), q.x - g.player.x);
+      g.chase.viewYaw = yaw; g.chase.forwardYaw = yaw; g.player.heading = yaw; g.chase.viewPitch = Math.atan2(gy + 0.25 - cam.position.y, dd); H.step(6);
+      const tg = g.pointer.target;
+      return { fromSite: +Math.hypot(q.x - s.x, q.z - s.z).toFixed(1), target: tg ? `${tg.kind}:${tg.ref || ''}` : null };
+    }, k);
+    if (pr.none) { eight.push({ k, ...pr }); continue; }
+    await page.keyboard.press('KeyE'); await ev(() => window.__r3f.step(20));
+    pr.after = await ev((k) => { const g = window.__game, t = g.tasks.active.find((x) => x.kind === 'starter'); return { checked: !!(t && t.checks && t.checks[k]), status: t && t.status, mode: g.player.mode, sat: !!(g.player.sit || g.player.seated) }; }, k);
+    if (pr.after.sat || pr.after.mode === 'sit') { await page.keyboard.press('KeyE'); await ev(() => window.__r3f.step(20)); }
+    eight.push({ k, ...pr });
+  }
+  await ev(() => { const g = window.__game; if (g.chase.setMode && g.chase.mode !== 'third') g.chase.setMode('third'); });
+  result('8 the site\'s three parts checked by the dot\'s E, the latrine down its trail too: the starter job done', eight.length === 3 && eight.every((q) => q.after && q.after.checked && /^sitepart:/.test(q.target || '')) && eight[2].after.status === 'done', eight);
 
   result('7 no page errors', errors.length === 0, { errors: errors.slice(0, 5) });
 } catch (e) {
