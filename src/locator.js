@@ -93,6 +93,8 @@ export class Locator {
       this.group.name = 'r3-locator';
       this.t.scene.add(this.group);
     }
+    // (r3 final: what people say is placed clear of the gems, as of the tracker's card: dialogue.js placement)
+    if (this.t.talk && !this.t.talk.keepClear) this.t.talk.keepClear = (cam, W, H) => this.screenRects(cam, W, H);
     return this;
   }
   mesh() {
@@ -180,6 +182,25 @@ export class Locator {
       for (const mat of me.material) { mat.opacity = op; mat.depthTest = !xr; }
       me.visible = op > 0.01 && dc > LOCATOR.closeCam;
     }
+  }
+  // each gem shown, as a box on the screen in px ({ x, y, w, h }, a little padded), for the barks to keep clear of
+  screenRects(cam = this.t.camera, W = window.innerWidth, H = window.innerHeight) {
+    const out = [];
+    if (!cam || !this.group || !this.group.visible) return out;
+    const v = this._sv || (this._sv = new THREE.Vector3());
+    for (const s of this.slots.values()) {
+      const me = s.mesh; if (!me.visible) continue;
+      const h = me.scale.x, px = [];
+      for (const dy of [0.38 * h, -LOCATOR.low * h]) {
+        v.set(me.position.x, me.position.y + dy, me.position.z).project(cam);
+        if (v.z > 1 || v.z < -1) { px.length = 0; break; }
+        px.push([((v.x + 1) / 2) * W, ((1 - v.y) / 2) * H]);
+      }
+      if (px.length < 2) continue;
+      const top = Math.min(px[0][1], px[1][1]), bot = Math.max(px[0][1], px[1][1]), cx = (px[0][0] + px[1][0]) / 2, hw = Math.max(6, (bot - top) * 0.4) + 6;
+      out.push({ x: cx - hw, y: top - 6, w: hw * 2, h: bot - top + 12, gem: true });
+    }
+    return out;
   }
   shown() {
     const out = [];
