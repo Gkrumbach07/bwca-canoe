@@ -483,10 +483,12 @@ class Boat {
   // r2: sim, the parties' canoes: (x, z, heading, v) is where their plan has the canoe now, aim a point ahead on its
   // way, cruise the leg's steady speed (m/s seen), hold at rest there (the bank, a stop afloat). Within PHYS_R of you the
   // hull paddles itself there with the player's own physics (simTick); beyond, it is placed there
-  drive({ x, z, heading = this.heading, v = 0, snap = false, exact = false, stroke = null, level = null, sim = false, aim = null, cruise = 0, hold = false }) {
+  drive({ x, z, heading = this.heading, v = 0, snap = false, exact = false, stroke = null, level = null, sim = false, aim = null, dock = false, cruise = 0, hold = false }) {
     this.mover = null; this.hidden = false; this.rest = null;
     if (snap || !this.ext) { this.heading = heading; this.bobY = null; this.sim = null; if (sim) { this.x = x; this.z = z; } }
-    this.ext = { x, z, heading, v, exact, stroke, level: Number.isFinite(level) ? level : null, sim, aim, cruise, hold };
+    // (r2 2 verify: the aim copied: the parties hand every canoe the same scratch point, so each had steered at the last
+    // one's, the bow into the bank a canoe's length off her own slot and then slid sideways into it)
+    this.ext = { x, z, heading, v, exact, stroke, level: Number.isFinite(level) ? level : null, sim, aim: aim ? { x: aim.x, z: aim.z } : null, dock, cruise, hold };
     if (!sim || !this.simOn) { this.x = x; this.z = z; }
     return this;
   }
@@ -568,11 +570,14 @@ class Boat {
     if (!(dt > 0)) return;
     const gx = E.x - this.x, gz = E.z - this.z, gd = Math.hypot(gx, gz);
     if (gd > 150 || bt > 8.9) { this.x = E.x; this.z = E.z; this.heading = E.heading; m.speed = E.v / bt; m.boost = bt; m.yawRate = 0; this.yawRate = 0; return; } // (fallen far behind, or a time-lapse past paddling: placed)
-    const holding = E.hold || ((E.v || 0) < 0.05 && gd < 5);
+    // (r2 2 verify: held only once by her place: well off it (left on a shore the plan's way passed, or come in short of
+    // her slot), she paddles there; held, she had been eased there however far, once 78 m in three seconds over a point)
+    const holding = (E.hold || (E.v || 0) < 0.05) && gd < 8, wayOff = !holding && E.hold;
     let thr = 0, yawT = 0;
     if (holding) {
       // held where she lies (a hand on the bank, a paddle's draw): eased into her place, turned to lie as the plan has her
-      const k = ease(0.9, dt);
+      // (r2 2 verify: drawn in no faster than a paddle's draw takes her sideways, 0.7 m/s)
+      const k = gd > 1e-6 ? Math.min(ease(0.9, dt), (0.7 * dt) / gd) : 0;
       this.x += gx * k; this.z += gz * k;
       yawT = clamp(wrapPi(E.heading - this.heading) * 1.2, -0.6, 0.6);
       m.speed *= Math.exp(-dt * 1.6);
@@ -581,16 +586,21 @@ class Boat {
       // always on open water)
       m.stuck = Math.max(0, (m.stuck || 0) - dt);
       m.toG = m.toG ? gd > 7 : gd > 14;
-      const toG = m.toG || m.stuck > 0, ax = toG ? E.x : E.aim ? E.aim.x : E.x + Math.cos(E.heading) * 15, az = toG ? E.z : E.aim ? E.aim.z : E.z - Math.sin(E.heading) * 15;
+      const toG = m.toG || m.stuck > 0 || wayOff, ax = toG ? E.x : E.aim ? E.aim.x : E.x + Math.cos(E.heading) * 15, az = toG ? E.z : E.aim ? E.aim.z : E.z - Math.sin(E.heading) * 15;
       // (steered as a paddler does: on where the bow will be in a moment, so she is straightened before she points there)
-      const want = Math.atan2(-(az - this.z), ax - this.x), e = wrapPi(want - this.heading);
+      // (r2 2 verify: coming in to where she lies, the last metres: the bow brought round to lie as the plan has her and her
+      // way checked (a back stroke), so she comes to rest by her place alongside the bank. Steered at that point to the end,
+      // she had reached the bank bow on, half a turn off how she lies there, and then swung round on the spot with her crew)
+      const da = Math.hypot(ax - this.x, az - this.z), wantP = Math.atan2(-(az - this.z), ax - this.x), dk = E.dock && !toG ? 1 - sstep(3, 9, da) : 0;
+      const want = dk > 0 ? wantP + wrapPi(E.heading - wantP) * dk : wantP, e = wrapPi(want - this.heading);
+      if (dk > 0) m.speed *= Math.exp(-dt * 1.4 * dk);
       m.steer += (clamp((e - 0.9 * m.yawRate) / 0.35, -1, 1) - m.steer) * ease(5, dt);
       yawT = m.steer * P.yaw * (0.55 + 0.45 * clamp(m.speed / 0.72, 0, 1));
       // the speed she wants: the plan's, and more while the plan is ahead of her bow (less when she is ahead of it); held
       // to over a stroke or two (m.vAvg), not fought within each stroke's surge
       const along = gx * Math.cos(this.heading) - gz * Math.sin(this.heading);
       const vWant = Math.max(0, (E.v || 0) + clamp(along * 0.3, -0.6 * (E.v || 0), 4)), lifeWant = vWant / bt;
-      thr = clamp((lifeWant / LIFE.cruise) ** 2 + 1.6 * (lifeWant - (m.vAvg ?? m.speed)), 0, 1.5);
+      thr = clamp((lifeWant / LIFE.cruise) ** 2 + 1.6 * (lifeWant - (m.vAvg ?? m.speed)), 0, 1.5) * (1 - 0.75 * dk);
       if (Math.abs(e) > 2.2 && m.speed < 0.3) thr = Math.min(thr, 0.25); // (turning round on the spot first)
     }
     m.thr = thr; m.vAvg = (m.vAvg ?? m.speed) + (m.speed - (m.vAvg ?? m.speed)) * ease(1.3, dt);
@@ -633,7 +643,20 @@ class Boat {
     // (never up the bank: a step that would take her within a metre of the shore is not taken, and she loses way: her
     // steering brings her round to where the plan has her, out on the water)
     const w = this.layer.world;
-    if (!holding && w && w.shoreAt && w.shoreAt(nx, nz) > -1.0 && w.shoreAt(nx, nz) > w.shoreAt(this.x, this.z)) { nx = this.x; nz = this.z; m.speed *= Math.exp(-dt * 3); m.stuck = 1.5; }
+    if (!holding && w && w.shoreAt && w.shoreAt(nx, nz) > -1.0 && w.shoreAt(nx, nz) > w.shoreAt(this.x, this.z)) {
+      // (r2 2 verify: glancing off it: the step's part along the shore kept, the part into it lost, as a hull scrapes along a
+      // bank; she had stopped dead there, held against it while the plan ran on, then been thrown after it. Only if that
+      // too would take her in does she lose all way)
+      const s0 = w.shoreAt(this.x, this.z), gxs = w.shoreAt(this.x + 1, this.z) - w.shoreAt(this.x - 1, this.z), gzs = w.shoreAt(this.x, this.z + 1) - w.shoreAt(this.x, this.z - 1), gl = Math.hypot(gxs, gzs);
+      let ok = false;
+      if (gl > 1e-4) {
+        const ux = gxs / gl, uz = gzs / gl, sx = nx - this.x, sz = nz - this.z, into = sx * ux + sz * uz, tx = this.x + sx - ux * Math.max(0, into) - ux * 0.02, tz = this.z + sz - uz * Math.max(0, into) - uz * 0.02;
+        const s1 = w.shoreAt(tx, tz);
+        if (!(s1 > -1.0 && s1 > s0)) { nx = tx; nz = tz; ok = true; m.speed *= Math.exp(-dt * 1.2); }
+      }
+      if (!ok) { nx = this.x; nz = this.z; m.speed *= Math.exp(-dt * 3); }
+      m.stuck = 1.5;
+    }
     this.x = nx; this.z = nz;
     this.yawRate = m.yawRate;
     this.boost = m.boost;
@@ -651,9 +674,10 @@ class Boat {
     let y = level + FLOAT_OFFSET + (hb + hs + hm) / 3, pitch = Math.atan2(hb - hs, 4) * 0.6 + this.v * 0.01;
     // r2 2: a hull by the bank rests on the ground under her where it rises over her keel: pulled in bow first, the bow up
     // the bank and the stern afloat (she had lain level with the bank's ground over her waterline, 0.4 to 1 m at the bow)
+    let nb = -Infinity, ns = -Infinity, nm = -Infinity;
     if (full && this.ext && this.ext.sim && L.ground && L.world && L.world.shoreAt && L.world.shoreAt(this.x, this.z) > -7) { // (the parties' own: a friend's canoe lies as their screen has it)
       const need = (a) => L.ground(this.x + f.x * a, this.z + f.z * a) - keelAt(a / (HULL.L / 2)) + 0.01; // (the root's height that keeps her keel there over it)
-      const nb = need(KEEL_A), ns = need(-KEEL_A), nm = need(0);
+      nb = need(KEEL_A); ns = need(-KEEL_A); nm = need(0);
       if (Math.max(nb, ns, nm) > y) {
         const yb = Math.max(y, nb), ys = Math.max(y, ns), sl = clamp((yb - ys) / (2 * KEEL_A), -0.35, 0.35);
         // (r2 2 verify: each end held over its own ground at the slope she is turned to: a bank steeper than the 0.35 she may
@@ -668,6 +692,9 @@ class Boat {
     const roll = this.yawRate * 0.1 + 0.012 * this.stroke.power * Math.sin(this.stroke.phase * Math.PI * 2) + rk.a;
     if (this.bobY === null || !(dt > 0) || !Number.isFinite(this.bobY)) { this.bobY = y; this.pitch = pitch; this.roll = roll; }
     else { const k = ease(5, dt); this.bobY += (y - this.bobY) * k; this.pitch += (pitch - this.pitch) * k; this.roll += (roll - this.roll) * k + (rk.a - this.rockWas || 0); }
+    // (r2 2 verify: eased, she had lagged the bank she runs up or swings over (her bow 0.3 m into it coming in, 0.7 m the
+    // frame a finer ground came in under her): never lower than keeps her keel on the ground, at the pitch she has)
+    if (nb > -Infinity) { const sp = KEEL_A * Math.sin(this.pitch), req = Math.max(nb + sp, ns - sp, nm); if (this.bobY < req) this.bobY = req; }
     this.rockWas = rk.a;
     this.y = Number.isFinite(this.bobY) ? this.bobY : level + FLOAT_OFFSET;
   }

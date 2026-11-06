@@ -587,6 +587,13 @@ export class PartyMoves {
     // (no way over the water found: a straight line, as the plan has it, but never drawn: no canoe crosses the land)
     const path = r.value || Object.assign(polyline([[s.A.L.x, s.A.L.z], [s.B.L.x, s.B.L.z]]), { none: true });
     L.paths.set(s.pathKey, path);
+    // (r2 2 verify: the canoes come in to lie along the bank bow the way the way in runs at its end, not the way the
+    // landings lie from each other: they had paddled in and then swung round on the spot at the bank, up to half a turn,
+    // with their crews still in them. Set once the way is found, before they are there)
+    if (!path.none && s.u1 === 1 && s.B && s.B.L && path.L > 30) {
+      const q = along(path, path.L - 25, { x: 0, z: 0, tx: 0, tz: 0 }, 1.5), e = path.pts[path.pts.length - 1], gx = e[0] - q.x, gz = e[1] - q.z;
+      if (Math.hypot(gx, gz) > 5) s.B.tsign = s.B.L.tx * gx + s.B.L.tz * gz >= 0 ? 1 : -1;
+    }
     return path;
   }
   segAt(L, h) {
@@ -614,7 +621,8 @@ export class PartyMoves {
     // end) and the leg's steady speed (game m/s)
     out.cruise = s.kind === 'drift' ? 0 : ((s.u1 - s.u0) * path.L) / Math.max(1, D - Math.min(MOVE.ramp, D / 2));
     const la = 26, ahead = sAt - stagger + la, aim = out.aim || (out.aim = { x: 0, z: 0 });
-    if (s.u1 === 1 && path.L - sAt < la + 8 && s.kind !== 'drift') { const o = sl(s.B, c); aim.x = o.x; aim.z = o.z; }
+    out.dock = false;
+    if (s.u1 === 1 && path.L - sAt < la + 8 && s.kind !== 'drift') { const o = sl(s.B, c); aim.x = o.x; aim.z = o.z; out.dock = true; } // (r2 2 verify: dock: brought in to lie there)
     else { const q2 = along(path, ahead, _q, 6); aim.x = q2.x - q2.tz * lat; aim.z = q2.z + q2.tx * lat; }
     return out;
   }
@@ -952,7 +960,7 @@ export class PartyMoves {
         if (pu > 0) { st.x -= s.S.L.ux * PUSH.out * pu; st.z -= s.S.L.uz * PUSH.out * pu; }
         const pk = L.pushK || (L.pushK = new Map()); if (pu > 0.05 && !(pk.get(c) > 0.05) && !jump) b.impulse(0.12); pk.set(c, pu);
       }
-      b.drive({ x: st.x, z: st.z, heading: st.h, v: L.held ? 0 : st.v * rate, snap: jump, sim: true, aim: water ? st.aim : null, cruise: water ? (st.cruise || 0) * rate : 0, hold: !water || L.held });
+      b.drive({ x: st.x, z: st.z, heading: st.h, v: L.held ? 0 : st.v * rate, snap: jump, sim: true, aim: water ? st.aim : null, dock: water && !!st.dock, cruise: water ? (st.cruise || 0) * rate : 0, hold: !water || L.held });
     }
     // the people
     const inBoat = s.kind === 'paddle' || s.kind === 'drift';
