@@ -142,7 +142,9 @@ try {
     if (o.open) o.hide();
     H.step(10); g.guide.sync(); H.step(4);
     const st = g.guide.list().find((e) => e.kind === 'starter');
-    const sNew = g.tracker.state();
+    // (r3 replay: the tutorial's next step is said first, the job's "New task" a few seconds after it)
+    let sNew = g.tracker.state();
+    for (let k = 0; k < 80 && st && !(sNew.mode === 'event' && sNew.id === st.id); k++) { H.step(3); sNew = g.tracker.state(); }
     return { starter: st && st.id, cur: g.guide.current() && g.guide.current().id, sNew, home };
   });
   result('5a a new entry shows the card ("New task: …")', three.starter && three.sNew.shown && three.sNew.mode === 'event' && three.sNew.head === 'New task' && three.sNew.id === three.starter && /^New task:/.test(three.sNew.text), three);

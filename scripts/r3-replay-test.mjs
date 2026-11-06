@@ -193,7 +193,15 @@ try {
   });
   result('starter: the first-night suggestion escaped is made again, and its job taken', st.first && !st.mid.talking && st.mid.avail && !st.mid.done && st.mid.active === 0 && st.again && st.job && st.done && !st.avail && st.active.length === 1, st);
 
-  // [slot:tracker-first]
+  // tracker-first (playtest 1 minor 4): as the talk ends, the first card a new player reads is the tutorial's next step
+  // (food), and the starter job's "New task" comes after it (cards recorded from the job's yes to 250 frames on)
+  const tf = await page.evaluate(() => {
+    const H = window.__rp, seq = H.seq();
+    const iFood = seq.findIndex((s) => s === 'tutorial:Next:story:onboard:food'), iJob = seq.findIndex((s) => /^event:New task:task:/.test(s));
+    return { seq, iFood, iJob };
+  });
+  result('tracker-first: the talk\'s end says "Next: Buy food" first, then the job\'s "New task"', tf.iFood >= 0 && tf.iJob > tf.iFood && !tf.seq.slice(0, tf.iFood).some((s) => /^event:/.test(s) && !/talk$/.test(s)), tf);
+
   // marks-one (playtests 1, 2 and 3: three gold gems at once): with food the step, only the food shelf has a story gem
   // (the leeches and the canoe get theirs in their turn), standing between the shelves
   const mk = await page.evaluate(async () => {

@@ -26,6 +26,7 @@ export const TRACKER = {
   showS: 6,          // an event card's seconds up (the frame's dt, so a paused game holds it)
   nearAgainS: 120,   // the same task's 'near' is said again only after this many real seconds
   queueMax: 3,       // events waiting behind the one shown (the oldest dropped)
+  tutFirstS: 4,      // r3 replay: a new tutorial step's card is up this long before other news (a job, a ticket) is said
 };
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const SIDE_STAR = '<svg viewBox="0 0 20 20" width="100%" height="100%"><path d="M10 1.6 12.4 7.6 18.4 10 12.4 12.4 10 18.4 7.6 12.4 1.6 10 7.6 7.6Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/></svg>';
@@ -111,9 +112,18 @@ export class Tracker {
     if (!G || !this.enabled) { this.draw(null); return; }
     if (this.veiled) { this.draw(null, true); return; }
     const step = Number.isFinite(dt) && dt > 0 ? Math.min(dt, 0.5) : 0;
+    // (r3 replay: a tutorial step just come up is said first; other news waits behind it TRACKER.tutFirstS: the talk's
+    // end brought "New task: First night out" before "Next: Buy food", so a new player read the side job first)
+    const cur0 = G.current(), tut = cur0 && cur0.tutorial && !cur0.done ? cur0 : null;
+    if (!tut) this.tutId = null;
+    else if (tut.id !== this.tutId) { this.tutId = tut.id; this.tutLeft = TRACKER.tutFirstS; }
+    if (this.tutLeft > 0) this.tutLeft -= step;
+    const hold = !!(tut && this.tutLeft > 0);
     if (this.ev) { this.ev.left -= step; if (this.ev.left <= 0 || !G.get(this.ev.id)) this.ev = null; }
     while (!this.ev && this.queue.length) {
-      const q = this.queue.shift(), e = G.get(q.id);
+      const i = hold ? this.queue.findIndex((x) => x.id === tut.id) : 0; // (holding: only the step's own card)
+      if (i < 0) break;
+      const q = this.queue.splice(i, 1)[0], e = G.get(q.id);
       if (e && !this.later(e)) this.ev = { ...q, left: TRACKER.showS };
     }
     let card = null;
