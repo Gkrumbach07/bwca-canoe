@@ -321,7 +321,7 @@ export class PartyCamps {
     const v = this.people.partyPerson(party);
     v.live = true; v.hear = CAMPS.hear; v.figs = [];
     const D = { key, c, party, stay: c.stay, site, v, mesh, obstacles, spots, canoeMesh, canoeObs, canoesIn: false, fireKey: `party:${party.id}`, d: Math.hypot(site.x - this.player.x, site.z - this.player.z), canoes: canoes.length, tents: tents.length,
-      figs: v.members.map((m, i) => ({ key: `${key}#${i}`, x: 0, z: 0, y: 0, heading: 0, look: m.look, spec: { pose: 'stand', lean: 0.02, wave: 0 } })), wave: null, fireR: mulberry32(((c.stay.seed >>> 0) ^ 0xf17e) >>> 0)(),
+      figs: v.members.map((m, i) => ({ key: `${key}#${i}`, x: 0, z: 0, y: 0, onGround: true, heading: 0, look: m.look, spec: { pose: 'stand', lean: 0.02, wave: 0 } })), wave: null, fireR: mulberry32(((c.stay.seed >>> 0) ^ 0xf17e) >>> 0)(),
       tentList: tents, canoeAt: canoes.map((q) => ({ x: q.x, z: q.z, tx: q.tx, tz: q.tz, wx: q.wx, wz: q.wz, y: q.y, q: new THREE.Quaternion().setFromRotationMatrix(q.basis.clone().multiply(new THREE.Matrix4().makeRotationX(Math.PI))) })), born: this.now, ring: { x: F.x, z: F.z }, bench: L.bench ? { x: L.bench.x, z: L.bench.z } : null }; // (r2 2: for the walks round them, the way out of a tent, the canoes carried up and down)
     this.drawn.set(key, D);
     this.place(D);
@@ -370,7 +370,12 @@ export class PartyCamps {
     const T = this.parties.today, h = this.day.hours, ph = this.phase(D.stay, T, h), S = D.spots, show = this.shows(D.stay);
     const n = show.people ? Math.min(3, D.v.members.length) : 0; // (p2 C: on the way in or gone out, they are the moving party's)
     D.arrive = T === D.stay.start ? this.times(D.stay).arrive : D.stay.land;
-    this.canoesOn(D, show.canoes || !!D.holdCanoes); // (r2 2: held on the bank till the party lifts them: party-moves.js departOf)
+    // (r2 2 final: the morning they go, kept a moment past their time till the moving party says whether its sterns will
+    // lift them (departOf sets holdCanoes): its actors made a few frames on, the canoes had gone off the bank for 8 frames
+    // and come back to be lifted)
+    let grace = false;
+    if (!show.canoes && T === D.stay.end && D.holdCanoes === undefined && D.canoesIn) { if (D.letGo == null) D.letGo = h; grace = h - D.letGo < 0.006; }
+    this.canoesOn(D, show.canoes || !!D.holdCanoes || grace); // (r2 2: held on the bank till the party lifts them: party-moves.js departOf)
     if (n && T === D.stay.start && !D.handIn) { D.handIn = true; this.handIn(D, h, n); }
     const wet = this.weather && /rain|storm/.test(this.weather.state || '');
     let at = [];
@@ -401,7 +406,7 @@ export class PartyCamps {
     const G = (x, z) => this.tiles.groundAt(x, z);
     for (let k = 0; k < n; k++) {
       const a = L.persons[k], f = D.figs[k]; if (!a || !f || a.boat || !(a.bind || a.dist < 200)) continue;
-      f.x = a.x; f.z = a.z; f.y = G(a.x, a.z); f.heading = a.heading; f.placed = true; f.out = true; f.at = null; f.path = null; f.lastH = h; f.spec = { pose: 'stand', lean: 0.02, wave: 0 };
+      f.x = a.x; f.z = a.z; f.y = G(a.x, a.z); f.heading = a.heading; f.placed = true; f.out = true; f.at = null; f.path = null; f.lastH = h; f.spec = { pose: 'stand', lean: 0.02, wave: 0 }; f.handIn = true;
     }
   }
   // r2 2: who of them is not up now is in a tent (the next out comes out of its door)
@@ -491,8 +496,8 @@ export class PartyCamps {
     }
     f.out = true;
     if (f.at !== id) {
-      const d = Math.hypot(s.x - f.x, s.z - f.z), walk = f.placed && (emerging || (was != null && Math.abs(h - was) < 0.02)) && Number.isFinite(d) && d > 0.35 && d < 60 && this.people && typeof this.people.walkOn === 'function';
-      f.at = id; f.home = s.heading;
+      const d = Math.hypot(s.x - f.x, s.z - f.z), walk = f.placed && (emerging || (was != null && Math.abs(h - was) < 0.02)) && Number.isFinite(d) && d > 0.35 && d < (f.handIn ? 250 : 60) && this.people && typeof this.people.walkOn === 'function';
+      f.at = id; f.home = s.heading; f.handIn = false; // (r2 2 final: one handed in from the landing walks up from it, however far: a landing 100 m off had put him at the fire in a frame)
       if (walk) {
         f.goal = { x: s.x, z: s.z, y, heading: s.heading, spec };
         // (r2 2: round the tents, the canoes on the bank, the fire ring and the bench, not through them; out of a tent by its door first)

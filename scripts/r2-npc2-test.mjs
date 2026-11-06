@@ -70,7 +70,10 @@ const PROBE = () => {
       for (let i = 0; i < 4; i++) g.step(1 / 30, 1);
       const t = g.pointer.target;
       last = { key, kind: t ? t.kind : null, label: t && t.kind === 'person' ? t.label : null, mode: p.mode, d: +Math.hypot(p.x - fx, p.z - fz).toFixed(2), on: g.pointer.on, title: g.title.state, tp: !!p.teleporting, cm: g.chase.mode, out: g.outfitter && g.outfitter.open };
-      if (t && t.kind === 'person') return last;
+      // (another walking across the line between: the dot rightly on them; aim again from another side)
+      const cx = f.f ? f.f.x : f.a.x, cz = f.f ? f.f.z : f.a.z, other = t && t.box && Math.hypot(t.box.x - cx, t.box.z - cz) > 0.5;
+      if (other) last.other = true;
+      if (t && t.kind === 'person' && (!other || tr === 5)) return last;
     }
     return last;
   }

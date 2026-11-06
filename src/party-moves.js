@@ -631,7 +631,11 @@ export class PartyMoves {
   // the hull of canoe c as it lies now (the drawn one; its slot at S when it is not)
   hullOf(L, c, S) {
     const b = L.boats[c];
-    if (b && !b.hidden && Number.isFinite(b.x)) return { x: b.x, z: b.z, h: b.heading, y: b.y, b };
+    const last = L.hullLast || (L.hullLast = []);
+    if (b && !b.hidden && Number.isFinite(b.x)) { last[c] = { x: b.x, z: b.z, h: b.heading, y: b.y, S }; return { x: b.x, z: b.z, h: b.heading, y: b.y, b }; }
+    // (r2 2 final: lifted onto his shoulders, where she last lay, not her slot: those beside her had jumped the 0.6 m and
+    // more she had settled off it, as he took her)
+    const q = last[c]; if (q && q.S === S) return { x: q.x, z: q.z, h: q.h, y: q.y, b: null };
     const o = this.slot(S, c, L.boats.length, { x: 0, z: 0, h: 0 }), lv = this.world.levelAt ? this.world.levelAt(o.x, o.z) : 0;
     return { x: o.x, z: o.z, h: o.h, y: lv + 0.15, b: null };
   }
@@ -791,7 +795,7 @@ export class PartyMoves {
     if (L.depart !== undefined) return L.depart;
     const D = this.campOf(L, 'from');
     // (only from the start of it: come on them later (a clock moved on, a teleport), their canoes are in the water already)
-    if (!D || !D.canoeAt || (h - s.h0) * 3600 / CLOCK > 6) return (L.depart = null);
+    if (!D || !D.canoeAt || (h - s.h0) * 3600 / CLOCK > 6) { if (D) D.holdCanoes = false; return (L.depart = null); } // (r2 2 final: and the camp's wait for the word over)
     const out = { D, tents: D.tentList || [], carry: new Map(), walk: new Map(), liftT: null };
     const n = L.plan.crew.boats.length;
     L.plan.crew.boats.forEach((crew, c) => {
@@ -903,7 +907,11 @@ export class PartyMoves {
     // (those the camp does not draw: into a tent, the last moments)
     if (i >= X.drawn && X.tents.length && tl < HAND.tent) {
       const tn = X.tents[i % X.tents.length], din = tn.size.b * 0.45, P = { x: tn.x + tn.fdx * din, z: tn.z + tn.fdz * din };
-      const J = this.jobPoseAt(L, s, i, h - (HAND.tent - tl) * CLOCK / 3600), u = smooth((HAND.tent - tl) / (HAND.tent - 1.2));
+      // (r2 2 final: the walk's start taken once, as it begins: worked out again each frame from a job by her side, it had
+      // moved with her as she was carried off and set down, 0.7-3.5 m a frame)
+      const TF = X.tentFrom || (X.tentFrom = new Map());
+      let J = TF.get(i); if (!J) { J = this.jobPoseAt(L, s, i, h - (HAND.tent - tl) * CLOCK / 3600); TF.set(i, { x: J.x, z: J.z }); }
+      const u = smooth((HAND.tent - tl) / (HAND.tent - 1.2));
       return { x: J.x + (P.x - J.x) * u, z: J.z + (P.z - J.z) * u, heading: headingOf(P.x - J.x, P.z - J.z), v: u < 1 ? Math.hypot(P.x - J.x, P.z - J.z) / (HAND.tent - 1.2) : 0, mode: u < 1 ? 'walk' : 'stand', pack: false, anim: u >= 1 ? { crouch: 0.9 } : null };
     }
     return null;

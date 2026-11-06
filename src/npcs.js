@@ -442,7 +442,9 @@ export class Body {
     const g = G(f.x, f.z);
     // the feet on the ground under them: outside, the height is the ground's (a walk's straight line between its points
     // had them in the air or sunk on a slope); on a floor or a deck, that
-    if (!(f.y > g + 0.12)) f.y = g;
+    // (r2 2 final: one only ever on the ground (a camp's: onGround) is kept on it however far it moved under them: the
+    // ground under a camp come into detail 0.6-1.2 m lower had been taken for a floor, a man standing on the air for frames)
+    if (!(f.y > g + 0.12) || f.onGround) f.y = g;
     this.floorY = f.y > g + 0.12 ? f.y : null;
     // (r2 2 verify: the height they stand at moved over 12 cm in a frame (a store built again on new ground, its floor
     // 0.2 to 0.6 m up or down: follow()): the feet planted afresh there, or the planted ones held the hips in the old floor
