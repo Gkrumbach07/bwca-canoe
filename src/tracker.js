@@ -28,7 +28,8 @@ export const TRACKER = {
   queueMax: 3,       // events waiting behind the one shown (the oldest dropped)
 };
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const ICON = (k) => (k === 'story' || k === 'side' ? `<span class="tr-gi ${k}" aria-hidden="true"></span>` : `<span class="tr-box k-${k}" aria-hidden="true"></span>`);
+const SIDE_STAR = '<svg viewBox="0 0 20 20" width="100%" height="100%"><path d="M10 1.6 12.4 7.6 18.4 10 12.4 12.4 10 18.4 7.6 12.4 1.6 10 7.6 7.6Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/></svg>';
+const ICON = (k) => (k === 'story' || k === 'side' ? `<span class="tr-gi gi-${k}" aria-hidden="true">${k === 'side' ? SIDE_STAR : ''}</span>` : `<span class="tr-box k-${k}" aria-hidden="true"></span>`);
 const bare = (s) => String(s || '').replace(/[.!]+$/, '').trim().toLowerCase();
 
 export class Tracker {

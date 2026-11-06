@@ -255,15 +255,15 @@
 :is(.pp-spread, .pp) .pp-todo.k-side.on .t { color: #1e4244; }
 :is(.pp-spread, .pp) button.pp-todo.k-story:hover .t { color: #5a3606; }
 :is(.pp-spread, .pp) button.pp-todo.k-side:hover .t { color: #1e4244; }
-:is(.pp-spread, .pp) .pp-gi { display: inline-block; width: 18px; height: 20px; flex: none; }
+:is(.pp-spread, .pp) .pp-gi { display: inline-block; position: relative; width: 18px; height: 20px; flex: none; }
 :is(.pp-spread, .pp) .pp-todo > .pp-gi { position: absolute; left: calc(var(--pp-margin) - 29px); top: 4px; }
 /* the gem: a cut diamond, a light facet over a deeper one, a dark rim (the gold alone would not read on the paper) */
-:is(.pp-spread, .pp) .pp-gi.story { position: relative; background: var(--pp-story); clip-path: polygon(50% 0, 100% 38%, 50% 100%, 0 38%); }
-:is(.pp-spread, .pp) .pp-gi.story::after { content: ''; position: absolute; inset: 2px 2px 2.4px; clip-path: polygon(50% 0, 100% 38%, 50% 100%, 0 38%);
+:is(.pp-spread, .pp) .pp-gi.gi-story { background: var(--pp-story); clip-path: polygon(50% 0, 100% 38%, 50% 100%, 0 38%); }
+:is(.pp-spread, .pp) .pp-gi.gi-story::after { content: ''; position: absolute; inset: 2px 2px 2.4px; clip-path: polygon(50% 0, 100% 38%, 50% 100%, 0 38%);
   background: linear-gradient(115deg, rgba(255, 246, 205, .95) 0 32%, transparent 33%), linear-gradient(245deg, rgba(150, 95, 10, .5) 0 36%, transparent 37%), linear-gradient(180deg, transparent 37%, rgba(150, 95, 10, .35) 38%), var(--pp-story-gem); }
 /* the side story's star: an open four-point star in teal */
-:is(.pp-spread, .pp) .pp-gi.side { background: var(--pp-side); clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%); position: relative; }
-:is(.pp-spread, .pp) .pp-gi.side::after { content: ''; position: absolute; inset: 0; background: var(--pp-sheet); clip-path: polygon(50% 18%, 57% 43%, 82% 50%, 57% 57%, 50% 82%, 43% 57%, 18% 50%, 43% 43%); }
+:is(.pp-spread, .pp) .pp-gi.gi-side { color: var(--pp-side); }
+:is(.pp-spread, .pp) .pp-gi.gi-side svg { display: block; }
 :is(.pp-spread, .pp) .pp-todo.k-story.done .t, :is(.pp-spread, .pp) .pp-todo.k-side.done .t { text-decoration: line-through; text-decoration-thickness: 2px; opacity: .7; }
 /* a story step picked: a page written in the journal */
 :is(.pp-spread, .pp) .pp-quest { padding: 30px 18px 10px 22px; display: flex; flex-direction: column; gap: 12px; }

@@ -320,7 +320,7 @@ export class Journal {
       }
       if (t.guide) {
         const e = t.guide, k = e.kind;
-        const icon = k === 'story' || k === 'side' ? `<span class="pp-gi ${k}" aria-hidden="true"></span>` : `<span class="pp-box${e.done ? ' done' : ''}" aria-hidden="true"></span>`;
+        const icon = k === 'story' || k === 'side' ? gemIcon(k) : `<span class="pp-box${e.done ? ' done' : ''}" aria-hidden="true"></span>`;
         const label = k === 'story' ? 'Story' : k === 'side' ? 'Side story' : '';
         return `<button type="button" class="pp-todo k-${k}${e.done ? ' done' : ''}${on}" data-task="${esc(key)}" data-kind="${k}"${label ? ` aria-label="${esc(`${label}: ${e.title}`)}"` : ''}>${icon}
         <span class="t">${esc(e.title || 'A task')}</span>${e.done ? '<span class="st">done</span>' : nx(nextOf(key, t))}</button>`;
@@ -352,7 +352,7 @@ export class Journal {
       const label = k === 'story' ? 'The season’s story' : k === 'side' ? 'A side story' : k === 'starter' ? 'The first job' : 'A task';
       const where = e.target && e.target.label && !e.done ? `<p class="pp-qwhere"><i aria-hidden="true">${GLYPH.where}</i> ${esc(up(e.target.label))}</p>` : '';
       left = `<div class="pp-scroll pp-quest k-${k}${fresh ? ' fresh' : ''}">
-        <p class="pp-qkind">${k === 'story' || k === 'side' ? `<span class="pp-gi ${k}" aria-hidden="true"></span>` : ''}${label}</p>
+        <p class="pp-qkind">${k === 'story' || k === 'side' ? gemIcon(k) : ''}${label}</p>
         <h3 class="pp-qtitle">${esc(e.title || 'A task')}</h3>
         ${e.done ? '<p class="pp-hand pp-qnext">Done.</p>' : e.next ? `<p class="pp-hand pp-qnext">${esc(e.next)}</p>` : ''}${where}</div>`;
       return { left, right, leftLabel: label, rightCls: 'tasks' };
@@ -544,6 +544,9 @@ const shortCaption = (c) => String(c || '').split(', ').slice(0, 2).join(', ');
 const TILT = [-1.4, 1.1, 0.5, -0.7, 1.6, -0.3];
 // small pencil glyphs for the facts
 const svg = (d, extra = '') => `<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"${extra}>${d}</svg>`;
+// r3 B: the story's cut gem (paper.css draws it) and the side story's open star (an outline, drawn here)
+const SIDE_STAR = '<svg viewBox="0 0 20 20" width="100%" height="100%"><path d="M10 1.6 12.4 7.6 18.4 10 12.4 12.4 10 18.4 7.6 12.4 1.6 10 7.6 7.6Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/></svg>';
+const gemIcon = (k) => `<span class="pp-gi gi-${k}" aria-hidden="true">${k === 'side' ? SIDE_STAR : ''}</span>`;
 const GLYPH = {
   where: svg('<path d="M8 15s5-4.6 5-8.2A5 5 0 0 0 3 6.8C3 10.4 8 15 8 15z"/><circle cx="8" cy="6.8" r="1.8"/>'),
   when: svg('<circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.4 1.6"/>'),
