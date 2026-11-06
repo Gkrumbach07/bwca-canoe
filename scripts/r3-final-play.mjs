@@ -32,7 +32,7 @@ const HELPERS = () => {
   H.step = (frames = 30, dt = 1 / 30) => { for (let left = frames; left > 0; left -= 200) g.step(dt, Math.min(200, left)); };
   H.wait = (ms) => new Promise((r) => setTimeout(r, ms));
   H.settle = async (ms = 30000) => { const t0 = performance.now(); while (g.player.teleporting && performance.now() - t0 < ms) { H.step(10); await H.wait(30); } H.step(20); };
-  H.look = (yaw, pitch = 0.05) => { const ch = g.chase; if (ch) { ch.viewYaw = yaw; ch.forwardYaw = yaw; ch.viewPitch = pitch; if (ch.snap) ch.snap(); } };
+  H.look = (yaw, pitch = 0.05) => { const ch = g.chase; if (g.player.mode === 'paddle') { g.player.heading = yaw; g.player.yawRate = 0; } if (ch) { ch.viewYaw = yaw; ch.forwardYaw = yaw; ch.viewPitch = pitch; if (ch.snap) ch.snap(); } };
   H.standAt = (x, z, heading = 0) => {
     const p = g.player;
     if (!p.carry || !p.carry.drop) p.carry = { trail: null, drop: { x: p.x, z: p.z, heading: p.heading }, hitCooldown: 0, from: null, choice: false };
@@ -228,6 +228,7 @@ try {
 
   // --- the canoe appearing at the berth ------------------------------------------------------------------------------
   const appear = await ev(() => { const g = window.__game, H = window.__p, d = g.player.carry.drop; if (g.outfitter.open) g.outfitter.hide(); if (g.chase.mode !== 'third') g.chase.setMode('third'); H.face(d, 6, -0.18); H.step(40); return { hull: g.player.canoe.hull.visible, near: H.near(d, 1.4).filter((x) => !x.walking) }; });
+  await page.waitForTimeout(1200); await ev(() => window.__p.step(4));
   await shot('06-canoe-appears', 6, 'After the talk: the loaned canoe at your berth');
   result('8 the loaned canoe drawn at your berth, nobody standing on it', appear.hull && appear.near.length === 0, appear);
 
@@ -236,8 +237,9 @@ try {
     const s = await ev((id) => { const g = window.__game, H = window.__p, L = g.outfitter.layout(g.profile.home), c = L.centre || L.counter; H.standAt(c.x, c.z); H.step(20); const e = g.guide.get(id), r = e && g.guide.reach(e); return { pos: r && { x: r.pos.x, y: r.pos.y, z: r.pos.z }, cur: window.__p.cur() }; }, id);
     if (!s.pos) return { none: true, s };
     // (the gem from the middle of the store, looked at; then up to the shelf)
-    await ev((q) => { const H = window.__p; H.aimAt(q, q.y); H.step(30); H.aimAt(q, q.y); H.step(4); }, s.pos);
+    await ev((q) => { const g = window.__game, H = window.__p; if (g.chase.mode !== 'first') g.chase.setMode('first'); H.aimAt(q, q.y); H.step(30); H.aimAt(q, q.y); H.step(4); }, s.pos);
     const gem = await gemCheck(id, `${name}-gem`, n, cap);
+    await ev(() => { const g = window.__game; if (g.chase.mode !== 'third') g.chase.setMode('third'); window.__p.step(6); });
     await walkTo(s.pos, 1.8);
     const blockers = await ev((q) => window.__p.near(q, 1.0).filter((x) => !x.walking), s.pos);
     await ev((q) => { const H = window.__p; H.aimAt(q, q.y - 0.3); H.step(6); }, s.pos);
@@ -255,7 +257,7 @@ try {
     await page.keyboard.press('Escape'); await ev(() => window.__p.step(10)); await page.waitForTimeout(200);
     return { cur: s.cur, gem, blockers, firstTgt, tgt, opened, m0, bought };
   };
-  const food = await shelfBuy('story:onboard:food', ['meal:breakfast', 'meal:supper'], '05-food', 5, 'The food shelf’s gem (the provisions)');
+  const food = await shelfBuy('story:onboard:food', ['meal:breakfast', 'meal:supper'], '05-food', 5, 'The food shelf’s gem (first person, from the middle of the store)');
   result('9 the food shelf: its gem visible, nobody in the way, E opens it, a double-click buys', food.cur && food.cur.id === 'story:onboard:food' && visible(food.gem) && !food.blockers.length && /^shelf:/.test(food.firstTgt || '') && food.bought.some((b) => b.money != null && b.money < food.m0), food);
   const lee = await shelfBuy('story:onboard:leeches', ['leeches'], '05b-leeches', null, null);
   result('10 the tackle shelf: its gem visible, nobody in the way, leeches bought', lee.cur && lee.cur.id === 'story:onboard:leeches' && visible(lee.gem) && !lee.blockers.length && /^shelf:/.test(lee.firstTgt || '') && lee.bought.some((b) => b.money != null && b.money < lee.m0), lee);
@@ -325,8 +327,9 @@ try {
     return { id, pos: r && { x: r.pos.x, y: r.pos.y, z: r.pos.z }, site: { x: s.x, z: s.z } };
   });
   await page.waitForTimeout(6000); // (the lake's name card fades)
-  await ev(([pos]) => { const g = window.__game, H = window.__p; if (g.chase.mode !== 'third') g.chase.setMode('third'); H.face(pos, 4, -0.05); H.step(150); }, [site.pos]);
-  const grate = site.pos ? await gemCheck(site.id, '09-grate-gem', 9, 'At the starter site: the gem over the grate, 4 m') : { none: true };
+  await ev(([pos]) => { const g = window.__game, H = window.__p; if (g.chase.mode !== 'third') g.chase.setMode('third'); H.face(pos, 4, -0.05); H.step(150); if (g.chase.mode !== 'first') g.chase.setMode('first'); H.aimAt(pos, pos.y - 0.4); H.step(10); }, [site.pos]);
+  const grate = site.pos ? await gemCheck(site.id, '09-grate-gem', 9, 'At the starter site: the gem over the grate (first person, 4 m)') : { none: true };
+  await ev(() => { const g = window.__game; if (g.chase.mode !== 'third') g.chase.setMode('third'); window.__p.step(6); });
   result('13 the grate\'s gem at the starter site, visible at the default camera', visible(grate), grate);
   const parts = [];
   for (const k of ['grate', 'latrine', 'pad']) {
