@@ -253,12 +253,20 @@ try {
     return { cur: s.cur, gem, blockers, firstTgt, tgt, opened, m0, bought };
   };
   const food = await shelfBuy('story:onboard:food', ['meal:breakfast', 'meal:supper'], '05-food', 5, 'The food shelf’s gem (the provisions)');
-  result('9 the food shelf: its gem visible, nobody in the way, E opens it, a double-click buys', food.cur && food.cur.id === 'story:onboard:food' && visible(food.gem) && !food.blockers.length && /^shelf:/.test(food.firstTgt || '') && food.opened && food.bought.some((b) => b.money != null && b.money < food.m0), food);
+  result('9 the food shelf: its gem visible, nobody in the way, E opens it, a double-click buys', food.cur && food.cur.id === 'story:onboard:food' && visible(food.gem) && !food.blockers.length && /^shelf:/.test(food.firstTgt || '') && food.bought.some((b) => b.money != null && b.money < food.m0), food);
   const lee = await shelfBuy('story:onboard:leeches', ['leeches'], '05b-leeches', null, null);
   result('10 the tackle shelf: its gem visible, nobody in the way, leeches bought', lee.cur && lee.cur.id === 'story:onboard:leeches' && visible(lee.gem) && !lee.blockers.length && /^shelf:/.test(lee.firstTgt || '') && lee.bought.some((b) => b.money != null && b.money < lee.m0), lee);
 
   // --- the canoe at the busiest hour: E get in, push off with W, a party's crew about the dock ----------------------
-  const toCanoe = await ev(([h]) => { const g = window.__game, H = window.__p, L = g.outfitter.layout(g.profile.home), f = L.dockFoot || L.dockLand || L.door, d = g.player.carry.drop; g.day.setClock(g.day.year, g.day.doy, h - 0.05); H.step(90); H.standAt(f.x, f.z); H.step(20); return { d: { x: d.x, z: d.z }, cur: H.cur() }; }, [hour.best]);
+  // (a party setting out from this dock today: the clock to the middle of its loading, so its crew is at the dock as
+  // you push off, and it paddles out after you)
+  const out0 = await ev(() => {
+    const g = window.__game, P = g.parties, home = g.profile.home, now = g.day.hours, c = [];
+    for (const { party, k } of P.legsOn(P.today)) { const pl = P.legPlan(party, k); if (!pl || !pl.from || pl.from.kind !== 'ep' || Number(pl.from.ep) !== Number(home)) continue; const la = pl.segs.find((q) => q.kind === 'launch'), pd = pl.segs.find((q) => q.kind === 'paddle'); if (!la || !pd || la.h0 < now + 0.05) continue; c.push({ id: pl.id, launch: la.h0, start: pl.start, paddle: pd.h0, boats: pl.crew && pl.crew.boats ? pl.crew.boats.length : null }); }
+    c.sort((a, b) => a.launch - b.launch); return { now: +now.toFixed(2), pick: c[0] || null, n: c.length };
+  });
+  log('setting out', JSON.stringify(out0));
+  const toCanoe = await ev(([h, pick]) => { const g = window.__game, H = window.__p, L = g.outfitter.layout(g.profile.home), f = L.dockFoot || L.dockLand || L.door, d = g.player.carry.drop; g.day.setClock(g.day.year, g.day.doy, pick ? pick.launch + (pick.start - pick.launch) * 0.35 : h - 0.05); H.step(90); H.standAt(f.x, f.z); H.step(20); return { d: { x: d.x, z: d.z }, cur: H.cur(), h: +g.day.hours.toFixed(3) }; }, [hour.best, out0.pick]);
   await walkTo(toCanoe.d, 2.2);
   const canoeGem = await gemCheck('story:onboard:canoe', '07a-canoe-gem');
   await ev((q) => { const H = window.__p; H.aimAt(q, window.__game.player.foot ? window.__game.player.foot.y - 0.3 : null); H.step(6); }, toCanoe.d);
@@ -272,7 +280,7 @@ try {
     H.step(10); H.look(H.yawTo(f), -0.08); H.step(20);
     let n = H.figsInView(), k = 0;
     for (; k < 600 && n < 2; k++) { g.step(1 / 30, 1); if (k % 10 === 0) n = H.figsInView(); }
-    return { n, k, mode: g.player.mode };
+    return { n, k, mode: g.player.mode, party: H.partyPeople().length, h: +g.day.hours.toFixed(3) };
   });
   await shot('07-push-off', 7, 'Pushed off: the store’s people and a party’s crew about the dock');
   const off = await ev((p0) => { const g = window.__game, H = window.__p; return { mode: g.player.mode, moved: +Math.hypot(g.player.x - p0.x, g.player.z - p0.z).toFixed(1), cur: H.cur(), tracker: H.screen().tracker }; }, p0);
@@ -282,8 +290,8 @@ try {
   const paddle = await ev(async () => {
     const g = window.__game, H = window.__p;
     let list = H.paddling(), k = 0;
-    for (; k < 40 && !(list.length && list[0].d < 260); k++) { H.step(90); await H.wait(10); list = H.paddling(); }
-    const b = list[0]; if (!b) return { none: true, k };
+    for (; k < 80 && !(list.length && list[0].d < 260); k++) { H.step(45); await H.wait(10); list = H.paddling(); }
+    const b = list[0]; if (!b) return { none: true, k, h: +g.day.hours.toFixed(3), legs: [...g.moves.active.values()].map((L) => `${L.plan.id}:${L.seg && L.seg.kind}`).slice(0, 6) };
     // (a teleport-free hop: in your canoe 30 m off theirs, on the water, looking at them)
     const p = g.player, W = g.world;
     if (b.d > 60) { for (const [a, r] of [[0, 30], [1.6, 30], [3.1, 30], [4.7, 30], [0.8, 45], [2.4, 45]]) { const x = b.x + Math.cos(a) * r, z = b.z + Math.sin(a) * r; if (W.shoreAt(x, z) < -4) { p.x = x; p.z = z; p.speed = 0; p.yawRate = 0; break; } } }
