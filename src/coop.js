@@ -247,7 +247,9 @@ class Remote {
       B.over = swim && !!s.ov;
       // (round 2: d[3..7] the pivot's height and turn as their screen lays it, on the slope, the shore, the deck)
       const d = s.d;
-      if (s.m !== 'carry' && Array.isArray(d) && d.length >= 3 && d.slice(0, 3).every(Number.isFinite)) {
+      this.berthHeld = s.nc && Array.isArray(d) && d.length >= 2 && Number.isFinite(d[0]) ? { x: d[0], z: d[1] } : null;
+      if (s.nc) B.hide(); // (r3 replay: no canoe lent yet: its berth held, nothing drawn)
+      else if (s.m !== 'carry' && Array.isArray(d) && d.length >= 3 && d.slice(0, 3).every(Number.isFinite)) {
         B.ext = null; B.hidden = false;
         const laid = d.length >= 8 && d.every(Number.isFinite) && !B.over;
         B.placeAt({ x: d[0], z: d[1], heading: d[2], y: laid ? d[3] : null, q: laid ? { x: d[4], y: d[5], z: d[6], w: d[7] } : null });
@@ -290,7 +292,8 @@ export class Coop {
     this.handlers = new Map(); this.peerFns = new Set(); this.tickFns = new Set();
     this.poseFns = new Set(); this.drawFns = new Set(); // phase 3: more in the pose (fn(m)), and drawn from it (fn(remote, s, T, dt))
     // a dock's free berth (outfitter.js berthFor): never tie up in a friend's canoe
-    if (g.outfitter) g.outfitter.otherCanoes = () => [...this.remotes.values()].filter((r) => r.boat && !r.boat.hidden).map((r) => ({ x: r.boat.x, z: r.boat.z }));
+    // (r3 replay: a friend's berth held for the canoe their staff talk will lend counts as taken)
+    if (g.outfitter) g.outfitter.otherCanoes = () => [...this.remotes.values()].map((r) => (r.boat && !r.boat.hidden ? { x: r.boat.x, z: r.boat.z } : r.berthHeld || null)).filter(Boolean);
     if (g.title) { g.title.coop = this; this.attachTitle(g.title); }
     // phase 3: the visitor profile stamped as the page goes, so a reload finds the room (Rejoin, a host's code back)
     this.stampT = 0; this.reopenTried = false;
@@ -553,7 +556,7 @@ export class Coop {
     const s = Number.isFinite(st.stroke) ? st.stroke : 0;
     if (s < this.lastStroke - 0.5) this.strokeN++;
     this.lastStroke = s;
-    const drop = !onboarding.noCanoe && p.carry && p.carry.drop, cap = p.mode === 'swim' && p.swim && p.swim.hull; // (a capsize: the hull beside you; r3 replay: no canoe before the loan, so a friend's screen draws none)
+    const drop = p.carry && p.carry.drop, cap = p.mode === 'swim' && p.swim && p.swim.hull; // (a capsize: the hull beside you)
     let pk = 1; try { pk = g.packs ? g.packs.count : 1; } catch { pk = 1; }
     const m = {
       t: 'pose', ts: Math.round(performance.now()), x: r2(p.x), z: r2(p.z), h: r3(p.heading), m: p.mode,
@@ -567,6 +570,8 @@ export class Coop {
     };
     const d = cap && Number.isFinite(cap.cx) ? [r2(cap.cx), r2(cap.cz), r3(cap.heading || 0)] : drop && Number.isFinite(drop.x) ? this.laid(drop) : null;
     if (d) m.d = d; // (none: no canoe set down; a friend's screen hides it)
+    // r3 replay: before the staff talk lends one there is no canoe: the berth is sent (nc), held for it, and nothing drawn
+    if (d && onboarding.noCanoe && !cap) m.nc = 1;
     // round 2: the height the body stands on, as this screen has it (the owner, 2026-11-01: "standing on top of a rock …
     // to them it just looks like I'm standing inside the rock"): on foot the feet's (the rig is 0.1 over them: a rock's top,
     // a deck, a stair, in a hop the height in the air); afloat and swimming the water's level under you
