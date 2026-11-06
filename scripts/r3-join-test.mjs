@@ -138,6 +138,7 @@ try {
       if (r && act !== 'canoe') H.face(r.pos, 2.6);
       if (r && act === 'canoe') { const L = g.outfitter.layout(ep), f = L.dockFoot || L.dockLand || r.pos; H.standAt(f.x, f.z); }
       H.step(250); // (an event card's seconds pass: the tutorial card says the step)
+      for (let k = 0; k < 120 && g.tracker.state().id !== id; k++) H.step(3); // (r3 replay: the job's card, said after the step's own, may still be up)
       const at = { cur: H.cur(), main: H.mainGem(), off: H.off(id), tr: g.tracker.state(), row: await H.row(id) };
       let did = null;
       if (act === 'food') did = ['meal:breakfast', 'meal:supper', 'meal:breakfast', 'meal:supper', 'meal:breakfast', 'meal:supper'].map((m) => S.buyItem(m, ep).ok);
@@ -187,13 +188,13 @@ try {
     for (let k = 0; k < 80 && !s.layout; k++) { H.step(10); await H.wait(80); }
     H.step(20); g.guide.sync();
     const e = g.guide.get(id), r = e && g.guide.reach(e);
-    if (r) { H.face(r.pos, 3.5); H.step(60); for (let k = 0; k < 80 && !H.cards.some((c) => c.id === id && c.head === 'Close by'); k++) H.step(3); } // (r3 replay: behind any card still up)
+    if (r) { H.face(r.pos, 3.5); H.step(60); for (let k = 0; k < 80 && !H.cards.some((c) => c.id === id && /Close by|Next/.test(c.head)); k++) H.step(3); } // (r3 replay: behind any card still up)
     return { id, row, next0: e0 && e0.next, far, key: e && e.target && e.target.key, gem: !!H.gem(id), off: H.off(id), cards: H.cardsOf(id), starterNew: null };
   });
   const starterNew = !!talk.starter && four.seq.includes(`event:New task:${talk.starter}`);
   if (six.none) result('6 the starter job (none on this home: skipped)', true, six);
   else result('6 the starter job: the tracker\'s "New task" at the talk\'s end, the journal row and its next line; at the site the gem over the grate and the tracker "Close by"; nothing from 200 m',
-    starterNew && six.row && six.row.kind === 'starter' && six.row.nx.length > 3 && !six.far && /grate/.test(six.key || '') && six.gem && six.off < 0.6 && six.cards.some((c) => /Close by/.test(c)), { ...six, starterNew });
+    starterNew && six.row && six.row.kind === 'starter' && six.row.nx.length > 3 && !six.far && /grate/.test(six.key || '') && six.gem && six.off < 0.6 && six.cards.some((c) => /Close by|Next/.test(c)), { ...six, starterNew }); // (r3 replay: "Next: Look over the grate" as the line changes on arrival, or "Close by")
 
   // 7 a co-op guest
   const page2 = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
