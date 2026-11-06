@@ -599,7 +599,8 @@ function pmaPath(p, lod) {
 }
 const boxIn = (b, v, W, H) => !(b[2] < v.x0 || b[0] > v.x0 + W * v.mPerPx || b[3] < v.z0 || b[1] > v.z0 + H * v.mPerPx);
 // the outlines, on a view { x0, z0, mPerPx } (W x H canvas px); focus: the id of the one to pick out
-export function paintPmas(ctx, v, W, H, { k = 1, focus = null } = {}) {
+// wash: every area washed and drawn in a solid line (the start map: at the whole wilderness's scale a dash alone was lost in the lakes' speckle)
+export function paintPmas(ctx, v, W, H, { k = 1, focus = null, wash = false } = {}) {
   const s = 1 / v.mPerPx, px = v.mPerPx, lod = lodOf(v.mPerPx, k);
   ctx.save();
   ctx.setTransform(ctx.getTransform().multiply(new DOMMatrix([s, 0, 0, s, -v.x0 * s, -v.z0 * s])));
@@ -607,9 +608,9 @@ export function paintPmas(ctx, v, W, H, { k = 1, focus = null } = {}) {
   for (const p of PMAS) {
     if (!boxIn(p.box, v, W, H)) continue;
     const path = pmaPath(p, lod), on = p.id === focus;
-    if (on) { ctx.fillStyle = INK.pmaWash; ctx.fill(path); }
+    if (on || wash) { ctx.fillStyle = INK.pmaWash; ctx.fill(path); }
     const kk = Math.max(k, 0.8); // (the corner sheet's small k: a line still a pixel wide, its dashes still dashes)
-    ctx.setLineDash([5 * kk * px, 2.6 * kk * px]);
+    ctx.setLineDash(wash ? [] : [5 * kk * px, 2.6 * kk * px]);
     ctx.strokeStyle = INK.pma; ctx.lineWidth = (on ? 1.9 : 1.15) * kk * px; ctx.stroke(path);
   }
   ctx.restore();
@@ -764,7 +765,7 @@ export function lakeBox(world, ids, cx, cz, reach) {
 //   view: { cx, cz, span } (span: metres across the canvas) or { x0, z0, x1, z1 } (fitted, with a margin)
 //   opts: { markers: [{ x, z, kind: 'dock' | 'dot' | 'you' | 'ring' | 'flag' | 'star', label, color, r }],
 //           route: [[x, z], …] (a pencil line), names: true (lake names), docks: true (the outfitters' docks),
-//           boundary: true, pmas: true (the primitive areas; pmaFocus: one picked out), burns: false, detail: (x0, z0, x1, z1) => bool (what may be shown; default everything),
+//           boundary: true, pmas: true (the primitive areas; pmaFocus: one picked out; pmaWash: all washed, solid lines), burns: false, detail: (x0, z0, x1, z1) => bool (what may be shown; default everything),
 //           k (line scale), fine: true (the 10 m tiles at any zoom), soundAll: true (every sounding at any zoom) }
 // Water and names come from the far field (80 m) when the view is wide, from the fine tiles when it is close; tiles not
 // in yet are fetched, and ready is false until they are: call it again (on a timer or the next frame) until it is true.
@@ -782,7 +783,7 @@ export function drawRegion(canvas, world, view, opts = {}) {
   const ready = paintGround(ctx, world, v, W, H, { k, budget: { build: opts.build ?? 3 }, depths: opts.soundAll || mPerPx < 6, ink: opts.ink || null, inkV: opts.inkV || 0, detail, far: opts.fine ? false : null, all: !!opts.soundAll });
   if (opts.burns) paintBurns(ctx, v, burnsInView(v, W, H), k);
   if (opts.boundary !== false) { if (BOUNDARY.ready) paintBoundary(ctx, v, k); else loadBoundary(); }
-  if (opts.pmas !== false) paintPmas(ctx, v, W, H, { k, focus: opts.pmaFocus || null });
+  if (opts.pmas !== false) paintPmas(ctx, v, W, H, { k, focus: opts.pmaFocus || null, wash: !!opts.pmaWash });
   const lettered = opts.names !== false ? paintLakeNames(ctx, world, v, W, H, { k, detail }) : [];
   if (opts.pmas !== false) paintPmaNames(ctx, world, v, W, H, { k, lettered, focus: opts.pmaFocus || null, onMine: detail ? (x, z) => detail(x, z, x, z) : null });
   if (opts.docks !== false) for (const ep of world.entryPoints) { const [a, b] = toPx(ep.x, ep.z); if (a > -20 && b > -20 && a < W + 20 && b < H + 20) paintEntry(ctx, a, b, k, ep.ep); }
