@@ -308,7 +308,8 @@ try {
     const p = g.player, W = g.world;
     if (b.d > 60) { for (const [a, r] of [[0, 30], [1.6, 30], [3.1, 30], [4.7, 30], [0.8, 45], [2.4, 45]]) { const x = b.x + Math.cos(a) * r, z = b.z + Math.sin(a) * r; if (W.shoreAt(x, z) < -4) { p.x = x; p.z = z; p.speed = 0; p.yawRate = 0; break; } } }
     for (let i = 0; i < 6; i++) { const c = H.paddling().find((q) => q.id === b.id) || b; p.heading = H.yawTo(c); H.look(H.yawTo(c), -0.05); H.step(5); await H.wait(20); }
-    if (g.chase.mode !== 'first') { g.chase.setMode('first'); for (let i = 0; i < 4; i++) { const c = H.paddling().find((q) => q.id === b.id) || b; H.look(H.yawTo(c), -0.04); H.step(4); } }
+    // (first person, the party a little off the bow: dead ahead it would sit behind your own bow and pack)
+    if (g.chase.mode !== 'first') { g.chase.setMode('first'); for (let i = 0; i < 4; i++) { const c = H.paddling().find((q) => q.id === b.id) || b; H.look(H.yawTo(c) + 0.35, -0.02); g.chase.viewYaw = H.yawTo(c); g.chase.forwardYaw = g.chase.viewYaw; H.step(4); } }
     const c = H.paddling().find((q) => q.id === b.id) || b;
     return { id: b.id, d: +Math.hypot(c.x - p.x, c.z - p.z).toFixed(1), k, mode: p.mode, inView: H.onScreen(c.x, (W.levelAt ? W.levelAt(c.x, c.z) : 0) + 0.5, c.z) };
   });
@@ -358,11 +359,13 @@ try {
     const q = pf ? { x: pf.f.x, z: pf.f.z } : fire;
     let at = null; for (const r of [8, 11, 6, 14]) { for (let i = 0; i < 12 && !at; i++) { const a = (i / 12) * Math.PI * 2, x = q.x + Math.cos(a) * r, z = q.z + Math.sin(a) * r; if (g.world.shoreAt(x, z) > 1.5 && Math.abs(g.player.groundAt(x, z) - g.player.groundAt(q.x, q.z)) < 2.5) at = { x, z }; } if (at) break; }
     if (at) H.standAt(at.x, at.z);
-    H.look(H.yawTo(q), -0.06); H.step(60); H.look(H.yawTo(pf ? { x: pf.f.x, z: pf.f.z } : q), -0.06); H.step(6);
+    if (g.chase.mode !== 'first') g.chase.setMode('first');
+    H.look(H.yawTo(q), -0.06); H.step(60); H.look(H.yawTo(pf ? { x: pf.f.x, z: pf.f.z } : q), -0.04); H.step(6);
     const people = H.storeFigs().filter((f) => f.party && H.onScreen(f.f.x, (f.f.y || 0) + 1, f.f.z)).length;
     return { d: Math.round(bd), people, at: !!at, pf: pf ? pf.key : null };
   }, site.site);
-  await shot('10-neighbours-dusk', 10, 'The neighbours’ camp at dusk (20:24)');
+  await shot('10-neighbours-dusk', 10, 'The neighbours’ camp at dusk (20:24, first person)');
+  await ev(() => { const g = window.__game; if (g.chase.mode !== 'third') g.chase.setMode('third'); window.__p.step(6); });
   result('15 the neighbours\' camp at dusk, its people in view', !nb.none && nb.people > 0, nb);
   const night = await ev(async (s) => {
     const g = window.__game, H = window.__p;
