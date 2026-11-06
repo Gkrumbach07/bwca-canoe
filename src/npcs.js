@@ -435,7 +435,7 @@ export class Body {
     const R = this.rig || this.makeRig(), st = this.state, spec = f.spec || { pose: 'stand' }, sc = (f.look && f.look.wear && f.look.wear.scale) || 1;
     const pid = f.key || f;
     if (this.pid !== pid) { // (a new person in this body: their own seed, the feet planted afresh)
-      this.pid = pid; this.gait.heal(); this.fade = null; this.kind = null; this.armW = 0; this.hd = f.heading + this.s.turn; this.px = NaN;
+      this.pid = pid; this.gait.heal(); this.fade = null; this.kind = null; this.armW = 0; this.hd = f.heading + this.s.turn; this.px = NaN; this.py = NaN;
       this.pb.life = makeLife(hashSeed(String(pid))); this.pb.idle.watch = null;
     }
     this.G = G; this.sc = sc;
@@ -444,6 +444,11 @@ export class Body {
     // had them in the air or sunk on a slope); on a floor or a deck, that
     if (!(f.y > g + 0.12)) f.y = g;
     this.floorY = f.y > g + 0.12 ? f.y : null;
+    // (r2 2 verify: the height they stand at moved over 12 cm in a frame (a store built again on new ground, its floor
+    // 0.2 to 0.6 m up or down: follow()): the feet planted afresh there, or the planted ones held the hips in the old floor
+    // for five frames, 0.35 m in the new one at the first)
+    if (Number.isFinite(this.py) && Math.abs(f.y - this.py) > 0.12) this.gait.heal();
+    this.py = f.y;
     // the heading eased round (a new job's facing turned to, never snapped), the speed from how far they really went
     const L = this.pb.life, want = f.heading + this.s.turn + (L ? L.oh : 0);
     const e = Math.atan2(Math.sin(want - this.hd), Math.cos(want - this.hd));
@@ -1191,7 +1196,7 @@ export class People {
     for (const v of this.extraPeople(ep, L)) out.push(v); // gl-e: someone another module stands here (extraAt)
     for (const v of this.visitorsOf(ep, L, op)) if (this.inHours(v)) out.push(v); // (gl-e: the week's people, each in their hours)
     for (const v of this.partyVisitorsOf(ep, L)) out.push(v); // gl-e: the parties going in and coming out, by the schedule
-    out.at = { y: L.floorY, x: L.centre.x, z: L.centre.z }; // the store they were placed in (follow(): built again since)
+    out.at = { y: L.floorY, x: L.centre.x, z: L.centre.z, dk: L.dockDeck ? L.dockDeck.y : null }; // the store they were placed in (follow(): built again since)
     out.partySig = this.partySig(ep);
     for (const v of out) if (!v.keeper && !v.party && v.figNames) this.keepNames(v, v.key);
     return out;
@@ -1204,8 +1209,19 @@ export class People {
     if (!at || !L) return;
     const dy = L.floorY - at.y, dx = L.centre.x - at.x, dz = L.centre.z - at.z;
     if (Math.abs(dy) < 1e-3 && Math.abs(dx) < 1e-3 && Math.abs(dz) < 1e-3) return;
-    for (const v of list) for (const f of v.figs) { f.x += dx; f.y += dy; f.z += dz; for (const q of [f.goal, ...(f.path || [])]) if (q) { q.x += dx; q.y += dy; q.z += dz; } }
-    list.at = { y: L.floorY, x: L.centre.x, z: L.centre.z };
+    // (r2 2 verify: only what stands on the store moves with its floor; one in the yard or on the dock stays on the ground
+    // or the deck there as it is now. All had been moved by the floor's step: a yard walker raised 0.6 m with it walked on
+    // in the air to the end of their walk, 20 s and more, over 0.6 m off the ground)
+    const fr = L.axes ? this.frameOf(L) : null, dk = L.dockDeck ? L.dockDeck.y : null;
+    const onStore = (q) => { if (!fr) return true; const c = fr.ab(q.x, q.z); return Math.abs(c.a) < 3.4 && c.b < 6.2 && c.b > -4.4; };
+    const move = (q) => {
+      const st = onStore(q); q.x += dx; q.z += dz;
+      if (st) q.y += dy;
+      else if (Number.isFinite(at.dk) && Number.isFinite(dk) && Math.abs(q.y - at.dk) < 0.06) q.y = dk;
+      else { const y = this.groundAt(L, q.x, q.z); if (Number.isFinite(y)) q.y = y; }
+    };
+    for (const v of list) for (const f of v.figs) for (const q of [f, f.goal, ...(f.path || [])]) if (q) move(q);
+    list.at = { y: L.floorY, x: L.centre.x, z: L.centre.z, dk };
   }
   keeperOf(ep, L, op) {
     const k = op && op.keeper, name = k ? k.name : 'The keeper', first = k ? k.first : 'the keeper';
