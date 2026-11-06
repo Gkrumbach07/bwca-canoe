@@ -218,6 +218,9 @@ export class Journal {
       <section class="pp-page right${body.rightCls ? ` ${body.rightCls}` : ''}" aria-labelledby="right-h">${nav}${body.right}
         <div class="pp-foot"><span></span><span>${pageNo}</span></div></section>`;
     [...this.jEl.querySelectorAll('.pp-scroll, .pp-index')].forEach((n, i) => { if (scrolls[i]) n.scrollTop = scrolls[i]; });
+    // (r3 replay: a list longer than its page fades at the foot while more is below: at 1280×720 the Tasks list cut its
+    // last row mid-line, with no scrollbar to say it scrolls)
+    for (const n of this.jEl.querySelectorAll('.pp-index')) { const more = () => n.classList.toggle('more', n.scrollTop + n.clientHeight < n.scrollHeight - 4); more(); n.addEventListener('scroll', more, { passive: true }); }
     // the log opens at its last line, as a book is written
     if (this.tab === 'fish' && this.logEnd) { const lg = this.jEl.querySelector('.fl-log .pp-index'); if (lg) lg.scrollTop = lg.scrollHeight; this.logEnd = false; }
   }

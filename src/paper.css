@@ -117,6 +117,8 @@
 :is(.pp-spread, .pp) .pp-sort button.on { background: var(--pp-brown-deep); color: var(--pp-sheet); }
 :is(.pp-spread, .pp) .pp-sort button:not(.on):hover { color: var(--ink); background: rgba(120, 95, 60, .12); }
 :is(.pp-spread, .pp) .pp-index { min-height: 0; flex: 1 1 auto; overflow: auto; scrollbar-width: thin; scrollbar-color: rgba(138, 74, 36, .5) transparent; padding-right: 6px; display: flex; flex-direction: column; gap: 10px; }
+/* (r3 replay: more below: the foot of the list fades, so a cut row reads as "scroll on") */
+:is(.pp-spread, .pp) .pp-index.more { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 54px), rgba(0, 0, 0, .15)); mask-image: linear-gradient(to bottom, #000 calc(100% - 54px), rgba(0, 0, 0, .15)); }
 :is(.pp-spread, .pp) .pp-group { display: flex; align-items: baseline; gap: 10px; margin-top: 6px; font: 700 15px/1.2 var(--sc); letter-spacing: .12em; color: var(--pp-brown); }
 :is(.pp-spread, .pp) .pp-group::before { content: ''; flex: none; align-self: center; width: 13px; height: 13px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); background: var(--pp-brown-deep); box-shadow: inset 0 0 0 3.5px var(--pp-brown-deep), inset 0 0 0 7px var(--pp-sheet); }
 :is(.pp-spread, .pp) .pp-group span { font: italic 15px/1.2 var(--serif); letter-spacing: 0; color: var(--ink-soft); }

@@ -280,7 +280,23 @@ try {
   result('ticket-words: "New task" with no colon, no "(I)" in the ticket\'s line, the gem over the counter',
     tw.st && /^New task /.test(tw.st.text) && !/New task:/.test(tw.st.text) && tw.next && !/\(I\)/.test(tw.next) && (tw.st.text.match(/journal/g) || []).length <= 2 && tw.gem && tw.off < 0.6, tw);
 
-  // [slot:journal-more]
+  // journal-more (playtest 3 minor 8): at 1280×720 a Tasks list longer than the page fades at its foot ("more") while
+  // there is more below, and not once scrolled to the end
+  await page.setViewportSize({ width: 1280, height: 720 });
+  const jm = await page.evaluate(async () => {
+    const g = window.__game, H = window.__rp, J = g.journal;
+    for (let i = 0; i < 6; i++) g.guide.add({ id: `side:rp:${i}`, kind: 'side', title: `A side story ${i + 1}`, next: 'Ask at the counter' });
+    J.showTask(null); H.step(4); await H.wait(120);
+    const n = document.querySelector('#journal .pp-index'), r = { sh: n.scrollHeight, ch: n.clientHeight, more: n.classList.contains('more'), mask: getComputedStyle(n).maskImage || getComputedStyle(n).webkitMaskImage };
+    n.scrollTop = n.scrollHeight; n.dispatchEvent(new Event('scroll')); await H.wait(60);
+    r.end = n.classList.contains('more');
+    J.close(); H.step(4);
+    for (let i = 0; i < 6; i++) g.guide.remove(`side:rp:${i}`);
+    return r;
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  result('journal-more: a long Tasks list fades at its foot while there is more below', jm.sh > jm.ch + 4 && jm.more && /gradient/.test(jm.mask || '') && !jm.end, jm);
+
   // fish-next (playtest 3 minor 7): a catch notice not caught yet says what to do ("Catch one, then bring it to the
   // board at …"), not "Not caught yet · it goes to …"
   const fn = await page.evaluate(async () => {
