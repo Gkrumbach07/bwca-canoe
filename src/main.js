@@ -1239,6 +1239,7 @@ async function main() {
   };
 
   const frame = (dt) => {
+    tiles.ground(player.x, player.z, camera.position); // r2 (NPC motion 2): the ground's changes first, so all stand on this frame's ground (tiles.js ground)
     wind.update(dt, day.hours);
     water.setWind(wind.dir.x, wind.dir.z, wind.speed);
     if (wind.puff > 0) water.uniforms.uRippleAmt.value = Math.min(1.35, water.uniforms.uRippleAmt.value + 0.4 * wind.puff); // a gust darkens the ripples (wind.js PUFF); the waves keep the steady wind
