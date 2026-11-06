@@ -158,15 +158,22 @@ export class Onboarding {
     if (this.state.step === 'door') { this.state.step = 'met'; this.write(); }
     this.stand(ep);
     const sp = this.speaker(ep);
-    return talk.open({ speaker: sp, name: sp.name, role: sp.role, room: ep, afloat: true, start: () => (this.state.step === 'gear' ? this.after(ep, landing) : this.hello(ep, landing)), bye: () => (this.state.step === 'gear' ? null : 'Shelf in the back, whenever you want it.') });
+    return talk.open({ speaker: sp, name: sp.name, role: sp.role, room: ep, afloat: true, start: () => (this.state.step === 'gear' ? this.after(ep, landing) : this.hello(ep, landing)), bye: () => this.bye() });
+  }
+  // the farewell as you leave the talk (r3 replay: the shelf named only once the offer was heard)
+  bye() {
+    const s = this.state;
+    if (s.step === 'gear') return null;
+    return s.heard ? 'Shelf in the back, whenever you want it.' : 'I’m at the counter when you’ve got a minute.';
   }
   hello(ep, landing) {
     const take = { text: 'I’ll take it.', go: () => { this.give(); return this.after(ep, landing); } };
-    const offer = () => ({ say: 'There’s old gear in the back nobody takes. A canvas pack, a canvas tent, a stove with a dent in it. Heavy, but it all works. If you’re not going to need it, it’s yours.',
+    const offer = () => ({ heard: this.heard(), say: 'There’s old gear in the back nobody takes. A canvas pack, a canvas tent, a stove with a dent in it. Heavy, but it all works. If you’re not going to need it, it’s yours.',
       choices: [take, { text: 'Why does nobody take it?', go: () => ({ say: 'It’s old. People want the light stuff. It’s been on that shelf since before I started here.', choices: [take, { text: 'Maybe later.', kind: 'bye', go: () => null }] }) }, { text: 'Maybe later.', kind: 'bye', go: () => null }] });
     return { say: 'Starting the season? Bad week for it. Every pack and tent we rent is out on the water till Sunday.',
       choices: [{ text: 'Nothing left at all?', go: offer }, { text: 'I’ll manage.', go: () => ({ say: 'With what? Hang on.', choices: [{ text: '…', go: offer }] }) }] };
   }
+  heard() { if (!this.state.heard) { this.state.heard = true; this.write(); } return true; }
   // the gear given: where it is, then the keeper (the first permit's on them) and the counter
   after(ep, landing) {
     const shop = this.t.outfitter && this.t.outfitter.shop;

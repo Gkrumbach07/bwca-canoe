@@ -135,7 +135,19 @@ try {
   });
   result('name: the staffer\'s name stays in the step with the staffer out of sight', nm.inside && nm.inside.title === `Talk to ${nm.name}` && nm.away.title === `Talk to ${nm.name}` && nm.away.next.includes(nm.name), nm);
 
-  // [slot:bye]
+  // bye (playtest 1 minor 8): escaping at the talk's first line, before the offer, the farewell does not name the shelf
+  // in the back the player never heard of; the locator stays on the staffer and the tracker says "Talk to <name>"
+  const by = await page.evaluate(async () => {
+    const g = window.__game, H = window.__rp;
+    H.barks.length = 0;
+    const at = await H.talkTo(/^Starting the season\?/);
+    H.shut(); H.step(30);
+    const cur = H.cur();
+    return { at: !!at, barks: H.barks.map((b) => b.text), cur, main: (g.locator.shown().find((q) => q.main) || {}).id, tr: g.tracker.state() };
+  });
+  result('bye: an Esc at the first line says no shelf you never heard of; the gem and the card stay on the staffer',
+    by.at && !by.barks.some((t) => /Shelf in the back/.test(t)) && by.barks.some((t) => /counter/.test(t)) && by.cur && by.cur.id === 'story:onboard:talk' && by.main === 'story:onboard:talk' && by.tr.shown && /^Talk to .+ at the counter\.$/.test(by.tr.next), by);
+
   // gear-esc (playtest 2 major 3, playtests 1 and 3 on the gems): the gear taken and the talk escaped at the canoe line:
   // the staffer stays the step and the only story gem; no food, leeches or canoe step (entry, gem or card) until the
   // keeper's word is done
