@@ -550,7 +550,10 @@ export function peopleTargets(people) {
       const top = headY - 0.08, bot = gy + (sit ? 0.25 : 0.22) * sc;
       const hit = near.segment(f.x, bot, f.z, hx, top, hz, 0.42);
       if (!hit) continue;
-      const name = v.keeper ? v.name : (people.s && people.s.talked && people.s.talked[v.key] ? v.first : v.name);
+      let name = v.keeper ? v.name : (people.s && people.s.talked && people.s.talked[v.key] ? v.first : v.name);
+      // (r2 2: one of several drawn for a person (a camp's party, a group in the store): their own name, not the first's
+      // on everyone; one with none, a plain word for who they are)
+      if (!v.keeper && v.figNames && (v.figNames.length > 1 || b.who.fig > 0)) name = v.figNames[b.who.fig] || (v.party || v.inParty ? 'One of the party' : 'A visitor');
       out.push({ dist: hit.t, miss: hit.miss * 0.9, target: { kind: 'person', ref: v.key, label: name, e: { verb: 'Talk', run: () => people.talkTo(v) }, hint: v.who && !v.keeper ? v.who : null, box: { x: f.x, y: (gy + headY + 0.14) / 2, z: f.z, hx: 0.3, hy: (headY + 0.14 - gy) / 2, hz: 0.3, heading: f.heading || 0, foot: gy, ground: b.floorY == null && b.G ? b.G : null } } });
     }
     return out;
