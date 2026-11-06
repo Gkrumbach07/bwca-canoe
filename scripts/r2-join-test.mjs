@@ -36,7 +36,7 @@ try {
     const g = window.__game, t = g.title, ep = g.world.entryPoints.find((e) => e.ep === home);
     t.setPick('adventure');
     await t.newSeason(ep, { confirm: false, start: { year: 2026, doy } });
-    if (g.onboarding && g.onboarding.pending()) g.onboarding.finish(g.onboarding.home, false);
+    if (g.onboarding && g.onboarding.pending()) { g.onboarding.give(); g.onboarding.finish(g.onboarding.home, false); } // (r3: the talk's gear and the loaned canoe first)
   }, [HOME, START_DOY]);
   await until(page, () => window.__game.title.state === 'game' && !window.__game.player.teleporting && !!window.__game.outfitter.visit, null, 240000);
   log('season at', HOME);

@@ -72,7 +72,7 @@ try {
     t.setPick('adventure');
     await t.newSeason(ep, { confirm: false, start: { year: 2026, doy } });
     // (the join: the home counter's first-visit talk is stream C's, tested by gl-c-test; here it is over)
-    if (g.onboarding && g.onboarding.pending()) g.onboarding.finish(g.onboarding.home, false);
+    if (g.onboarding && g.onboarding.pending()) { g.onboarding.give(); g.onboarding.finish(g.onboarding.home, false); } // (r3: the talk's gear and the loaned canoe first)
   }, [HOME, START_DOY]);
   await until(page, () => window.__game.title.state === 'game' && !window.__game.player.teleporting && !!window.__game.outfitter.visit, null, 180000);
   await page.evaluate(() => { const o = window.__game.outfitter; if (o.open) o.hide(); });
