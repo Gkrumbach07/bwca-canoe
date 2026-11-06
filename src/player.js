@@ -75,6 +75,7 @@ const LOW_OVER = STEP_UP - 0.1;
 // of a step's reach from the feet and he dropped into the flight (the owner: "sprinting up stairs makes you sink into
 // them sometimes"). Well under a tread's run (props.js STEP_RUN 0.28), and over a walk's stride in a frame at 60 fps
 const STRIDE_PROBE = 0.1;
+const EMBED_UP = 1.6; // r2 replay: feet this far under a store's floor or deck, inside it, are put up on it (walker update)
 const SPACE = { early: 0.8, ahead: 1.0, reach: [0.35, 0.65, 1.0] }; // a Space pressed this long before, this far short of (looked for from each reach), a vault or a climb waits for it
 // fb C: the water on foot. Wading slows you with the depth; past SWIM_DEPTH (chest deep) you swim, and you stand again
 // under STAND_DEPTH; with the canoe overhead you go no deeper than CARRY_DEPTH. A swimmer is held off whatever stands
@@ -1536,6 +1537,14 @@ export class Player {
         // still easing up to it (up a flight at a jog they lag a few centimetres, and the tread two up, 0.30 m over the
         // one he is on, must stay within a step of it)
         let feetY = ft.air ? ft.y : Math.max(ft.y, this.supportAt(this.x, this.z, ft.y + STEP_UP, near));
+        // r2 replay: feet under a store's floor or deck, inside its footprint (a season begun at the door on a slow
+        // machine: the feet fell to the ground under the door before the store's floor was there to hold them, walked a
+        // step in, and the floor came round them: held by its sides for good). Up onto it, as if stepped up
+        if (!ft.air) for (const t of near) {
+          if (!t.box || !t.store || t.top === undefined || t.top <= feetY + STEP_UP || t.top - feetY > EMBED_UP) continue;
+          const dx = this.x - t.x, dz = this.z - t.z;
+          if (Math.abs(dx * t.ux + dz * t.uz) <= t.hx && Math.abs(-dx * t.uz + dz * t.ux) <= t.hz) { feetY = t.top; ft.y = t.top; ft.vy = 0; }
+        }
         // a frame's walk longer than STRIDE_PROBE (a sprint up a flight) is read along the way, a tread at a time, so the
         // feet are carried up each one in turn and the tread at its end is within a step of them (stopped at anything
         // that holds him: what is past it is not reached). A walk's frame is not read here, and is as it was
