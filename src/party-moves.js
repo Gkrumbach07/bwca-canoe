@@ -799,14 +799,19 @@ export class PartyMoves {
       else if (lag.lag > 0) {
         // made up: while you are not by them, or in a stop (the lunch, a drift)
         const s = L.seg, d = this.distTo(L);
-        if (d > MOVES.near || (s && (s.kind === 'drift' || (s.kind === 'landing' && s.lunch)))) lag.lag = Math.max(0, lag.lag - gh * (d > MOVES.near ? MOVES.catchUp : 1));
+        // (r2 2: and the time-lapse of it only out of sight: a carry seen 200 m off had walked half again as fast)
+        const away = d > MOVES.near && !this.seen(L);
+        if (away || (s && (s.kind === 'drift' || (s.kind === 'landing' && s.lunch)))) lag.lag = Math.max(0, lag.lag - gh * (away ? MOVES.catchUp : 1));
       }
       const he = h - lag.lag - dlMax() / 3600;
       L.base = h - lag.lag; // (a carry's people: each on this clock less their own delay)
       // (in, and the camp has them: its canoes up the bank and its people at the fire, from this frame)
       if (he >= L.plan.end && L.plan.to.kind === 'site' && this.partyCamps) { const D = this.partyCamps.drawn.get(L.plan.to.key); if (D && D.canoesIn) { this.drop(L); continue; } }
       // (far off: only its place along the plan; the actors made as it comes into range, let go as it leaves)
-      const at = this.whereAt(L, he), far = Math.hypot(at.x - p.x, at.z - p.z), has = L.boats.length + L.persons.length > 0;
+      // (r2 2: with its actors made, how far the nearest of them is: a long carry's middle had been taken for where the party
+      // was, so a party carrying right by you, 1 km from that middle, was placed every third frame, each step three frames'
+      // worth: 0.5 m and more a jump, 16 m/s and over seen)
+      const at = this.whereAt(L, he), has = L.boats.length + L.persons.length > 0, far = Math.min(Math.hypot(at.x - p.x, at.z - p.z), has ? this.distTo(L) : Infinity);
       if (has && far > MOVES.dormR) this.freeActors(L);
       if (!has && far < MOVES.actR) this.makeActors(L);
       if (!L.boats.length && !L.persons.length) continue;
