@@ -91,6 +91,8 @@ export class Tracker {
   push(head, e) {
     if (!this.enabled || !e || this.later(e)) return;
     if (this.ev && this.ev.id === e.id) { if (head === 'Done') this.ev.head = head; this.ev.left = TRACKER.showS; return; }
+    // (a task added where you stand is "New task", not "Close by": the guide's add and near come in the same sync)
+    if (head === 'Close by' && this.queue.some((x) => x.id === e.id && x.head === 'New task')) return;
     this.queue = this.queue.filter((x) => x.id !== e.id);
     this.queue.push({ head, id: e.id });
     if (this.queue.length > TRACKER.queueMax) this.queue.shift();
