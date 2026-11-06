@@ -755,7 +755,7 @@ export class Packs {
     if (trail && trail.dist < 12) {
       const pts = trail.trail.pts, e0 = pts[0], e1 = pts[pts.length - 1];
       const d0 = Math.hypot(e0[0] - p.x, e0[1] - p.z), d1 = Math.hypot(e1[0] - p.x, e1[1] - p.z);
-      if (Math.min(d0, d1) < 5) { const l = trail.def.launch[d1 < d0 ? 1 : 0]; L = { x: l.x, z: l.z, lake: l.lake, deep: true }; }
+      if (Math.min(d0, d1) < 5) { const l = trail.def.launch[d1 < d0 ? 1 : 0]; if (!l.road) L = { x: l.x, z: l.z, lake: l.lake, deep: true }; } // (round 2: a road end is no launch)
     }
     if (!L && w.shoreAt(p.x, p.z) < 8) L = p.launchFrom(p.x, p.z, 12);
     return L && L.deep ? L : null;
@@ -768,7 +768,7 @@ export class Packs {
     if (tr) {
       const pts = tr.trail.pts, e0 = pts[0], e1 = pts[pts.length - 1];
       const d0 = Math.hypot(e0[0] - d.x, e0[1] - d.z), d1 = Math.hypot(e1[0] - d.x, e1[1] - d.z);
-      if (Math.min(d0, d1) < 12) { const l = tr.def.launch[d1 < d0 ? 1 : 0]; return { x: l.x, z: l.z, lake: l.lake, deep: true }; }
+      if (Math.min(d0, d1) < 12) { const l = tr.def.launch[d1 < d0 ? 1 : 0]; if (!l.road) return { x: l.x, z: l.z, lake: l.lake, deep: true }; } // (round 2: a road end is no launch)
     }
     return p.launchFrom(d.x, d.z, 8);
   }

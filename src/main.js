@@ -1110,7 +1110,7 @@ async function main() {
     const inLot = () => { const p = player, h = p.onFoot && !outfitter.open && !trip.active ? TH.trailheadAt(p.x, p.z) : null; return !!(h && h.where === 'lot'); };
     const atLanding = () => { const p = player, h = p.onFoot && trip.active && outfitter.trip.away ? TH.trailheadAt(p.x, p.z) : null; return !!(h && h.where === 'landing'); };
     const glbM = [
-      { id: 'gl-b:pickup', prio: TEACH, recur: 'once', text: 'Out at the lot. {E} on the sign calls a pickup.', due: inLot },
+      { id: 'gl-b:pickup', prio: TEACH, recur: 'once', text: 'At the trailhead. {E} on the sign calls a pickup.', due: inLot },
       { id: 'gl-b:landing', prio: TEACH, recur: 'once', text: 'A trailhead. Walk up to the lot to come out here.', due: atLanding },
     ];
     for (const m of glbM) if (!MOMENTS.some((q) => q.id === m.id)) { const { due, ...rest } = m; void due; MOMENTS.push(rest); }
@@ -1118,7 +1118,7 @@ async function main() {
     hints.due = (id, rec) => (glbDue.has(id) ? glbDue.get(id)() : dueB(id, rec));
     window.__game.outfitters = { OUTFITTER_EPS: OF.OUTFITTER_EPS, OUTFITTERS: OF.OUTFITTERS, isOutfitter: OF.isOutfitter, hostOf: (ep) => OF.hostOf(ep, world), reachOf: (ep) => OF.reachOf(ep, world),
       countryOf: (ep) => OF.countryOf(ep, world), roadKm: (a, b) => OF.roadKm(a, b, world), roadWay: (a, b) => OF.roadWay(a, b, world), premiumOf: OF.premiumOf, specialtyOf: OF.specialtyOf,
-      outfitterHomes: () => OF.outfitterHomes(world), homeTurf: (ep) => OF.homeTurf(ep, world) };
+      outfitterHomes: () => OF.outfitterHomes(world), placeOf: (ep) => OF.placeOf(ep, world), homeTurf: (ep) => OF.homeTurf(ep, world) };
     window.__game.trailhead = { trailheadLayout: TH.trailheadLayout, trailheadLayouts: TH.trailheadLayouts, trailheadAt: TH.trailheadAt, onTrailhead: TH.onTrailhead };
   }
   // gl-c: a new save and its first day (docs/build/game-loop-brief.md, stream C). The title's first step is a map of the

@@ -8,10 +8,11 @@
 // Self-contained on purpose: it reads only world.meta.overview, world.base and the rides' rows, so the shared map
 // renderer can take its place later (drawCounterMap's arguments are the whole contract).
 //
-//   drawCounterMap(canvas, { world, here: { ep, x, z }, rows: [{ ep, x, z, price, unknown, short, outfitter }], hot, sandbox, pma })
+//   drawCounterMap(canvas, { world, here: { ep, x, z }, rows: [{ ep, x, z, price, unknown, short, outfitter, name }], hot, sandbox, pma })
 // (r2: the primitive areas' outlines, fine dashed over the water; pma: the one chosen at the permit desk, washed and
 // named on the sketch)
-// (the game-loop round: the truck goes to every entry point. An outfitter is a ring, a trailhead a small square; a
+// (the game-loop round: the truck goes to every entry point. An outfitter is a ring round a little store, where the store
+// stands (round 2 markers: no number, its name when hovered), a trailhead a small square with its number; a
 // trailhead off the sheet is left off it, unless it is the one hovered: the list beside the map has them all)
 //     → [{ ep, x, y, r }] the markers in css px, for hit testing (markerAt)
 //   markerAt(marks, x, y) → ep or null
@@ -166,11 +167,13 @@ export function drawCounterMap(canvas, { world, here, rows = [], hot = null, san
       ctx.save(); ctx.translate(x + Math.cos(q.a) * (R + 3), y + Math.sin(q.a) * (R + 3)); ctx.rotate(q.a);
       ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(0, -4); ctx.lineTo(0, 4); ctx.closePath(); ctx.fillStyle = r.short ? FAINT : col; ctx.fill(); ctx.restore();
     }
+    // (round 2 markers: an outfitter is its store, a little building where the store stands, never its entry point's
+    // number; its name when hovered)
     ctx.beginPath(); ctx.arc(x, y, on ? R + 2 : R, 0, Math.PI * 2);
     ctx.fillStyle = on ? '#f4ecd8' : 'rgba(241, 233, 212, .94)'; ctx.fill();
     ctx.lineWidth = on ? 2.2 : 1.4; ctx.strokeStyle = r.short ? FAINT : col; ctx.stroke();
-    ctx.fillStyle = r.short ? FAINT : col; ctx.font = `700 ${String(r.ep).length > 1 ? 11 : 12}px "Alegreya Sans SC", "Alegreya Sans", sans-serif`;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(r.ep), x, y + 0.5);
+    storeGlyph(ctx, x, y, r.short ? FAINT : col);
+    if (on && r.name) { ctx.font = '700 12px "Alegreya Sans SC", "Alegreya Sans", sans-serif'; ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText(r.name, x, y - R - 3); }
     const fare = sandbox ? 'free' : `$${r.price}`;
     ctx.font = `600 ${on ? 19 : 17}px Caveat, "Bradley Hand", cursive`;
     const w = ctx.measureText(fare).width, b = { x0: x - w / 2, x1: x + w / 2, y0: y + R + 1, y1: y + R + 17 };
@@ -187,7 +190,7 @@ export function drawCounterMap(canvas, { world, here, rows = [], hot = null, san
   ctx.closePath(); ctx.fillStyle = RED; ctx.fill();
   ctx.restore();
   ctx.font = '600 18px Caveat, "Bradley Hand", cursive'; ctx.fillStyle = RED; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-  const lab = `you are here · ${here.ep}`, lw = ctx.measureText(lab).width, left = hx + R + 8 + lw > cw - 6;
+  const lab = 'you are here', lw = ctx.measureText(lab).width, left = hx + R + 8 + lw > cw - 6;
   ctx.textAlign = left ? 'right' : 'left'; ctx.fillText(lab, left ? hx - R - 8 : hx + R + 8, hy - 1);
 
   // north and the scale, in the corners
@@ -201,6 +204,16 @@ export function drawCounterMap(canvas, { world, here, rows = [], hot = null, san
   ctx.font = '700 10.5px "Alegreya Sans SC", sans-serif'; ctx.fillStyle = SOFT; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
   ctx.fillText(`${mi} ${mi === 1 ? 'mile' : 'miles'}`, sx0 + len + 6, sy0 + 2);
   return marks;
+}
+
+// a store: a little gabled building, its door pale (the maps' store marker, map-render.js paintStore, at this size)
+function storeGlyph(ctx, x, y, col) {
+  ctx.save(); ctx.translate(x, y + 1);
+  ctx.fillStyle = col;
+  ctx.beginPath(); ctx.moveTo(-6.5, -1); ctx.lineTo(0, -7); ctx.lineTo(6.5, -1); ctx.closePath(); ctx.fill();
+  ctx.fillRect(-5, -1.5, 10, 6.5);
+  ctx.fillStyle = '#f4ecd8'; ctx.fillRect(-1.4, 1, 2.8, 4);
+  ctx.restore();
 }
 
 export function markerAt(marks, x, y) {

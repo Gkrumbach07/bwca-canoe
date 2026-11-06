@@ -14,6 +14,7 @@ import { clock12, shortDate } from './hud.js';
 import { save, slots } from './save.js';
 import { SeasonsPanel } from './seasons.js'; // round A-D
 import { Wizard, START_HOUR } from './wizard.js';
+import { placeOf } from './outfitters.js'; // round 2 markers: a season begins at the store's dock
 
 const $ = (id) => document.getElementById(id);
 const DRIFT_RATE = 0.045;   // rad/s round the canoe
@@ -413,7 +414,10 @@ export class Title {
     else if (this.outfitter && this.outfitter.abandon) this.outfitter.abandon(this.modePick);
     else if (this.trip) this.trip.setMode(this.modePick);
     this.saver.clear(); this.saved = null;
-    const ok = await this.player.teleport(ep.x, ep.z);
+    // round 2 markers: afloat beside the store's dock (placeOf), not out at the put-in: the store can stand 780 m from it
+    // (Slim Lake), past where the arrival walks you in from
+    const pl = placeOf(ep.ep, this.world), inAt = pl && pl.dock ? pl.dock : ep;
+    const ok = await this.player.teleport(inAt.x, inAt.z);
     this.wizard.busy(false);
     this.busy = false;
     if (!ok) { this.wizard.show(0); this.el.status.textContent = `No open water near the ${ep.name} landing; try another.`; return; }

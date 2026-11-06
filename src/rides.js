@@ -27,8 +27,9 @@
 //
 // It hides the counter itself before the fade (so the counter's own close afterwards does nothing), and on arrival
 // sets outfitter.arrivedBy = 'ride' for the counter's greeting (keeperLine(profile, 'ride')).
-import { outfitterProfile, keeperLine, roadOf, roadKm, roadWay, isOutfitter, reachOf, hostOf } from './outfitters.js';
+import { outfitterProfile, keeperLine, roadOf, roadKm, roadWay, isOutfitter, reachOf, hostOf, nearWords } from './outfitters.js';
 import { miles } from './units.js';
+import { landingEp } from './ep-start.js'; // round 2: an entry point that puts in at an outfitter's own landing is a walk from its counter
 
 export const ROAD = 1.4;          // road km for a km of straight line, where the road graph has no answer
 const BASE_H = 0.5, KMH = 40;     // the time: half an hour, then 40 km an hour
@@ -97,7 +98,7 @@ export class Rides {
     return list.filter((l) => l.ep !== a.ep).map((l) => {
       const q = quoteBetween(a, l, this.world), at = (h + q.hours) % 24, out = isOutfitter(l.ep);
       return { ep: l.ep, name: l.name, place: l.place, lake: this.lakeOf(l), road: roadOf(l.ep), ...q, price: this.sandbox ? 0 : q.price, outfitter: out, host: hostOf(l.ep, this.world),
-        unknown: out && !this.knows(l.ep), late: !this.sandbox && (at >= LATE || at < EARLY) };
+        unknown: out && !this.knows(l.ep), late: !this.sandbox && (at >= LATE || at < EARLY), walk: landingEp(this.world, l.ep) === a.ep };
     }).sort((x, y) => x.km - y.km);
   }
 
@@ -108,6 +109,7 @@ export class Rides {
     if (this.busy || !o || !to) return false;
     if (!from) { this.note('The truck goes from an outfitter’s counter.'); return false; }
     if (from.ep === to.ep) { this.note(`${to.name}’s landing is down the yard: walk it.`); return false; }
+    if (landingEp(this.world, to.ep) === from.ep) { this.note(`${to.name} puts in at this landing: walk down to the dock.`); return false; } // (round 2: a shared landing, EP 47/48 at 49's, 70 at 69's, 66 at 64's, 52 at 51's)
     const r = this.offer(from.ep).find((x) => x.ep === to.ep);
     if (!r) return false;
     if (!this.sandbox && r.price > 0) {
@@ -122,7 +124,7 @@ export class Rides {
       ? `Sandbox: the truck is free and the road takes no time. ${lake}, entry point ${to.ep}.`
       : `${kmWords(r.km)} miles${via} to ${lake}, ${rideTime(r.hours)}: $${r.price}. The canoe rides on the roof, the packs in the back.${lateWords}`;
     const card = {
-      kicker: `${from.name} → ${to.name} · entry point ${to.ep}`,
+      kicker: `${from.name} → ${to.name} · ${isOutfitter(to.ep) ? nearWords(to.ep, this.world) || `entry point ${to.ep}` : `entry point ${to.ep}`}`, // (round 2: an outfitter is near an entry point)
       text: `“${this.keeperWords(fromP, 'goodbye')}”`,
       sub,
       fadeIn: this.sandbox ? 0.6 : 1.2, hold: this.sandbox ? 0.4 : 3.2, fadeOut: this.sandbox ? 0.8 : 1.8,
@@ -151,10 +153,22 @@ export class Rides {
     return { night: true };
   }
   // at full dark: the move, the clock, the night if it is late, the outfitter known, its door or the trailhead's lot
+  // Round 2 (entry points true to life): the truck to a portage-first start's lot, on land: on foot there, the canoe set
+  // down in the lot (outfitter.js updateTrailArrival then puts it where the trailhead's layout says, once it is built)
+  async toLot(to) {
+    const o = this.outfitter, p = o && o.player, w = this.world, L = to.lot;
+    if (!p || !L || typeof p.standAt !== 'function') return this.teleport(to.x, to.z);
+    if (p.teleporting) return false;
+    p.teleporting = true;
+    try { if (w.tiles) await w.tiles.ensure(L.x, L.z, 130); } finally { p.teleporting = false; }
+    const ok = p.standAt({ x: L.x, z: L.z, heading: 0, drop: { x: L.x + 3, z: L.z, heading: 0 } });
+    if (ok && p.chase) p.chase.snap();
+    return ok || this.teleport(to.x, to.z);
+  }
   async arrive(from, to, r, toP) {
     void toP;
     const o = this.outfitter, pr = this.profile, core = this.core, d = this.day;
-    const ok = await this.teleport(to.x, to.z);
+    const ok = to.lot ? await this.toLot(to) : await this.teleport(to.x, to.z); // (round 2: a portage-first start's lot is on land)
     if (!ok) { // the truck could not get through (no open water found at the landing): nothing moves, the fare back
       if (pr && r.price > 0) { pr.s.money += r.price; pr.s.spent -= r.price; pr.entry(r.price, `the drive to ${to.name}, refunded`); pr.changed('money'); }
       this.note(`The road to ${to.name} is closed today. The fare is back in your hand.`);
@@ -262,7 +276,7 @@ export class Rides {
       return `<li class="ride${r.outfitter ? ' out' : ' th'}${r.unknown ? ' new' : ''}${short ? ' short' : ''}" data-ep="${r.ep}">
         <span class="epno" title="Entry point ${r.ep}"><small>EP</small>${r.ep}</span>
         <div class="to"><b>${esc(r.name)}</b><span>${meta.join(' · ')}${r.outfitter ? ' · <i class="o">outfitter</i>' : reach.has(r.ep) ? ' · ours' : ''}${r.late ? ' · a bunk night first' : ''}</span></div>
-        <div class="go"><b class="fare">${this.sandbox ? 'free' : `$${r.price}`}</b><button type="button" class="stamp small" data-act="ride" data-id="${r.ep}"${short || this.busy ? ' disabled' : ''} aria-label="Drive to ${esc(r.name)}, entry point ${r.ep}${this.sandbox ? '' : `, $${r.price}`}">Drive</button></div>
+        <div class="go"><b class="fare">${r.walk ? 'walk' : this.sandbox ? 'free' : `$${r.price}`}</b><button type="button" class="stamp small" data-act="ride" data-id="${r.ep}"${short || r.walk || this.busy ? ' disabled' : ''} aria-label="Drive to ${esc(r.name)}, entry point ${r.ep}${this.sandbox ? '' : `, $${r.price}`}">Drive</button></div>
       </li>`;
     };
     return `<section class="rides"${shim ? ' data-shim="1"' : ''} aria-labelledby="rides-h">

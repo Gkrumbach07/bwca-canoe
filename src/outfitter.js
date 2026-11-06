@@ -29,7 +29,7 @@
 // the home store's door (the keeper's forty dollars as you step in), and so does a ride's end; a page reloaded in a
 // store comes back on its floor (updateArrival).
 import { kv } from './store.js'; // the saves' store (IndexedDB, read into memory before the boot)
-import { outfitterName, trailheadName, isOutfitter, hostOf, roadOf } from './outfitters.js';
+import { outfitterName, trailheadName, isOutfitter, hostOf, roadOf, placeOf } from './outfitters.js';
 import { trailheadLayout, trailheadAt, trailheadDist } from './trailhead.js';
 import { esc, plural, word } from './hud.js';
 import { drawCounterMap, markerAt } from './counter-map.js';
@@ -151,7 +151,12 @@ export class Outfitter {
     // trailheads (a lot, a permit box, the sign: trailhead.js), each with the outfitter that serves it (host)
     this.entries = world.entryPoints.map((ep) => {
       const out = isOutfitter(ep.ep);
-      return { ep: ep.ep, name: out ? outfitterName(ep) : trailheadName(ep), place: ep.name, x: ep.x, z: ep.z, lake: ep.lake, outfitter: out, host: hostOf(ep.ep, world) };
+      // round 2 markers: an outfitter's landing is at its store (placeOf: x, z the water by its dock, where a season, a
+      // ride and a pickup come in; store, door), its entry point's own spot kept as epX, epZ
+      const pl = out ? placeOf(ep.ep, world) : null, at = pl && pl.dock ? pl.dock : ep;
+      return { ep: ep.ep, name: out ? outfitterName(ep) : trailheadName(ep), place: ep.name, x: at.x, z: at.z, epX: ep.x, epZ: ep.z, store: pl ? pl.store : null, door: pl ? pl.door : null, lake: ep.lake, outfitter: out, host: hostOf(ep.ep, world),
+        // (round 2, entry points true to life: a portage-first start's lot, where the truck leaves you; a shared landing)
+        lot: out ? null : ep.lot || null, shares: ep.shares || null, start: ep.start || null };
     });
     this.landings = this.entries.filter((e) => e.outfitter);
     this.desks = new Map();          // the counter's other desks (addDesk: the permit desk, the onboarding, the tally's)
@@ -363,6 +368,8 @@ export class Outfitter {
   // streams in), the canoe is tied up at its dock and you stand at the door, or back where you were on the floor.
   // With no store by ARRIVAL_WAIT, a season's counter opens from the water as it always did.
   updateArrival(dt) {
+    // (round 2: an entry point that puts in at another's landing arrives there: EP 66 Crocodile River at East Bearskin's)
+    if (this.arrival) { const sh = this.entry(this.arrival.ep); if (sh && sh.shares && this.entry(sh.shares)) { this.arrival.ep = sh.shares; this.arrival.via = sh.ep; } }
     if (this.arrival && !isOutfitter(this.arrival.ep)) return this.updateTrailArrival(dt);
     const a = this.arrival, p = this.player, l = this.landing(a.ep), L = l ? this.layout(a.ep) : null;
     a.t += dt;
@@ -402,7 +409,11 @@ export class Outfitter {
     this.arrival = null;
     if (this.distTo(e, p.x, p.z) > ARRIVAL_FAR || !(p.mode === 'paddle' || p.onFoot)) return;
     this.setDown(T, e);
-    if (a.why === 'ride') this.hud.note(`The truck leaves you in the lot at ${e.name}: the canoe at the landing.`, 5);
+    // (round 2: a portage-first start: the canoe off the roof in the lot, the carry from its edge; a boat drop at a portage)
+    const o = T.open, carry = o ? `the ${o.posted || o.rods}-rod portage` : 'the portage', far = o && o.i != null && this.world.portages[o.i] ? this.world.portages[o.i].launch[o.end] : null, toLake = far ? this.world.lakeName(far.lake) : null;
+    if (a.why === 'ride' && T.water && T.water.dry && T.drop === 'boat') this.hud.note(`The outfitter's boat leaves you at the start of ${carry}${toLake ? ` to ${toLake}` : ''}. The canoe is on the shore: Q on it to shoulder it.`, 7);
+    else if (a.why === 'ride' && T.water && T.water.dry) this.hud.note(`The truck leaves you in the lot at ${e.name}: the canoe off the roof. ${carry[0].toUpperCase() + carry.slice(1)}${toLake ? ` to ${toLake}` : ''} starts at the sign.`, 7);
+    else if (a.why === 'ride') this.hud.note(`The truck leaves you in the lot at ${e.name}: the canoe at the landing.`, 5);
     else if (a.why === 'moved') this.hud.note(a.words || `In the lot at ${e.name}.`, 7);
   }
   // you in a trailhead's lot by the sign, facing the water; the canoe set down afloat at its landing
@@ -410,7 +421,7 @@ export class Outfitter {
     const p = this.player, w = T.water, door = T.door;
     p.landing = null; p.ashore = null; p.swim = null; p.speed = 0; p.yawRate = 0; p.bob = null; p.balance = 0; p.extraRoll = 0;
     p.mode = 'walk';
-    p.carry = { trail: null, drop: { x: w.x, z: w.z, heading: w.heading }, hitCooldown: 0, from: null, choice: false };
+    p.carry = { trail: null, drop: { x: w.x, z: w.z, heading: w.heading }, hitCooldown: 0, from: null, choice: false }; // (round 2: w.dry, set down on the lot's ground)
     if (typeof p.restHull === 'function') p.restHull(w.x, w.z, w.heading);
     p.x = door.x; p.z = door.z; p.heading = door.heading;
     p.foot = { y: p.groundAt(p.x, p.z), vy: 0, air: false, t: 0, land: 0, near: null };
@@ -752,8 +763,8 @@ export class Outfitter {
     const n = this.rides && typeof this.rides.offer === 'function' ? this.rides.offer(a.ep).length : 0;
     return `<section class="sidemap" aria-labelledby="sidemap-h">
       <div class="top"><h3 id="sidemap-h">Where the truck goes</h3><span class="sum">${n ? `${n} entry points from ${a.ep}` : `from entry point ${a.ep}`}</span></div>
-      <div class="sheet"><canvas aria-label="A sketch map of the outfitters the truck goes to, with each one's entry point number and fare"></canvas><i class="tape l" aria-hidden="true"></i><i class="tape r" aria-hidden="true"></i></div>
-      <p class="key"><span class="k here"><i>★</i>you are here</span><span class="k known"><i>${a.ep}</i>outfitter</span><span class="k th"><i>${a.ep}</i>trailhead</span><span class="k fare"><b>$</b>the fare</span></p>
+      <div class="sheet"><canvas aria-label="A sketch map of the outfitters the truck goes to, with each outfitter's store, each trailhead's entry point number and the fare"></canvas><i class="tape l" aria-hidden="true"></i><i class="tape r" aria-hidden="true"></i></div>
+      <p class="key"><span class="k here"><i>★</i>you are here</span><span class="k known"><i>⌂</i>outfitter</span><span class="k th"><i>${a.ep}</i>trailhead</span><span class="k fare"><b>$</b>the fare</span></p>
     </section>`;
   }
   // draws the side map into the open counter, and ties its rings to the rides' rows (a hover lights both; a ring
@@ -762,8 +773,8 @@ export class Outfitter {
     const el = this.el.panel, cv = el && el.querySelector('.sidemap canvas'), a = this.at;
     if (!cv || !a || !this.rides || typeof this.rides.offer !== 'function') return;
     const money = this.money, sandbox = this.sandbox;
-    const rows = this.rides.offer(a.ep).map((r) => { const l = this.entry(r.ep) || {}; return { ep: r.ep, x: l.x, z: l.z, price: r.price, unknown: r.unknown, outfitter: r.outfitter !== false, short: !sandbox && r.price > money }; });
-    const here = { ep: a.ep, x: a.x, z: a.z };
+    const rows = this.rides.offer(a.ep).map((r) => { const l = this.entry(r.ep) || {}, m = l.store || l; return { ep: r.ep, x: m.x, z: m.z, name: l.name, price: r.price, unknown: r.unknown, outfitter: r.outfitter !== false, short: !sandbox && r.price > money }; });
+    const here = { ep: a.ep, x: (a.store || a).x, z: (a.store || a).z }; // (round 2 markers: an outfitter at its store)
     const draw = () => {
       if (!this.open || this.tab !== 'counter' || !cv.isConnected) return;
       let pma = null; try { pma = typeof this.pmaFocusFn === 'function' ? this.pmaFocusFn() : null; } catch { pma = null; } // r2: the primitive area chosen at the desk

@@ -9,7 +9,7 @@ import { miles, fmtDepth, fmtFtIn, fmtIn, fmtLbOz, fmtF, fmtMphMs, fmtMphKmh, fm
 import { names } from './names.js'; // d1 names: the bays, points, islands, narrows, summits and named portages on the map
 import { KIND, FOREST, REGIME, WCLASS, HGM, nwiCode, wetRegime, wetBeaver, wetHgm, wclass1 } from './land.js'; // 2026-10-31: the land under you, in the developer rows
 import { GROUND } from './terrain-build.js';
-import { paintGround, paintBurns, burnsInView, burnWords, paintBoundary, loadBoundary, BOUNDARY, paintPmas, paintPmaNames, paintEntry, tileGeo, tileCache, INK, lakeAt, lodOf, SMALL_LAKE, paintCreeks } from './map-render.js'; // the map as vectors (the wetlands round: paintCreeks)
+import { paintGround, paintBurns, burnsInView, burnWords, paintBoundary, loadBoundary, BOUNDARY, paintPmas, paintPmaNames, paintEntries, tileGeo, tileCache, INK, lakeAt, lodOf, SMALL_LAKE, paintCreeks } from './map-render.js'; // the map as vectors (the wetlands round: paintCreeks)
 import './hud.css';
 const KIND_NAMES = Object.keys(KIND); // ground kind value -> its key (land.js KIND runs 0..13 in order)
 
@@ -441,7 +441,7 @@ export class Hud {
       // a notice's pencil ring is its own mark: on the line it is taken first, anywhere inside it after the rest
       if (h.kind === 'task') { const off = Math.abs(d - Math.max(h.r / mPerPx, 7 * k)); if (off < 8 * k) take(h, off, 0); }
       if (h.kind === 'claim' && d < 18 * k) take(h, d, 1);
-      else if (h.kind === 'dock' && d < 10 * k) take(h, d, 4);
+      else if ((h.kind === 'store' || h.kind === 'ep' || h.kind === 'dock') && d < 10 * k) take(h, d, h.kind === 'store' ? 3.9 : 4);
       else if (h.kind === 'site' && d < 8 * k) take(h, d, 3);
       else if (h.kind === 'dam' && d < 7 * k) take(h, d, 4.5); // the wetlands round
       else if ((h.kind === 'task' || h.kind === 'note') && d < Math.max(h.r / mPerPx, 9 * k)) take(h, 40 + d / 8, h.kind === 'task' ? 0 : 6);
@@ -1409,7 +1409,7 @@ export class Hud {
     const bare = look === 'owned' && none;
     if (this.bareLegs !== bare) {
       this.bareLegs = bare;
-      for (const i of e.map.querySelectorAll('.band.foot .leg > i.portage, .band.foot .leg > i.camp, .band.foot .leg > i.dock')) i.parentNode.style.display = bare ? 'none' : ''; // (the notices' red pencil stays: it is drawn on blank paper too)
+      for (const i of e.map.querySelectorAll('.band.foot .leg > i.portage, .band.foot .leg > i.camp, .band.foot .leg > i.dock, .band.foot .leg > i.store, .band.foot .leg > i.ep')) i.parentNode.style.display = bare ? 'none' : ''; // (the notices' red pencil stays: it is drawn on blank paper too)
       for (const b of e.mapLayers.querySelectorAll('.layer')) b.style.display = bare ? 'none' : ''; // and no layer toggles over blank paper (polish B)
     }
     // (fb5 join, rule 3: the line says what is missing, else only the keys: not "your sheets, with everything on them ·
@@ -1740,12 +1740,12 @@ export class Hud {
       if (mid && lay.campsites && dp < 46) {
         const r = (close ? 4.2 : 2.6) * k;
         for (let ci = 0; ci < w.campsites.length; ci++) {
-          const c = w.campsites[ci];
-          if (!inView(c.x, c.z, c.x, c.z) || !onMine(c.x, c.z, c.x, c.z)) continue;
-          const [a, b] = toPx(c.x, c.z);
+          const c = w.campsites[ci], s = c.fire || c; // round 2 markers: at its fire ring as built (world.js campSpot)
+          if (!inView(s.x, s.z, s.x, s.z) || !onMine(s.x, s.z, s.x, s.z)) continue;
+          const [a, b] = toPx(s.x, s.z);
           ctx.beginPath(); ctx.arc(a, b, r, 0, 6.28); ctx.fillStyle = '#c0392b'; ctx.fill();
           if (close) { ctx.beginPath(); ctx.arc(a, b, r * 0.38, 0, 6.28); ctx.fillStyle = '#f4e9d6'; ctx.fill(); }
-          hits.push({ kind: 'site', i: ci, x: c.x, z: c.z, px: 8 });
+          hits.push({ kind: 'site', i: ci, x: s.x, z: s.z, px: 8 });
           // d1 names: the Forest Service's number, small, to the left of the dot (the pencil tick goes right)
           if (close && c.usfs != null && mPerPx < 10) { ctx.font = `600 ${9.5 * k}px ${SERIF}`; ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(160, 45, 30, 0.9)'; ctx.fillText(String(c.usfs), a - r - 2 * k, b + 3.5 * k); }
           // round A-B: a night slept there, ticked in pencil beside it
@@ -1788,17 +1788,11 @@ export class Hud {
         }
         ctx.textBaseline = 'alphabetic';
       }
-      // entry points: the outfitters' docks, a pier with a shack at its root (smaller on the overview, where seventy of
-      // them full size were most of what you saw: lodOf)
-      ctx.font = `600 ${11 * k}px ${SERIF}`;
+      // round 2 markers: every entry point, its number in a box at its put-in, and every outfitter a little store where
+      // its store stands (outfitters.js placeOf), its name beside it from the middle zoom in (smaller on the overview,
+      // where fifty-five of them full size were most of what you saw: lodOf)
       const dockK = k * (1 - 0.35 * lodOf(mPerPx, k).gen);
-      for (const ep of w.entryPoints) {
-        if (!inView(ep.x, ep.z, ep.x, ep.z)) continue;
-        const [a, b] = toPx(ep.x, ep.z);
-        paintEntry(ctx, a, b, dockK, ep.ep); // (the game-loop round: an outfitter's dock, or a trailhead's sign)
-        hits.push({ kind: 'dock', ep: ep.ep, x: ep.x, z: ep.z, px: 10 });
-        if (mid) { ctx.fillStyle = '#4a3b26'; ctx.textAlign = 'center'; ctx.fillText(`EP ${ep.ep}`, a, b + 19 * k); }
-      }
+      paintEntries(ctx, w, toPx, W, H, dockK, { names: mid, hits, inView });
       ctx.restore();
     }
     // The words pencilled on your map at your asking (map-book.js marks: a keeper's or a visitor's word, each with who
