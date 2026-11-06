@@ -116,6 +116,7 @@ import { onboarding } from './onboarding.js'; // gl-c: the home counter's first 
 import { starter } from './starter.js'; // the start round: each outfitter's first night out, the season's sky and its kind first days
 import { walt } from './walt.js'; // gl-c: the notebook in the old tent
 import { guide } from './guide.js'; // r3: the registry of what is on the go (the journal's Tasks, the tracker, the locator)
+import { tracker } from './tracker.js'; // r3 B: the task pop-ups on the left
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -1255,6 +1256,17 @@ async function main() {
   // ==== r3 A (start + onboarding): its one block goes below this line ====
 
   // ==== r3 B (journal + tracker): its one block goes below this line ====
+  // r3 B: the journal's Tasks page draws the guide's entries (story steps in their amber ink, side stories in teal, each
+  // with its next line), and the pop-up tracker on the left says a task added or near, and the tutorial's step all along;
+  // while its card is up, I opens the journal at that task. Settings, HUD: "Task pop-ups" turns it off.
+  {
+    journal.guide = guide;
+    tracker.attach({ guide, settings, journal, hud, title, talk });
+    journal.taskPeek = () => tracker.peek();
+    const updT = tasks.update.bind(tasks);
+    tasks.update = (dt) => { updT(dt); try { tracker.update(dt); } catch (e) { if (!tracker.warnedU) { tracker.warnedU = true; console.warn('tracker', e); } } };
+    window.__game.tracker = tracker;
+  }
 
   // ==== r3 C (golden locator): its one block goes below this line ====
 
