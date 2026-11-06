@@ -519,7 +519,7 @@ export class PartyMoves {
   // partyPerson: the same as at their camp)
   makeActors(L) {
     const party = L.party, crew = L.plan.crew, v = L.who;
-    L.persons = party.members.map((m, i) => this.actors.person({ key: `party:${party.id}#${i}`, look: v ? v.members[i].look : undefined, name: v ? v.members[i].name : null }));
+    L.persons = party.members.map((m, i) => this.actors.person({ key: `party:${party.id}#${i}`, look: v ? v.members[i].look : undefined, name: v ? v.members[i].name : null, life: true })); // (r2 verify: the idle with life and the look at you were never switched on for them)
     L.boats = crew.boats.map((b, c) => this.actors.boat({ key: `party:${party.id}/${c}`, hull: crew.hulls[c], crew: [], packs: 2 }));
     L.speakers = L.persons.map((a, i) => ({ key: `party:${party.id}#${i}`, person: `party:${party.id}`, name: v ? v.members[i].name : 'A paddler', role: '', hear: 95, pos: (out) => (a.removed ? null : a.headAt(out)) }));
     L.lastH = null;

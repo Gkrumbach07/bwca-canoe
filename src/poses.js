@@ -552,6 +552,11 @@ export function makeGait(body) {
     // there, a finer tile or a LiDAR chunk come in, does not: the feet re-step to it and the hips follow it eased)
     if (!loco.init || loco.air || Math.hypot(rig.position.x - loco.rigPos.x, rig.position.z - loco.rigPos.z) > 1.5 || Math.abs(rig.position.y - loco.rigPos.y) > 4) { initFeet(); loco.air = false; }
     loco.rigPos.copy(rig.position); loco.h = rig.rotation.y;
+    // (r2 verify: for the people the game drives, a planted foot the ground has moved under by more than 0.25 m, walking
+    // as well as standing, is planted afresh where it stands: a finer tile come in under a party on a steep bank had left
+    // a walker's feet a metre under it and the hips capped down to them, buried to the waist. The player's own and a
+    // friend's feet keep their rules: their ground can change with what they stand on)
+    if (body.life && loco.init) for (const k of ['L', 'R']) { const f = loco.feet[k]; if (!f.swing && Math.abs(f.pos.y - ground(f.pos.x, f.pos.z)) > 0.25) plantAt(f, f.pos, f.yaw); }
     mireK += ((state.mire || 0) - mireK) * damp(3, dt);
     const v = Math.max(0, state.speed);
     const mf = state.moveFwd, ml = state.moveLat, mag = Math.hypot(mf, ml);
