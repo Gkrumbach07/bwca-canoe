@@ -49,7 +49,8 @@ const HELPERS = () => {
   H.cur = () => { g.guide.sync(); const c = g.guide.current(); return c ? { id: c.id, next: c.next, tutorial: c.tutorial } : null; };
   // every card the tracker draws (head, id, mode), in order
   const draw = g.tracker.draw.bind(g.tracker);
-  g.tracker.draw = (card, hold) => { if (card && card.e) { const l = H.cards[H.cards.length - 1], k = `${card.mode}|${card.head}|${card.e.id}`; if (!l || l.k !== k) H.cards.push({ k, mode: card.mode, head: card.head, id: card.e.id, next: card.e.next }); } return draw(card, hold); };
+  g.tracker.draw = (card, hold) => { if (card && card.e) { const l = H.cards[H.cards.length - 1], k = `${card.mode}|${card.head}|${card.e.id}`; if (!l || l.k !== k) H.cards.push({ k, mode: card.mode, head: card.head, id: card.e.id, next: card.e.next, at: { mark: H.markNow, talking: g.npcs.dialogue.talking, ob: g.onboarding.state && g.onboarding.state.step, open: !!g.outfitter.open, stack: H.debug ? String(new Error().stack).split('\n').slice(2, 7).map((l) => l.trim().replace(/https?:\/\/[^/]+/, '')).join(' < ') : undefined } }); } return draw(card, hold); };
+  H.markNow = null; H.debug = true; // (r4: each card recorded with what was going on: the rig's own mark, the talk, the onboarding's step)
   H.cardsOf = (id) => H.cards.filter((c) => c.id === id).map((c) => `${c.mode}:${c.head}`);
   H.gem = (id) => g.locator.shown().find((q) => q.id === id && !q.gone) || null;
   H.mainGem = () => { const m = g.locator.shown().find((q) => q.main && !q.gone); return m ? m.id : null; };
@@ -121,8 +122,9 @@ try {
   // 3 the talk through, then each step played
   const talk = await page.evaluate(async () => {
     const g = window.__game, H = window.__r3j, d = g.npcs.dialogue;
-    H.cards.length = 0;
-    H.open(); for (let i = 0; i < 16 && d.convo; i++) { d.choose(0); H.step(2); await H.wait(30); }
+    H.cards.length = 0; H.markNow = 'talk:open';
+    H.open(); H.markNow = 'talk:choose'; for (let i = 0; i < 16 && d.convo; i++) { d.choose(0); H.step(2); await H.wait(30); }
+    H.markNow = 'talk:over';
     if (g.starter.pending) await g.starter.pending;
     if (g.outfitter.open) g.outfitter.hide();
     H.step(20);
@@ -134,6 +136,7 @@ try {
   for (const [id, act] of [['story:onboard:food', 'food'], ['story:onboard:leeches', 'leeches'], ['story:onboard:canoe', 'canoe']]) {
     const s = await page.evaluate(async ({ id, act }) => {
       const g = window.__game, H = window.__r3j, S = g.outfitter.shop, ep = g.profile.home;
+      H.markNow = `step:${act}`;
       const e = g.guide.get(id), r = e && g.guide.reach(e);
       if (r && act !== 'canoe') H.face(r.pos, 2.6);
       if (r && act === 'canoe') { const L = g.outfitter.layout(ep), f = L.dockFoot || L.dockLand || r.pos; H.standAt(f.x, f.z); }
@@ -153,8 +156,9 @@ try {
   }
   const four = await page.evaluate(() => {
     const H = window.__r3j;
-    return { leeches: H.cardsOf('story:onboard:leeches'), canoe: H.cardsOf('story:onboard:canoe'), food: H.cardsOf('story:onboard:food'), seq: H.cards.map((c) => `${c.mode}:${c.head}:${c.id}`) };
+    return { leeches: H.cardsOf('story:onboard:leeches'), canoe: H.cardsOf('story:onboard:canoe'), food: H.cardsOf('story:onboard:food'), seq: H.cards.map((c) => `${c.mode}:${c.head}:${c.id}`), at: H.cards.map((c) => ({ id: c.id, ...c.at })) };
   });
+  log('4 cards', JSON.stringify(four.at).slice(0, 4000));
   const sayOrder = (four.seq.filter((s) => /story:onboard/.test(s)).map((s) => s.split(':').slice(2).join(':')).filter((v, i, a) => a.indexOf(v) === i));
   result('4 the tracker says each step in its turn and never a later one early (no "Close by" for a tutorial step)',
     !four.seq.some((s) => /Close by:story:onboard/.test(s)) && JSON.stringify(sayOrder) === JSON.stringify(['story:onboard:food', 'story:onboard:leeches', 'story:onboard:canoe']), { ...four, sayOrder });
