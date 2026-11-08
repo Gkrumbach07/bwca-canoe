@@ -389,3 +389,30 @@ and one truck draw call while it is in view. Load cost: two small tables in `src
   script should prefer the named road the graph in `outfitters.js` uses.
 - The behaviour past the box's edge is read from `world.js`/`tiles.js`, not played.
 - Not in this proposal: the starting-weather and starter-route ideas in the same message (their own streams).
+
+## As built: streams E1 + E2 (2026-11-08, branch claude/edge-roads)
+
+- **The table.** `scripts/edge-osm.mjs` (OSM roads and towns from the Geofabrik extracts, Quetico relation 14520069 from
+  Overpass, into `data-cache/edge`) and `scripts/edge.mjs` (run on a host: it reads the release's tiles for the water)
+  write `src/edge.bin` (26 KB: a 50 m grid of zones and the outlines) and `src/map-roads.bin` (17 KB: 1,121 km of
+  roads, 24 towns, 12 "to Cook 9 mi" exits). Zones: **out** 6,650 km², **wild** (the BWCAW) 4,415, **doorstep** 487
+  (400 m round the BWCAW, 1.5 km round every put-in, lot, head and outfitter's yard, each lot's road 1.5 km toward town
+  and the walk from a lot to its road up to 3.2 km, the roads joining lots within 4 km (22 joins), and 36 ways in by
+  water 250 m wide), **Quetico** 2,256 (the park and 400 m round it, more than 60 m past the BWCAW's line). Every entry
+  point's put-in, lot and store is wild or doorstep; the three lots inside the box's 200 m south margin (Bog Lake, Little
+  Isabella, Snake River) keep their doorstep. Rerun `scripts/edge.mjs` whenever a lot or a store moves (E3).
+- **The notice** (`src/edge.js` EdgeWatch, `edge.css`): a Forest Service brown sign under the energy bar's row, "You have
+  left the Boundary Waters", up after 2.2 s out and down after 2.2 s back in (a jump of 200 m or a teleport at once),
+  the second line the first time only; Quetico's in park green, "Quetico Provincial Park", gone with a Quetico permit
+  held (`permits.holdsQuetico`, a held permit of kind `quetico`: none sold yet). Nothing in the walker or the canoe
+  reads it. On the map, a printed tag at the top of the sheet while out.
+- **Quetico's ticket.** Camping off a site is allowed in Quetico (it has no designated sites); a tent pitched there on an
+  Adventure trip without a Quetico permit is one $50 ticket a trip (`PRICES.quetico`), on Ontario Parks' own notice.
+- **The campsites past the band** (154, plus one of world-fixes' added sites) are marked `c.past` in world.js, kept in
+  the list (the saves and tables go by index), still built in 3D, but off every map, the sheets' counts, the parties,
+  the visitors and the notices. `?edge=off` marks none.
+- **The map.** Past the edge washed 34 % toward the paper; the edge a fine pencil line; Quetico's outline dashed green;
+  the roads (highways double, county roads single, solid paved / dashed gravel, the lots' spurs fine dashed) and the
+  towns in spaced capitals on the HUD sheet, the book's map, the start map and the portraits (`map-render drawRegion`
+  `roads`/`edge` options); the counter map has the real roads under its pencil lines.
+- **Rig:** `scripts/edge-test.mjs`.
