@@ -13,8 +13,8 @@
 //   6 Quetico (Kawnipi): its own notice; camping off a site allowed there; a night without a Quetico permit is one $50
 //     ticket (once a trip), on Ontario's notice in the book; no notice at all with a Quetico permit held
 //   7 the campsites past the band: on no map, in no party's choices, no notice's site
-//   8 the map: the wash past the edge, the roads and the towns drawn (the pixels past the edge lighter than they were,
-//     the road ink present), a shot of the Ely side
+//   8 the map: the wash past the edge (lighter than inside, but only a little) and the roads round Ely, by the painters
+//     themselves on sheets of their own; the notice while out; a shot of the book's map on the Ely side
 //   9 no page errors
 //
 //   npx vite --port 5411 --strictPort &
@@ -188,16 +188,27 @@ try {
     const view = sh ? sh.view : null; if (sh) sh.view = () => 'whole';
     hud.setMode('sheet'); hud.lookAt(H.at.whiteIron.x + 3000, H.at.whiteIron.z, 16000);
     for (let i = 0; i < 40; i++) { H.step(2); await H.wait(60); }
-    const cv = hud.canvas, ctx = cv.getContext('2d');
-    // a pixel past the edge (Ely, land) against one in the wilderness (land too), by lightness, and the road ink near Ely
-    const px = (q) => { const W = cv.width, Hh = cv.height, v = hud.view, m = v.span / W; const a = Math.round((q.x - v.cx) / m + W / 2), b = Math.round((q.z - v.cz) / m + Hh / 2); if (a < 0 || b < 0 || a >= W || b >= Hh) return null; return Array.from(ctx.getImageData(a, b, 1, 1).data); };
     const state = hud.edgeState ? hud.edgeState() : null;
-    const box = (q, r) => { const W = cv.width, Hh = cv.height, v = hud.view, m = v.span / W; const a = Math.round((q.x - v.cx) / m + W / 2), b = Math.round((q.z - v.cz) / m + Hh / 2); const d = ctx.getImageData(Math.max(0, a - r), Math.max(0, b - r), 2 * r, 2 * r).data; let ink = 0; for (let k = 0; k < d.length; k += 4) if (d[k] < 130 && d[k] > d[k + 2] && d[k + 1] < 110) ink++; return ink; };
-    return { state, ely: px(H.at.ely), inkNearEly: box(H.at.ely, 40), mode: hud.mode, restore: !!view };
+    // the painters themselves on a sheet of their own, 16 km round White Iron at 16 m a pixel: the paper past the edge
+    // (Ely) washed lighter than the paper inside (Farm Lake's doorstep is not washed: the wilderness south of it is), but
+    // only a little (the owner: "just slightly faded"), and the roads inked round Ely
+    const m = window.__edgeMod, W = 1000, Hh = 1000, cv = document.createElement('canvas'); cv.width = W; cv.height = Hh;
+    const ctx = cv.getContext('2d'), c = H.at.whiteIron, v = { x0: c.x - 8000, z0: c.z - 8000, mPerPx: 16 };
+    const at = (q) => [Math.round((q.x - v.x0) / v.mPerPx), Math.round((q.z - v.z0) / v.mPerPx)];
+    ctx.fillStyle = '#c8bfa0'; ctx.fillRect(0, 0, W, Hh); m.paintEdge(ctx, v, 1, { line: false, quetico: false });
+    const lum = (q) => { const [a, b] = at(q), d = ctx.getImageData(a, b, 1, 1).data; return d[0] + d[1] + d[2]; };
+    const inside = { x: H.at.lakeOne.x, z: H.at.lakeOne.z }, wild = window.__edgeZone(inside.x, inside.z);
+    const v2 = { x0: inside.x - 8000, z0: inside.z - 8000, mPerPx: 16 }; // (Lake One, painted alike)
+    const c2 = document.createElement('canvas'); c2.width = W; c2.height = Hh; const x2 = c2.getContext('2d'); x2.fillStyle = '#c8bfa0'; x2.fillRect(0, 0, W, Hh); m.paintEdge(x2, v2, 1, { line: false, quetico: false });
+    const lumIn = (() => { const d = x2.getImageData(500, 500, 1, 1).data; return d[0] + d[1] + d[2]; })();
+    const lumOut = lum(H.at.ely);
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, Hh); m.paintRoads(ctx, v, W, Hh, { k: 1, lettered: [] });
+    const [ea, eb] = at(H.at.ely), d = ctx.getImageData(ea - 60, eb - 60, 120, 120).data; let ink = 0; for (let k = 0; k < d.length; k += 4) if (d[k] < 200) ink++;
+    return { state, wild, lumIn, lumOut, inkNearEly: ink, mode: hud.mode, restore: !!view };
   });
   await page.waitForTimeout(500);
   await shot('8-map-ely-side');
-  result('8 the map past the edge: the roads inked near Ely, the notice on the sheet while out', s8.state === 'out' && s8.inkNearEly > 20, s8);
+  result('8 the map: past the edge washed lighter but only a little, the roads inked round Ely, the notice on the sheet while out', s8.state === 'out' && s8.wild === 1 && s8.lumOut > s8.lumIn && s8.lumOut - s8.lumIn < 90 && s8.inkNearEly > 200, s8);
   await page.evaluate(() => { const hud = window.__game.hud; try { hud.setMode('glance'); hud.setMode(null); } catch { /* */ } });
 
   result('9 no page errors', errors.length === 0, { errors: errors.slice(0, 5) });
