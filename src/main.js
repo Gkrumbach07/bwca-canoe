@@ -928,7 +928,7 @@ async function main() {
   // co-op phase 1 (coop.js, docs/plans/coop.md): friends in their own browsers on one lake in Sandbox, drawn with the
   // actor layer, the host's clock everyone's. Their poses are set just before the actors' own update (after the camera),
   // their names placed after it. Invite friends on the pause card, Join a trip on the title (or a ?join=CODE link).
-  const coop = new Coop({ player, canoe, actors, day, title, trip, outfitter, profile, packs, hud, camera, world, saver });
+  const coop = new Coop({ player, canoe, actors, day, title, trip, outfitter, profile, packs, hud, camera, world, saver, story }); // (k1a: story, for the guest's mirror mode)
   { const upd = actors.update.bind(actors); actors.update = (dt, ...a) => { try { coop.update(dt); } catch (e) { if (!coop.warned) { coop.warned = true; console.warn('coop', e); } } upd(dt, ...a); try { coop.labels(); } catch { /* the names only */ } }; }
   coop.fromUrl();
   window.__game.coop = coop;
