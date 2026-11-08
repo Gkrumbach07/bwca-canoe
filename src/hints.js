@@ -79,6 +79,8 @@ const STILL_AFLOAT = 6; // seconds sitting still afloat before F is offered
 const GREY_LOOK = 2.5; // seconds the dot rests on a greyed verb before the right-click is offered
 const HUSH = 6;        // r4: seconds after the staffer's line at the door before a teaching line (the tracker's card and
                        // the gem have the first word of a new season)
+const HUSH_DOOR = 14;  // r4: seconds at the store, the talk to come, before a teaching line when the staffer has not
+                       // spoken yet (a season starts at the door, outside: the line comes as you step in)
 const DARK = -3;       // the sun's elevation (degrees) under which it is dark (camp.js dark)
 const SHELF_REACH = 1.6; // metres from a shelf's box (outfitter.js REACH)
 const SHELVES = new Set(['food', 'tackle', 'gear', 'wall']); // the store's hotspots that are shelves (outfitter.js HOT)
@@ -279,17 +281,14 @@ export class Hints {
   // the staff talk still to come at the store you are in
   get talkToCome() { const o = this.onboarding, v = this.t.outfitter && this.t.outfitter.visit; return !!(o && v && typeof o.pending === 'function' && o.pending(v.ep)); }
   // r4: a teaching line held back now: the first seconds of a new season's store (before the staffer's line at the door
-  // and HUSH seconds after it: the tracker's card and the gem say the first thing to do), and the shelf's key and the
+  // and HUSH seconds after it, or HUSH_DOOR seconds at the store before it: the tracker's card and the gem say the first
+  // thing to do), and the shelf's key and the
   // store's people while the talk is still to come (unless the dot is on a shelf: then its key is the thing)
   waits(m) {
     if (m.prio !== TEACH) return false;
     if (!this.talkToCome) return false;
-    const o = this.onboarding, v = this.t.outfitter.visit;
-    if (v.inside) {
-      if (!(o.state && o.state.nudged)) return true;
-      if (this.nudgedAt == null) this.nudgedAt = this.clockT;
-      if (this.clockT - this.nudgedAt < HUSH) return true;
-    }
+    if (this.nudgedAt == null) { if (this.comeAt == null || this.clockT - this.comeAt < HUSH_DOOR) return true; }
+    else if (this.clockT - this.nudgedAt < HUSH) return true;
     if (m.id === 'storeparty') return true;
     if (m.id === 'shelf') { const g = this.t.pointer && this.t.pointer.target; return !(g && g.kind === 'shelf'); }
     return false;
@@ -542,7 +541,7 @@ export class Hints {
     this.clockT += dt;
     // the accumulators: walking, under way, on foot, still afloat (a new season starts them again)
     const sid = t.profile ? t.profile.seasonId : null;
-    if (sid !== this.sid) { this.sid = sid; this.nudgedAt = null; this.walkT = this.paddleT = this.footT = this.wayT = this.stillT = 0; this.held.clear(); this.pend.clear(); }
+    if (sid !== this.sid) { this.sid = sid; this.nudgedAt = null; this.comeAt = null; this.walkT = this.paddleT = this.footT = this.wayT = this.stillT = 0; this.held.clear(); this.pend.clear(); }
     const moving = Math.abs(p.speed || 0) > 0.3;
     if (p.mode === 'walk' && !p.seat) { this.footT += dt; if (moving) this.walkT += dt; } else this.footT = 0;
     if (p.mode === 'paddle' && moving && !(f && f.rodUp) && !p.landing) this.paddleT += dt;
@@ -556,6 +555,8 @@ export class Hints {
       this.here = this.siteHere();
       this.watchFire(this.here && this.here.site);
       this.learnFromWorld();
+      // (r4: when the store with the talk to come was first seen, and when the staffer's line at the door was said)
+      if (this.talkToCome) { if (this.comeAt == null) this.comeAt = this.clockT; const o = this.onboarding; if (this.nudgedAt == null && o.state && o.state.nudged) this.nudgedAt = this.clockT; }
       const g = t.pointer && t.pointer.target; // (the dot resting on a thing it can do nothing with, for the right-click)
       this.greyT = g && g.e && g.e.why && !(g.q && !g.q.why) ? (this.greyT || 0) + step : 0;
     }

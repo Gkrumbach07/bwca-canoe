@@ -59,7 +59,7 @@ const HELPERS = () => {
   hs.show = (m, text, how, ...a) => {
     const r = show(m, text, how, ...a);
     const st = ob.state || {};
-    H.hints.push({ n: (H.seq = (H.seq || 0) + 1), forced: !!H.forcing, id: m.id, how, prio: m.prio, text: String(text || '').replace(/\{([^}]+)\}/g, '$1'), raw: String(text || ''), at: hs.clock(), clockT: +hs.clockT.toFixed(2), nudgedAt: hs.nudgedAt == null ? null : +hs.nudgedAt.toFixed(2),
+    H.hints.push({ n: (H.seq = (H.seq || 0) + 1), forced: !!H.forcing, id: m.id, how, prio: m.prio, text: String(text || '').replace(/\{([^}]+)\}/g, '$1'), raw: String(text || ''), at: hs.clock(), clockT: +hs.clockT.toFixed(2), nudgedAt: hs.nudgedAt == null ? null : +hs.nudgedAt.toFixed(2), comeAt: hs.comeAt == null ? null : +hs.comeAt.toFixed(2),
       talking: !!H.d().talking, talkToCome: !!hs.talkToCome, loan: !!st.loan, done: !!st.done, mode: g.player.mode, inside: !!(g.outfitter.visit && g.outfitter.visit.inside), target: H.target(), tracker: g.tracker.state().text.slice(0, 90) });
     if (!H.forcing) H.unshot.push(H.seq);
     return r;
@@ -136,7 +136,7 @@ try {
   await realFor(2000);
   const pre = await hintsNow();
   const firstTeach = pre.find((h) => h.prio === 1);
-  result('1 the store\'s first seconds: no teaching line before the staffer\'s word at the door and its hush', !firstTeach || (firstTeach.nudgedAt != null && firstTeach.clockT - firstTeach.nudgedAt >= 5.9), { firstTeach, all: pre.map((h) => `${h.id}@${h.clockT}`) });
+  result('1 the store\'s first seconds: no teaching line before the staffer\'s word at the door and its hush (or 14 s at the door)', !firstTeach || (firstTeach.nudgedAt != null ? firstTeach.clockT - firstTeach.nudgedAt >= 5.9 : firstTeach.clockT - (firstTeach.comeAt ?? 0) >= 13.9), { firstTeach, all: pre.map((h) => `${h.id}@${h.clockT}`) });
   result('2 before the talk: no shelf key, no store party line (the gem is on the staffer)', !pre.some((h) => (h.id === 'storeparty' || (h.id === 'shelf' && !/^shelf/.test(h.target || ''))) && h.talkToCome), pre.map((h) => `${h.id}:${h.target}`));
 
   // --- the talk: walk to the staffer, E, 1 to the end ------------------------------------------------------------------------
@@ -170,7 +170,7 @@ try {
   await ev(() => { const g = window.__game; if (g.hints.cur) g.hints.hide(); window.__p.unshot.length = 0; });
   // (the forced line is no moment of the season: out of the log)
   await ev(() => { const H = window.__p; H.hints = H.hints.filter((h) => !h.forced); });
-  result('5 I with "{I}" on the line up opens the pack, not the journal at the tracker\'s task', iTest.up === 'thirsty' && iTest.wants && jI.open && jI.tab !== 'tasks', { iTest, jI });
+  result('5 I with "{I}" on the line up opens the pack, not the journal at the tracker\'s task', iTest.up === 'thirsty' && iTest.wants && jI.open && jI.side === 'pack', { iTest, jI });
 
   // --- the shelf gems against the top bar: 1280x720 and 1920x1080, first and third person, from 1.2, 1.8 and 2.6 m ---------
   const gemRows = [];
