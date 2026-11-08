@@ -111,7 +111,7 @@ try {
     }, [kind, doy0, out]);
     made.push(r);
     const exactWanted = ['beaver', 'lastcheck', 'pma', 'secchi', 'colour', 'item', 'survey', 'deadfall', 'litter', 'campsite'].includes(kind);
-    const ok = r.made && r.inBand && r.inWin && (r.outWin === null || r.outWin === false) && r.left === DAYS[kind] && r.entry && (!!r.next || kind === 'photo') && (!exactWanted || !!r.target || kind === 'lastcheck');
+    const ok = r.made && r.inBand && r.inWin && (r.outWin === null || r.outWin === false) && r.left === DAYS[kind] && r.entry && (!!r.next || kind === 'photo') && (!exactWanted || !!r.target);
     result(`2 ${kind}: written in its window, pay in band, its deadline, a journal line${exactWanted ? ', a place' : ''}`, ok, r);
   }
 
@@ -253,8 +253,8 @@ try {
   const evN = (k) => r7.ev.filter((e) => e === k).length;
   result('7b the turn: up at seven on 15 June 2027, rested, the permit held; season:close and year:open once each; the same season', r7.year === 2027 && r7.today === r7a.june15 && Math.abs(r7.hours - 7) < 0.1 && r7.energy >= 0.99 && r7.held.includes(r7a.june15) && evN('season:close') === 1 && evN('year:open') === 1 && r7.season && r7a.money - r7.money === 6, r7);
   await frames(30);
-  const r7c = await page.evaluate(() => { const g = window.__game, T = g.tasks, doy = g.day.doy; return { board: T.board(25).filter(Boolean).map((t) => ({ kind: t.kind, inWin: T.inWindow(t.kind, doy, 25) })) }; });
-  result('7c after the turn the board is this June\'s (every notice in its window)', r7c.board.every((t) => t.inWin), r7c);
+  const r7c = await page.evaluate(async () => { const g = window.__game, T = g.tasks, doy = g.day.doy; T.board(25); await T.write(25); return { board: T.board(25).filter(Boolean).map((t) => ({ kind: t.kind, inWin: T.inWindow(t.kind, doy, 25) })) }; });
+  result('7c after the turn the board is this June\'s (every notice in its window)', r7c.board.length >= 3 && r7c.board.every((t) => t.inWin), r7c);
   await shot('june-2027');
 } catch (e) {
   log('ERROR', e && e.stack ? e.stack : e);
