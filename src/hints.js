@@ -43,6 +43,15 @@
 // pressed on it (pointer.js), or a card or the book asks (hints.next(id, text)), its `next` shows here as a teaching line;
 // after that only its why.
 //
+// r4 (the tutorial polish, 2026-11-08): reviewed against round 3's empty-handed start (onboarding.js: nothing of yours
+// but the bottle until the staff talk lends the canoe and gives the old gear; the guide's tracker card and gold gem
+// show each step of the main path). In a new season's store no teaching line comes before the staffer's word at the
+// door, nor for HUSH seconds after it; the shelf's key and the store's people wait until the talk is over (the gem
+// is on the staffer); nothing about the canoe before there is one; hunger in a store points at the provisions shelf;
+// the evening names the site pencilled on your map (main.js, the starter block); "Done. Notices pay when you come in."
+// is the tracker's own Done card (main.js gl-d); I, while a line on the screen says {I}, opens the pack it names, not
+// the journal at the tracker's task (wantsKey). docs/build/r4-tut.md has every moment with keep, changed or removed.
+//
 // (One speed, 2026-10-26: the pace toast and the 1 2 3 moment are gone with the keys; the clock is everyone's, pace.js.)
 //
 //   const hints = new Hints({ player, hud, day, profile, pointer, outfitter, inventory, lamp, chase, title, talk, camp,
@@ -68,6 +77,8 @@ const ON_FOOT = 1;     // seconds on foot before V is offered (not the frame you
 const UNDER_WAY = 3;   // seconds under way on a new trip before the first word of it
 const STILL_AFLOAT = 6; // seconds sitting still afloat before F is offered
 const GREY_LOOK = 2.5; // seconds the dot rests on a greyed verb before the right-click is offered
+const HUSH = 6;        // r4: seconds after the staffer's line at the door before a teaching line (the tracker's card and
+                       // the gem have the first word of a new season)
 const DARK = -3;       // the sun's elevation (degrees) under which it is dark (camp.js dark)
 const SHELF_REACH = 1.6; // metres from a shelf's box (outfitter.js REACH)
 const SHELVES = new Set(['food', 'tackle', 'gear', 'wall']); // the store's hotspots that are shelves (outfitter.js HOT)
@@ -262,6 +273,36 @@ export class Hints {
   get stamp() { const d = this.t.day; return d ? d.year * 1000 + d.doy : 0; }
   get nowH() { const d = this.t.day; return d ? d.doy * 24 + d.hours : 0; }
   clock() { const d = this.t.day; if (!d) return ''; const h = Math.floor(d.hours), m = Math.floor((d.hours - h) * 60); return `d${d.doy} ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`; }
+  // r4: the new season's staff talk (onboarding.js), when the build has it
+  get onboarding() { return this.ref('onboarding'); }
+  get noCanoe() { const o = this.onboarding; return !!(o && o.noCanoe); }
+  // the staff talk still to come at the store you are in
+  get talkToCome() { const o = this.onboarding, v = this.t.outfitter && this.t.outfitter.visit; return !!(o && v && typeof o.pending === 'function' && o.pending(v.ep)); }
+  // r4: a teaching line held back now: the first seconds of a new season's store (before the staffer's line at the door
+  // and HUSH seconds after it: the tracker's card and the gem say the first thing to do), and the shelf's key and the
+  // store's people while the talk is still to come (unless the dot is on a shelf: then its key is the thing)
+  waits(m) {
+    if (m.prio !== TEACH) return false;
+    if (!this.talkToCome) return false;
+    const o = this.onboarding, v = this.t.outfitter.visit;
+    if (v.inside) {
+      if (!(o.state && o.state.nudged)) return true;
+      if (this.nudgedAt == null) this.nudgedAt = this.clockT;
+      if (this.clockT - this.nudgedAt < HUSH) return true;
+    }
+    if (m.id === 'storeparty') return true;
+    if (m.id === 'shelf') { const g = this.t.pointer && this.t.pointer.target; return !(g && g.kind === 'shelf'); }
+    return false;
+  }
+  // r4: the line up says this key ('I'): the key does what it says (journal.js asks before the tracker's task)
+  wantsKey(k) { return !!(this.cur && this.el.classList.contains('show') && new RegExp(`\\{${k}\\}`).test(this.cur.raw || '')); }
+  // a place in words from where you are ("1.2 mi north-east")
+  placeWords(x, z) {
+    const p = this.t.player; if (!p) return '';
+    const dx = x - p.x, dz = z - p.z, d = Math.hypot(dx, dz), deg = ((Math.atan2(dx, -dz) * 180) / Math.PI + 360) % 360;
+    const far = d < 300 ? `${Math.max(150, Math.round(d * 3.28084 / 50) * 50)} ft` : `${(d / 1609.344).toFixed(1)} mi`; // (imperial on screen)
+    return `${far} ${compassLong(deg)}`;
+  }
   // the campsite you stand at on foot (free or yours), with its ring and how far it is
   siteHere() {
     const p = this.t.player, c = this.t.camp;
@@ -320,9 +361,7 @@ export class Hints {
     let n = null;
     try { n = reg.nearestFree(p.x, p.z, 6000, (s) => !sheets.showsDetail || sheets.showsDetail(s.x, s.z)); } catch { n = null; }
     if (!n) return '';
-    const dx = n.site.x - p.x, dz = n.site.z - p.z, deg = ((Math.atan2(dx, -dz) * 180) / Math.PI + 360) % 360;
-    const far = n.d < 300 ? `${Math.max(150, Math.round(n.d * 3.28084 / 50) * 50)} ft` : `${(n.d / 1609.344).toFixed(1)} mi`; // (imperial on screen)
-    return `${far} ${compassLong(deg)}`;
+    return this.placeWords(n.site.x, n.site.z);
   }
 
   // --- whether a moment applies now: false, true, a level (lower is worse) or { lv, text, short } ---------------------
@@ -339,7 +378,7 @@ export class Hints {
         return v !== false && this.here && this.here.ringD <= SITE ? { lv: v, text: 'Nearly spent. Rest, eat or drink now.', short: 'Nearly spent.' } : v;
       }
       case 'donein': return this.live && e.needs.rest <= (ep ? 0.1 : 0.005) ? e.needs.rest : false;
-      case 'nofood': return this.live && e.warning;
+      case 'nofood': return this.live && e.warning ? (this.atOutfitter ? { lv: 1, text: 'No food, and not much left in you. The provisions shelf, now.', short: 'No food: the provisions shelf.' } : true) : false; // (r4: in a store)
       // the body
       case 'bottle': return this.live && !this.atOutfitter && e.treating <= 0.001 && e.bottle <= (ep ? 0.3 : 0.02) ? 1 : false;
       case 'thirsty': {
@@ -354,7 +393,8 @@ export class Hints {
         // (fb5 join: food hung in the barrel at camp is food: say where it is, not "no food… an outfitter sells it")
         const hung = snacks <= 0 && e.food <= 0.01 && typeof e.hungFood === 'function' ? e.hungFood() : null;
         if (hung && hung.days > 0) return { lv: v, text: 'Hungry. Your food hangs in the barrel: hold {E} on it to let it down.', short: 'Hungry. The barrel.' };
-        if (snacks > 0 || e.food <= 0.01) return snacks > 0 ? v : { lv: v, text: 'Hungry, and no food with you. An outfitter sells it.', short: 'Hungry, and no food.' };
+        // (r4: in a store with nothing to eat, the shelf it is on, not "an outfitter sells it")
+        if (snacks > 0 || e.food <= 0.01) return snacks > 0 ? v : this.atOutfitter ? { lv: v, text: 'Hungry, and no food with you. The provisions shelf has it.', short: 'Hungry: the provisions shelf.' } : { lv: v, text: 'Hungry, and no food with you. An outfitter sells it.', short: 'Hungry, and no food.' };
         return { lv: v, text: 'Hungry. Cook a meal on the grate at a fire, or eat {I}.', short: 'Hungry. {I}' };
       }
       case 'cold': return this.inside ? false : need('warmth');
@@ -455,7 +495,7 @@ export class Hints {
         if (g && g.kind === 'shelf') return true;
         return !!(v.L && Array.isArray(v.L.hot) && v.L.hot.some((h) => SHELVES.has(h.key) && reachTo(h, p.x, p.z) <= SHELF_REACH));
       }
-      case 'book': return p.mode === 'walk' && this.besideCanoeWithThings();
+      case 'book': return p.mode === 'walk' && !this.noCanoe && this.besideCanoeWithThings(); // (r4: the dock's hidden hull is no canoe)
       case 'jog': return this.walkT >= WALK;
       case 'view': return this.footT >= ON_FOOT;
       default: return false;
@@ -502,7 +542,7 @@ export class Hints {
     this.clockT += dt;
     // the accumulators: walking, under way, on foot, still afloat (a new season starts them again)
     const sid = t.profile ? t.profile.seasonId : null;
-    if (sid !== this.sid) { this.sid = sid; this.walkT = this.paddleT = this.footT = this.wayT = this.stillT = 0; this.held.clear(); this.pend.clear(); }
+    if (sid !== this.sid) { this.sid = sid; this.nudgedAt = null; this.walkT = this.paddleT = this.footT = this.wayT = this.stillT = 0; this.held.clear(); this.pend.clear(); }
     const moving = Math.abs(p.speed || 0) > 0.3;
     if (p.mode === 'walk' && !p.seat) { this.footT += dt; if (moving) this.walkT += dt; } else this.footT = 0;
     if (p.mode === 'paddle' && moving && !(f && f.rodUp) && !p.landing) this.paddleT += dt;
@@ -555,7 +595,7 @@ export class Hints {
       // an episode over ('while'): the next one starts afresh (and short)
       if (!on) { this.held.delete(m.id); if (m.recur === 'while' && rec.ep) { rec.ep = false; rec.again = false; this.save(); } continue; }
       const heldT = (this.held.get(m.id) || 0) + step; this.held.set(m.id, heldT);
-      if (!this.clear(m)) continue;
+      if (!this.clear(m) || this.waits(m)) continue;
       const lv = typeof r === 'number' ? r : r && typeof r === 'object' && Number.isFinite(r.lv) ? r.lv : 1;
       const learnt = !!(m.learn && !m.keyed && this.used(m.learn));
       const full = (r && r.text) || m.text, short = (r && r.short) || m.short || null;
@@ -593,7 +633,7 @@ export class Hints {
     }
     this.pend.delete(m.id);
     this.held.set(m.id, 0);
-    this.cur = { m, t: 0, text, how, card };
+    this.cur = { m, t: 0, text, how, card, raw: text };
     this.shownAt = this.clockT; this.lastPrio = m.prio;
     this.el.innerHTML = `<span class="words">${momentHtml(text)}</span>`;
     this.el.dataset.hint = m.id;
