@@ -182,11 +182,21 @@ function dijkstra(s, maxCost, onSettle) {
 }
 const pathTo = (via, s, t) => { const out = []; let i = t; while (i !== s) { const id = via.get(i); if (id === undefined) return null; out.push(id); const e = edges[id]; i = e.a === i ? e.b : e.a; } return out.reverse(); };
 
+// the release's ground (a host; function loadGround below)
+let ground = null;
+if (!has('--no-heights') && fs.existsSync(dataDir + 'tiles')) ground = await loadGround();
+
 // ---- each start's way out ----------------------------------------------------------------------------------------
 const used = new Set(), routes = [], report = [];
 for (const S of starts) {
   const sn = nearest(S.x, S.z, SNAP_MAX);
   if (!sn) { report.push({ key: S.key, name: S.name, at: S.at, road: null, why: `no drivable way within ${SNAP_MAX} m` }); continue; }
+  // a landing's or a dock's point lies at (or in) the water: the start is the first dry ground from it toward its road
+  if (ground && S.at !== 'lot') {
+    const tx = nodes[sn.i].x, tz = nodes[sn.i].z, L = Math.hypot(tx - S.x, tz - S.z);
+    for (let d = 0; d < L; d += 2) { const x = S.x + ((tx - S.x) * d) / L, z = S.z + ((tz - S.z) * d) / L; if (ground.at(x, z).sd > 3) { S.x = x; S.z = z; break; } }
+    sn.d = Math.hypot(tx - S.x, tz - S.z);
+  }
   // a start a little way off its road (a lot back in the trees, a landing below the road's end): a two-track to it
   let s0 = sn.i;
   if (sn.d > 20 && sn.d <= TRACK_MAX) {
@@ -280,8 +290,6 @@ function resample(pts, step) {
   }
   return out;
 }
-let ground = null;
-if (!has('--no-heights') && fs.existsSync(dataDir + 'tiles')) ground = await loadGround();
 async function loadGround() {
   const { createServer } = await import('vite');
   const vite = await createServer({ root, configFile: false, server: { middlewareMode: true, hmr: false, watch: null }, appType: 'custom', logLevel: 'error', optimizeDeps: { noDiscovery: true, include: [] } });
@@ -345,7 +353,7 @@ async function loadGround() {
   };
 }
 const enc = (rows, scales) => { const out = [], prev = scales.map(() => 0); for (const r of rows) r.forEach((v, i) => { const q = Math.round(v * scales[i]); out.push(i < 2 || i === 2 ? q - prev[i] : q); prev[i] = q; }); return out; };
-const roads = [];
+const roads = [], crossings = [];
 let wet = 0, cuts = [];
 for (const c of chains) {
   const pts = resample(c.pts, STEP), n = pts.length;
@@ -369,6 +377,12 @@ for (const c of chains) {
     for (const e of [0, n - 1]) h[e] = raw[e];
     for (let i = 0; i < n; i++) { const cut = h[i] - raw[i]; w[i] = SHOULDER(cut); cuts.push(Math.abs(cut)); }
     wet += water.reduce((t, v) => t + v, 0);
+    for (let i = 0; i < n;) { // the water a road crosses (a culvert, a bridge: for the owner's list)
+      if (!water[i]) { i++; continue; }
+      let j = i; while (j < n && water[j]) j++;
+      crossings.push({ name: c.name, k: c.k, m: (j - i) * STEP, end: i === 0 || j === n, x: Math.round(pts[i][0]), z: Math.round(pts[i][1]) });
+      i = j;
+    }
   }
   const rows = pts.map(([x, z], i) => [x, z, h[i], water[i] ? -w[i] : w[i]]);
   roads.push({ k: c.k, hw: c.hw, line: c.line ? 1 : 0, name: c.name, p: enc(rows, [10, 10, 100, 10]) });
@@ -383,6 +397,6 @@ const table = {
 };
 fs.writeFileSync(outFile, JSON.stringify(table));
 console.log(`roads: ${outFile} ${(fs.statSync(outFile).size / 1024).toFixed(0)} KB; ${ground ? `over water ${wet} samples (${(wet * STEP / 1000).toFixed(2)} km), cut/fill median ${cuts[cuts.length >> 1]?.toFixed(2)} m, p95 ${cuts[Math.floor(cuts.length * 0.95)]?.toFixed(2)} m, max ${cuts[cuts.length - 1]?.toFixed(2)} m` : 'no heights'}`);
-if (reportFile) fs.writeFileSync(reportFile, JSON.stringify({ starts: report, joins }, null, 1));
+if (reportFile) fs.writeFileSync(reportFile, JSON.stringify({ starts: report, joins, crossings: crossings.sort((a, b) => b.m - a.m) }, null, 1));
 for (const r of report) if (!r.road && r.why) console.log(`  ${r.key} ${r.name}: ${r.why}`);
 for (const r of report) if (r.snap > 300) console.log(`  ${r.key} ${r.name} (${r.at}): the road is ${r.snap} m from the start`);
