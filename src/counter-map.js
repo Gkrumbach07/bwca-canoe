@@ -8,11 +8,17 @@
 // Self-contained on purpose: it reads only world.meta.overview, world.base and the rides' rows, so the shared map
 // renderer can take its place later (drawCounterMap's arguments are the whole contract).
 //
-//   drawCounterMap(canvas, { world, here: { ep, x, z }, rows: [{ ep, x, z, price, unknown, short, outfitter }], hot, sandbox })
-// (the game-loop round: the truck goes to every entry point. An outfitter is a ring, a trailhead a small square; a
+//   drawCounterMap(canvas, { world, here: { ep, x, z }, rows: [{ ep, x, z, price, unknown, short, outfitter, name }], hot, sandbox, pma })
+// (r2: the primitive areas' outlines, fine dashed over the water; pma: the one chosen at the permit desk, washed and
+// named on the sketch)
+// (the game-loop round: the truck goes to every entry point. An outfitter is a ring round a little store, where the store
+// stands (round 2 markers: no number, its name when hovered), a trailhead a small square with its number; a
 // trailhead off the sheet is left off it, unless it is the one hovered: the list beside the map has them all)
 //     → [{ ep, x, y, r }] the markers in css px, for hit testing (markerAt)
 //   markerAt(marks, x, y) → ep or null
+
+import { sketchPmas } from './map-render.js';
+import { pmaById } from './pma.js';
 
 const MI = 1609.344;          // metres in a mile
 const PAD = 0.14;             // the margin round the outfitters, as a share of the span
@@ -61,7 +67,7 @@ const miles = (m) => { const v = m / MI; return v < 10 ? +v.toFixed(1) : Math.ro
 // a round scale-bar length in miles for about a quarter of the sketch's width
 function scaleMiles(spanM) { const want = spanM / MI / 4; for (const s of [1, 2, 5, 10, 20, 25, 50]) if (s >= want * 0.7) return s; return 50; }
 
-export function drawCounterMap(canvas, { world, here, rows = [], hot = null, sandbox = false, onReady = null } = {}) {
+export function drawCounterMap(canvas, { world, here, rows = [], hot = null, sandbox = false, onReady = null, pma = null } = {}) {
   if (!canvas || !here) return [];
   const box = canvas.getBoundingClientRect(), cw = Math.max(120, Math.round(box.width)), ch = Math.max(120, Math.round(box.height));
   const dpr = Math.min(2, (typeof window !== 'undefined' && window.devicePixelRatio) || 1);
@@ -75,7 +81,8 @@ export function drawCounterMap(canvas, { world, here, rows = [], hot = null, san
   rows = rows.filter((r) => Number.isFinite(r.x) && Number.isFinite(r.z));
   const isTh = (r) => r.outfitter === false;
   const near = [...rows].sort((a, b) => Math.hypot(a.x - here.x, a.z - here.z) - Math.hypot(b.x - here.x, b.z - here.z)).slice(0, FRAME);
-  const pts = [here, ...near];
+  const pf = pmaById(pma); // (the area chosen at the desk is framed in too)
+  const pts = [here, ...near, ...(pf ? [{ x: pf.centre[0], z: pf.centre[1] }] : [])];
   const x0 = Math.min(...pts.map((p) => p.x)), x1 = Math.max(...pts.map((p) => p.x)), z0 = Math.min(...pts.map((p) => p.z)), z1 = Math.max(...pts.map((p) => p.z));
   const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, inner = 1 - 2 * PAD;
   const s = Math.min((cw * inner) / Math.max(MIN_SPAN, x1 - x0), (ch * inner) / Math.max(MIN_SPAN * (ch / cw), z1 - z0));
@@ -117,6 +124,18 @@ export function drawCounterMap(canvas, { world, here, rows = [], hot = null, san
     try { ctx.drawImage(wv.canvas, sx, sy, sw, sh, 0, 0, cw, ch); } catch { /* off the picture's edge */ }
   }
 
+  // the primitive areas: a fine dashed line, the one chosen at the desk washed and named in pencil
+  // (r2 replay: the eleven not picked had been a faint dash lost in the lakes at this scale: a light wash under each too)
+  sketchPmas(ctx, X, Y, { stroke: 'rgba(82, 76, 98, .7)', width: 1, dash: [3, 2.5], focus: pma, wash: 'rgba(82, 76, 98, .14)', focusStroke: 'rgba(70, 64, 86, .95)', fill: 'rgba(82, 76, 98, .07)' });
+  if (pf) {
+    ctx.font = 'italic 500 13px Alegreya, Georgia, serif';
+    const tw = ctx.measureText(pf.name).width;
+    const m = EDGE + R + 6; // (clear of the outfitters pinned along the edges)
+    const lx = Math.max(m + tw / 2, Math.min(cw - m - tw / 2, X(pf.centre[0]))), ly = Math.max(m, Math.min(ch - m - 26, Y(pf.centre[1]))); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+    ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(241, 233, 212, .9)'; ctx.strokeText(pf.name, lx, ly);
+    ctx.fillStyle = 'rgba(70, 64, 86, .95)'; ctx.fillText(pf.name, lx, ly);
+  }
+
   // the roads as the truck goes: a faint pencil line out to each one (the hovered one firm)
   ctx.lineCap = 'round';
   for (const r of rows) {
@@ -148,11 +167,13 @@ export function drawCounterMap(canvas, { world, here, rows = [], hot = null, san
       ctx.save(); ctx.translate(x + Math.cos(q.a) * (R + 3), y + Math.sin(q.a) * (R + 3)); ctx.rotate(q.a);
       ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(0, -4); ctx.lineTo(0, 4); ctx.closePath(); ctx.fillStyle = r.short ? FAINT : col; ctx.fill(); ctx.restore();
     }
+    // (round 2 markers: an outfitter is its store, a little building where the store stands, never its entry point's
+    // number; its name when hovered)
     ctx.beginPath(); ctx.arc(x, y, on ? R + 2 : R, 0, Math.PI * 2);
     ctx.fillStyle = on ? '#f4ecd8' : 'rgba(241, 233, 212, .94)'; ctx.fill();
     ctx.lineWidth = on ? 2.2 : 1.4; ctx.strokeStyle = r.short ? FAINT : col; ctx.stroke();
-    ctx.fillStyle = r.short ? FAINT : col; ctx.font = `700 ${String(r.ep).length > 1 ? 11 : 12}px "Alegreya Sans SC", "Alegreya Sans", sans-serif`;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(r.ep), x, y + 0.5);
+    storeGlyph(ctx, x, y, r.short ? FAINT : col);
+    if (on && r.name) { ctx.font = '700 12px "Alegreya Sans SC", "Alegreya Sans", sans-serif'; ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText(r.name, x, y - R - 3); }
     const fare = sandbox ? 'free' : `$${r.price}`;
     ctx.font = `600 ${on ? 19 : 17}px Caveat, "Bradley Hand", cursive`;
     const w = ctx.measureText(fare).width, b = { x0: x - w / 2, x1: x + w / 2, y0: y + R + 1, y1: y + R + 17 };
@@ -169,7 +190,7 @@ export function drawCounterMap(canvas, { world, here, rows = [], hot = null, san
   ctx.closePath(); ctx.fillStyle = RED; ctx.fill();
   ctx.restore();
   ctx.font = '600 18px Caveat, "Bradley Hand", cursive'; ctx.fillStyle = RED; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-  const lab = `you are here · ${here.ep}`, lw = ctx.measureText(lab).width, left = hx + R + 8 + lw > cw - 6;
+  const lab = 'you are here', lw = ctx.measureText(lab).width, left = hx + R + 8 + lw > cw - 6;
   ctx.textAlign = left ? 'right' : 'left'; ctx.fillText(lab, left ? hx - R - 8 : hx + R + 8, hy - 1);
 
   // north and the scale, in the corners
@@ -183,6 +204,16 @@ export function drawCounterMap(canvas, { world, here, rows = [], hot = null, san
   ctx.font = '700 10.5px "Alegreya Sans SC", sans-serif'; ctx.fillStyle = SOFT; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
   ctx.fillText(`${mi} ${mi === 1 ? 'mile' : 'miles'}`, sx0 + len + 6, sy0 + 2);
   return marks;
+}
+
+// a store: a little gabled building, its door pale (the maps' store marker, map-render.js paintStore, at this size)
+function storeGlyph(ctx, x, y, col) {
+  ctx.save(); ctx.translate(x, y + 1);
+  ctx.fillStyle = col;
+  ctx.beginPath(); ctx.moveTo(-6.5, -1); ctx.lineTo(0, -7); ctx.lineTo(6.5, -1); ctx.closePath(); ctx.fill();
+  ctx.fillRect(-5, -1.5, 10, 6.5);
+  ctx.fillStyle = '#f4ecd8'; ctx.fillRect(-1.4, 1, 2.8, 4);
+  ctx.restore();
 }
 
 export function markerAt(marks, x, y) {

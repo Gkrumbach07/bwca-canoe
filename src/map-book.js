@@ -16,6 +16,7 @@
 // It also gives the HUD the marks to draw (hud.markSource), what is under the pointer (hud.onHover), what a click on a
 // mark does (hud.onMarkClick) and the lake page (hud.onLakePage); journal.js makes it and turns to it.
 import { esc, plural, word, shortDate, fishSilhouette } from './hud.js';
+import { markOf } from './ep-start.js'; // round 2, entry points true to life: an entry point found at its start
 import { KINDS } from './tasks.js';
 import { names } from './names.js';
 import { sheets, sheetAt } from './sheets.js';
@@ -23,7 +24,9 @@ import { explored } from './explored.js';
 import { teaWord } from './water.js';
 import { eventsAt } from './burns.js';
 import { BURNS } from './burns.js';
+import { isOutfitter, outfitterName, hostOf, placeOf, nearWords } from './outfitters.js'; // round 2 markers
 import { drawRegion, burnWords, inWilderness, loadBoundary, BOUNDARY, FT, INK, lakeAt, lakeBox } from './map-render.js';
+import { pmaAt } from './pma.js'; // r2: a lake in a primitive area says so
 import './map.css';
 
 const FISH = { walleye: 'Walleye', pike: 'Northern pike', smallmouth: 'Smallmouth bass', laketrout: 'Lake trout', perch: 'Yellow perch', crappie: 'Crappie' };
@@ -31,7 +34,7 @@ const ACRE = 4046.86;
 const RESULTS = 40;          // search results listed at most
 const INDEX_EVERY = 1;       // s: the index page follows the game this often while it is open
 const HINT_WORD = { laketrout: 'lakers, deep', walleye: 'walleye at dusk', pike: 'pike in the weeds', smallmouth: 'smallmouth, rocky points', crappie: 'crappie at dusk', perch: 'perch', moose: 'moose at dawn', carry: 'a long carry', bear: 'a bear about' };
-const KIND_WORD = { lake: 'lake', bay: 'bay', narrows: 'narrows', point: 'point', island: 'island', summit: 'summit', place: 'place', portage: 'portage', site: 'campsite', dock: 'outfitter', falls: 'falls', rapids: 'rapids', burn: 'burn' };
+const KIND_WORD = { ep: 'entry point', lake: 'lake', bay: 'bay', narrows: 'narrows', point: 'point', island: 'island', summit: 'summit', place: 'place', portage: 'portage', site: 'campsite', dock: 'outfitter', falls: 'falls', rapids: 'rapids', burn: 'burn' };
 const ft = (m) => Math.round(m / FT);
 const acresOf = (l, w) => (l.cells * w.cell * w.cell) / ACRE;
 const acreWords = (a) => `${(a >= 100 ? Math.round(a / 10) * 10 : Math.max(1, Math.round(a))).toLocaleString('en-US')} ${a < 1.5 ? 'acre' : 'acres'}`;
@@ -126,6 +129,9 @@ export class MapBook {
     out.claim = [...claims.values()];
     // the words pencilled on the map, and who said them (a keeper's: outfitter.toldHints; a visitor's carries `by`)
     const told = o && typeof o.toldHints === 'function' ? o.toldHints() : [];
+    // (the start round: a first night out's way, pencilled by whoever suggested it: starter.js notes)
+    const st = this.starter || (typeof window !== 'undefined' && window.__game ? window.__game.starter : null);
+    if (st && typeof st.notes === 'function') { try { told.push(...st.notes()); } catch (e) { console.warn('map: the first night', e); } }
     for (const h of told) {
       const L = ts && ts.landing ? ts.landing(h.ep) : null;
       const who = h.by || (o.shop && typeof o.shop.keeperName === 'function' ? o.shop.keeperName(h.ep) : null) || 'the keeper';
@@ -151,6 +157,8 @@ export class MapBook {
       if (hit.kind === 'task') { const t = hit.task; return { html: `<b>${esc(t.title)}</b><span>${esc(cap(t.label || 'about here'))}</span>`, ring: hit, click: true }; }
       if (hit.kind === 'claim') { const c = hit.claim; return { html: `<span class="seal">$</span><b>To claim at ${esc(c.where)}</b>${c.items.map((q) => `<span>${esc(q.title)} · $${q.pay}</span>`).join('')}`, ring: { ...hit, px: 14 }, click: true }; }
       if (hit.kind === 'note') { const h = hit.note; return { html: `<b class="pencil">${esc(h.label)}</b><span>“${esc(h.text || '')}”</span><i>— ${esc(h.whoFull || h.who)}${h.where ? `, ${esc(h.where)}` : ''}</i>`, ring: hit }; }
+      if (hit.kind === 'store') { const pl = placeOf(hit.ep, w); return { html: `<b>${esc(pl ? pl.name : outfitterName(hit.ep))}</b><span>The outfitter's store, ${esc(nearWords(hit.ep, w))}</span>`, ring: hit }; } // round 2 markers
+      if (hit.kind === 'ep') { const e = w.entryPoints.find((q) => q.ep === hit.ep), h = hostOf(hit.ep, w); return { html: `<b>Entry point ${hit.ep}${e && e.name ? ` · ${esc(e.name)}` : ''}</b><span>${isOutfitter(hit.ep) ? `${esc(outfitterName(hit.ep))} stands near by` : h != null ? `a trailhead; ${esc(outfitterName(h))} drives here` : 'a trailhead'}</span>`, ring: hit }; }
       if (hit.kind === 'dock') { const e = w.entryPoints.find((q) => q.ep === hit.ep), L = this.tasks && this.tasks.landing ? this.tasks.landing(hit.ep) : null; return { html: `<b>${esc(L ? L.name : `${e ? e.name : ''} landing`)}</b><span>Entry point ${hit.ep}${e && e.name ? ` · ${esc(e.name)}` : ''}</span>`, ring: hit }; }
       if (hit.kind === 'dam') { const d = hit.d; return { html: d.old ? '<b>Old beaver dam</b><span>breached and grassed over: the pond behind it drained to meadow</span>' : `<b>Beaver dam</b><span>${d.route ? 'across the creek: haul the canoe over' : 'holding back a beaver pond'}${d.lodge ? ' · a lodge in the pond' : ''}</span>`, ring: { ...hit, px: 9 } }; } // the wetlands round
       if (hit.kind === 'site') {
@@ -196,10 +204,13 @@ export class MapBook {
       const m = p.pts[Math.floor(p.pts.length / 2)];
       out.push({ name: p.proper ? p.name : `${p.name} portage`, kind: 'portage', x: m[0], z: m[1], sub: `${p.rods} rods`, i });
     });
-    w.campsites.forEach((c, i) => { const nm = names.siteWords(c); if (nm) out.push({ name: nm, kind: 'site', x: c.x, z: c.z, sub: '', i }); });
+    w.campsites.forEach((c, i) => { const nm = names.siteWords(c), s = c.fire || c; if (nm) out.push({ name: nm, kind: 'site', x: s.x, z: s.z, sub: '', i }); }); // (round 2 markers: at the ring)
+    // round 2 markers: an outfitter at its store, by its name ("near entry point 6, Slim Lake"); an entry point at its
+    // put-in, by its number and place
     for (const e of w.entryPoints) {
-      const L = this.tasks && this.tasks.landing ? this.tasks.landing(e.ep) : null;
-      out.push({ name: L ? L.name : `${e.name} landing`, kind: 'dock', x: e.x, z: e.z, sub: `entry point ${e.ep}${e.name ? ` · ${e.name}` : ''}`, alt: `EP ${e.ep} ${e.name || ''}` });
+      out.push({ name: `Entry point ${e.ep}${e.name ? ` · ${e.name}` : ''}`, kind: 'ep', x: markOf(e).x, z: markOf(e).z, sub: isOutfitter(e.ep) ? `${outfitterName(e.ep)} near by` : (hostOf(e.ep, w) != null ? `served by ${outfitterName(hostOf(e.ep, w))}` : ''), alt: `EP ${e.ep}` });
+      const pl = placeOf(e.ep, w);
+      if (pl) out.push({ name: pl.name, kind: 'dock', x: pl.store.x, z: pl.store.z, sub: nearWords(e.ep, w), alt: 'outfitter store' });
     }
     let ww = [];
     try { ww = typeof this.hud.mapPlaces === 'function' ? this.hud.mapPlaces() || [] : []; } catch { ww = []; }
@@ -213,7 +224,7 @@ export class MapBook {
   findable(q) {
     const sh = sheets.profile ? sheets : null;
     if (!sh || sh.view() !== 'owned') return true;
-    if (q.kind === 'dock') return true; // (the landings are on the road map: you can always find an outfitter)
+    if (q.kind === 'dock' || q.kind === 'ep') return true; // (the landings are on the road map: you can always find an outfitter)
     return sh.showsDetail(q.x, q.z);
   }
   search(text) {
@@ -285,10 +296,12 @@ export class MapBook {
       ${row('notes', 'note', 'Pencilled in', 'what keepers and visitors marked for you')}
       ${row('burns', 'burn', 'Burns', 'fires and the 1999 blowdown, by the year')}
       ${row('boundary', 'bound', 'The wilderness', 'the Boundary Waters boundary')}
+      ${row('pmas', 'pma', 'Primitive areas', 'no campsites, no kept trails')}
       <div class="lab">Always</div>
       ${fixed('you', 'You', 'and the canoe where you left it')}
       ${fixed('paddled', 'Paddled', 'lakes you have been on, inked')}
-      ${fixed('dock', 'Outfitters', 'their docks, by entry point')}
+      ${fixed('dock', 'Outfitters', 'each at its store, by name')}
+      ${fixed('ep', 'Entry points', 'numbered, at the put-in')}
       ${fixed('sheet', 'Sheets', 'yours ruled in ink; the rest dotted at an outfitter')}
     </div>`;
   }
@@ -352,7 +365,8 @@ export class MapBook {
     if (eps.length) rows.push(['Landings', eps.map((e) => `entry point ${e.ep}${e.name ? `, ${esc(e.name)}` : ''}`).join('<br>')]);
     const br = burnAt(L.cx, L.cz), burn = br ? `${burnWords(br)} nearby` : '';
     const inside = BOUNDARY.ready ? inWilderness(L.cx, L.cz) : null;
-    const yours = [explored.hasLake(id) ? 'paddled' : 'not paddled yet', inside === true ? 'inside the wilderness' : inside === false ? 'outside the wilderness' : '', burn].filter(Boolean).join(' · ');
+    const pa = pmaAt(L.cx, L.cz);
+    const yours = [explored.hasLake(id) ? 'paddled' : 'not paddled yet', pa ? `in the ${pa.name}` : inside === true ? 'inside the wilderness' : inside === false ? 'outside the wilderness' : '', burn].filter(Boolean).join(' · ');
     const sheet = sheetAt(L.cx, L.cz);
     this.lakeEl.innerHTML = `<section class="page left mb-portrait"><div class="sc kicker"><button type="button" class="pbtn" data-back>‹ The map</button>${sheet ? ` · sheet ${esc(sheet.id)}` : ''}</div>
         <div class="lede"><h2>${esc(L.name || 'Unnamed water')}</h2><div class="sub">${esc(yours)}</div></div>
@@ -378,7 +392,7 @@ export class MapBook {
     cv.width = Math.round(box.width * dpr); cv.height = Math.round(box.height * dpr);
     const w = this.w, ext = this.extent(id), ids = this.pieces(id), sites = w.campsites.filter((c) => ids.has(c.lake ?? 0));
     const r = drawRegion(cv, w, { ...ext, margin: 0.14 }, { names: false, docks: true, boundary: true, build: 3, ink: null, k: (cv.width / 620), fine: true, soundAll: true,
-      markers: sites.map((c) => ({ x: c.x, z: c.z, kind: 'dot', color: '#c0392b', r: 3.6 })) });
+      markers: sites.map((c) => ({ x: (c.fire || c).x, z: (c.fire || c).z, kind: 'dot', color: '#c0392b', r: 3.6 })) }); // (round 2 markers: at the ring)
     // the lake's own name across it, the rest of the water left unlettered
     const ctx = cv.getContext('2d'), L = w.lakes[id - 1], [a, b] = r.toPx(L.cx, L.cz), k = cv.width / 620;
     ctx.save(); ctx.font = `italic 600 ${18 * k}px Alegreya, Georgia, serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';

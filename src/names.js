@@ -56,8 +56,8 @@ export const names = {
         if (!r) continue;
         const [, , , , no, name, rods, cls] = r;
         p.usfs = { no, cls, rods };
-        if (name && name !== p.name) { p.osmName = p.name; p.name = name; }
-        if (rods && rods !== p.rods) { p.osmRods = p.rods; p.rods = rods; }
+        if (name && name !== p.name && !p.epName) { p.osmName = p.name; p.name = name; } // (round 2: an entry point's opening portage keeps the entry point table's name, ep-fixes.json)
+        if (rods && rods !== p.rods && !p.posted) { p.osmRods = p.rods; p.rods = rods; } // (and its rods: the Forest Service's posted rods are p.posted)
         if (/\bportage$/i.test(p.name) && !/[–-]/.test(p.name)) p.proper = true; // "Height of Land Portage" (not "Portage River")
         st.portages++; if (rods) st.rods++;
       }
@@ -79,7 +79,8 @@ export const names = {
   portageLine(p) {
     if (!p) return null;
     const cls = p.usfs && p.usfs.cls ? CLASS_WORDS[p.usfs.cls] : null;
-    return `Portage: ${p.name} · ${p.rods} ${p.rods === 1 ? 'rod' : 'rods'}${cls ? ` · ${cls}` : ''}`;
+    const rods = p.posted || p.rods; // (round 2: the posted rods where the entry point table has them, as the trail's sign)
+    return `Portage: ${p.name} · ${rods} ${rods === 1 ? 'rod' : 'rods'}${cls ? ` · ${cls}` : ''}`;
   },
   // the places within r of (x, z), nearest first (for rumours, the map's tests)
   near(x, z, r, kinds = null) {

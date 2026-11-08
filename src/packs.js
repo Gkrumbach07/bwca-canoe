@@ -55,6 +55,7 @@ import { inventory as INVENTORY } from './inventory.js';
 import { itemDef } from './items.js';
 import { fmtDist, pounds } from './units.js';
 import { hold } from './hold.js'; // camp 1: the held "Load everything here"
+import { onboarding } from './onboarding.js'; // r3: no canoe at the dock before the staff talk
 
 export const WEIGHTS = { aluminium: 34, royalex: 29, kevlar: 20, gear: 16, foodPack: 2, foodDay: 0.9 }; // kg (the canoes; the rest is the items' own)
 const REACH = 3;            // m from a thing on the ground within which you pick it up or take it too
@@ -477,6 +478,7 @@ export class Packs {
   hullAction() {
     const p = this.player, c = p.carry, d = c && c.drop;
     if (p.mode !== 'walk' || !d || this.busy) return null;
+    if (onboarding.noCanoe) return null; // r3: a new season's dock is empty until the staff talk lends a canoe (onboarding.js)
     if (this.push) return { e: { verb: 'Push it off', held: true, run: () => {} }, q: null, label: 'the canoe' };
     const can = this.canShoulder();
     const shoulder = { verb: 'Shoulder it', held: false, why: can.ok ? null : can.why, needs: can.needs, next: can.next, run: () => { if (this.canShoulder().ok) p.pickUpHull(); }, help: () => this.openBookAtCanoe() };
@@ -755,7 +757,7 @@ export class Packs {
     if (trail && trail.dist < 12) {
       const pts = trail.trail.pts, e0 = pts[0], e1 = pts[pts.length - 1];
       const d0 = Math.hypot(e0[0] - p.x, e0[1] - p.z), d1 = Math.hypot(e1[0] - p.x, e1[1] - p.z);
-      if (Math.min(d0, d1) < 5) { const l = trail.def.launch[d1 < d0 ? 1 : 0]; L = { x: l.x, z: l.z, lake: l.lake, deep: true }; }
+      if (Math.min(d0, d1) < 5) { const l = trail.def.launch[d1 < d0 ? 1 : 0]; if (!l.road) L = { x: l.x, z: l.z, lake: l.lake, deep: true }; } // (round 2: a road end is no launch)
     }
     if (!L && w.shoreAt(p.x, p.z) < 8) L = p.launchFrom(p.x, p.z, 12);
     return L && L.deep ? L : null;
@@ -768,7 +770,7 @@ export class Packs {
     if (tr) {
       const pts = tr.trail.pts, e0 = pts[0], e1 = pts[pts.length - 1];
       const d0 = Math.hypot(e0[0] - d.x, e0[1] - d.z), d1 = Math.hypot(e1[0] - d.x, e1[1] - d.z);
-      if (Math.min(d0, d1) < 12) { const l = tr.def.launch[d1 < d0 ? 1 : 0]; return { x: l.x, z: l.z, lake: l.lake, deep: true }; }
+      if (Math.min(d0, d1) < 12) { const l = tr.def.launch[d1 < d0 ? 1 : 0]; if (!l.road) return { x: l.x, z: l.z, lake: l.lake, deep: true }; } // (round 2: a road end is no launch)
     }
     return p.launchFrom(d.x, d.z, 8);
   }

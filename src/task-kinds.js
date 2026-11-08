@@ -97,9 +97,9 @@ async function readSite(T, c, cand) {
 // a campsite notice's pencil ring: tight and named where the site is known (an island's is the island's), else the
 // stretch of the lake the notice describes
 function siteRing(T, t, label = null) {
-  const s = typeof t.site === 'number' ? T.world.campsites[t.site] : null;
+  const s = typeof t.site === 'number' ? T.world.campsites[t.site] : null, f = s && s.fire ? s.fire : s; // round 2 markers: the ring where the fire ring is (world.js c.fire)
   if (!s) return t.hint || null;
-  if (t.feature === 'island' || T.known(s.x, s.z)) return { x: s.x, z: s.z, r: TIGHT, label: label || SITE_LABEL[t.feature] || 'the campsite', tight: true };
+  if (t.feature === 'island' || T.known(s.x, s.z)) return { x: f.x, z: f.z, r: TIGHT, label: label || SITE_LABEL[t.feature] || 'the campsite', tight: true };
   return T.hintFor(t.lakeId, s, AREA_LABEL[t.feature] || null);
 }
 // a portage notice's candidates, as the survey's: named both ends, within RANGE, a band's portages in

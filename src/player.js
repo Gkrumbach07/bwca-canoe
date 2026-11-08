@@ -1,4 +1,5 @@
 import { FLOAT_OFFSET, LENGTH } from './canoe.js';
+import { onboarding } from './onboarding.js'; // r3 replay: no canoe to swim to before the staff talk lends one
 import { resample, PUNCHEON_TOP, yardBlocked } from './props.js';
 import { KIND, BOARDWALK, mireAt, trailMireAt } from './land.js'; // the wetlands underfoot
 import { brushAt } from './thicket.js'; // the density round: the brush in the way
@@ -7,7 +8,7 @@ import { clamp, lerp, smoothstep } from './rng.js';
 import { windHeight } from './waves.js';
 import { GROUND, surfaceAt } from './terrain-build.js';
 import { HULL, keelAt, section, SEATS, floorAt } from './hull.js'; // (wetlands round 2: SEATS, floorAt, the haul's walk through the hull)
-import { paceOf, LIFE, CANOE, MAX_LAPSE, SWIM_LAPSE, canoeLapse, footSeen } from './pace.js';
+import { paceOf, LIFE, CANOE, MAX_LAPSE, SWIM_LAPSE, canoeLapse, footSeen, PADDLE_PHYS } from './pace.js';
 import { burnLook } from './burns.js';
 import { CarryBalance, BALANCE } from './balance.js'; // the canoe's balance on the shoulders (the owner, 2026-10-31)
 import { fmtDist } from './units.js';
@@ -34,7 +35,7 @@ export class Input {
 // the hull is moved at `speed` times the boost (updatePaddle; pace.js CANOE, about 7.8 at a steady stroke), while the
 // stroke keeps life's cadence (times pace.js CANOE.stroke), and everything that reads `speed` (the energy, a capsize, a
 // bump on the shore, the loons, the clock's "under way") reads the speed at life.
-const PADDLE = { accel: 3.1, hustle: 4.65, reverse: 1.35, drag: 0.31, lin: 0.12, yaw: 0.65, strokeRate: 0.95, hustleRate: 1.35 };
+const PADDLE = PADDLE_PHYS; // (pace.js: the parties' canoes run the same physics, r2)
 // m/s at life (pace.js LIFE): a walk, Shift a jog, and a carry before the load slows it; face: how fast the walker turns
 // to where the keys point. On foot the walker is time-lapsed to the seen speed of where he is (pace.js footSeen: a carry,
 // a trail, open land, a camp or a store): how he is seen to move, while the clock runs at its one rate.
@@ -75,6 +76,7 @@ const LOW_OVER = STEP_UP - 0.1;
 // of a step's reach from the feet and he dropped into the flight (the owner: "sprinting up stairs makes you sink into
 // them sometimes"). Well under a tread's run (props.js STEP_RUN 0.28), and over a walk's stride in a frame at 60 fps
 const STRIDE_PROBE = 0.1;
+const EMBED_UP = 1.6; // r2 replay: feet this far under a store's floor or deck, inside it, are put up on it (walker update)
 const SPACE = { early: 0.8, ahead: 1.0, reach: [0.35, 0.65, 1.0] }; // a Space pressed this long before, this far short of (looked for from each reach), a vault or a climb waits for it
 // fb C: the water on foot. Wading slows you with the depth; past SWIM_DEPTH (chest deep) you swim, and you stand again
 // under STAND_DEPTH; with the canoe overhead you go no deeper than CARRY_DEPTH. A swimmer is held off whatever stands
@@ -337,6 +339,7 @@ export class Player {
     for (const p of this.world.portages) {
       for (let end = 0; end < 2; end++) {
         const l = p.launch[end];
+        if (l.road) continue; // (round 2: a portage-first start's road end)
         const d = Math.hypot(l.x - this.x, l.z - this.z);
         if (d < LANDING_RADIUS && (!best || d < best.d)) best = { def: p, end, d, launch: l };
       }
@@ -908,8 +911,8 @@ export class Player {
       } else this.prompt = { key: null, text: `You are in the water — swim to the canoe (${fmtDist(d)})` };
       return;
     }
-    // from the shore: the canoe where you left it
-    const drop = this.carry && this.carry.drop, dd = drop ? Math.hypot(drop.x - this.x, drop.z - this.z) : Infinity;
+    // from the shore: the canoe where you left it (r3 replay: none at all before the staff talk lends one)
+    const drop = !onboarding.noCanoe && this.carry && this.carry.drop, dd = drop ? Math.hypot(drop.x - this.x, drop.z - this.z) : Infinity;
     if (dd < 3.4) {
       // fb4 A: in where it floats (or where a push would float it: packs.js pushPlan), as it lies; no launch point
       const pk = this.packs, floats = !!(pk && pk.afloat && pk.afloat(drop));
@@ -943,7 +946,7 @@ export class Player {
   // as it lies (co-op round 3: coop-boat.js too). False when it lies too far up the bank
   swimIn() {
     const drop = this.carry && this.carry.drop, st = this.canoe.state;
-    if (this.mode !== 'swim' || !drop) return false;
+    if (this.mode !== 'swim' || !drop || onboarding.noCanoe) return false;
     const pk = this.packs, floats = !!(pk && pk.afloat && pk.afloat(drop)), plan = !floats && pk && pk.pushPlan ? pk.pushPlan(drop) : null;
     const at = floats ? drop : plan ? plan.to : null, L = at ? null : this.launchFrom(drop.x, drop.z, 10);
     if (!at && !L) return false;
@@ -1536,6 +1539,14 @@ export class Player {
         // still easing up to it (up a flight at a jog they lag a few centimetres, and the tread two up, 0.30 m over the
         // one he is on, must stay within a step of it)
         let feetY = ft.air ? ft.y : Math.max(ft.y, this.supportAt(this.x, this.z, ft.y + STEP_UP, near));
+        // r2 replay: feet under a store's floor or deck, inside its footprint (a season begun at the door on a slow
+        // machine: the feet fell to the ground under the door before the store's floor was there to hold them, walked a
+        // step in, and the floor came round them: held by its sides for good). Up onto it, as if stepped up
+        if (!ft.air) for (const t of near) {
+          if (!t.box || !t.store || t.top === undefined || t.top <= feetY + STEP_UP || t.top - feetY > EMBED_UP) continue;
+          const dx = this.x - t.x, dz = this.z - t.z;
+          if (Math.abs(dx * t.ux + dz * t.uz) <= t.hx && Math.abs(-dx * t.uz + dz * t.ux) <= t.hz) { feetY = t.top; ft.y = t.top; ft.vy = 0; }
+        }
         // a frame's walk longer than STRIDE_PROBE (a sprint up a flight) is read along the way, a tread at a time, so the
         // feet are carried up each one in turn and the tread at its end is within a step of them (stopped at anything
         // that holds him: what is past it is not reached). A walk's frame is not read here, and is as it was
@@ -1777,7 +1788,7 @@ export class Player {
     if (trail && trail.dist < 12) {
       const pts = trail.trail.pts, e0 = pts[0], e1 = pts[pts.length - 1];
       const d0 = Math.hypot(e0[0] - this.x, e0[1] - this.z), d1 = Math.hypot(e1[0] - this.x, e1[1] - this.z);
-      if (Math.min(d0, d1) < 5) { const l = trail.def.launch[d1 < d0 ? 1 : 0]; L = { x: l.x, z: l.z, lake: l.lake, deep: true }; }
+      if (Math.min(d0, d1) < 5) { const l = trail.def.launch[d1 < d0 ? 1 : 0]; if (!l.road) L = { x: l.x, z: l.z, lake: l.lake, deep: true }; } // (round 2: a road end is no launch)
     }
     if (!L && w.shoreAt(this.x, this.z) < 8) L = this.launchFrom(this.x, this.z, 12);
     if (L && L.deep && away) {

@@ -171,6 +171,11 @@ export class Dialogue {
     const W = window.innerWidth, H = window.innerHeight, cam = this.camera;
     cam.updateMatrixWorld();
     const placed = [];
+    // (r3 replay: the tracker's card on the left is kept clear as a bark is (a visitor's bark lay across its lines))
+    const tr = document.getElementById('tracker');
+    if (tr && tr.classList.contains('on')) { const r = tr.getBoundingClientRect(); if (r.width > 0) placed.push({ x: r.left, y: r.top, w: r.width, h: r.height }); }
+    // (r3 final: and the golden gems on screen (locator.js keepClear): the staffer's "Got a minute?" lay right over hers)
+    if (typeof this.keepClear === 'function') { try { for (const r of this.keepClear(cam, W, H) || []) placed.push(r); } catch { /* no gems */ } }
     for (const b of this.on) {
       const head = this.headOf(b.sp, _v);
       if (!b.w || !b.h) { const r = b.box.getBoundingClientRect(); b.w = r.width; b.h = r.height; }
@@ -272,7 +277,8 @@ export class Dialogue {
     const n = c.node || {}, list = n.choices || [];
     const opts = list.map((o, i) => `<li class="opt${o.kind ? ` ${o.kind}` : ''}${o.dim ? ' dim' : ''}" data-i="${i}"><kbd>${i + 1}</kbd><span>${esc(o.text)}</span>${o.kind === 'task' ? '<em>a task</em>' : o.kind === 'counter' ? '<em>the counter</em>' : o.tag ? `<em>${esc(o.tag)}</em>` : ''}</li>`).join('');
     const L = c.last && !c.you ? c.last : null; // fb4 D: what they said to you last time, until you answer
-    this.panel.innerHTML = `<div class="head"><span class="name">${esc(n.by || c.name || c.speaker.name)}</span>${c.role ? `<span class="role">${esc(c.role)}</span>` : ''}</div>`
+    const role = n.by ? n.byRole || '' : c.role; // (r3 replay: a line said by someone else, the keeper in the staffer's talk, never takes the staffer's role)
+    this.panel.innerHTML = `<div class="head"><span class="name">${esc(n.by || c.name || c.speaker.name)}</span>${role ? `<span class="role">${esc(role)}</span>` : ''}</div>`
       + (L ? `<div class="last"><span class="when">Last time · ${esc(this.whenWords(L.at))}</span>${L.you ? `<span class="you-then">You: ${esc(quote(L.you))}</span>` : ''}<span class="then">${esc(quote(L.say))}</span></div>` : '')
       + (c.you ? `<div class="you">${esc(quote(c.you))}</div>` : '')
       + `<div class="say${c.wait ? ' wait' : ''}">${esc(c.wait ? '…' : n.plain ? n.say : quote(n.say || '…'))}</div>`

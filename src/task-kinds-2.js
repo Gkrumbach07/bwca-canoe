@@ -58,9 +58,9 @@ const onFoot = (p) => p.mode === 'walk' && !p.teleporting;
 const byDay = (T) => { const d = T.day; return !d || (d.hours >= 7 && d.hours <= 20.5); };
 // a campsite's ring: tight where you know it, else the part of the lake the notice names
 function siteRing(T, i, lakeId, feature, label = null) {
-  const s = T.world.campsites[i];
+  const s = T.world.campsites[i], f = s && s.fire ? s.fire : s; // round 2 markers: the ring where the fire ring is (world.js c.fire)
   if (!s) return null;
-  if (feature === 'island' || T.known(s.x, s.z)) return { x: s.x, z: s.z, r: TIGHT, label: label || SITE_LABEL[feature] || 'the campsite', tight: true };
+  if (feature === 'island' || T.known(s.x, s.z)) return { x: f.x, z: f.z, r: TIGHT, label: label || SITE_LABEL[feature] || 'the campsite', tight: true };
   return T.hintFor(lakeId, s, AREA_LABEL[feature] || null);
 }
 // campsites a band's notice may name (as task-kinds.js siteCands): [{ s, i, d, hops, lakeId }]
@@ -236,7 +236,7 @@ registerKind('campsite', {
   pay(t) { return Math.min(PAY_MAX, 16 + 4 * (t.hops ?? 1) + Math.round(1.2 * (t.km || 0))); },
   update(T, t) {
     const p = T.player, s = T.world.campsites[t.site];
-    if (!s || !onFoot(p) || Math.hypot(s.x - p.x, s.z - p.z) > 40 || p.prompt) return;
+    if (!s || !onFoot(p) || Math.hypot(s.x - p.x, s.z - p.z) > SITE_GATE || p.prompt) return; // (r3 final: the part's own 2.6 m below)
     const at = partsOf(T, t); if (!at) return;
     const checks = t.checks || (t.checks = {});
     // a site with no latrine box to find (an old one, the box gone): nothing there to check
@@ -255,6 +255,37 @@ registerKind('campsite', {
   progress(t) { const n = PARTS.filter((k) => (t.checks || {})[k]).length; return n ? `${word(n)} of three checked` : 'the grate, the latrine, the tent pad'; },
   fraction(t) { return PARTS.filter((k) => (t.checks || {})[k]).length / 3; },
   doneWords(t) { const bad = PARTS.filter((k) => (t.checks || {})[k] === 'broken').map((k) => PART_LABEL[k]); return bad.length ? `the ${listWords(bad)} broken` : 'all fine'; },
+});
+
+// =======================================================================================================================
+// starter: the start round (starter.js). An outfitter's first night out, suggested in talk with the site pencilled on
+// your map: look over the site's grate, latrine and tent pad (the campsite check's own steps, nothing found broken: a
+// first night is not a repair job), $20, three days. Never on a board (no weight): starter.js makes it with makeKind.
+const STARTER_WORDS = {
+  titles: ['First night out'],
+  texts: [['{site} on {lake}: a night there, and look over the grate, the latrine and the tent pad.', '{keeper}']],
+};
+registerKind('starter', {
+  label: 'First night out', weight: { local: 0, medium: 0, far: 0 },
+  make(T, c) {
+    const R = ref('starter'), r = R && typeof R.route === 'function' ? R.route(c.ep) : null;
+    if (!r) return null;
+    const s = r.siteRec;
+    const shop = T.outfitter && T.outfitter.shop, keeper = shop && typeof shop.keeperName === 'function' ? shop.keeperName(c.ep) : null;
+    const site = SITE_LABEL[r.feature] || 'the campsite';
+    const [say, sign] = STARTER_WORDS.texts[0];
+    return { key: `starter:${c.ep}`, site: r.site, lakeId: r.lakeId, feature: r.feature || null, faults: [], checks: {}, km: r.km, hops: (r.portages || []).length, known: true,
+      title: STARTER_WORDS.titles[0], text: fill(say, { site: cap(site), lake: r.lake || 'the lake' }), sign: keeper ? `${keeper}, at the counter` : fill(sign, { keeper: 'the counter' }), hint: { x: s.x, z: s.z, r: TIGHT, label: site } };
+  },
+  pay(t) { const R = ref('starter'); return R && typeof R.payOf === 'function' ? R.payOf(t.from) : 20; },
+  update(T, t) { return KINDS.campsite.update(T, t); },
+  use(T, t) { return KINDS.campsite.use(T, t); },
+  check(T, t, part) { return KINDS.campsite.check(T, t, part); },
+  onDrop(T, t) { t.checks = {}; delete t.found; },
+  target(T, t) { const s = T.world.campsites[t.site]; return s ? { x: s.x, z: s.z, r: TIGHT, label: SITE_LABEL[t.feature] || 'the campsite', tight: true } : null; },
+  progress(t) { return KINDS.campsite.progress(t); },
+  fraction(t) { return KINDS.campsite.fraction(t); },
+  doneWords(t) { return KINDS.campsite.doneWords(t); },
 });
 
 // =======================================================================================================================
@@ -508,8 +539,41 @@ registerKind('pma', {
   doneWords() { return 'the trail mapped'; },
 });
 
+// the dot's targets for a campsite check's parts (campsite, starter): each part not yet looked over, within the dot's
+// reach, a low box over it (no mesh of its own: a soft pool of light under it); E checks it, as the notice's line says
+const PART_BOX = { grate: [0.6, 0.35, 0.6], latrine: [0.6, 0.5, 0.6], pad: [1.2, 0.25, 1.2] };
+function partTargets(T) {
+  return (ray, near) => {
+    const out = [], p = T.player;
+    if (!p || !T.active || !onFoot(p)) return out;
+    for (const t of T.active) {
+      if (t.status !== 'open' || (t.kind !== 'campsite' && t.kind !== 'starter')) continue;
+      const s = T.world.campsites[t.site];
+      // (r3 final: a cheap gate only: the reach is each part's own (PART_REACH). A latrine down its trail stands 64 m
+      // from the site's middle, and the old 60 m gate here left it never a target: the first night's job could not end)
+      if (!s || near.flat(s.x, s.z) > SITE_GATE) continue;
+      const at = partsOf(T, t), checks = t.checks || {};
+      if (!at) continue;
+      for (const k of PARTS) {
+        const q = at[k];
+        if (!q || checks[k] || near.flat(q.x, q.z) > PART_REACH) continue;
+        const [hx, hy, hz] = PART_BOX[k], y = typeof p.groundAt === 'function' ? p.groundAt(q.x, q.z) : near.y;
+        const b = { x: q.x, y: y + hy, z: q.z, hx, hy, hz }, hit = near.box(b);
+        if (!hit) continue;
+        // (ahead of whatever else is on the same spot, the fire ring's card on the grate, while it is still to check:
+        // then the ring is back)
+        out.push({ dist: hit.t, miss: hit.miss * 0.3 - 0.5, target: { kind: 'sitepart', ref: `site:${t.id}:${k}`, label: `the ${PART_LABEL[k]}`, box: b,
+          e: { verb: 'Check', run: () => { const K = KINDS[t.kind]; if (K && K.check) K.check(T, t, k); } } } });
+      }
+    }
+    return out;
+  };
+}
+const SITE_GATE = 150; // m from a site's middle: past this none of its parts is looked for (a latrine trail runs 60 m and more)
+const PART_REACH = 3.2; // m: a part a step or two off, low on the ground (the dot's own 2.6 and a little: litter's reach)
+
 // --- wiring (main.js, the gl-d block) ----------------------------------------------------------------------------------
-export const KINDS2 = ['creel', 'campsite', 'beaver', 'iceout', 'colour', 'lastcheck', 'pma'];
+export const KINDS2 = ['creel', 'campsite', 'beaver', 'iceout', 'colour', 'lastcheck', 'pma', 'starter'];
 export function attachTaskKinds2(o = {}) {
   Object.assign(G, o);
   const { tasks, photo } = o;
@@ -522,7 +586,10 @@ export function attachTaskKinds2(o = {}) {
     const otg = photo.onTheGo.bind(photo);
     photo.onTheGo = () => [...otg(), ...(tasks ? tasks.active.filter((t) => t.kind === 'colour' && t.status === 'open') : [])];
   }
-  if (typeof window !== 'undefined' && window.__game) window.__game.taskKinds2 = { kinds: KINDS2, checkPart: (t, part) => checkPart(tasks, t, part), askParty: (t, party) => askParty(tasks, t, party) };
+  // r2 replay: a site's grate, latrine and tent pad on the dot (on foot the E is the dot's: pointer.js eats an E
+  // pointed at nothing, so the notice's "Check the grate" line alone could never be acted on)
+  if (o.pointer && typeof o.pointer.register === 'function' && tasks && !G.partsOn) { G.partsOn = true; o.pointer.register(partTargets(tasks)); }
+  if (typeof window !== 'undefined' && window.__game) window.__game.taskKinds2 = { kinds: KINDS2, checkPart: (t, part) => checkPart(tasks, t, part), askParty: (t, party) => askParty(tasks, t, party), partsOf: (t) => (tasks ? partsOf(tasks, t) : null) }; // (r3: partsOf for guide.js, the locator's next part of a site check)
   return { kinds: KINDS2 };
 }
 void plural;

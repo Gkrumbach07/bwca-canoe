@@ -72,6 +72,7 @@
 //   people.speakerOf(person, fig)         the speaker dialogue.js places on the screen (the figure's head)
 import * as THREE from 'three';
 import { buildFigure } from './figure.js';
+import { makeBody, makeGait, newState, sitPose, placeFigure, makeLife, poseSnap, fadeStep, snapArms, blendArms } from './poses.js'; // r2: the people's own gait
 import { Mesher, V3, ringPts, loft } from './loft.js';
 import { registerKind, KINDS } from './tasks.js';
 import { outfitterProfile, keeperLine, placeFacts, abundanceOf, KEEPER_FROM, OUTFITTER_EPS } from './outfitters.js';
@@ -94,6 +95,7 @@ import { FORAGE, inSeason } from './forage.js'; // content B: the berries in sea
 import { itemDef } from './items.js'; // content B: a keeper's one-of-a-kind (stream C's), given when its def is in the build
 import { Smart, STEP as SMART_STEP } from './smart.js'; // gl-e: people act (smart objects)
 import { grounding as GROUND } from './grounding.js'; // gl-e: lines only about what is true
+import { guide } from './guide.js'; // r3 final: the main path's step kept clear of the store's people (act)
 import { MOVE } from './parties.js'; // gl-e: a party's canoes go in the water MOVE.launch before the put-in
 
 const NS = 'people';
@@ -106,6 +108,8 @@ const TALK_R = 2.0;           // metres within which E talks
 const TALK_FACE = 0.5;        // cos of how squarely you must face someone to talk to them (60°)
 const LOOK_R = 4.5;           // metres within which a visitor looks at you
 const KEEPER_LOOK_R = 8;      // the keeper watches you anywhere in the store
+const DECK_CLEAR = 1.2;       // m: no store spot on the dock this near your berth's deck point (a party loaded 0.9 m off it)
+const STEP_CLEAR = 1.6;       // m: no store spot this near the main path's step's target (act: the shelf, the staffer)
 const BODY_KEEP = 0.62;       // metres the walker is held off a standing person (their body and his)
 const SEAT_KEEP = 0.7;        // and off a sitting one's knees
 const STANDING_CHAT = 0.05;   // standing for the first word of the day with a keeper
@@ -133,6 +137,8 @@ const LOT_WANTS = { in: { load: 3, wait: 1 }, out: { unload: 2.5, load: 1, wait:
 const WALK_V = 1.15;                 // m/s (real) a person walks between things in a store
 const WALK_SPEC = Object.freeze({ pose: 'walk' });
 const AISLE = { back: -1.7, front: 2.5 }; // the store's cross aisles (b, its own frame): behind the shelves and before them
+const DOOR_WAIT = 6;                  // s (r2 2): the longest anyone waits to give way (at the door, or to someone in the way)
+const APART = 0.5;                    // m (r2 2): a walker is kept this far from anyone (shoulder to shoulder)
 const DOOR_A = -0.25;                // the door (a)
 const ST_HD = 4.0;                   // the store's front wall (b): props.js ST.hD
 // what each wants to be at, by weight (smart.js ranks them each five minutes)
@@ -397,86 +403,114 @@ export class Body {
     this.bun.visible = !!look.wear.bun && !look.wear.hat;
     this.group.scale.setScalar(look.wear.scale || 1);
   }
-  show() { if (this.group.parent !== this.scene) this.scene.add(this.group); this.group.visible = true; }
-  park() { this.group.visible = false; if (this.group.parent) this.group.parent.remove(this.group); }
-}
-
-// The standing pose, as canoe.js stands the walker (the legs to planted feet, the arms hanging, the breath), and its two
-// variants: leaning on a counter (the hands on its top `counter` metres ahead, at `top` over the floor) and sitting (on a
-// seat `seat` high). look: { yaw, pitch } of the head toward what it watches, in the body's frame.
-const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), FOOT = { L: new THREE.Quaternion(), R: new THREE.Quaternion() };
-FOOT.L.setFromAxisAngle(V(0, 1, 0), 0.1); FOOT.R.setFromAxisAngle(V(0, 1, 0), -0.1);
-const SIT_FOOT = { L: new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), 0.18), R: new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), -0.18) };
-function posePerson(body, spec, dt, sc = 1) {
-  const P = body.fig.poser, J = body.fig.joints, s = body.s;
-  s.breath += dt * Math.PI * 2 * 0.22; s.shift += dt * 0.55;
-  const br = Math.sin(s.breath);
-  const yaw = s.yaw, pitch = s.pitch;
-  if (spec.pose === 'sit') {
-    const seat = spec.seat / sc;
-    const pelvis = bodyQ(0.15 * yaw, -0.06, 0), chest = bodyQ(0.35 * yaw, 0.1 + 0.01 * br, 0), head = bodyQ(yaw, pitch - 0.05, 0);
-    P.setRoot(V(0.02, seat + 0.098 + 0.05, 0), pelvis);
-    P.rot('spine', _q.copy(pelvis).slerp(chest, 0.5)); P.rot('chest', chest); P.rot('neck', _q.copy(chest).slerp(head, 0.45)); P.rot('head', head);
-    P.rot('clavL', chest); P.rot('clavR', chest);
+  // r2: drawn in a rig of its own (its place and heading, its size), posed by the gait the paddlers and the player walk
+  // with (poses.js): the feet planted on the ground under them, the hips over them, the steps taken
+  show() {
+    const g = this.group, R = this.rig || this.makeRig();
+    if (g.parent !== R) { R.add(g); g.position.set(0, 0, 0); g.rotation.set(0, 0, 0); g.scale.setScalar(1); }
+    if (R.parent !== this.scene) this.scene.add(R);
+    g.visible = true; R.visible = true;
+  }
+  park() {
+    this.group.visible = false;
+    if (this.group.parent && this.group.parent !== this.rig) this.group.parent.remove(this.group);
+    if (this.rig) this.rig.removeFromParent();
+    this.pid = null;
+  }
+  makeRig() {
+    this.rig = new THREE.Group(); this.rig.name = `${this.group.name} rig`;
+    this.frame = new THREE.Object3D(); // (the gait's frame: the rig's place in a world scaled to the figure, a kid's steps)
+    this.sc = 1; this.floorY = null; this.G = null;
+    this.state = newState({ mode: 'walk' });
+    this.pb = makeBody(this.fig, this.frame, this.state, { ground: (x, z) => this.footGround(x * this.sc, z * this.sc) / this.sc, life: makeLife(1) });
+    this.gait = makeGait(this.pb);
+    this.fade = null; this.kind = null; this.armW = 0; this.hd = 0; this.px = NaN; this.pz = NaN; this.vv = 0;
+    return this.rig;
+  }
+  // what a foot stands on: the ground; on a floor or a deck (the figure's own height well over the ground under it)
+  // level with that floor near them
+  footGround(x, z) {
+    const g = this.G ? this.G(x, z) : 0;
+    return this.floorY == null ? g : Math.max(g, this.floorY);
+  }
+  // the frame's pose: f the person's figure (x, y, z, heading, spec, look), sTurn the feet turned to you, G the ground
+  pose(f, dt, G) {
+    const R = this.rig || this.makeRig(), st = this.state, spec = f.spec || { pose: 'stand' }, sc = (f.look && f.look.wear && f.look.wear.scale) || 1;
+    const pid = f.key || f;
+    if (this.pid !== pid) { // (a new person in this body: their own seed, the feet planted afresh)
+      this.pid = pid; this.gait.heal(); this.fade = null; this.kind = null; this.armW = 0; this.hd = f.heading + this.s.turn; this.px = NaN; this.py = NaN;
+      this.pb.life = makeLife(hashSeed(String(pid))); this.pb.idle.watch = null;
+    }
+    this.G = G; this.sc = sc;
+    const g = G(f.x, f.z);
+    // the feet on the ground under them: outside, the height is the ground's (a walk's straight line between its points
+    // had them in the air or sunk on a slope); on a floor or a deck, that
+    // (r2 2 final: one only ever on the ground (a camp's: onGround) is kept on it however far it moved under them: the
+    // ground under a camp come into detail 0.6-1.2 m lower had been taken for a floor, a man standing on the air for frames)
+    if (!(f.y > g + 0.12) || f.onGround) f.y = g;
+    this.floorY = f.y > g + 0.12 ? f.y : null;
+    // (r2 2 verify: the height they stand at moved over 12 cm in a frame (a store built again on new ground, its floor
+    // 0.2 to 0.6 m up or down: follow()): the feet planted afresh there, or the planted ones held the hips in the old floor
+    // for five frames, 0.35 m in the new one at the first)
+    if (Number.isFinite(this.py) && Math.abs(f.y - this.py) > 0.12) this.gait.heal();
+    this.py = f.y;
+    // the heading eased round (a new job's facing turned to, never snapped), the speed from how far they really went
+    const L = this.pb.life, want = f.heading + this.s.turn + (L ? L.oh : 0);
+    const e = Math.atan2(Math.sin(want - this.hd), Math.cos(want - this.hd));
+    this.hd += Math.max(-4 * dt, Math.min(4 * dt, e * Math.min(1, dt * 8)));
+    if (!(dt > 0)) this.hd = want;
+    const px = f.x + (L ? L.ox : 0), pz = f.z + (L ? L.oz : 0);
+    if (Number.isFinite(this.px) && dt > 0) { const d = Math.hypot(f.x - this.px, f.z - this.pz) / dt; this.vv += ((d < 6 ? d : 0) - this.vv) * Math.min(1, dt * 12); }
+    this.px = f.x; this.pz = f.z;
+    const yb = f.y + 0.1;
+    R.position.set(px, yb, pz); R.rotation.set(0, this.hd, 0); R.scale.setScalar(sc);
+    if (this.group.scale.x !== 1) this.group.scale.setScalar(1); // (the size is the rig's: wear() sizes the figure for the actors' lending)
+    this.frame.position.set(px / sc, yb / sc, pz / sc); this.frame.rotation.set(0, this.hd, 0); this.frame.updateMatrix();
+    // the pose changed kind (a seat, the counter, the walk): the bones eased from the old to the new
+    const kind = spec.pose === 'sit' ? 'sit' : 'stand';
+    if (this.kind && this.kind !== kind) { this.fade = poseSnap(this.fig, this.fade); this.fade.dur = 0.45; }
+    this.kind = kind;
+    // the head toward what they look at (look(): you, near by; else their own glance) and the job's own pitch
+    this.pb.idle.watch = { yaw: this.s.yaw, pitch: -(this.s.pitch + (spec.pitch || 0)) };
+    if (kind === 'sit') {
+      sitPose(this.pb, this.gait, dt, (f.y + (spec.seat || 0.45)) / sc);
+    } else {
+      const raw = this.vv, walking = raw > 0.12;
+      st.speed += (raw - st.speed) * Math.min(1, dt * 12);
+      st.walkSpeed += ((walking ? 1 : 0) - st.walkSpeed) * Math.min(1, dt * 8);
+      st.moveFwd += ((walking ? 1 : 0) - st.moveFwd) * Math.min(1, dt * 10); st.moveLat *= 1 - Math.min(1, dt * 10);
+      st.walk += raw * dt * 4.2;
+      st.crouch = spec.pose === 'stoop' ? 1 : 0;
+      st.lean = spec.pose === 'counter' ? (spec.lean || 0.12) : spec.pose === 'stoop' ? 0 : (spec.lean || 0.02);
+      st.held = null; st.mode = 'walk';
+      const busy = spec.pose === 'counter' || spec.hands === 'front' || spec.pose === 'browse' || spec.wave > 0.01;
+      this.pb.handsBusy = busy;
+      placeFigure(this.pb, 0, 0, 0);
+      this.gait.walk(dt, null, null);
+      // the hands at the job, eased in over the gait's: on the counter, out to a shelf, in front (a rod, a cup), a wave
+      this.armW = Math.max(0, Math.min(1, this.armW + (busy && !walking ? dt * 3 : -dt * 3)));
+      if (this.armW > 0.01) { snapArms(this.fig); this.jobArms(spec, sc); blendArms(this.fig, this.armW * this.armW * (3 - 2 * this.armW)); }
+    }
+    fadeStep(this.fig, this.fade, dt);
+  }
+  // the arms at a job (figure space: the frame 0.1 over the floor, at the figure's size)
+  jobArms(spec, sc) {
+    const P = this.fig.poser, J = this.fig.joints, s = this.s, cq = J.chest.q, fy = (y) => (y - 0.1) / sc;
     for (const [k, sg] of [['L', -1], ['R', 1]]) {
-      P.leg(k, V(0.47, 0.085, sg * 0.15), V(0.6, 1.2, sg * 0.2), SIT_FOOT[k]);
       const sh = J['arm' + k].p;
-      P.arm(k, V(0.33, seat + 0.2, sg * 0.15), V(0, 0, 1), V(sh.x - 0.15, sh.y - 0.4, sh.z + sg * 0.35), V(0, -1, 0));
+      if (spec.pose === 'counter') { P.arm(k, V(spec.counter, fy(spec.top + 0.04), sg * 0.21), V(0, 0, 1), V(sh.x - 0.25, sh.y - 0.35, sh.z + sg * 0.45), V(0, -1, 0)); continue; }
+      if (spec.hands === 'front') { P.arm(k, V(0.34, fy(0.98), sg * 0.1), V(1, 0, -sg * 0.15).applyQuaternion(cq), V(sh.x - 0.3, sh.y - 0.2, sh.z + sg * 0.35), V(0, 0, -sg).applyQuaternion(cq)); continue; }
+      if (spec.pose === 'browse' && k === 'R' && s.reach > 0.05) { const rr = Math.min(1, s.reach); P.arm(k, V(sh.x + 0.25 + 0.3 * rr, sh.y - 0.42 + 0.3 * rr, sh.z + 0.05), V(1, 0, -sg * 0.15).applyQuaternion(cq), V(sh.x - 0.3, sh.y - 0.2, sh.z + sg * 0.35), V(0, 0, -sg).applyQuaternion(cq)); }
     }
-    return;
-  }
-  // gl-e: walking (between the smart objects: a stride of the legs and a swing of the arms on s.walk, the metres
-  // walked), stooping (at the dock, loading), browsing (a hand to the shelf now and then), and the head's own pitch
-  // for what they are at (spec.pitch: down at the map table, up at the board)
-  const walk = spec.pose === 'walk', stoop = spec.pose === 'stoop';
-  const ph = walk ? (s.walk || 0) * (Math.PI / 0.72) : 0, swing = walk ? Math.sin(ph) : 0;
-  const lean = (stoop ? 0.62 : walk ? 0.06 : spec.lean || 0.02) + 0.008 * br;
-  const pelvis = bodyQ(0.12 * yaw, 0.03 + lean * (stoop ? 0.55 : 0.3), 0), chest = bodyQ(0.35 * yaw + (walk ? 0.06 * swing : 0), lean, 0), head = bodyQ(yaw, pitch + 0.1 * lean + (spec.pitch || 0) + (stoop ? 0.4 : 0), 0); // (stooping, the head down to the work: it was turned up, -0.35, and read as a face to the sky)
-  const sway = spec.pose === 'counter' || walk ? 0 : 0.012 * Math.sin(s.shift);
-  const bob = walk ? 0.022 * Math.abs(Math.cos(ph)) : stoop ? 0.07 : 0;
-  P.setRoot(V(lean * 0.06 - (stoop ? 0.08 : 0), 0.925 - 0.02 + 0.05 - 0.004 * (0.5 + 0.5 * br) - (spec.pose === 'counter' ? 0.012 : 0) - bob, sway), pelvis);
-  P.rot('spine', _q.copy(pelvis).slerp(chest, 0.5)); P.rot('chest', chest); P.rot('neck', _q.copy(chest).slerp(head, 0.45)); P.rot('head', head);
-  _q2.setFromEuler(_e.set(0.01 * br, 0, 0, 'YXZ')); P.rot('clavL', _q.copy(chest).multiply(_q2));
-  _q2.setFromEuler(_e.set(-0.01 * br, 0, 0, 'YXZ')); P.rot('clavR', _q.copy(chest).multiply(_q2));
-  for (const [k, sg] of [['L', -1], ['R', 1]]) {
-    if (walk) {
-      const u = k === 'L' ? swing : -swing, fwd = k === 'L' ? Math.cos(ph) : -Math.cos(ph); // (fwd > 0: this foot swinging forward)
-      P.leg(k, V(0.24 * u, 0.085 + 0.075 * Math.max(0, fwd), sg * 0.11), V(0.6, 0.5, sg * 0.16), FOOT[k]);
-      continue;
+    if (spec.wave > 0.01) {
+      const w = Math.min(1, spec.wave), sh = J.armR.p, t = s.breath * 3.4;
+      P.arm('R', V(sh.x + 0.1, sh.y + 0.5 * w - 0.55 * (1 - w), sh.z + 0.22 + 0.08 * Math.sin(t) * w), V(0, 1, 0), V(sh.x - 0.05, sh.y - 0.15, sh.z + 0.5), V(1, 0, 0));
     }
-    const ankle = V(-0.005 + (k === 'L' ? 0.03 : -0.02) - (stoop ? 0.06 : 0), 0.085, sg * (stoop ? 0.17 : 0.12));
-    P.leg(k, ankle, V(0.6, 0.5, sg * 0.16), FOOT[k]);
-  }
-  const cq = J.chest.q;
-  for (const [k, sg] of [['L', -1], ['R', 1]]) {
-    const sh = J['arm' + k].p;
-    if (walk || stoop || spec.hands === 'front' || (spec.pose === 'browse' && k === 'R' && s.reach > 0.05)) {
-      // walking: the arms swing against the legs; stooping: the hands down to a pack at the feet; in front: a rod, a cup;
-      // browsing: the right hand out to the shelf
-      const u = k === 'L' ? swing : -swing, rr = spec.pose === 'browse' ? Math.min(1, s.reach) : 0;
-      const tgt = walk ? V(-0.17 * u + 0.04, sh.y - 0.6, sh.z + sg * 0.08) : stoop ? V(0.42, 0.28, sg * 0.2) : rr > 0 ? V(sh.x + 0.25 + 0.3 * rr, sh.y - 0.42 + 0.3 * rr, sh.z + 0.05) : V(0.34, 0.98, sg * 0.1);
-      P.arm(k, tgt, V(1, 0, -sg * 0.15).applyQuaternion(cq), V(sh.x - 0.3, sh.y - 0.2, sh.z + sg * 0.35), V(0, 0, -sg).applyQuaternion(cq));
-      continue;
-    }
-    if (spec.pose === 'counter') {
-      // the hands on the counter's top a little ahead, the elbows out
-      P.arm(k, V(spec.counter, spec.top + 0.04, sg * 0.21), V(0, 0, 1), V(sh.x - 0.25, sh.y - 0.35, sh.z + sg * 0.45), V(0, -1, 0));
-      continue;
-    }
-    const sw = 0.05, bend = 0.3;
-    const du = V(Math.sin(sw), -Math.cos(sw), sg * 0.13).normalize().applyQuaternion(cq);
-    const df = V(Math.sin(sw + bend), -Math.cos(sw + bend), sg * 0.06).normalize().applyQuaternion(cq);
-    const elbow = sh.clone().addScaledVector(du, 0.315), target = elbow.clone().addScaledVector(df, 0.335);
-    P.arm(k, target, V(1, 0, -sg * 0.15).applyQuaternion(cq), elbow.clone().add(V(-0.3, 0, sg * 0.05).applyQuaternion(cq)), V(0, 0, -sg).applyQuaternion(cq));
-  }
-  // round A-F: a hand lifted to you from a party's camp (spec.wave 0..1, eased in and out by party-camps.js), the
-  // open hand up by the head, side to side
-  if (spec.wave > 0.01) {
-    const w = Math.min(1, spec.wave), sh = J.armR.p, t = s.breath * 3.4;
-    const up = V(sh.x + 0.1, sh.y + 0.5 * w - 0.55 * (1 - w), sh.z + 0.22 + 0.08 * Math.sin(t) * w);
-    P.arm('R', up, V(0, 1, 0), V(sh.x - 0.05, sh.y - 0.15, sh.z + 0.5), V(1, 0, 0));
   }
 }
+const hashSeed = (str) => { let h = 2166136261; for (let i = 0; i < str.length; i++) h = Math.imul(h ^ str.charCodeAt(i), 16777619); return h >>> 0; };
+
+// (r2: the store and camp people are posed by the gait, Body.pose above; the fixed pose they had is gone)
 
 // --- the tasks: fetch (boards and visitors) and npc (a visitor's errand) ----------------------------------------------
 // What one outfitter sends for from another, by the kind of place it comes from
@@ -1071,6 +1105,7 @@ export function moveKeepers(s) {
   s.moved = 1;
   return true;
 }
+const HEAD_V = new THREE.Vector3(), TOP_BOX = new THREE.Box3();
 export class People {
   constructor({ world, scene, player, day, hud, tasks, outfitter = null, profile = null, weather = null, registry = null, mat }) {
     this.world = world; this.scene = scene; this.player = player; this.day = day; this.hud = hud; this.tasks = tasks; this.outfitter = outfitter; this.profile = profile; this.weather = weather; this.registry = registry;
@@ -1167,7 +1202,7 @@ export class People {
     for (const v of this.extraPeople(ep, L)) out.push(v); // gl-e: someone another module stands here (extraAt)
     for (const v of this.visitorsOf(ep, L, op)) if (this.inHours(v)) out.push(v); // (gl-e: the week's people, each in their hours)
     for (const v of this.partyVisitorsOf(ep, L)) out.push(v); // gl-e: the parties going in and coming out, by the schedule
-    out.at = { y: L.floorY, x: L.centre.x, z: L.centre.z }; // the store they were placed in (follow(): built again since)
+    out.at = { y: L.floorY, x: L.centre.x, z: L.centre.z, dk: L.dockDeck ? L.dockDeck.y : null }; // the store they were placed in (follow(): built again since)
     out.partySig = this.partySig(ep);
     for (const v of out) if (!v.keeper && !v.party && v.figNames) this.keepNames(v, v.key);
     return out;
@@ -1180,8 +1215,19 @@ export class People {
     if (!at || !L) return;
     const dy = L.floorY - at.y, dx = L.centre.x - at.x, dz = L.centre.z - at.z;
     if (Math.abs(dy) < 1e-3 && Math.abs(dx) < 1e-3 && Math.abs(dz) < 1e-3) return;
-    for (const v of list) for (const f of v.figs) { f.x += dx; f.y += dy; f.z += dz; for (const q of [f.goal, ...(f.path || [])]) if (q) { q.x += dx; q.y += dy; q.z += dz; } }
-    list.at = { y: L.floorY, x: L.centre.x, z: L.centre.z };
+    // (r2 2 verify: only what stands on the store moves with its floor; one in the yard or on the dock stays on the ground
+    // or the deck there as it is now. All had been moved by the floor's step: a yard walker raised 0.6 m with it walked on
+    // in the air to the end of their walk, 20 s and more, over 0.6 m off the ground)
+    const fr = L.axes ? this.frameOf(L) : null, dk = L.dockDeck ? L.dockDeck.y : null;
+    const onStore = (q) => { if (!fr) return true; const c = fr.ab(q.x, q.z); return Math.abs(c.a) < 3.4 && c.b < 6.2 && c.b > -4.4; };
+    const move = (q) => {
+      const st = onStore(q); q.x += dx; q.z += dz;
+      if (st) q.y += dy;
+      else if (Number.isFinite(at.dk) && Number.isFinite(dk) && Math.abs(q.y - at.dk) < 0.06) q.y = dk;
+      else { const y = this.groundAt(L, q.x, q.z); if (Number.isFinite(y)) q.y = y; }
+    };
+    for (const v of list) for (const f of v.figs) for (const q of [f, f.goal, ...(f.path || [])]) if (q) move(q);
+    list.at = { y: L.floorY, x: L.centre.x, z: L.centre.z, dk };
   }
   keeperOf(ep, L, op) {
     const k = op && op.keeper, name = k ? k.name : 'The keeper', first = k ? k.first : 'the keeper';
@@ -1345,7 +1391,15 @@ export class People {
     const who = e.dir === 'in' ? `${pv.who}, going in today` : `${pv.who}, just off the water`;
     const v = { key: `visit:${p.id}`, ep, arch, name, first: pv.members[0].name, last: pv.last, city: pv.city, vars: { ...pv.vars, town: (placeFacts(ep, this.world) || {}).town || 'Ely', road: 'the road', district: districtOf(ep) },
       who, trip: p, partyId: p.id, dir: e.dir, until: e.to, crew: pv.members.map((m, i) => ({ i, name: m.name, where: where(i) })), figNames: pv.members.map((m) => m.name), figs: [], inParty: true };
-    v.figs = pv.members.map((m, i) => ({ x: home.x, z: home.z, y: home.y, heading: home.heading, look: m.look, spec: { pose: 'stand', lean: 0.02 }, where: where(i), member: i, fresh: true }));
+    // (r2 2: each at their own place as they come, not all at the door's one point: the first in the doorway, the rest
+    // beside it on the porch, or round the lot's; they had walked off out of one another)
+    const at = (i) => {
+      if (!i) return home;
+      const k = Math.ceil(i / 2), sd = i % 2 ? 1 : -1;
+      if (!lot && L.axes) { const w = this.frameOf(L).w(DOOR_A + sd * 0.8 * k, 4.55); return { x: w.x, z: w.z, y: home.y, heading: home.heading }; }
+      const a = i * 2.4; return { x: home.x + Math.cos(a) * 0.8 * k, z: home.z + Math.sin(a) * 0.8 * k, y: home.y, heading: home.heading };
+    };
+    v.figs = pv.members.map((m, i) => { const q = at(i); return { x: q.x, z: q.z, y: q.y, heading: q.heading, look: m.look, spec: { pose: 'stand', lean: 0.02 }, where: where(i), member: i, fresh: true }; });
     if (lot) v.lot = true;
     v.hasTask = e.dir === 'out' && seeded(hashKey(p.id), 0x7a5c)() < STORE_P.task;
     return v;
@@ -1362,8 +1416,31 @@ export class People {
     // (into the store's people as they stand, if settled: nobody else is moved)
     { const r = this.rosters.get(ep), L = storeLayout(ep); if (r && L) r.splice(1, 0, ...this.extraPeople(ep, L, [rec])); }
     const self = this;
+    let speaker = null;
     return {
       get person() { const r = self.rosters.get(ep) || null; return r ? r.find((v) => v.key === rec.key) || null : null; },
+      // (r3 final: the talk's speaker and the guide's gem over the drawn head, as anyone's in the store (speakerOf): the
+      // idles move the head, a half step the feet; the gem rode a fixed point over the spot and dipped into the hat by
+      // 4 cm. The person looked up each time: the store's roster is made afresh. Not drawn: over the spot.)
+      get speaker() {
+        const h = this;
+        return speaker || (speaker = { key: rec.key, person: rec.key, name, role: role || '',
+          pos(out) {
+            // drawn: the head, and the top of the hat over it (measured once on the skinned body), less the guide's hand
+            // over a speaker's point (guide.speakerPos +0.35), so the gem's point rides just over the hat
+            const v = h.person, b = v ? self.bodies.find((x) => x.who && !x.lent && x.who.person === v && x.who.fig === 0) : null;
+            if (b && b.group.visible) {
+              b.group.updateWorldMatrix(true, true); b.fig.bones.head.getWorldPosition(HEAD_V);
+              if (rec.topOf !== b || !Number.isFinite(rec.topOff)) { TOP_BOX.setFromObject(b.group, true); rec.topOff = Math.max(0.12, Math.min(0.45, TOP_BOX.max.y - HEAD_V.y)); rec.topOf = b; }
+              return out.set(HEAD_V.x, HEAD_V.y + rec.topOff + 0.02 - 0.35, HEAD_V.z);
+            }
+            const r = v ? self.speakerOf(v, 0).pos(HEAD_V) : null; // (into a Vector3: the guide's out is a plain { set })
+            if (r) return out.set(r.x, r.y, r.z);
+            const q = rec.spot; if (!q || typeof q !== 'object' || !Number.isFinite(q.x)) return null;
+            const L = storeLayout(ep), y = Number.isFinite(q.y) ? q.y : L && Number.isFinite(L.floorY) ? L.floorY : L ? self.groundAt(L, q.x, q.z) : 0;
+            return out.set(q.x, y + 1.62, q.z);
+          } });
+      },
       say(text) { const v = this.person; return v ? self.bark(v, 0, text, PRI.reply) : (self.hud ? self.hud.note(`${name}: “${text}”`, 6) : null); },
       remove() { const l = self.extrasAt.get(ep) || []; const i = l.indexOf(rec); if (i >= 0) l.splice(i, 1); const r = self.rosters.get(ep); if (r) { const j = r.findIndex((v) => v.extra === rec); if (j >= 0) r.splice(j, 1); } },
     };
@@ -1569,6 +1646,13 @@ export class People {
     // (a slot where someone another module stood stays theirs: extraAt)
     let blocked = null;
     for (const v of list) if (v.extra) for (const f of v.figs) for (const o of this.smart.at(where)) o.slots.forEach((q, k) => { if (Math.hypot(q.x - f.x, q.z - f.z) < 0.6) (blocked || (blocked = new Set())).add(`${o.id}#${k}`); });
+    // (r3 final: nobody of the store's loads, unloads or fishes at a berth that is yours or a friend's: the empty dock
+    // before the staff talk lends the canoe, the loaned canoe tied there after, a friend's berth held for theirs)
+    for (const d of this.takenDecks(ep, L)) for (const o of this.smart.at(where)) o.slots.forEach((q, k) => { if (q.deck && Math.hypot(q.x - d.x, q.z - d.z) < DECK_CLEAR) (blocked || (blocked = new Set())).add(`${o.id}#${k}`); });
+    // (r3 final: and the main path's step in this store kept clear: nobody of the store's takes a spot by what the gem is
+    // over (the tackle shelf, the food shelf, the summer help at the counter's end), so they never stand between you and
+    // it and the dot goes to it, not to Dave browsing in front of it; the counter's pay slots by the staffer the same)
+    { const q = this.stepAt(L); if (q) for (const o of this.smart.at(where)) o.slots.forEach((sl, k) => { if (Math.hypot(sl.x - q.x, sl.z - q.z) < STEP_CLEAR) (blocked || (blocked = new Set())).add(`${o.id}#${k}`); }); }
     const m = this.smart.assign(where, people, clock, blocked);
     for (const [v, f] of figs) {
       if (f.held) { // talked to: stop, and turn to you
@@ -1593,20 +1677,124 @@ export class People {
         if (q) { f.at = null; f.act = 'wait'; f.goal = { ...q, spec: { pose: 'stand', lean: 0.02 } }; if (snap) this.settle(f); else f.path = this.route(L, f, f.goal); }
         f.fresh = false;
       } else if (f.fresh) { f.fresh = false; } // (nothing free: they stay where they stand)
-      if (f.path && f.path.length) this.walkOn(f, dt);
+      else if (!a && !f.path && f.spec && f.spec.pose !== 'sit') this.wander(L, figs, f, dt); // (r2: nor frozen there)
+      if (a) f.wHome = null;
+      if (f.path && f.path.length) this.walkOn(f, dt, this.giveWay(L, figs, f, dt));
+    }
+    this.keepApart(figs, dt);
+  }
+  // the main path's step's target when it is in or about this store ({ x, z }), else null (guide.js)
+  stepAt(L) {
+    try {
+      const cur = guide.current(), tg = cur && cur.target, q = tg && typeof tg.pos === 'function' ? tg.pos() : null;
+      return q && Number.isFinite(q.x) && L && L.centre && Math.hypot(q.x - L.centre.x, q.z - L.centre.z) < 16 ? q : null;
+    } catch { return null; }
+  }
+  // the decks of a store's berths kept for you or a friend (outfitter.js: this visit's berth, otherCanoes in a room)
+  takenDecks(ep, L) {
+    const o = this.outfitter, bs = L && Array.isArray(L.dockBerths) ? L.dockBerths : [];
+    if (!o || !bs.length) return [];
+    const sides = [];
+    const v = o.visit; if (v && Number(v.ep) === Number(ep)) sides.push((v.berth && v.berth.side) || L.dockSide || null);
+    else if (Number(ep) === Number(this.profile && this.profile.home) && L.dockSide) sides.push(L.dockSide); // (home: the canoe's own berth)
+    try { if (typeof o.otherCanoes === 'function') sides.push(...o.otherCanoes()); } catch { /* a room's */ }
+    const out = [];
+    for (const s of sides) { if (!s || !Number.isFinite(s.x)) continue; let b = null, bd = 2.6; for (const q of bs) { const d = q.side ? Math.hypot(q.side.x - s.x, q.side.z - s.z) : Infinity; if (d < bd) { bd = d; b = q; } } if (b && b.deck) out.push(b.deck); } // (the nearest berth: the two sides of the dock lie close)
+    return out;
+  }
+  // r2 2: nobody walks through anyone (the owner's leftover: a party going in at the door walked through each other).
+  // At the door one at a time: someone about to go in or out waits outside it while another is in it coming the other
+  // way, or too close ahead going theirs; elsewhere a walker slows behind someone in the way going their way, and the
+  // one of two meeting head on with the later key waits a moment for the other to step by (keepApart). A wait gives up
+  // after DOOR_WAIT s. True: hold this step
+  giveWay(L, figs, f, dt) {
+    const q = f.path && f.path[0]; if (!q) return false;
+    const dx = q.x - f.x, dz = q.z - f.z, d = Math.hypot(dx, dz) || 1, ux = dx / d, uz = dz / d;
+    const inDoor = L.axes ? this.doorZone(L) : null, mine = inDoor ? inDoor(f.x, f.z) : false;
+    const ahead = { x: f.x + ux * Math.min(1.1, d + 0.4), z: f.z + uz * Math.min(1.1, d + 0.4) };
+    const toDoor = inDoor && !mine && inDoor(ahead.x, ahead.z);
+    let hold = false;
+    for (const [, g] of figs) {
+      if (g === f || (g.spec && g.spec.pose === 'sit')) continue;
+      const ox = g.x - f.x, oz = g.z - f.z, od = Math.hypot(ox, oz), walking = !!(g.path && g.path.length);
+      if (toDoor && walking && inDoor(g.x, g.z)) {
+        const gq = g.path[0], gx = gq.x - g.x, gz = gq.z - g.z, same = gx * ux + gz * uz > 0;
+        if (!same || od < 1.1) { hold = true; break; }
+      }
+      if (od > 0.95 || od < 1e-4) continue;
+      const fwd = (ox * ux + oz * uz) / od; if (fwd < 0.35) continue; // (not in front of them)
+      if (walking) {
+        const gq = g.path[0], gx = gq.x - g.x, gz = gq.z - g.z, gl = Math.hypot(gx, gz) || 1, dot = (gx * ux + gz * uz) / gl;
+        if (dot > 0.3 && od < 0.85) { hold = true; break; } // (behind someone going their way)
+        if (dot < -0.3 && f.key > g.key && od < 0.95) { hold = true; break; } // (head on: the later waits, the other steps by)
+      }
+    }
+    f.waitT = hold ? (f.waitT || 0) + dt : 0;
+    return hold && f.waitT < DOOR_WAIT;
+  }
+  // the door of the store (its own frame): from the front aisle inside, through the doorway, onto the porch
+  doorZone(L) {
+    const c = this.doorZ || (this.doorZ = new WeakMap());
+    let fn = c.get(L);
+    if (!fn) { const fr = this.frameOf(L); fn = (x, z) => { const q = fr.ab(x, z); return Math.abs(q.a - DOOR_A) < 0.85 && q.b > AISLE.front - 0.4 && q.b < 4.9; }; c.set(L, fn); }
+    return fn;
+  }
+  // and those within APART of a walker eased off to either side of them (the walker steps round, never through)
+  keepApart(figs, dt) {
+    const k = Math.min(1, dt * 10);
+    for (let i = 0; i < figs.length; i++) for (let j = i + 1; j < figs.length; j++) {
+      const a = figs[i][1], b = figs[j][1], wa = !!(a.path && a.path.length), wb = !!(b.path && b.path.length);
+      if (!wa && !wb) continue;
+      const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz);
+      if (d >= APART || d < 1e-4) continue;
+      const push = (APART - d) * (wa && wb ? k : 1), nx = dx / d, nz = dz / d, sa = wa && wb ? 0.5 : wa ? 1 : 0, sb = 1 - sa;
+      if (sa && !(a.spec && a.spec.pose === 'sit')) { a.x -= nx * push * sa; a.z -= nz * push * sa; }
+      if (sb && !(b.spec && b.spec.pose === 'sit')) { b.x += nx * push * sb; b.z += nz * push * sb; }
     }
   }
   settle(f) { const g = f.goal; if (!g) return; f.x = g.x; f.z = g.z; f.y = g.y; f.heading = g.heading; f.spec = g.spec; f.path = null; }
-  walkOn(f, dt) {
-    let left = WALK_V * dt;
+  walkOn(f, dt, hold = false) {
+    // r2: away from a standstill and into the stop at a walker's pace (it had started and stopped at full speed), the
+    // stride the gait's by the speed made good (Body.pose), so the feet keep to the ground
+    let rem = 0, ax = f.x, az = f.z;
+    for (const q of f.path) { rem += Math.hypot(q.x - ax, q.z - az); ax = q.x; az = q.z; if (rem > 3) break; }
+    const want = hold ? 0 : Math.min(WALK_V, 0.25 + Math.sqrt(2 * 1.1 * Math.max(0, rem))); // (r2 2: held: giving way, stopped)
+    if (hold) { f.wv = Math.max(0, (f.wv || 0) - 3.5 * dt); if (!(f.wv > 0.02)) { f.spec = WALK_SPEC; return; } }
+    f.wv = (f.wv || 0) + clamp(want - (f.wv || 0), -2.5 * dt, 1.5 * dt);
+    let left = Math.max(0.05, f.wv) * dt;
     while (left > 0 && f.path.length) {
       const q = f.path[0], dx = q.x - f.x, dz = q.z - f.z, d = Math.hypot(dx, dz);
       if (d <= left) { f.x = q.x; f.z = q.z; f.y = q.y; left -= d; f.walked = (f.walked || 0) + d; f.path.shift(); continue; }
-      const k = left / d; f.x += dx * k; f.z += dz * k; f.y += (q.y - f.y) * k; f.walked = (f.walked || 0) + left;
+      // (r2 verify: over open ground a walk keeps to the ground under it, not to the straight line between its points: a
+      // camp's walk from the bench down to the shore had them in the air over every hollow, the line taken for a floor;
+      // onto a floor, a step or the dock, the line)
+      const G = this.ground, open = G && !(f.y > G(f.x, f.z) + 0.12) && !(q.y > G(q.x, q.z) + 0.12);
+      const k = left / d; f.x += dx * k; f.z += dz * k; f.y = open ? G(f.x, f.z) : f.y + (q.y - f.y) * k; f.walked = (f.walked || 0) + left;
       const want = Math.atan2(-dz, dx); f.heading += clamp(wrapPi(want - f.heading), -6 * dt, 6 * dt);
       left = 0;
     }
-    if (!f.path.length) { f.path = null; this.settle(f); } else f.spec = WALK_SPEC;
+    if (!f.path.length) { f.path = null; f.wv = 0; this.settle(f); } else f.spec = WALK_SPEC;
+  }
+  // r2: someone with nothing to do does not stand frozen where they stopped: now and then they wander a step or two off
+  // to another spot near where they began waiting (clear of the store's lanes and of everyone else), and stand there
+  wander(L, figs, f, dt) {
+    if (!f.wHome) f.wHome = { x: f.x, z: f.z };
+    f.idleT = (f.idleT || 0) + dt;
+    if (f.idleT < (f.idleAt || (f.idleAt = 9 + Math.random() * 14))) return;
+    f.idleT = 0; f.idleAt = 10 + Math.random() * 16;
+    const G = (x, z) => this.groundAt(L, x, z), W = this.world;
+    for (let k = 0; k < 8; k++) {
+      const a = Math.random() * Math.PI * 2, d = 0.9 + Math.random() * 1.6, x = f.wHome.x + Math.cos(a) * d, z = f.wHome.z + Math.sin(a) * d;
+      if (L.axes && this.inLane(L, x, z)) continue;
+      if (W.shoreAt && W.shoreAt(x, z) < 0.6) continue;
+      const y = G(x, z), y0 = G(f.x, f.z);
+      if (Math.abs(f.y - y0) > 0.12 || Math.abs(y - y0) > 0.6 || Math.hypot(G(x + 0.4, z) - G(x - 0.4, z), G(x, z + 0.4) - G(x, z - 0.4)) > 0.45) continue; // (off a deck no; nor up a steep bank)
+      if (figs.some(([, g]) => g !== f && Math.hypot(g.x - x, g.z - z) < 0.9)) continue;
+      const hd = f.heading + (Math.random() * 2 - 1) * 1.2;
+      f.goal = { x, z, y, heading: hd, spec: f.spec && f.spec.pose !== 'walk' ? f.spec : { pose: 'stand', lean: 0.02 } };
+      f.path = [{ x, z, y }];
+      return;
+    }
   }
   // a way from where a figure stands to a goal through the store: along the aisles (the left, the middle and the right
   // one, and the cross aisles behind and before the shelves), out the door, down the steps, to the dock
@@ -1779,6 +1967,39 @@ export class People {
   }
   giveBack(b) { if (b && b.lent) { b.lent = null; b.who = null; b.park(); } }
 
+  // r2 2 (verify): who of those wanted has a body, the nearest first. With more people about than bodies (a busy store
+  // morning: a party of nine and two more at Moose Lake), the nearest-first cut had people popping out and in a few
+  // metres off as two of them walked past each other in the ranking (13 in 90 s seen from the doorway). Now one drawn
+  // keeps their body while still wanted, and a body changes hands only between two out of sight (or far off): someone
+  // in view is never put away nor brought out of nothing; a spare body still goes to the nearest at once.
+  keepOf(want, free) {
+    if (want.length <= free.length) return want;
+    const cam = this.camera;
+    if (!cam) return [...want.filter((w) => w.must), ...want.filter((w) => !w.must)].slice(0, free.length);
+    const drawn = (w) => free.some((b) => b.who && b.who.person === w.person && b.who.fig === w.fig);
+    const P = this._vp || (this._vp = new THREE.Vector3());
+    const seen = (w) => { if (w.d > 45) return false; const f = w.f; P.set(f.x, (Number.isFinite(f.y) ? f.y : 0) + 1, f.z).project(cam); return P.z < 1 && Math.abs(P.x) < 1.25 && Math.abs(P.y) < 1.25; };
+    const keep = want.filter(drawn), rest = want.filter((w) => !drawn(w));
+    for (const w of rest) {
+      if (keep.length < free.length) { keep.push(w); continue; }
+      if (seen(w)) continue;
+      let vi = -1;
+      for (let i = 0; i < keep.length; i++) if (keep[i].d > w.d + 1.5 && !seen(keep[i]) && (vi < 0 || keep[i].d > keep[vi].d)) vi = i;
+      if (vi >= 0) keep[vi] = w;
+    }
+    // (r3 final: the keeper and the staffer (an extraAt person: the guide's gem is over them, E talks to them) always
+    // have a body. A busy morning, eight of a party and the photographer in the store, left the summer help undrawn: the
+    // gem over empty air and E a word with whoever stood there. Someone else gives theirs up, one out of sight first,
+    // else the farthest; only the must-haves past the pool's size go without)
+    for (const w of want) {
+      if (!w.must || keep.includes(w)) continue;
+      if (keep.length < free.length) { keep.push(w); continue; }
+      let vi = -1;
+      for (let i = 0; i < keep.length; i++) { const k = keep[i]; if (k.must) continue; if (vi < 0) { vi = i; continue; } const a = !seen(k), b = !seen(keep[vi]); if (a !== b ? a : k.d > keep[vi].d) vi = i; }
+      if (vi >= 0) keep[vi] = w;
+    }
+    return keep;
+  }
   // --- per frame ---------------------------------------------------------------------------------------------------
   update(dt) {
     const p = this.player;
@@ -1798,13 +2019,13 @@ export class People {
       const L = storeLayout(ep), ds = L ? Math.max(0, Math.hypot(L.centre.x - p.x, L.centre.z - p.z) - STORE_R) : Infinity;
       for (const v of this.rosters.get(ep) || []) v.figs.forEach((f, i) => {
         const drawn = this.bodies.some((b) => b.who && b.who.person === v && b.who.fig === i);
-        if (ds < DRAW_R || (drawn && ds < DRAW_OUT)) want.push({ person: v, fig: i, f, d: Math.hypot(f.x - p.x, f.z - p.z) - (v.keeper ? 5 : 0) });
+        if (ds < DRAW_R || (drawn && ds < DRAW_OUT)) want.push({ person: v, fig: i, f, d: Math.hypot(f.x - p.x, f.z - p.z) - (v.keeper || v.extra ? 5 : 0), must: !!(v.keeper || v.extra) }); // (r3 final: the keeper and the staffer always drawn: keepOf)
       });
     }
     for (const [ep, list] of this.lots) { const T = list.T, ds = T ? Math.hypot(T.lot.x - p.x, T.lot.z - p.z) : Infinity; if (ds < DRAW_R + 20) for (const v of list) v.figs.forEach((f, i) => want.push({ person: v, fig: i, f, d: Math.hypot(f.x - p.x, f.z - p.z) })); void ep; } // gl-e: a trailhead's lot
     if (this.extra) { try { for (const w of this.extra() || []) if (w && w.f) want.push(w); } catch (e) { console.warn('people.extra', e); } } // round A-F: the parties' camps
     want.sort((a, b) => a.d - b.d);
-    const free = this.bodies.filter((b) => !b.lent), keep = want.slice(0, free.length); // (round A-F: a body lent out is the borrower's)
+    const free = this.bodies.filter((b) => !b.lent), keep = this.keepOf(want, free); // (round A-F: a body lent out is the borrower's)
     for (const b of free) if (b.who && !keep.some((w) => w.person === b.who.person && w.fig === b.who.fig)) { b.who = null; b.park(); }
     for (const w of keep) {
       if (free.some((b) => b.who && b.who.person === w.person && b.who.fig === w.fig)) continue;
@@ -1815,6 +2036,7 @@ export class People {
       b.show();
     }
     // pose them, each looking at you when you are near
+    const W = this.world, G = this.ground || ((x, z) => (W.tiles && W.tiles.groundAt ? W.tiles.groundAt(x, z) : W.heightAt ? W.heightAt(x, z) : 0));
     const eye = V(p.x, (p.foot ? p.foot.y : p.altitude || 0) + 1.62, p.z), inStore = !!(this.outfitter && this.outfitter.visit && this.outfitter.visit.inside);
     for (const b of this.bodies) {
       if (!b.who || b.lent) continue;
@@ -1823,9 +2045,12 @@ export class People {
       this.look(b, v, f, eye, dt, inStore);
       b.s.walk = f.walked || 0; // gl-e: the stride follows the metres walked; a browser's hand to the shelf
       if (f.spec.pose === 'browse') { f.reachT = (f.reachT || 0) + dt; const c = (f.reachT % 7) / 7; b.s.reach = c < 0.12 ? c / 0.12 : c < 0.3 ? 1 : c < 0.42 ? (0.42 - c) / 0.12 : 0; } else b.s.reach = 0;
-      b.group.position.set(f.x, f.y, f.z);
-      b.group.rotation.set(0, f.heading + b.s.turn, 0);
-      posePerson(b, f.spec, dt, f.look.wear.scale || 1);
+      // r2: posed by the gait on the exact ground; a figure over ground not yet loaded is not drawn till it is (never
+      // guessed: the coarse ground under it would sink or float them)
+      if (W.isReady && !W.isReady(f.x, f.z)) { b.group.visible = false; continue; }
+      if (!b.group.visible || b.rig.parent !== this.scene) b.show();
+      b.s.breath += dt * Math.PI * 2 * 0.22;
+      b.pose(f, dt, G);
     }
     if (p.onFoot) this.holdOff();
     this.visitTick(); // content B: a new visit, a clean slate of lines
@@ -1956,7 +2181,7 @@ export class People {
   talkTo(key, fig = 0) {
     const v = typeof key === 'string' ? this.find(key) : key;
     if (!v) return null;
-    if (v.party) return this.partyWord ? this.partyWord(v) : null; // round A-F: a word from a party out there (a bark; gl-e: party-camps.js tells onTalk)
+    if (v.party) return this.partyWord ? this.partyWord(v, fig) : null; // round A-F: a word from a party out there (a bark; gl-e: party-camps.js tells onTalk)
     if (v.extra) return this.extraTalk(v); // gl-e: someone another module stands here
     if (v.inParty) return this.dialogue ? this.pConverse(v, fig) : this.pTalk(v, fig); // gl-e: a party member in a store
     if (this.dialogue) return v.keeper ? this.keeperConverse(v) : this.converse(v);
@@ -2276,6 +2501,8 @@ export class People {
   }
   kChoices(v) {
     const ch = this.charOf(v.ep), m = ch ? ch.manner : 'warm', ws = this.wordState(v.ep), list = this.wordList(v), out = [];
+    // (the start round: what another module asks of a keeper first, starter.js's first night out; each (v) → a choice or null)
+    for (const f of this.extraChoices || []) { try { const c = f(v); if (c) out.push(c); } catch (e) { console.warn('people: a keeper choice', e); } }
     const more = list.slice(ws.n).some((x) => !this.said.has(x.text)), none = this.fresh(NO_WORD[m] || NO_WORD.warm);
     if (more || none) out.push({ text: ws.n ? 'Anything else on the water?' : 'What’s the word on the water?', dim: !more, go: () => this.kWord(v) });
     const beat = this.arcBeat(v.ep);

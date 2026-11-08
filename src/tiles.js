@@ -675,8 +675,13 @@ export class TileManager {
   farOf(tx, ty) { const per = this.world.far.tile / (this.world.tile / this.world.far.factor); return [Math.floor(tx / per), Math.floor(ty / per)]; }
 
   // --- per frame ----------------------------------------------------------------------------
-  update(px, pz, camPos) {
-    this.tick++;
+  // r2 (NPC motion 2): the part of the frame's update that changes the ground under anyone (tiles in and out, the LiDAR
+  // detail chunks, an outfitter built again on new ground). main.js runs it at the top of the frame, before the walker,
+  // the store's and the camps' people and the parties stand on the ground: run after them (as the whole update was), a
+  // chunk swapped in under them was drawn a frame with everyone on the old mesh, a metre in it. update() does it when
+  // the frame did not (the quality bench, a test calling update alone), with the camera's view (LOD, culling) after it
+  ground(px, pz, camPos = this.camPos) {
+    this.tick++; this.groundDone = true;
     const w = this.world;
     const [ptx, pty] = w.tileOf(px, pz);
     this.playerTile = [ptx, pty];
@@ -689,7 +694,7 @@ export class TileManager {
       const fx = pfx + dx, fy = pfy + dy;
       if (fx >= 0 && fy >= 0 && fx < w.far.ntx && fy < w.far.nty) this.requestFar(fx, fy);
     }
-    this.camPos = camPos;
+    if (camPos) this.camPos = camPos;
     this.dispatch(px, pz);
     // frames far apart (a hidden or throttled window, where a frame may come once a second): nobody is watching them
     // be smooth, so the installs take a quarter of the gap (to 100 ms) instead of 3 ms, or a teleport's wait stretches
@@ -701,6 +706,12 @@ export class TileManager {
     this.evict();
     this.detail.tick(px, pz); // the detail chunks: in and out by distance, the ground re-seated under the budget
     stepOutfitters(OUTFITTER_BUDGET); // the outfitters whose ground changed, built again on it and swapped in whole
+  }
+  update(px, pz, camPos) {
+    const w = this.world;
+    if (!this.groundDone) this.ground(px, pz, camPos);
+    this.groundDone = false;
+    this.camPos = camPos;
     // draw only what the fog lets through; far chunks stand in wherever a fine tile is missing
     // round A-C: a tile's LOD is worked out again only once the camera has moved a step that could change a decision
     // there: LOD_STEP metres in the tile underfoot, a fiftieth of the distance to a tile farther off (a choice made at

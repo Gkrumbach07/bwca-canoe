@@ -95,10 +95,12 @@
 .g.note { width: 22px; height: 16px; border-radius: 50% 48% 52% 50% / 46% 54% 46% 54%; border: 1.7px solid rgba(74, 64, 54, .62); background: rgba(74, 64, 54, .07); }
 .g.burn { border: 1.2px dashed rgba(150, 70, 34, .8); background: repeating-linear-gradient(-45deg, rgba(150, 70, 34, .3) 0 1.5px, transparent 1.5px 6px); }
 .g.bound { height: 0; border-top: 2px dashed rgba(46, 92, 52, .9); box-shadow: 0 3px 0 4px rgba(70, 120, 60, .13); }
+.g.pma { height: 0; border-top: 1.4px dashed rgba(82, 76, 98, .85); }
 .g.you { width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-bottom: 13px solid #e8562f; }
 .g.way { height: 0; border-top: 1.8px solid rgba(54, 46, 38, .86); transform: rotate(-8deg); }
 .g.paddled { border-radius: 45% 55% 50% 50%; background: rgb(132, 172, 199); border: 1.5px solid rgb(30, 62, 94); }
-.g.dock { width: 10px; height: 12px; background: linear-gradient(#5e4630 0 55%, #b4321f 55%); }
+.g.dock { width: 11px; height: 11px; background: linear-gradient(#b4321f 0 42%, #3d2c1c 42%); clip-path: polygon(50% 0, 100% 42%, 92% 42%, 92% 100%, 8% 100%, 8% 42%, 0 42%); } /* round 2 markers: a store */
+.g.ep { width: 12px; height: 10px; background: #2f5a3a; border-radius: 1px; } /* round 2 markers: an entry point flag */
 .g.sheet { border: 1.6px solid rgba(42, 52, 30, .85); }
 
 #journal #map.in-book #pin { width: 400px; }

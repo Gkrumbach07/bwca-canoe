@@ -11,11 +11,15 @@
 //   soundings      the DNR-mapped lakes' depth contours, in feet as the outfitters' maps letter them
 //   burns          burns.js's perimeters (the fires and the 1999 blowdown) by the season's date, hatched
 //   the boundary   the Boundary Waters Canoe Area Wilderness boundary (scripts/boundary.mjs -> boundary.bin)
+//   primitive areas the twelve PMAs (pma.js), a fine dashed outline in a muted slate and the name in small italics, as
+//                  the Fisher and McKenzie sheets mark them: over the ground, under the lake names (paintPmas, paintPmaNames)
 //
 // Shared by the HUD's map (hud.js), the book's map tab, the lake page's portrait (map-book.js) and anyone else who wants
 // a piece of the map on a canvas: drawRegion(canvas, world, view, opts) (below) draws a region with markers.
 import { BURNS, burnDate } from './burns.js';
-import { isOutfitter } from './outfitters.js'; // the game-loop round: an outfitter's dock, or a trailhead's sign
+import { OUTFITTER_EPS, placeOf } from './outfitters.js'; // round 2 markers: an outfitter at its store, an entry point at its put-in
+import { markOf } from './ep-start.js'; // round 2, entry points true to life: an entry point marked at its start
+import { PMAS, inPoly } from './pma.js'; // r2: the primitive areas' outlines on every map
 
 export const FT = 0.3048;
 export const INK = {
@@ -23,6 +27,7 @@ export const INK = {
   contour: 'rgba(146, 116, 70, 0.42)', index: 'rgba(128, 98, 56, 0.72)', sound: 'rgba(62, 104, 136, 0.62)', soundIndex: 'rgba(46, 86, 118, 0.85)',
   burn: 'rgba(150, 70, 34, 0.75)', blow: 'rgba(92, 104, 62, 0.75)', rx: 'rgba(150, 90, 50, 0.38)', bound: 'rgba(46, 92, 52, 0.9)', boundBand: 'rgba(70, 120, 60, 0.13)',
   lakeName: '#2d4f66', red: '#b4321f', ink: '#2a2016',
+  pma: 'rgba(82, 76, 98, 0.82)', pmaName: 'rgba(70, 64, 86, 0.92)', pmaWash: 'rgba(82, 76, 98, 0.09)',
 };
 export const SERIF = 'Alegreya, Georgia, "Times New Roman", serif';
 export const PENCIL = 'Caveat, "Bradley Hand", "Segoe Print", cursive';
@@ -574,6 +579,102 @@ export function paintBoundary(ctx, v, k = 1) {
   ctx.restore();
 }
 
+// --- the primitive management areas (r2, the owner 2026-11-05: "Make sure we add that map outline") ---------------------
+// Public, as the wilderness's own edge is: drawn wherever the base map is drawn (the HUD's sheet cuts them to the sheets
+// you own in the wild, as it cuts the boundary). A fine dashed slate line; the one a permit is for (focus) a shade firmer
+// with a pale wash inside. The names in small italics at a spot well inside, off the lake that names the area, and only
+// once the area is wide enough on the sheet to carry its name; never over a lake name already lettered.
+const pmaGen = new Map(); // `${id}:${level}` -> Path2D (the overview's rings simplified, as the boundary's)
+const pmaFull = new Map(); // id -> Path2D
+function pmaPath(p, lod) {
+  if (!pmaFull.has(p.id)) { const q = new Path2D(); p.poly.forEach(([x, z], i) => (i ? q.lineTo(x, z) : q.moveTo(x, z))); q.closePath(); pmaFull.set(p.id, q); }
+  if (!lod || !lod.level) return pmaFull.get(p.id);
+  const key = `${p.id}:${lod.level}`;
+  if (!pmaGen.has(key)) {
+    const flat = []; for (const [x, z] of p.poly) flat.push(x, z);
+    const q = simplifyRing(flat, lod.tol * 0.5), path = new Path2D();
+    for (let i = 0; i < q.length; i += 2) { if (i) path.lineTo(q[i], q[i + 1]); else path.moveTo(q[i], q[i + 1]); }
+    path.closePath(); pmaGen.set(key, q.length >= 6 ? path : pmaFull.get(p.id));
+  }
+  return pmaGen.get(key);
+}
+const boxIn = (b, v, W, H) => !(b[2] < v.x0 || b[0] > v.x0 + W * v.mPerPx || b[3] < v.z0 || b[1] > v.z0 + H * v.mPerPx);
+// the outlines, on a view { x0, z0, mPerPx } (W x H canvas px); focus: the id of the one to pick out
+// wash: every area washed and drawn in a solid line (the start map: at the whole wilderness's scale a dash alone was lost in the lakes' speckle)
+export function paintPmas(ctx, v, W, H, { k = 1, focus = null, wash = false } = {}) {
+  const s = 1 / v.mPerPx, px = v.mPerPx, lod = lodOf(v.mPerPx, k);
+  ctx.save();
+  ctx.setTransform(ctx.getTransform().multiply(new DOMMatrix([s, 0, 0, s, -v.x0 * s, -v.z0 * s])));
+  ctx.lineJoin = 'round'; ctx.lineCap = 'butt';
+  for (const p of PMAS) {
+    if (!boxIn(p.box, v, W, H)) continue;
+    const path = pmaPath(p, lod), on = p.id === focus;
+    if (on || wash) { ctx.fillStyle = INK.pmaWash; ctx.fill(path); }
+    const kk = Math.max(k, 0.8); // (the corner sheet's small k: a line still a pixel wide, its dashes still dashes)
+    ctx.setLineDash(wash ? [] : [5 * kk * px, 2.6 * kk * px]);
+    ctx.strokeStyle = INK.pma; ctx.lineWidth = (on ? 1.9 : 1.15) * kk * px; ctx.stroke(path);
+  }
+  ctx.restore();
+}
+// a few spots well inside each area for its name, best first: far from its edge, off the lakes the sheet letters
+const pmaSpots = new Map();
+function spotsOf(p, lakes) {
+  if (pmaSpots.has(p.id)) return pmaSpots.get(p.id);
+  const [x0, z0, x1, z1] = p.box, step = Math.max(150, Math.min(x1 - x0, z1 - z0) / 14), out = [];
+  const named = (lakes || []).filter((l) => l && l.name && l.cells >= 600 && l.cx > x0 - 2000 && l.cx < x1 + 2000 && l.cz > z0 - 2000 && l.cz < z1 + 2000);
+  const edge = (x, z) => { let m = Infinity; for (let i = 0, j = p.poly.length - 1; i < p.poly.length; j = i++) { const [ax, az] = p.poly[j], [bx, bz] = p.poly[i]; m = Math.min(m, Math.sqrt(segD2(x, z, ax, az, bx, bz))); } return m; };
+  for (let z = z0 + step / 2; z < z1; z += step) for (let x = x0 + step / 2; x < x1; x += step) {
+    if (!inPoly(p.poly, x, z)) continue;
+    let lk = Infinity; for (const l of named) lk = Math.min(lk, Math.hypot(l.cx - x, (l.cz - z) * 2.5)); // (a name is wide, not tall)
+    out.push({ x, z, score: Math.min(edge(x, z), 2500) + Math.min(lk, 1800) });
+  }
+  out.sort((a, b) => b.score - a.score);
+  const keep = [];
+  for (const q of out) { if (keep.length >= 6) break; if (keep.every((r) => Math.hypot(r.x - q.x, r.z - q.z) > step * 3)) keep.push(q); }
+  if (!keep.length) keep.push({ x: p.centre[0], z: p.centre[1] });
+  pmaSpots.set(p.id, keep);
+  return keep;
+}
+// the names: lettered = boxes already taken on the canvas (the lake names); onMine(x, z) → bool (what may be shown)
+export function paintPmaNames(ctx, world, v, W, H, { k = 1, lettered = [], onMine = null, focus = null, paper = INK.paper } = {}) {
+  if (v.mPerPx / k > 90) return lettered; // (the whole country: twelve names crowding the overview)
+  const size = (v.mPerPx < 16 ? 12.5 : 11) * k;
+  if (size < 7) return lettered; // (too small to read: the corner sheet)
+  const toPx = (x, z) => [(x - v.x0) / v.mPerPx, (z - v.z0) / v.mPerPx];
+  ctx.save();
+  ctx.font = `italic 500 ${size}px ${SERIF}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+  ctx.lineWidth = 3 * k; ctx.strokeStyle = paper;
+  for (const p of PMAS) {
+    if (!boxIn(p.box, v, W, H)) continue;
+    const txt = p.name, tw = ctx.measureText(txt).width, wide = (p.box[2] - p.box[0]) / v.mPerPx;
+    if (wide < tw * 0.85 && p.id !== focus) continue; // (too small on the sheet to carry its name)
+    for (const q of spotsOf(p, world && world.lakes)) {
+      const [a, b] = toPx(q.x, q.z);
+      if (a - tw / 2 < 2 || b < size || a + tw / 2 > W - 2 || b > H - size) continue;
+      if (onMine && !onMine(q.x, q.z)) continue;
+      const box = { x0: a - tw / 2 - 2 * k, x1: a + tw / 2 + 2 * k, y0: b - size * 0.65, y1: b + size * 0.65 };
+      if (lettered.some((r) => box.x0 < r.x1 && r.x0 < box.x1 && box.y0 < r.y1 && r.y0 < box.y1)) continue;
+      lettered.push(box);
+      ctx.fillStyle = INK.pmaName; ctx.strokeText(txt, a, b); ctx.fillText(txt, a, b);
+      break;
+    }
+  }
+  ctx.restore();
+  return lettered;
+}
+// the outlines on a sketch with its own projection (the counter's side map, the start map): X(x), Y(z) → canvas px
+export function sketchPmas(ctx, X, Y, { stroke = INK.pma, width = 1, dash = [4, 2.5], focus = null, wash = INK.pmaWash, focusStroke = null, fill = null } = {}) {
+  ctx.save();
+  ctx.lineJoin = 'round';
+  for (const p of PMAS) {
+    const on = p.id === focus;
+    ctx.beginPath(); p.poly.forEach(([x, z], i) => (i ? ctx.lineTo(X(x), Y(z)) : ctx.moveTo(X(x), Y(z)))); ctx.closePath();
+    if (on && wash) { ctx.fillStyle = wash; ctx.fill(); } else if (fill) { ctx.fillStyle = fill; ctx.fill(); } // (r2 replay: every one washed, where a dash alone is lost)
+    ctx.setLineDash(dash); ctx.strokeStyle = on && focusStroke ? focusStroke : stroke; ctx.lineWidth = on ? width * 1.8 : width; ctx.stroke();
+  }
+  ctx.restore();
+}
+
 // --- tiles fetched for the map alone (shared by every map that draws) --------------------------------------------------
 const FETCHES = 4;
 const FINE_BELOW = 12; // m a canvas pixel: the 10 m tiles under this, the far field's 80 m ones over it
@@ -663,9 +764,10 @@ export function lakeBox(world, ids, cx, cz, reach) {
 // --- a region of the map on a canvas, for anyone ------------------------------------------------------------------------
 // drawRegion(canvas, world, view, opts) → { ready, toPx(x, z), worldAt(px, py), mPerPx }
 //   view: { cx, cz, span } (span: metres across the canvas) or { x0, z0, x1, z1 } (fitted, with a margin)
-//   opts: { markers: [{ x, z, kind: 'dock' | 'dot' | 'you' | 'ring' | 'flag' | 'star', label, color, r }],
-//           route: [[x, z], …] (a pencil line), names: true (lake names), docks: true (the outfitters' docks),
-//           boundary: true, burns: false, detail: (x0, z0, x1, z1) => bool (what may be shown; default everything),
+//   opts: { markers: [{ x, z, kind: 'dock' | 'store' | 'ep' | 'dot' | 'you' | 'ring' | 'flag' | 'star', label, color, r, ep }],
+//           route: [[x, z], …] (a pencil line), names: true (lake names), docks: true (the entry points, numbered, and
+//           the outfitters' stores where they stand: paintEntries),
+//           boundary: true, pmas: true (the primitive areas; pmaFocus: one picked out; pmaWash: all washed, solid lines), burns: false, detail: (x0, z0, x1, z1) => bool (what may be shown; default everything),
 //           k (line scale), fine: true (the 10 m tiles at any zoom), soundAll: true (every sounding at any zoom) }
 // Water and names come from the far field (80 m) when the view is wide, from the fine tiles when it is close; tiles not
 // in yet are fetched, and ready is false until they are: call it again (on a timer or the next frame) until it is true.
@@ -683,8 +785,10 @@ export function drawRegion(canvas, world, view, opts = {}) {
   const ready = paintGround(ctx, world, v, W, H, { k, budget: { build: opts.build ?? 3 }, depths: opts.soundAll || mPerPx < 6, ink: opts.ink || null, inkV: opts.inkV || 0, detail, far: opts.fine ? false : null, all: !!opts.soundAll });
   if (opts.burns) paintBurns(ctx, v, burnsInView(v, W, H), k);
   if (opts.boundary !== false) { if (BOUNDARY.ready) paintBoundary(ctx, v, k); else loadBoundary(); }
-  if (opts.names !== false) paintLakeNames(ctx, world, v, W, H, { k, detail });
-  if (opts.docks !== false) for (const ep of world.entryPoints) { const [a, b] = toPx(ep.x, ep.z); if (a > -20 && b > -20 && a < W + 20 && b < H + 20) paintEntry(ctx, a, b, k, ep.ep); }
+  if (opts.pmas !== false) paintPmas(ctx, v, W, H, { k, focus: opts.pmaFocus || null, wash: !!opts.pmaWash });
+  const lettered = opts.names !== false ? paintLakeNames(ctx, world, v, W, H, { k, detail }) : [];
+  if (opts.pmas !== false) paintPmaNames(ctx, world, v, W, H, { k, lettered, focus: opts.pmaFocus || null, onMine: detail ? (x, z) => detail(x, z, x, z) : null });
+  if (opts.docks !== false) paintEntries(ctx, world, toPx, W, H, k, { names: mPerPx < 60 });
   if (opts.route && opts.route.length > 1) {
     ctx.beginPath(); opts.route.forEach(([x, z], i) => { const [a, b] = toPx(x, z); if (i) ctx.lineTo(a, b); else ctx.moveTo(a, b); });
     ctx.strokeStyle = 'rgba(54, 46, 38, 0.86)'; ctx.lineWidth = 2 * k; ctx.lineCap = ctx.lineJoin = 'round'; ctx.setLineDash([6 * k, 4 * k]); ctx.stroke(); ctx.setLineDash([]);
@@ -826,13 +930,64 @@ export function paintTrailhead(ctx, a, b, k = 1) {
   ctx.strokeStyle = '#e8dcbc'; ctx.lineWidth = 0.9; ctx.strokeRect(-3.6, -6.6, 7.2, 4.2);
   ctx.restore();
 }
-export function paintEntry(ctx, a, b, k = 1, ep = null) { if (ep != null && !isOutfitter(ep)) paintTrailhead(ctx, a, b, k); else paintDock(ctx, a, b, k); }
+// Round 2 markers (the owner, 2026-11-05: "when you have an outfitter mapped, it doesn't need to be joined with the entry
+// point that it's on. Those can be two separate points on the map. Not calling it outfitter 6"). An entry point is its
+// number in a small box on a short staff, its foot on the put-in, as the Fisher and McKenzie maps flag them; an outfitter
+// is a little store where the store stands (outfitters.js placeOf), labelled with its sign's name.
+export function paintEntry(ctx, a, b, k = 1, ep = null) {
+  const s = String(ep ?? '');
+  ctx.save(); ctx.translate(a, b); ctx.scale(k, k);
+  ctx.font = `700 ${s.length > 1 ? 9 : 10}px ${SERIF}`;
+  const w = Math.max(13, ctx.measureText(s).width + 6), h = 12, top = -h - 7;
+  ctx.strokeStyle = INK.ink; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, top + h); ctx.stroke();
+  ctx.fillStyle = '#2f5a3a'; ctx.fillRect(-w / 2, top, w, h);
+  ctx.strokeStyle = '#f4e9d6'; ctx.lineWidth = 0.8; ctx.strokeRect(-w / 2 + 1, top + 1, w - 2, h - 2);
+  ctx.fillStyle = '#f4e9d6'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(s, 0, top + h / 2 + 0.5);
+  ctx.beginPath(); ctx.arc(0, 0, 1.6, 0, 6.2832); ctx.fillStyle = INK.ink; ctx.fill();
+  ctx.restore();
+}
+// an outfitter's store: a little gabled building, red roof, ink walls, a pale door
+export function paintStore(ctx, a, b, k = 1) {
+  ctx.save(); ctx.translate(a, b); ctx.scale(k, k);
+  ctx.fillStyle = '#f4e9d6'; ctx.beginPath(); ctx.moveTo(-8, -1); ctx.lineTo(0, -9.5); ctx.lineTo(8, -1); ctx.lineTo(6.5, 6.5); ctx.lineTo(-6.5, 6.5); ctx.closePath(); ctx.fill(); // (a pale halo)
+  ctx.fillStyle = '#3d2c1c'; ctx.fillRect(-5.5, -2, 11, 7.5);
+  ctx.fillStyle = INK.red; ctx.beginPath(); ctx.moveTo(-7, -1.5); ctx.lineTo(0, -8); ctx.lineTo(7, -1.5); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#f4e9d6'; ctx.fillRect(-1.3, 1.2, 2.6, 4.3);
+  ctx.restore();
+}
+// a store's name beside it, in the map's serif on a paper halo
+export function paintStoreName(ctx, name, a, b, k = 1) {
+  ctx.save();
+  ctx.font = `600 ${11 * k}px ${SERIF}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+  ctx.lineWidth = 3 * k; ctx.strokeStyle = 'rgba(236, 228, 207, 0.92)'; ctx.strokeText(name, a + 10 * k, b);
+  ctx.fillStyle = INK.ink; ctx.fillText(name, a + 10 * k, b);
+  ctx.restore();
+}
+// every entry point at its put-in and every outfitter at its store, in view (toPx world → canvas px); hits (when given)
+// gets { kind: 'ep', ep, x, z } and { kind: 'store', ep, x, z } for the hover. names: the stores' names beside them.
+export function paintEntries(ctx, world, toPx, W, H, k = 1, { names = true, hits = null, inView = null } = {}) {
+  const seen = (x, z) => { const [a, b] = toPx(x, z); return (!inView || inView(x, z, x, z)) && a > -40 && b > -40 && a < W + 40 && b < H + 40 ? [a, b] : null; };
+  for (const ep of world.entryPoints || []) {
+    const m = markOf(ep), p = seen(m.x, m.z); if (!p) continue; // (round 2, entry points true to life: at its start, a portage-first one's lot)
+    paintEntry(ctx, p[0], p[1], k, ep.ep);
+    if (hits) hits.push({ kind: 'ep', ep: ep.ep, x: m.x, z: m.z, px: 10 });
+  }
+  for (const n of OUTFITTER_EPS) {
+    const pl = placeOf(n, world); if (!pl || !pl.store) continue;
+    const p = seen(pl.store.x, pl.store.z); if (!p) continue;
+    paintStore(ctx, p[0], p[1], k);
+    if (names) paintStoreName(ctx, pl.name, p[0], p[1], k);
+    if (hits) hits.push({ kind: 'store', ep: n, x: pl.store.x, z: pl.store.z, px: 10 });
+  }
+}
 // a marker for drawRegion's callers
 export function paintMarker(ctx, m, [a, b], k = 1) {
   const col = m.color || INK.red, r = (m.r || 5) * k;
   ctx.save();
   ctx.lineCap = ctx.lineJoin = 'round';
   if (m.kind === 'dock') paintDock(ctx, a, b, k);
+  else if (m.kind === 'store') paintStore(ctx, a, b, k);
+  else if (m.kind === 'ep') paintEntry(ctx, a, b, k, m.ep);
   else if (m.kind === 'you') { ctx.translate(a, b); ctx.scale(k, k); ctx.fillStyle = '#e8562f'; ctx.strokeStyle = '#3b2a1a'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(0, 0, 5, 0, 6.2832); ctx.fill(); ctx.stroke(); }
   else if (m.kind === 'ring') { ctx.beginPath(); ctx.arc(a, b, r * 2, 0, 6.2832); ctx.strokeStyle = col; ctx.lineWidth = 2 * k; ctx.stroke(); }
   else if (m.kind === 'flag') {

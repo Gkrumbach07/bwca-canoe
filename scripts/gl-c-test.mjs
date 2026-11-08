@@ -3,7 +3,7 @@
 //   1 Title → New season shows the start map: ≥ 13 pins (55 without stream B), gentle ones marked; a pin's card names its
 //     country and keeper; ← → move between pins; picking one goes to the date step; Start begins the season there
 //   2 At the home store: the door's line, then E at the counter (openHot, what E calls) opens the staffer's talk; after it
-//     the canoe holds the old pack with the old tent, the dented stove and the pot, and three days of food; the profile
+//     the canoe holds the old pack with the old tent, the dented stove and the pot (r3: no food; a life jacket); the profile
 //     owns the home sheet; with permits (a stand-in for stream A's when the build has none) a $0 first permit at home today
 //   3 no 'aframe' and no 'pack3' in a new season's inventory
 //   4 pitch the old tent at a site and sleep a night: one 'notebook:found', the notebook in the inventory, the card shown;
@@ -150,7 +150,7 @@ try {
   await shot(A, 'c-staffer');
   const talked = await A.evaluate(async () => {
     const g = window.__game, d = g.npcs.dialogue, said = [];
-    for (let i = 0; i < 6 && d.convo; i++) { said.push(`${d.convo.node.by || d.convo.name}: ${d.convo.node.say}`); d.choose(0); await new Promise((r) => setTimeout(r, 30)); }
+    for (let i = 0; i < 10 && d.convo; i++) { said.push(`${d.convo.node.by || d.convo.name}: ${d.convo.node.say}`); d.choose(0); await new Promise((r) => setTimeout(r, 30)); }
     return { said, talking: d.talking, open: g.outfitter.open, tab: g.outfitter.tab };
   });
   result('2c the talk ends at the counter', !talked.talking && talked.open && talked.tab === 'counter', talked);
@@ -162,8 +162,10 @@ try {
     const P = g.permits, today = Math.round(Date.UTC(g.day.year, 0, g.day.doy) / 86400000);
     return { pack: pack && pack.where, inPack, barrel: barrel && barrel.grid.map((e) => e.id), breakfasts: meals('meal:breakfast'), suppers: meals('meal:supper'), sheets: g.profile.sheets(), permits: P && P.held ? P.held() : null, stub: !!window.__glc.stub, today, home: g.profile.home, onboard: g.onboarding.state, events: window.__glc.events.map((e) => e.evt), crateLeft: inv.crate.grid.map((e) => e.id) };
   });
-  result('2d the canoe holds the old pack with the tent, the stove and the pot', gift.pack === 'canoe' && ['walttent', 'waltstove', 'pot', 'sleepingbag', 'pad', 'clothes', 'tarp', 'tablets', 'tacklebox'].every((id) => gift.inPack.includes(id)), { inPack: gift.inPack, crateLeft: gift.crateLeft });
-  result('2e food for three days', gift.breakfasts === 3 && gift.suppers === 3, { breakfasts: gift.breakfasts, suppers: gift.suppers, barrel: gift.barrel });
+  // (r3, the owner 2026-11-05: a new season starts empty-handed; the talk gives the old gear and the outfitter's loan, a
+  // life jacket in the pack, and no food or tackle box: those are bought, scripts/r3-start-test.mjs)
+  result('2d the canoe holds the old pack with the tent, the stove and the pot', gift.pack === 'canoe' && ['walttent', 'waltstove', 'pot', 'sleepingbag', 'pad', 'clothes', 'tarp', 'tablets', 'pfd'].every((id) => gift.inPack.includes(id)), { inPack: gift.inPack, crateLeft: gift.crateLeft });
+  result('2e no food comes with the gear (r3: it is bought)', gift.breakfasts === 0 && gift.suppers === 0 && Array.isArray(gift.barrel), { breakfasts: gift.breakfasts, suppers: gift.suppers, barrel: gift.barrel });
   result('2f the profile owns the home sheet', gift.sheets.length >= 1, { sheets: gift.sheets });
   const pm = (gift.permits || [])[0] || null;
   result(`2g a $0 first permit at home today${gift.stub ? ' (stand-in for stream A)' : ''}`, pm && pm.ep === gift.home && pm.abs === gift.today && pm.from === gift.home && (pm.price || 0) === 0 && (gift.stub ? pm.why === 'first' : true), { permit: pm, today: gift.today });

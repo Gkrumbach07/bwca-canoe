@@ -14,6 +14,8 @@ import { clock12, shortDate } from './hud.js';
 import { save, slots } from './save.js';
 import { SeasonsPanel } from './seasons.js'; // round A-D
 import { Wizard, START_HOUR } from './wizard.js';
+import { placeOf } from './outfitters.js'; // round 2 markers: a season begins at the store's dock
+import { onboarding } from './onboarding.js'; // r3: a new season is empty-handed until the staff talk
 
 const $ = (id) => document.getElementById(id);
 const DRIFT_RATE = 0.045;   // rad/s round the canoe
@@ -248,6 +250,7 @@ export class Title {
   }
   // "the aluminium canoe, two packs and a barrel"
   gearWords(pr) {
+    if (onboarding.noCanoe) return 'no gear yet'; // (r3: before the staff talk the dock is empty and the profile's kit a name only)
     let canoe = '';
     try { const k = pr.kit && pr.kit.canoe; canoe = k === 'kevlar' ? 'the Kevlar canoe' : k ? 'the aluminium canoe' : ''; } catch { canoe = ''; }
     const has = (id) => { try { return pr.has(id); } catch { return false; } };
@@ -365,7 +368,7 @@ export class Title {
     else if (season) e.hint.textContent = `The season${tripDays}`;
     else e.hint.textContent = '';
     const room = season && slots.usable ? slots.firstEmpty() : 0; // round A-D: an empty slot keeps the season under way
-    if (e.newHint) e.newHint.textContent = season ? (room ? `in slot ${room}: this season is kept` : pause ? '' : 'forgets the season under way') : `a fresh start, with $40 and the kit`;
+    if (e.newHint) e.newHint.textContent = season ? (room ? `in slot ${room}: this season is kept` : pause ? '' : 'forgets the season under way') : `a fresh start, with $40 and your own things`;
     e.newTrip.classList.toggle('current', !pause && !season);
     this.showRight(null);
   }
@@ -413,7 +416,10 @@ export class Title {
     else if (this.outfitter && this.outfitter.abandon) this.outfitter.abandon(this.modePick);
     else if (this.trip) this.trip.setMode(this.modePick);
     this.saver.clear(); this.saved = null;
-    const ok = await this.player.teleport(ep.x, ep.z);
+    // round 2 markers: afloat beside the store's dock (placeOf), not out at the put-in: the store can stand 780 m from it
+    // (Slim Lake), past where the arrival walks you in from
+    const pl = placeOf(ep.ep, this.world), inAt = pl && pl.dock ? pl.dock : ep;
+    const ok = await this.player.teleport(inAt.x, inAt.z);
     this.wizard.busy(false);
     this.busy = false;
     if (!ok) { this.wizard.show(0); this.el.status.textContent = `No open water near the ${ep.name} landing; try another.`; return; }

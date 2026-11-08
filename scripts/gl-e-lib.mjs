@@ -41,7 +41,7 @@ export async function seasonAt(page, { ep = 25, year = 2026, doy = 192, hours = 
     t.setPick(mode);
     await t.newSeason(e, { confirm: false, start: { year, doy } });
     // (the join: the home counter's first-visit talk is stream C's, tested by gl-c-test; here it is over)
-    if (g.onboarding && g.onboarding.pending()) g.onboarding.finish(g.onboarding.home, false);
+    if (g.onboarding && g.onboarding.pending()) { g.onboarding.give(); g.onboarding.finish(g.onboarding.home, false); } // (r3: the talk's gear and the loaned canoe first)
   }, { ep, year, doy, mode });
   await until(page, () => window.__game.title.state === 'game' && !window.__game.player.teleporting, null, 180000);
   await page.evaluate(({ year, doy, hours }) => { const g = window.__game; if (g.outfitter.open) g.outfitter.hide(); g.day.setClock(year, doy, hours); }, { year, doy, hours });

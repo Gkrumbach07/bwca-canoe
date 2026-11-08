@@ -117,6 +117,8 @@
 :is(.pp-spread, .pp) .pp-sort button.on { background: var(--pp-brown-deep); color: var(--pp-sheet); }
 :is(.pp-spread, .pp) .pp-sort button:not(.on):hover { color: var(--ink); background: rgba(120, 95, 60, .12); }
 :is(.pp-spread, .pp) .pp-index { min-height: 0; flex: 1 1 auto; overflow: auto; scrollbar-width: thin; scrollbar-color: rgba(138, 74, 36, .5) transparent; padding-right: 6px; display: flex; flex-direction: column; gap: 10px; }
+/* (r3 replay: more below: the foot of the list fades, so a cut row reads as "scroll on") */
+:is(.pp-spread, .pp) .pp-index.more { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 54px), rgba(0, 0, 0, .15)); mask-image: linear-gradient(to bottom, #000 calc(100% - 54px), rgba(0, 0, 0, .15)); }
 :is(.pp-spread, .pp) .pp-group { display: flex; align-items: baseline; gap: 10px; margin-top: 6px; font: 700 15px/1.2 var(--sc); letter-spacing: .12em; color: var(--pp-brown); }
 :is(.pp-spread, .pp) .pp-group::before { content: ''; flex: none; align-self: center; width: 13px; height: 13px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); background: var(--pp-brown-deep); box-shadow: inset 0 0 0 3.5px var(--pp-brown-deep), inset 0 0 0 7px var(--pp-sheet); }
 :is(.pp-spread, .pp) .pp-group span { font: italic 15px/1.2 var(--serif); letter-spacing: 0; color: var(--ink-soft); }
@@ -228,3 +230,53 @@
 :is(.pp-spread, .pp) .pp-foot.left { justify-content: flex-start; }
 :is(.pp-spread, .pp) .pp-foot { font-size: 12px; letter-spacing: .06em; }
 :is(.pp-spread, .pp) .pp-banner { background: rgba(120, 90, 50, .16); box-shadow: inset 0 0 0 1px rgba(120, 90, 50, .14); }
+
+/* r2: a ranger's ticket on the Tasks page: its line marked with a small pink slip, not a box; Pay under the slip */
+:is(.pp-spread, .pp) .pp-todo > .pp-tk { position: absolute; left: calc(var(--pp-margin) - 30px); top: 6px; width: 20px; height: 14px; rotate: -6deg; background: #f0cfc6; border: 1.2px solid #8a3a2c; border-radius: 1px;
+  background-image: linear-gradient(180deg, transparent 4px, rgba(138, 58, 44, .55) 4px 5px, transparent 5px 8px, rgba(138, 58, 44, .4) 8px 9px, transparent 9px); }
+:is(.pp-spread, .pp) .pp-todo.ticket .t { color: #8a2a1c; }
+:is(.pp-spread, .pp) .pp-todo.ticket .pay { color: #8a2a1c; }
+:is(.pp-spread, .pp) .pp-todo.ticket.paidnow { opacity: .55; transition: opacity 1.2s ease; }
+:is(.pp-spread, .pp) .pp-tkpay { display: flex; justify-content: center; margin: 16px 0 6px; }
+:is(.pp-spread, .pp) .pp-tkpay .stamp { font-size: 13px; padding: 8px 18px; background: #7a2a1e; border-color: #7a2a1e; }
+:is(.pp-spread, .pp) .pp-tkshort { text-align: center; margin-top: 14px; color: var(--map-red); }
+
+/* r3 B (2026-11-05): the guide's entries on the Tasks page. The owner: "The campaign and story related ones should kind
+   of be like written in a different color. Like I want to say gold, but I know that won't show up well. Or at least
+   have an icon next to it". The story's steps: a deeper amber-ochre ink (--pp-story, about 6:1 on --pp-sheet, measured by
+   scripts/r3-journal-test.mjs) and a small faceted gold gem in the margin, the locator's gem drawn small. Side stories:
+   a deep teal ink (--pp-side) and an open four-point star. The notices, the starter job and the tickets keep their
+   looks. Each open line's "what next" (.nx) is a pencilled line under it. */
+:root { --pp-story: #74480a; --pp-story-gem: #e0b043; --pp-side: #2b5658; }
+:is(.pp-spread, .pp) .pp-todo .nx { grid-column: 1 / -1; font-size: 18px; color: var(--pencil); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+:is(.pp-spread, .pp) .pp-todo .nx::before { content: '→ '; opacity: .7; }
+:is(.pp-spread, .pp) .pp-todo.k-story .t { color: var(--pp-story); font-weight: 700; }
+:is(.pp-spread, .pp) .pp-todo.k-story .nx { color: var(--pp-story); }
+:is(.pp-spread, .pp) .pp-todo.k-side .t, :is(.pp-spread, .pp) .pp-todo.k-side .nx { color: var(--pp-side); }
+:is(.pp-spread, .pp) .pp-todo.k-story.on .t { color: #5a3606; }
+:is(.pp-spread, .pp) .pp-todo.k-side.on .t { color: #1e4244; }
+:is(.pp-spread, .pp) button.pp-todo.k-story:hover .t { color: #5a3606; }
+:is(.pp-spread, .pp) button.pp-todo.k-side:hover .t { color: #1e4244; }
+:is(.pp-spread, .pp) .pp-gi { display: inline-block; position: relative; width: 18px; height: 20px; flex: none; }
+:is(.pp-spread, .pp) .pp-todo > .pp-gi { position: absolute; left: calc(var(--pp-margin) - 29px); top: 4px; }
+/* the gem: a cut diamond, a light facet over a deeper one, a dark rim (the gold alone would not read on the paper) */
+:is(.pp-spread, .pp) .pp-gi.gi-story { background: var(--pp-story); clip-path: polygon(50% 0, 100% 38%, 50% 100%, 0 38%); }
+:is(.pp-spread, .pp) .pp-gi.gi-story::after { content: ''; position: absolute; inset: 2px 2px 2.4px; clip-path: polygon(50% 0, 100% 38%, 50% 100%, 0 38%);
+  background: linear-gradient(115deg, rgba(255, 246, 205, .95) 0 32%, transparent 33%), linear-gradient(245deg, rgba(150, 95, 10, .5) 0 36%, transparent 37%), linear-gradient(180deg, transparent 37%, rgba(150, 95, 10, .35) 38%), var(--pp-story-gem); }
+/* the side story's star: an open four-point star in teal */
+:is(.pp-spread, .pp) .pp-gi.gi-side { color: var(--pp-side); }
+:is(.pp-spread, .pp) .pp-gi.gi-side svg { display: block; }
+:is(.pp-spread, .pp) .pp-todo.k-story.done .t, :is(.pp-spread, .pp) .pp-todo.k-side.done .t { text-decoration: line-through; text-decoration-thickness: 2px; opacity: .7; }
+/* a story step picked: a page written in the journal */
+:is(.pp-spread, .pp) .pp-quest { padding: 30px 18px 10px 22px; display: flex; flex-direction: column; gap: 12px; }
+:is(.pp-spread, .pp) .pp-quest.fresh { animation: pp-quest-in .5s ease-out; }
+@keyframes pp-quest-in { from { opacity: 0; translate: 0 6px; } }
+:is(.pp-spread, .pp) .pp-qkind { margin: 0; display: flex; align-items: center; gap: 10px; font: 700 13px/1.2 var(--sc); letter-spacing: .16em; color: var(--ink-soft); }
+:is(.pp-spread, .pp) .pp-quest.k-story .pp-qkind { color: var(--pp-story); }
+:is(.pp-spread, .pp) .pp-quest.k-side .pp-qkind { color: var(--pp-side); }
+:is(.pp-spread, .pp) .pp-qtitle { margin: 0; font: 600 28px/1.15 var(--serif); color: var(--ink); text-wrap: balance; }
+:is(.pp-spread, .pp) .pp-quest.k-story .pp-qtitle { color: var(--pp-story); }
+:is(.pp-spread, .pp) .pp-quest.k-side .pp-qtitle { color: var(--pp-side); }
+:is(.pp-spread, .pp) .pp-qnext { margin: 4px 0 0; font-size: 25px; line-height: 1.25; color: var(--pencil); transform: rotate(-.6deg); }
+:is(.pp-spread, .pp) .pp-qwhere { margin: 0; display: flex; align-items: center; gap: 8px; font: italic 17px/1.3 var(--serif); color: var(--ink-soft); }
+:is(.pp-spread, .pp) .pp-qwhere i { display: inline-flex; color: var(--pp-brown); }

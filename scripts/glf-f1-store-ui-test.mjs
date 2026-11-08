@@ -80,7 +80,7 @@ try {
   await shot(page, 'f1-wizard-sum');
   await page.click('#btn-start');
   await page.waitForFunction(() => { const g = window.__game; return g.title.state === 'game' && !g.player.teleporting && !!g.outfitter.visit; }, null, { timeout: 240000, polling: 250 });
-  await page.evaluate(() => { const g = window.__game; if (g.onboarding && g.onboarding.pending()) g.onboarding.finish(g.onboarding.home, false); if (g.outfitter.open) g.outfitter.hide(); window.__f1.step(60); });
+  await page.evaluate(() => { const g = window.__game; if (g.onboarding && g.onboarding.pending()) { g.onboarding.give(); g.onboarding.finish(g.onboarding.home, false); } /* (r3: the empty-handed start: the talk's gear and loaned canoe first) */ if (g.outfitter.open) g.outfitter.hide(); window.__f1.step(60); });
   const year = await page.evaluate(() => window.__game.day.year);
 
   // --- 1: the way up from the dock, at each outfitter ----------------------------------------------------------------

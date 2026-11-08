@@ -88,7 +88,7 @@ try {
     const g = window.__game, o = g.outfitter, d = g.npcs.dialogue, m0 = g.profile.money;
     o.openHot('counter', o.visit.landing);
     const talking = d.talking, said = [];
-    for (let i = 0; i < 6 && d.convo; i++) { said.push(d.convo.node.say); d.choose(0); await window.__glj.wait(30); }
+    for (let i = 0; i < 10 && d.convo; i++) { said.push(d.convo.node.say); d.choose(0); await window.__glj.wait(30); }
     const P = g.permits, held = P.held().map((p) => ({ id: p.id, ep: p.ep, abs: p.abs, from: p.from, price: p.price }));
     const inv = g.profile.inventory, pack = inv.containers.find((c) => c.item === 'waltpack');
     return { talking, said: said.length, done: g.onboarding.state.done, held, today: P.today, money: g.profile.money - m0, pack: pack && pack.where, inPack: pack ? pack.grid.map((e) => e.id) : [], counterOpen: o.open };

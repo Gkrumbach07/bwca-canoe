@@ -30,7 +30,7 @@ import { Ripples } from './wake.js';
 import { Wind } from './wind.js';
 import { Fishing } from './fishing.js';
 import { Energy, GULP } from './energy.js';
-import { Tasks } from './tasks.js';
+import { Tasks, siteFeature } from './tasks.js';
 import { Outfitter } from './outfitter.js';
 import { Settings, FpsCounter } from './settings.js';
 import { TripSaver } from './save.js';
@@ -62,6 +62,7 @@ import { CoopBoat } from './coop-boat.js'; // co-op phase 3 round 3: two canoes,
 import { CoopTrip } from './coop-trip.js'; // co-op phase 3, stream C: Adventure in co-op
 import { CoopNight } from './coop-night.js'; // co-op phase 3, stream A: the night together
 import { CoopSky } from './coop-sky.js'; // co-op phase 3, stream B: one sky (the host's wind, the weather's seed)
+import { CoopParties } from './coop-parties.js'; // co-op round 2: one set of parties (the host's seed and Traffic, everyone's camps)
 import { CoopAnim } from './coop-anim.js'; // co-op phase 3, stream B: a friend's figure does what they are doing
 import { inventory } from './inventory.js'; // fb A
 import { ITEMS, defineItem, itemDef, NEED } from './items.js'; // fb A (NEED: the fb4 join's room step)
@@ -90,9 +91,11 @@ import { attachTaskKinds } from './task-kinds.js'; // content A
 import { attachTaskKinds2 } from './task-kinds-2.js'; // gl-d: the board's new kinds (registered before any save is read)
 import { bear } from './bear.js'; // cons A
 import { bugs } from './bugs.js'; // cons C
+import { LIFE_ENV } from './poses.js'; // r2: the bugs out, for the people's idle
 import { record } from './record.js'; // round A-A
 import { slots } from './save.js'; // round A-D
 import { migrateSeason } from './migrate.js'; // d2 join
+import { migratePmas } from './migrate-pma.js'; // r2: the old saves' primitive areas
 import { kv } from './store.js';
 import { CULL } from './tiles.js'; // round A-C
 import { AutoWatch, prewarmPasses } from './quality.js'; // round A-C
@@ -111,7 +114,10 @@ import { Permits } from './permits.js'; // gl-a: permits
 import { PermitDesk } from './permit-desk.js'; // gl-a: the permit desk
 import { story } from './story-hooks.js'; // gl-c: the story's event bus and saved state
 import { onboarding } from './onboarding.js'; // gl-c: the home counter's first visit, the old gear
+import { starter } from './starter.js'; // the start round: each outfitter's first night out, the season's sky and its kind first days
 import { walt } from './walt.js'; // gl-c: the notebook in the old tent
+import { guide } from './guide.js'; // r3: the registry of what is on the go (the journal's Tasks, the tracker, the locator)
+import { tracker } from './tracker.js'; // r3 B: the task pop-ups on the left
 
 const palette = { zenith: 0x4c8fd8, horizon: 0xd6e6f2, ground: 0x9aa58a, sun: 0xffe9c4, fog: 0xc6dbe9, cloudTop: 0xfbf8f1, cloudBase: 0xa6bfd9 };
 
@@ -123,6 +129,7 @@ async function main() {
   // d2 join: a season made on another map release carried to this one's lake, site and trail numbers, before anything
   // reads it (migrate.js)
   await migrateSeason(world.meta, kv); // (the saves' store: store.js)
+  const pmaMigrated = migratePmas(kv, { meta: world.meta }); // r2: a season's primitive areas from the old made-up table to the real twelve, once
   // d1 names: the official names on the world's records before the tiles build (the trail signs read them): the sites'
   // USFS numbers, the portages' trails, rods and classes, the place names (names.js; the rest of it below)
   const named = await names.attach(world).catch((e) => { console.warn('d1 names', e); return null; });
@@ -342,6 +349,7 @@ async function main() {
   // hotspots leave E to a visitor you face (outfitter.people). Updated after the outfitter's prompt, in the frame below.
   const npcs = new People({ world, scene, player, day, hud, tasks, outfitter, profile, weather, registry: campsites, mat: canoe.rig.getObjectByProperty('isSkinnedMesh', true).material });
   outfitter.people = npcs;
+  npcs.camera = camera; // (r2 2 verify: a body changes hands only out of view)
   npcs.quiet = () => photo.raised; // the people say nothing while the camera is up (3B)
   weather.indoors = () => !!(outfitter.visit && outfitter.visit.inside); // hubs 3 join: no rain falling inside a store
   // polish B: the soundscape knows indoors too (audio.js): the wind, the trees, the shore and the birds through the walls,
@@ -361,6 +369,11 @@ async function main() {
   // and packs draw with the rig's material, so no program or light is added. Updated after the camera, below.
   const actorPool = typeof npcs.lend === 'function' ? { take: (look) => { const b = npcs.lend('actors'); if (b) b.wear(look); return b; }, give: (b) => npcs.giveBack(b) } : null;
   const actors = new Actors({ scene, ground: (x, z) => tiles.groundAt(x, z), world, water, ripples, material: canoe.material, lidMaterial: canoe.lid.material, pool: actorPool, reflectLayer: REFLECT_LAYER });
+  // r2 (NPC motion): the wind on the parties' canoes (their own physics near you), where your eyes are (a person near
+  // looks at you), and the bugs where you are (people swat at them)
+  actors.wind = wind;
+  actors.eye = (out) => out.set(player.x, (player.foot ? player.foot.y : player.altitude || 0) + 1.62, player.z);
+  { const upd = actors.update.bind(actors); actors.update = (dt, ...a) => { try { LIFE_ENV.bugs = (bugs.now && bugs.now.level) || 0; } catch { LIFE_ENV.bugs = 0; } upd(dt, ...a); }; }
 
   // the shell: settings (applied now and live), the trip saver, the title / pause screen
   const fps = new FpsCounter(renderer);
@@ -886,7 +899,7 @@ async function main() {
   const parties = new Parties({ world, profile, day });
   parties.attach({ registry: campsites, camp, player, camera, settings, inventory, fires });
   const partyCamps = new PartyCamps({ world, scene, tiles, fires, parties, people: npcs, player, day, camp, weather, wind });
-  npcs.extra = () => partyCamps.extras(); npcs.partyWord = (v) => partyCamps.word(v);
+  npcs.extra = () => partyCamps.extras(); npcs.partyWord = (v, fig) => partyCamps.word(v, fig);
   { const campUpdF = camp.update.bind(camp); camp.update = (dt) => { campUpdF(dt); parties.update(dt); partyCamps.update(dt); }; }
   // a party's greeting carries over the water (their speakers' hear: dialogue.js keeps a bark to 22 m of its speaker)
   { const distF = talk.distTo.bind(talk); talk.distTo = (sp) => { const d = distF(sp); return sp && sp.hear ? (d * 22) / sp.hear : d; }; }
@@ -929,6 +942,7 @@ async function main() {
   coop.g.more({ packs });
   window.__game.coopNight = new CoopNight(coop); // phase 3 stream A: the night together, one wake time (coop-night.js)
   window.__game.coopSky = new CoopSky(coop, { wind, weather }); // phase 3 stream B: the host's wind and weather seed (coop-sky.js)
+  window.__game.coopParties = new CoopParties(coop, { parties }); // co-op round 2: the same parties at the same sites on every screen
   window.__game.coopAnim = new CoopAnim(coop, { fishing, photo }); // phase 3 stream B: a friend’s jump, seat, crouch and rod; round 2: moves, hands, arms, line (coop-anim.js)
   // water: two rules (the owner, 2026-10-26: "shoudlt it require some water for mthe deharated meals and oatmeal" and "if
   // i fill water up without a tablet, it is instantly clean even tho warnign says its not"). Every dried meal and a cup
@@ -1041,11 +1055,13 @@ async function main() {
   // time: permits.js keeps what you hold (bwca-canoe:permits, per season), the calendar (each entry point's real quota
   // less the parties booked), the prices, the fines and the skip to a permit's day; permit-desk.js is its section of
   // the counter. A push-off takes the permit for that landing today (trip.js start), else it is day use, and still out
-  // after dark is a ranger's fine (permits.update). pma.js: the primitive areas a PMA permit camps off-site in.
+  // after dark is a ranger's fine (permits.update), a ticket in the book when the trip ends: paid from the journal's
+  // Tasks page (journal.permits), and till then the desk sells no overnight permit. pma.js: the primitive areas.
   {
     const permits = new Permits({ world, day, profile, trip, outfitter, energy, veil, hud, parties, player });
     permits.attach();
     trip.permits = permits;
+    journal.permits = permits; // r2: the tickets on the Tasks page
     const permitDesk = new PermitDesk({ permits, outfitter, world, day, profile });
     // stream B's counter sections (the join: the claims-hook fallback dropped, B's addDesk is there)
     outfitter.addDesk('permits', { order: 10, html: (l) => permitDesk.section(l.ep), act: (a, id, ev) => permitDesk.act(a, id, ev) });
@@ -1061,14 +1077,22 @@ async function main() {
     }
     // the moment (hints.js): once a season, near sunset on a day-use trip; and no "make camp" on one
     const dayUseNow = () => { const s = trip.state; return trip.active && trip.adventure && !!s.dayUse && !s.grandfathered && !s.fined; };
-    if (!MOMENTS.some((m) => m.id === 'dayuse')) MOMENTS.unshift({ id: 'dayuse', prio: 2, recur: 'once', text: 'Day use: out by dark, or a ranger fines you. Overnight needs a permit.' });
+    if (!MOMENTS.some((m) => m.id === 'dayuse')) MOMENTS.unshift({ id: 'dayuse', prio: 2, recur: 'once', text: 'Day use: out by dark, or a ranger writes you a ticket. Overnight needs a permit.' });
     const dueA = hints.due.bind(hints);
     hints.due = (id, rec) => {
       if (id === 'dayuse') { const ss = day.sunriseSunset, set = ss && Number.isFinite(ss.set) ? ss.set : 20.5; return dayUseNow() && day.hours >= set - 0.75 && day.hours < permits.duskOf(); }
       if ((id === 'evening' || id === 'dusk') && dayUseNow()) return false;
       return dueA(id, rec);
     };
-    Object.assign(window.__game, { permits, permitDesk });
+    // r2: the maps pick out a primitive area: the one chosen at the desk while the counter is open, else the one the
+    // trip under way's permit is for (map-render.js paintPmas focus)
+    const pmaFocus = () => {
+      const f = permitDesk.focusPma(); if (f) return f;
+      const s = trip.state, p = trip.active && s ? s.permit : null;
+      return p && p.kind === 'pma' && p.pma ? p.pma : null;
+    };
+    hud.pmaFocusFn = pmaFocus; outfitter.pmaFocusFn = pmaFocus;
+    Object.assign(window.__game, { permits, permitDesk, pmaMigrated });
   }
   // gl-b: outfitters, drives, pickups, roads (the game-loop round, stream B). Fourteen outfitters on entry points
   // (outfitters.js OUTFITTERS), the other forty-one trailheads (trailhead.js: a lot, a permit box, the sign); the truck
@@ -1095,7 +1119,7 @@ async function main() {
     const inLot = () => { const p = player, h = p.onFoot && !outfitter.open && !trip.active ? TH.trailheadAt(p.x, p.z) : null; return !!(h && h.where === 'lot'); };
     const atLanding = () => { const p = player, h = p.onFoot && trip.active && outfitter.trip.away ? TH.trailheadAt(p.x, p.z) : null; return !!(h && h.where === 'landing'); };
     const glbM = [
-      { id: 'gl-b:pickup', prio: TEACH, recur: 'once', text: 'Out at the lot. {E} on the sign calls a pickup.', due: inLot },
+      { id: 'gl-b:pickup', prio: TEACH, recur: 'once', text: 'At the trailhead. {E} on the sign calls a pickup.', due: inLot },
       { id: 'gl-b:landing', prio: TEACH, recur: 'once', text: 'A trailhead. Walk up to the lot to come out here.', due: atLanding },
     ];
     for (const m of glbM) if (!MOMENTS.some((q) => q.id === m.id)) { const { due, ...rest } = m; void due; MOMENTS.push(rest); }
@@ -1103,7 +1127,7 @@ async function main() {
     hints.due = (id, rec) => (glbDue.has(id) ? glbDue.get(id)() : dueB(id, rec));
     window.__game.outfitters = { OUTFITTER_EPS: OF.OUTFITTER_EPS, OUTFITTERS: OF.OUTFITTERS, isOutfitter: OF.isOutfitter, hostOf: (ep) => OF.hostOf(ep, world), reachOf: (ep) => OF.reachOf(ep, world),
       countryOf: (ep) => OF.countryOf(ep, world), roadKm: (a, b) => OF.roadKm(a, b, world), roadWay: (a, b) => OF.roadWay(a, b, world), premiumOf: OF.premiumOf, specialtyOf: OF.specialtyOf,
-      outfitterHomes: () => OF.outfitterHomes(world), homeTurf: (ep) => OF.homeTurf(ep, world) };
+      outfitterHomes: () => OF.outfitterHomes(world), placeOf: (ep) => OF.placeOf(ep, world), homeTurf: (ep) => OF.homeTurf(ep, world) };
     window.__game.trailhead = { trailheadLayout: TH.trailheadLayout, trailheadLayouts: TH.trailheadLayouts, trailheadAt: TH.trailheadAt, onTrailhead: TH.onTrailhead };
   }
   // gl-c: a new save and its first day (docs/build/game-loop-brief.md, stream C). The title's first step is a map of the
@@ -1139,7 +1163,7 @@ async function main() {
   // word heard by a creel survey, a visitor's gift kept when the tally pays their notice, the board's dot label, and
   // two moments.
   {
-    attachTaskKinds2({ tasks, photo, parties, partyCamps, moves, npcs, outfitter, trip });
+    attachTaskKinds2({ tasks, photo, parties, partyCamps, moves, npcs, outfitter, trip, pointer });
     record.weather = weather; record.parties = parties;
     // a party's word on their trip is a creel survey's answer: stream E's npcs.onTalk when it is there, else the camps'
     // word (party-camps.js) and the canoes' talk (party-moves.js)
@@ -1194,6 +1218,79 @@ async function main() {
     const dueE = hints.due.bind(hints);
     hints.due = (id, rec) => (id === storeParty.id ? npcs.partyHere() : dueE(id, rec));
   }
+  // The start round (2026-11-05; starter.js). The owner: "sometimes just randomly you can start and it will be raining …
+  // In the intro, it should be very easy and take you on a very simple route … each outfitter has a starter route and task
+  // that gets you a little bit more money." The weather is the season's own (its seed from the season), kind over the
+  // first trip (weather.js GENTLE); each outfitter's first night out is suggested once a season (at home as the first
+  // talk ends, elsewhere when you ask the keeper), its way pencilled on your map, a small job with it, the site held.
+  {
+    starter.attach({ tasks, profile, outfitter, npcs, onboarding, parties, weather, trip, day, world, hud, permits: window.__game.permits }); // (r2 join: the ticket gate)
+    onboarding.attach({ starter });
+    starter.sync();
+    // the keeper's first choice at an outfitter whose first night you have not heard
+    npcs.extraChoices = npcs.extraChoices || [];
+    npcs.extraChoices.push((v) => {
+      if (!v || !starter.available(v.ep) || onboarding.pending(v.ep)) return null;
+      const home = Number(v.ep) === starter.home;
+      return { text: home ? 'Somewhere easy for a night out?' : 'First time here. Somewhere easy for a night?', tag: 'new', go: () => starter.talk(v.ep, () => ({ say: 'Anything else?', filler: true, choices: npcs.kChoices(v) })) };
+    });
+    // the site suggested is yours from the hour it was suggested, while it stands (parties.js mine)
+    const mineS = parties.mine.bind(parties);
+    parties.mine = () => { const out = mineS(); try { for (const h of starter.holds()) { const o = out.find((q) => q.i === h.i); if (o) o.since = Math.min(o.since, h.since); else out.push(h); } } catch (e) { console.warn('starter: holds', e); } return out; };
+    const updS = outfitter.update.bind(outfitter);
+    outfitter.update = (dt) => { updS(dt); starter.update(dt); };
+    // the moments: the first paddle out says where the pencilled way is; new water says the keeper knows an easy night
+    const sAsk = { id: 'starter:ask', prio: 1, recur: 'once', text: 'New water. The keeper knows an easy first night: {E} to talk.' };
+    if (!MOMENTS.some((q) => q.id === sAsk.id)) MOMENTS.push(sAsk);
+    const dueS = hints.due.bind(hints);
+    hints.due = (id, rec) => {
+      if (id === sAsk.id) { const v = outfitter.visit; return !!(v && v.inside && Number(v.ep) !== starter.home && starter.available(v.ep) && !talk.talking && !outfitter.open); }
+      const r = dueS(id, rec);
+      if (id === 'start' && r) { let n = []; try { n = starter.notes(); } catch { n = []; } if (n.length) return { lv: 1, text: 'Your first night’s way is pencilled on your map: {M}.' }; }
+      return r;
+    };
+    window.__game.starter = starter;
+  }
+  // r3 contract (docs/build/r3-contract.md): the guide, one registry of what is on the go (the board's notices, the
+  // starter job, the ranger's tickets, the main path's steps), read by the journal's Tasks page, the pop-up tracker on the
+  // left and the golden locator. Worked out from its sources after the tasks each frame; nothing of it is saved.
+  {
+    guide.attach({ tasks, permits: window.__game.permits || null, onboarding, outfitter, player, profile, title });
+    const updG = tasks.update.bind(tasks);
+    tasks.update = (dt) => { updG(dt); try { guide.update(dt); } catch (e) { if (!guide.warnedU) { guide.warnedU = true; console.warn('guide', e); } } };
+    window.__game.guide = guide;
+  }
+  // ==== r3 A (start + onboarding): its one block goes below this line ====
+  // r3 A: the main path from the onboarding's saved state (onboarding.js guideSpecs: the talk, the food, the leeches, the
+  // canoe at the dock), in place of the guide's placeholder; a reload brings the same step back
+  guide.source('onboarding', () => onboarding.guideSpecs(guide));
+
+  // ==== r3 B (journal + tracker): its one block goes below this line ====
+  // r3 B: the journal's Tasks page draws the guide's entries (story steps in their amber ink, side stories in teal, each
+  // with its next line), and the pop-up tracker on the left says a task added or near, and the tutorial's step all along;
+  // while its card is up, I opens the journal at that task. Settings, HUD: "Task pop-ups" turns it off.
+  {
+    journal.guide = guide;
+    tracker.attach({ guide, settings, journal, hud, title, talk });
+    journal.taskPeek = () => tracker.peek();
+    const updT = tasks.update.bind(tasks);
+    tasks.update = (dt) => { updT(dt); try { tracker.update(dt); } catch (e) { if (!tracker.warnedU) { tracker.warnedU = true; console.warn('tracker', e); } } };
+    window.__game.tracker = tracker;
+  }
+
+  // ==== r3 C (golden locator): its one block goes below this line ====
+  // the golden locator (locator.js): a gem over what guide.marks() names, drawn after the camera has moved (through
+  // pointer.update, which runs behind the title card too: the shell hides it). Imported here, not at the top, so the
+  // three round-3 blocks merge without touching the import list.
+  {
+    const { locator } = await import('./locator.js');
+    locator.attach({ scene, camera, guide, world, talk, photo });
+    const updL = pointer.update.bind(pointer);
+    pointer.update = (dt, shell) => { updL(dt, shell); try { locator.update(dt, shell); } catch (e) { if (!locator.warnedU) { locator.warnedU = true; console.warn('locator', e); } } };
+    window.__game.locator = locator;
+  }
+
+  window.__game.siteFeature = siteFeature; // (scripts/r2-starter-routes.mjs: a site's kind of shore)
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
 
   // fb3 join: a NaN never freezes the game. Once (the join's test aimed at an undefined point: the heading was NaN for a few
@@ -1233,6 +1330,7 @@ async function main() {
   };
 
   const frame = (dt) => {
+    tiles.ground(player.x, player.z, camera.position); // r2 (NPC motion 2): the ground's changes first, so all stand on this frame's ground (tiles.js ground)
     wind.update(dt, day.hours);
     water.setWind(wind.dir.x, wind.dir.z, wind.speed);
     if (wind.puff > 0) water.uniforms.uRippleAmt.value = Math.min(1.35, water.uniforms.uRippleAmt.value + 0.4 * wind.puff); // a gust darkens the ripples (wind.js PUFF); the waves keep the steady wind

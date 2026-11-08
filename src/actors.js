@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { buildFigure } from './figure.js';
-import { buildHullGeometry, buildLidGeometry, buildPackGeometry, buildFarHullGeometry, HULL_PALETTES, PACK_AT, PACK2_AT, PACKS, SEATS, floorAt } from './hull.js';
+import { buildHullGeometry, buildLidGeometry, buildPackGeometry, buildFarHullGeometry, HULL_PALETTES, PACK_AT, PACK2_AT, PACKS, SEATS, floorAt, keelAt, HULL } from './hull.js';
 import { paddleMesher } from './gear.js';
-import { FLOAT_OFFSET, makeBody, makeGait, makeMoves, makeStroke, newState, placeFigure, wrapPi, swimPose, sitPose, updateIdle, workArms } from './poses.js';
+import { FLOAT_OFFSET, makeBody, makeGait, makeMoves, makeStroke, newState, placeFigure, wrapPi, swimPose, sitPose, updateIdle, workArms, makeLife, poseSnap, fadeStep } from './poses.js';
+import { PADDLE_PHYS, LIFE, CANOE } from './pace.js'; // r2: the parties' canoes near you paddle with the player's physics
 import { mulberry32 } from './rng.js';
 import { resample } from './props.js';
 
@@ -43,12 +44,18 @@ const FAR_SLOTS = 32;
 const WAKE_R = 150;            // m: the wake's flecks shed only this near the viewer
 const SWITCH_EVERY = 14;       // strokes on a side before the crew switch over (the bow calls it)
 const HULL_PIVOT = 0;          // a hull's pivot sits at the canoe frame's origin (FLOAT_OFFSET above the water)
+const PHYS_R = [400, 430];     // m (r2): a boat with its own hull physics within, its place on the plan beyond
+const LOOK_R = 7;              // m (r2): a person standing this near you looks at you
 const SEAT_ORDER = ['stern', 'bow', 'mid']; // p2 C: a third kneels in the middle, behind the yoke (a family's kid, a group's third)
 const MID_X = -0.42;
+const KEEL_A = 2.05;           // m (r2 2): where along the keel a hull by the bank is held off the ground (bow, stern; the middle too)
 const seatX = (seat) => (seat === 'stern' ? SEATS.stern.x : seat === 'bow' ? SEATS.bow.x : MID_X);
 
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const ease = (k, dt) => 1 - Math.exp(-k * dt);
+const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const hashStr = (str) => { let h = 2166136261; for (let i = 0; i < str.length; i++) h = Math.imul(h ^ str.charCodeAt(i), 16777619); return h >>> 0; };
+const _eye = new THREE.Vector3();
 const toPts = (pts) => (pts || []).map((p) => (Array.isArray(p) ? [p[0], p[1]] : [p.x, p.z]));
 // a move's world places for a figure posed at its own size, in a world scaled to it (bindFigure: a kid's steps)
 const sv = (p, s) => ({ x: p.x / s, y: p.y / s, z: p.z / s });
@@ -247,8 +254,9 @@ class FarHulls {
 
 // --- people and boats ----------------------------------------------------------------------------------------------
 class Person {
-  constructor(layer, { key, look = null, name = null } = {}) {
+  constructor(layer, { key, look = null, name = null, life = false } = {}) {
     this.layer = layer; this.key = key || `actor:${layer.seq++}`; this.look = look || tripperLook(layer.seq * 7 + 3); this.name = name;
+    this.lifeOn = !!life; // (r2: a person the game drives, not a friend: an idle with life, a look at you)
     this.x = 0; this.y = 0; this.z = 0; this.heading = 0; this.v = 0;
     this.state = newState({ mode: 'walk' });
     this.mode = 'stand';     // stand | walk | carry | crew | swim (co-op phase 3: a friend in the water, driven)
@@ -290,7 +298,8 @@ class Person {
   drive({ x, z, heading = this.heading, v = 0, mode = 'stand', pack = false, hull = 'aluminium', snap = false, anim = null, y = null }) {
     this.leaveBoat(); this.mover = null; this.ext = true; this.anim = anim;
     this.footY = Number.isFinite(y) ? y : null;
-    if (snap) this.heading = heading;
+    if (snap) { this.heading = heading; if (this.bind && this.bind.gait) this.bind.gait.heal(); this.fadeSnap = null; } // (r2: a jump: the feet planted afresh where they land)
+    else if (this.bind && this.bind.gait && Math.abs(x - this.x) + Math.abs(z - this.z) > 0.9) this.bind.gait.heal(); // (r2 2: and so for any step of over a metre in a frame, called a jump or not: a foot left planted two metres back had held the hips a metre under the ground)
     this.mode = mode === 'carry' ? 'carry' : mode === 'walk' ? 'walk' : mode === 'swim' ? 'swim' : 'stand';
     if (this.mode === 'swim') pack = false;
     this.hullColour = this.mode === 'carry' ? (HULL_PALETTES[hull] ? hull : 'aluminium') : null;
@@ -393,9 +402,17 @@ class Person {
     st.crouch = an ? an.crouch || 0 : 0;
     st.hustle = false; st.mode = this.mode === 'carry' ? 'carry' : 'walk';
     st.held = (this.anim && this.anim.held) || null; // (round 2: a hand with a thing in it hangs carrying it, under the canoe too)
+    st.carryFrom = (this.mode === 'carry' && this.anim && this.anim.carryFrom) || null; // (r2 2 verify: a lift or a set-down: poses.js carry)
     const s = B.s, F = B.frame, R = B.root, yb = (air && Number.isFinite(an.y) ? an.y : this.y) + 0.1;
-    F.position.set(this.x / s, yb / s, this.z / s); F.rotation.set(0, this.heading, 0);
-    if (F !== R) { R.position.set(this.x, yb, this.z); R.rotation.set(0, this.heading, 0); R.scale.setScalar(s); }
+    // (r2: standing, the half step or the turn on the spot of an idle with life; and a look at you, near)
+    const L = B.pb.life, px = this.x + (L ? L.ox : 0), pz = this.z + (L ? L.oz : 0), hd = this.heading + (L ? L.oh : 0);
+    if (this.lifeOn && this.layer.eye) {
+      const e = this.layer.eye(_eye), dx = e.x - this.x, dz = e.z - this.z, d = Math.hypot(dx, dz);
+      const ang = wrapPi(Math.atan2(-dz, dx) - hd);
+      B.pb.idle.watch = d < LOOK_R && Math.abs(ang) < 1.9 && raw < 0.3 && this.mode !== 'carry' ? { yaw: clamp(ang, -1.15, 1.15), pitch: clamp(Math.atan2(e.y - (this.y + 1.6), Math.max(0.4, d)), -0.4, 0.4) } : null;
+    }
+    F.position.set(px / s, yb / s, pz / s); F.rotation.set(0, hd, 0);
+    if (F !== R) { R.position.set(px, yb, pz); R.rotation.set(0, hd, 0); R.scale.setScalar(s); }
     // round 2: a vault or a climb, the player's own (poses.js makeMoves), the frame riding the move's path as theirs does
     const mv = an && an.mv && this.mode === 'walk' ? an.mv : null;
     if (mv) {
@@ -410,11 +427,12 @@ class Person {
     else B.gait.walk(dt, an ? an.mk || null : null, an ? an.fz || null : null);
     if (air) this.airN = (this.airN || 0) + 1; // (the rig: frames posed in the air)
     // round 2: the arms at a held job, eating or drinking, the camera up (poses.js workArms), eased in and out over the gait's
-    const want = an && an.arms && this.mode === 'walk' && !an.fz ? an.arms : null;
+    const want = an && an.arms && (this.mode === 'walk' || this.mode === 'stand') && !an.fz ? an.arms : null; // (r2 2: standing too: a push off the bank)
     if (want) { this.arms = { kind: want.kind, t: want.t }; }
     this.armsW = clamp((this.armsW || 0) + (want ? dt * 5 : -dt * 4), 0, 1);
     if (this.arms && this.armsW > 0.01) { workArms(B.pb, this.arms.kind, this.arms.t, this.armsW * this.armsW * (3 - 2 * this.armsW)); this.armsN = (this.armsN || 0) + 1; }
     else if (!want) this.arms = null;
+    fadeStep(B.body.fig, this.fadeSnap, dt); // (r2: out of a seat in the hull, the kneel eased into the stand)
   }
   // co-op phase 3: on a seat (poses.js sitPose), its top at world height top
   poseSit(dt, top) {
@@ -453,20 +471,29 @@ class Boat {
     crew.slice(0, 3).forEach((p, i) => this.seatCrew(p, SEAT_ORDER[i]));
     this.wakeAcc = 0;
     this.hidden = false; this.ext = null; // p2 C: hidden while carried over a trail; ext: driven from outside (drive())
+    this.sim = null; this.rock = { a: 0, v: 0 }; this.px = NaN; this.pz = NaN; // r2: the hull's own physics near you; its rocking
   }
+  // r2: a person's weight onto the gunwale or off it: the hull rocks (k rad/s of roll), and settles
+  impulse(k) { this.rock.v += k; }
   // p2 C: placed from outside, a frame at a time: { x, z, heading (the bow's, as the player's), v (m/s as seen) }; the
   // heading eases to it as a canoe turns (snap: at once)
   // co-op: exact (a remote player, already smoothed from the wire): the heading as given, not eased; stroke: { phase,
   // side, power } the paddler's own, so the stroke is theirs and not this layer's guess from the speed
   // co-op round 2: level, the water's level under the hull as the paddler's own screen has it (a creek's step, the
   // season's water), else the world's here
-  drive({ x, z, heading = this.heading, v = 0, snap = false, exact = false, stroke = null, level = null }) {
+  // r2: sim, the parties' canoes: (x, z, heading, v) is where their plan has the canoe now, aim a point ahead on its
+  // way, cruise the leg's steady speed (m/s seen), hold at rest there (the bank, a stop afloat). Within PHYS_R of you the
+  // hull paddles itself there with the player's own physics (simTick); beyond, it is placed there
+  drive({ x, z, heading = this.heading, v = 0, snap = false, exact = false, stroke = null, level = null, sim = false, aim = null, dock = false, cruise = 0, hold = false }) {
     this.mover = null; this.hidden = false; this.rest = null;
-    if (snap || !this.ext) { this.heading = heading; this.bobY = null; }
-    this.ext = { heading, v, exact, stroke, level: Number.isFinite(level) ? level : null }; this.x = x; this.z = z;
+    if (snap || !this.ext) { this.heading = heading; this.bobY = null; this.sim = null; if (sim) { this.x = x; this.z = z; } }
+    // (r2 2 verify: the aim copied: the parties hand every canoe the same scratch point, so each had steered at the last
+    // one's, the bow into the bank a canoe's length off her own slot and then slid sideways into it)
+    this.ext = { x, z, heading, v, exact, stroke, level: Number.isFinite(level) ? level : null, sim, aim: aim ? { x: aim.x, z: aim.z } : null, dock, cruise, hold };
+    if (!sim || !this.simOn) { this.x = x; this.z = z; }
     return this;
   }
-  hide() { this.hidden = true; this.ext = null; this.v = 0; return this; }
+  hide() { this.hidden = true; this.ext = null; this.v = 0; this.sim = null; this.simOn = false; return this; }
   seatCrew(p, seat) {
     p.leaveBoat(); p.mover = null; p.mode = 'crew'; p.boat = this; p.seat = seat; p.hullColour = null; p.pack = false;
     this.crew.push(p);
@@ -486,6 +513,16 @@ class Boat {
   }
   remove() { this.layer.drop(this); }
   tick(dt) {
+    // (r2: the parties' canoes near you paddle themselves to where the plan has them)
+    const simOn = !!(this.ext && this.ext.sim && !this.hidden && this.dist < (this.simOn ? PHYS_R[1] : PHYS_R[0]));
+    // (handed back to the plan: the way she was off it eased out over a few seconds, never a jump)
+    if (simOn !== !!this.simOn) { this.simOn = simOn; this.sim = null; this.goff = !simOn && this.ext ? { x: this.x - this.ext.x, z: this.z - this.ext.z, h: wrapPi(this.heading - this.ext.heading) } : null; }
+    if (!simOn && this.goff && this.ext && !this.hidden) {
+      const k = Math.exp(-Math.max(0, dt) * 0.6), G = this.goff; G.x *= k; G.z *= k; G.h *= k;
+      this.x = this.ext.x + G.x; this.z = this.ext.z + G.z;
+      if (Math.hypot(G.x, G.z) < 0.05) this.goff = null;
+    }
+    if (simOn) { this.simTick(dt); this.settle(dt); this.measure(dt); return; }
     if (this.ext) {
       // (p2 C) placed from outside: the heading eases round as a canoe turns
       const h0 = this.heading, e = wrapPi(this.ext.heading - this.heading);
@@ -513,6 +550,117 @@ class Boat {
       }
     }
     this.settle(dt);
+    this.measure(dt);
+  }
+  // the speed it is seen to go (r2: from how far it went, not what it was told)
+  measure(dt) {
+    if (Number.isFinite(this.px) && dt > 0) { const d = Math.hypot(this.x - this.px, this.z - this.pz) / dt; this.vSeen = d < 40 ? (this.vSeen || 0) + (d - (this.vSeen || 0)) * ease(10, dt) : this.vSeen || 0; if (this.simOn) this.v = this.vSeen; }
+    this.px = this.x; this.pz = this.z;
+  }
+  // r2: the hull's own physics (player.js updatePaddle's, pace.js PADDLE_PHYS): each stroke's thrust pulsed over its
+  // first half against the drag, so she surges on the stroke and glides between; the bow brought round by the stern's
+  // steering (the yaw rate eased toward what the strokes can turn her, so she swings, and keeps swinging a moment); the
+  // time-lapse she is seen at built as the stroke steadies, as the player's is; the wind's push. An autopilot paddles
+  // her as a player would: the bow at a point ahead on the plan's way (pure pursuit), the strokes harder when the plan
+  // is ahead of her and easier when it is behind, never placed. At rest (the bank, a stop) she is held where she lies.
+  simTick(dt) {
+    const E = this.ext, S = this.stroke, P = PADDLE_PHYS;
+    let m = this.sim;
+    const cruiseSeen = Math.max(E.cruise || 0, E.v || 0), bt = clamp(cruiseSeen / LIFE.cruise, 1, 9);
+    if (!m) { m = this.sim = { speed: 0, boost: 1, thr: 0, yawRate: 0, steer: 0 }; if (E.v > 0.3 && !E.hold) { m.boost = bt; m.speed = E.v / bt; S.power = 1; } this.heading = this.heading ?? E.heading; }
+    if (!(dt > 0)) return;
+    const gx = E.x - this.x, gz = E.z - this.z, gd = Math.hypot(gx, gz);
+    if (gd > 150 || bt > 8.9) { this.x = E.x; this.z = E.z; this.heading = E.heading; m.speed = E.v / bt; m.boost = bt; m.yawRate = 0; this.yawRate = 0; return; } // (fallen far behind, or a time-lapse past paddling: placed)
+    // (r2 2 verify: held only once by her place: well off it (left on a shore the plan's way passed, or come in short of
+    // her slot), she paddles there; held, she had been eased there however far, once 78 m in three seconds over a point)
+    const holding = (E.hold || (E.v || 0) < 0.05) && gd < 8, wayOff = !holding && E.hold;
+    let thr = 0, yawT = 0;
+    if (holding) {
+      // held where she lies (a hand on the bank, a paddle's draw): eased into her place, turned to lie as the plan has her
+      // (r2 2 verify: drawn in no faster than a paddle's draw takes her sideways, 0.7 m/s)
+      const k = gd > 1e-6 ? Math.min(ease(0.9, dt), (0.7 * dt) / gd) : 0;
+      this.x += gx * k; this.z += gz * k;
+      yawT = clamp(wrapPi(E.heading - this.heading) * 1.2, -0.6, 0.6);
+      m.speed *= Math.exp(-dt * 1.6);
+    } else {
+      // (the point ahead on the way; fallen well off the plan's place, or held off the bank, the plan's place itself: it is
+      // always on open water)
+      m.stuck = Math.max(0, (m.stuck || 0) - dt);
+      m.toG = m.toG ? gd > 7 : gd > 14;
+      const toG = m.toG || m.stuck > 0 || wayOff, ax = toG ? E.x : E.aim ? E.aim.x : E.x + Math.cos(E.heading) * 15, az = toG ? E.z : E.aim ? E.aim.z : E.z - Math.sin(E.heading) * 15;
+      // (steered as a paddler does: on where the bow will be in a moment, so she is straightened before she points there)
+      // (r2 2 verify: coming in to where she lies, the last metres: the bow brought round to lie as the plan has her and her
+      // way checked (a back stroke), so she comes to rest by her place alongside the bank. Steered at that point to the end,
+      // she had reached the bank bow on, half a turn off how she lies there, and then swung round on the spot with her crew)
+      const da = Math.hypot(ax - this.x, az - this.z), wantP = Math.atan2(-(az - this.z), ax - this.x), dk = E.dock && !toG ? 1 - sstep(3, 9, da) : 0;
+      const want = dk > 0 ? wantP + wrapPi(E.heading - wantP) * dk : wantP, e = wrapPi(want - this.heading);
+      if (dk > 0) m.speed *= Math.exp(-dt * 1.4 * dk);
+      m.steer += (clamp((e - 0.9 * m.yawRate) / 0.35, -1, 1) - m.steer) * ease(5, dt);
+      yawT = m.steer * P.yaw * (0.55 + 0.45 * clamp(m.speed / 0.72, 0, 1));
+      // the speed she wants: the plan's, and more while the plan is ahead of her bow (less when she is ahead of it); held
+      // to over a stroke or two (m.vAvg), not fought within each stroke's surge
+      const along = gx * Math.cos(this.heading) - gz * Math.sin(this.heading);
+      const vWant = Math.max(0, (E.v || 0) + clamp(along * 0.3, -0.6 * (E.v || 0), 4)), lifeWant = vWant / bt;
+      thr = clamp((lifeWant / LIFE.cruise) ** 2 + 1.6 * (lifeWant - (m.vAvg ?? m.speed)), 0, 1.5) * (1 - 0.75 * dk);
+      if (Math.abs(e) > 2.2 && m.speed < 0.3) thr = Math.min(thr, 0.25); // (turning round on the spot first)
+    }
+    m.thr = thr; m.vAvg = (m.vAvg ?? m.speed) + (m.speed - (m.vAvg ?? m.speed)) * ease(1.3, dt);
+    m.yawRate += (yawT - m.yawRate) * ease(3.5, dt);
+    this.heading = wrapPi(this.heading + m.yawRate * dt);
+    // the strokes: life's cadence, a little quicker hard on; the crew change sides every SWITCH_EVERY
+    const paddling = thr > 0.06, rate = P.strokeRate * CANOE.stroke * (0.85 + 0.2 * Math.min(thr, 1.3));
+    const phase0 = S.phase, prate = paddling || S.phase > 0.02 ? rate : 0;
+    if (paddling || S.phase > 0.02) {
+      const prev = S.phase;
+      S.phase = (S.phase + dt * rate) % 1;
+      if (prev < 0.5 && S.phase >= 0.5 && (S.count + 1) % SWITCH_EVERY === 0) S.side *= -1;
+      if (S.phase < prev) { S.count++; if (!paddling) S.phase = 0; }
+    }
+    S.power += ((paddling ? Math.min(1, 0.45 + thr) : 0) - S.power) * ease(6, dt);
+    // the thrust pulses and the drag, in steps of no more than 1/40 s (player.js)
+    const thrust = P.accel * thr, n = Math.max(1, Math.ceil(dt * 40)), h = dt / n;
+    for (let k = 0; k < n; k++) {
+      const ph = (phase0 + (k + 0.5) * h * prate) % 1;
+      m.speed += thrust * (paddling && ph < 0.5 ? Math.sin((ph / 0.5) * Math.PI) : 0) * h;
+      m.speed -= (m.speed * Math.abs(m.speed) * P.drag + m.speed * P.lin) * h;
+    }
+    // the time-lapse she is seen at (player.js's boost): built as the stroke steadies, eased off in a hard turn and at rest
+    const kb = holding ? 0 : sstep(0.35, 0.85, m.speed / LIFE.cruise) * (1 - 0.85 * sstep(0.35, 0.9, Math.abs(m.yawRate) / P.yaw));
+    const bw = 1 + (bt - 1) * kb;
+    m.boost += (bw - m.boost) * ease(bw > m.boost ? 1.1 : 3.5, dt);
+    const fx = Math.cos(this.heading), fz = -Math.sin(this.heading), vb = m.speed * m.boost;
+    let nx = this.x + fx * vb * dt, nz = this.z + fz * vb * dt;
+    // (r2 verify: fallen behind the plan, after a stop or the push-off, as the plan's time-lapsed way ran on ahead of a
+    // stroke still building: she is brought up along her own way a little more each second the further back she is, so
+    // she trails it by twenty-odd metres at worst. She had been snapped onto it 60 m ahead, 130 m from you, in view)
+    if (!holding) { const al = gx * fx + gz * fz; if (al > 12) { const k = 1 - Math.exp(-dt * 0.02 * (al - 12)), d = Math.min(al * k, Math.max(4, 0.8 * (E.v || 0)) * dt); nx += fx * d; nz += fz * d; } } // (never a zip: at most 0.8 of the plan's speed more)
+    // the wind: pushed downwind, the bow off it (time-lapsed with the hull, as the player's)
+    const Wd = this.layer.wind;
+    if (Wd && Wd.dir) {
+      const U = Wd.gustSpeed ?? Wd.speed ?? 0, d = 0.022 * U * dt * m.boost;
+      nx += Wd.dir.x * d; nz += Wd.dir.z * d;
+      this.heading += Math.sin(wrapPi(Math.atan2(-Wd.dir.z, Wd.dir.x) - this.heading)) * 0.004 * U * dt;
+    }
+    // (never up the bank: a step that would take her within a metre of the shore is not taken, and she loses way: her
+    // steering brings her round to where the plan has her, out on the water)
+    const w = this.layer.world;
+    if (!holding && w && w.shoreAt && w.shoreAt(nx, nz) > -1.0 && w.shoreAt(nx, nz) > w.shoreAt(this.x, this.z)) {
+      // (r2 2 verify: glancing off it: the step's part along the shore kept, the part into it lost, as a hull scrapes along a
+      // bank; she had stopped dead there, held against it while the plan ran on, then been thrown after it. Only if that
+      // too would take her in does she lose all way)
+      const s0 = w.shoreAt(this.x, this.z), gxs = w.shoreAt(this.x + 1, this.z) - w.shoreAt(this.x - 1, this.z), gzs = w.shoreAt(this.x, this.z + 1) - w.shoreAt(this.x, this.z - 1), gl = Math.hypot(gxs, gzs);
+      let ok = false;
+      if (gl > 1e-4) {
+        const ux = gxs / gl, uz = gzs / gl, sx = nx - this.x, sz = nz - this.z, into = sx * ux + sz * uz, tx = this.x + sx - ux * Math.max(0, into) - ux * 0.02, tz = this.z + sz - uz * Math.max(0, into) - uz * 0.02;
+        const s1 = w.shoreAt(tx, tz);
+        if (!(s1 > -1.0 && s1 > s0)) { nx = tx; nz = tz; ok = true; m.speed *= Math.exp(-dt * 1.2); }
+      }
+      if (!ok) { nx = this.x; nz = this.z; m.speed *= Math.exp(-dt * 3); }
+      m.stuck = 1.5;
+    }
+    this.x = nx; this.z = nz;
+    this.yawRate = m.yawRate;
+    this.boost = m.boost;
   }
   // on the water: the level, the swell under the hull (three points along the keel), the roll of the strokes
   settle(dt) {
@@ -524,10 +672,31 @@ class Boat {
     if (!lc || Math.abs(lc.x - this.x) + Math.abs(lc.z - this.z) > 4) this.lvl = { x: this.x, z: this.z, v: L.levelAt(this.x, this.z) };
     const given = this.ext && this.ext.level, level = Number.isFinite(given) ? given : this.lvl.v, full = !!this.near || this.dist < 260, w = (a) => (full ? L.waveAt(this.x + f.x * a, this.z + f.z * a) : 0);
     const hb = w(2), hs = w(-2), hm = w(0);
-    const y = level + FLOAT_OFFSET + (hb + hs + hm) / 3, pitch = Math.atan2(hb - hs, 4) * 0.6 + this.v * 0.01;
-    const roll = this.yawRate * 0.1 + 0.012 * this.stroke.power * Math.sin(this.stroke.phase * Math.PI * 2);
+    let y = level + FLOAT_OFFSET + (hb + hs + hm) / 3, pitch = Math.atan2(hb - hs, 4) * 0.6 + this.v * 0.01;
+    // r2 2: a hull by the bank rests on the ground under her where it rises over her keel: pulled in bow first, the bow up
+    // the bank and the stern afloat (she had lain level with the bank's ground over her waterline, 0.4 to 1 m at the bow)
+    let nb = -Infinity, ns = -Infinity, nm = -Infinity;
+    if (full && this.ext && this.ext.sim && L.ground && L.world && L.world.shoreAt && L.world.shoreAt(this.x, this.z) > -7) { // (the parties' own: a friend's canoe lies as their screen has it)
+      const need = (a) => L.ground(this.x + f.x * a, this.z + f.z * a) - keelAt(a / (HULL.L / 2)) + 0.01; // (the root's height that keeps her keel there over it)
+      nb = need(KEEL_A); ns = need(-KEEL_A); nm = need(0);
+      if (Math.max(nb, ns, nm) > y) {
+        const yb = Math.max(y, nb), ys = Math.max(y, ns), sl = clamp((yb - ys) / (2 * KEEL_A), -0.35, 0.35);
+        // (r2 2 verify: each end held over its own ground at the slope she is turned to: a bank steeper than the 0.35 she may
+        // take had left the bow's keel in it (0.15 m), as the ends' middle height alone does once the slope is clamped)
+        const sn = sl / Math.hypot(1, sl);
+        y = Math.max(yb - sn * KEEL_A, ys + sn * KEEL_A, nm); pitch = -Math.atan(sl); // (placeRoot turns by -pitch: the bow up for a slope up to it)
+        this.beached = sl;
+      } else this.beached = 0;
+    }
+    // (r2: and the rock of someone stepping in or out, a damped spring)
+    const rk = this.rock; if (dt > 0) { rk.v += (-30 * rk.a - 3.2 * rk.v) * dt; rk.a += rk.v * dt; rk.a = clamp(rk.a, -0.2, 0.2); }
+    const roll = this.yawRate * 0.1 + 0.012 * this.stroke.power * Math.sin(this.stroke.phase * Math.PI * 2) + rk.a;
     if (this.bobY === null || !(dt > 0) || !Number.isFinite(this.bobY)) { this.bobY = y; this.pitch = pitch; this.roll = roll; }
-    else { const k = ease(5, dt); this.bobY += (y - this.bobY) * k; this.pitch += (pitch - this.pitch) * k; this.roll += (roll - this.roll) * k; }
+    else { const k = ease(5, dt); this.bobY += (y - this.bobY) * k; this.pitch += (pitch - this.pitch) * k; this.roll += (roll - this.roll) * k + (rk.a - this.rockWas || 0); }
+    // (r2 2 verify: eased, she had lagged the bank she runs up or swings over (her bow 0.3 m into it coming in, 0.7 m the
+    // frame a finer ground came in under her): never lower than keeps her keel on the ground, at the pitch she has)
+    if (nb > -Infinity) { const sp = KEEL_A * Math.sin(this.pitch), req = Math.max(nb + sp, ns - sp, nm); if (this.bobY < req) this.bobY = req; }
+    this.rockWas = rk.a;
     this.y = Number.isFinite(this.bobY) ? this.bobY : level + FLOAT_OFFSET;
   }
   placeRoot() {
@@ -552,6 +721,7 @@ class Boat {
       const f = B.pb.paddler; f.scale.setScalar(1);
       placeFigure(B.pb, seatX(p.seat), 0, 0);
       B.stroke.pose(dt, B.paddle);
+      fadeStep(B.body.fig, p.fadeSnap, dt); // (r2: from the step in over the gunwale, eased into the kneel)
       // (p2 C: a kid kneels smaller, the paddle with them: the pose made full size, then figure and paddle shrunk about
       // the seat, so the hands keep the grip)
       const k = clamp((p.look && p.look.wear && p.look.wear.scale) || 1, 0.6, 1);
@@ -660,7 +830,7 @@ export class Actors {
     p.state = newState({ mode: crew ? 'paddle' : p.mode === 'carry' ? 'carry' : 'walk' });
     // (round 2: the person's own ground, a friend's rock or deck under their feet)
     const ground = s === 1 ? (x, z) => p.groundAt(x, z) : (x, z) => p.groundAt(x * s, z * s) / s;
-    const pb = makeBody(body.fig, frame, p.state, { ground });
+    const pb = makeBody(body.fig, frame, p.state, { ground, life: p.lifeOn && !crew ? makeLife(hashStr(p.key)) : null });
     const B = { body, pb, root, frame, s, kind: crew ? 'crew' : 'foot', gait: null, stroke: null, paddle: null, packMesh: null, moves: null };
     if (crew) {
       B.stroke = makeStroke(pb, { seatX: seatX(p.seat) });
@@ -722,6 +892,10 @@ export class Actors {
     const t0 = performance.now();
     if (!(dt >= 0)) dt = 0;
     if (this.pool.tick) this.pool.tick();
+    // (r2 2 verify: how far each is before they move: a hull shown again (set down off a carry, out from the camp) had
+    // ticked its first frame on the distance of where it last was, kilometres off, so not lying on the bank: 0.4 m of it
+    // through the ground that frame)
+    for (const b of this.boats) b.dist = Math.hypot(b.x - vx, b.z - vz);
     for (const b of this.boats) b.tick(dt);
     for (const p of this.people) p.tick(dt);
     const fl = Math.hypot(fx, fz), pri = (x, z, d) => (fl > 0 && (x - vx) * fx + (z - vz) * fz < -0.2 * d * fl ? 3 * d : d);
@@ -730,7 +904,7 @@ export class Actors {
     // the near hulls: boats within 250 m and carriers within a figure's reach, nearest first, six at most
     const hullWant = [];
     for (const b of this.boats) if (!b.hidden && b.dist < (b.near ? NEAR_R[1] : NEAR_R[0])) hullWant.push(b);
-    for (const p of this.people) if (p.mode === 'carry' && p.dist < (p.hull ? FIG_R[1] : FIG_R[0])) hullWant.push(p);
+    for (const p of this.people) if (p.mode === 'carry' && !p.hidden && p.dist < (p.hull ? FIG_R[1] : FIG_R[0])) hullWant.push(p);
     hullWant.sort((a, b) => a.pri - b.pri);
     const keepH = new Set(hullWant.slice(0, NEAR_HULLS));
     for (const a of [...this.boats, ...this.people]) if ((a.near || a.hull) && !keepH.has(a)) this.freeHull(a);
@@ -738,7 +912,7 @@ export class Actors {
     // the figures: within 60 m (kept to 66), a boat's crew only with its hull drawn, nearest first, eight at most
     // (a boat's crew all together or none, so no hull goes by with half its crew)
     const units = [];
-    for (const p of this.people) if (!p.boat && p.dist < (p.bind ? FIG_R[1] : FIG_R[0])) units.push({ pri: p.pri, ps: [p] });
+    for (const p of this.people) if (!p.boat && !p.hidden && p.dist < (p.bind ? FIG_R[1] : FIG_R[0])) units.push({ pri: p.pri, ps: [p] }); // (r2 2: hidden: the camp has them)
     for (const b of this.boats) if (b.near && !b.hidden && b.crew.length && b.dist < (b.crew.some((c) => c.bind) ? FIG_R[1] : FIG_R[0])) units.push({ pri: b.pri, ps: b.crew });
     units.sort((a, b) => a.pri - b.pri);
     // (p2 C: as many as the pool has free besides those already drawn: a shared pool, npcs.js's eight, lends what the
@@ -748,7 +922,13 @@ export class Actors {
     for (const u of units) if (figWant.length + u.ps.length <= cap) figWant.push(...u.ps);
     const keepF = new Set(figWant);
     for (const p of this.people) {
-      if (p.bind && (!keepF.has(p) || (p.bind.kind === 'crew') !== (p.mode === 'crew' && !!p.boat) || (p.bind.kind === 'crew' && p.bind.root !== (p.boat && p.boat.root)))) this.unbind(p);
+      if (p.bind && (!keepF.has(p) || (p.bind.kind === 'crew') !== (p.mode === 'crew' && !!p.boat) || (p.bind.kind === 'crew' && p.bind.root !== (p.boat && p.boat.root)))) {
+        // (r2: into the hull or out of it in view: the pose it had kept, to ease the new one from)
+        const swap = keepF.has(p) && (p.bind.kind === 'crew') !== (p.mode === 'crew' && !!p.boat);
+        p.fadeSnap = swap ? poseSnap(p.bind.body.fig, p.fadeSnap) : null;
+        if (p.fadeSnap) p.fadeSnap.dur = 0.5;
+        this.unbind(p);
+      }
     }
     for (const u of units) {
       if (!keepF.has(u.ps[0])) continue;

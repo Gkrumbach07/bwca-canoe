@@ -20,7 +20,7 @@
 //
 // Permits (the game-loop round, stream A, permits.js): a push-off takes the permit you hold for that landing and that
 // day (permits.forTrip, then used), and without one the trip is day use (`dayUse`: still out after dark, a ranger's
-// fine, permits.js checkDusk). `permit` is the paper as it was used ({ id, kind, ep, abs, pma, from, price }); the
+// fine, permits.js checkDusk, written up as a ticket when the trip ends or is taken back: permits.issue). `permit` is the paper as it was used ({ id, kind, ep, abs, pma, from, price }); the
 // 'exit' outcome carries { dayUse, permitId }. A trip comes in at any entry point (stream B's trailheads too), and only
 // an outfitter's landing makes an outfitter known.
 //
@@ -41,6 +41,7 @@ import { kv } from './store.js'; // the saves' store (IndexedDB, read into memor
 import { save } from './save.js';
 import { plural } from './hud.js';
 import { clockOf } from './pace.js';
+import { nearWords } from './outfitters.js'; // round 2: an outfitter is near an entry point, not one by number
 
 const DOC_KEY = 'bwca-canoe-trip';  // the outfitter's document
 const BOOK = 'logbook';             // save.js namespace
@@ -176,7 +177,7 @@ export class Trip {
     const l = this.landing(ep);
     this.fresh = ep; // the counter greets a first visit (outfitter.js)
     this.log('known', { ep });
-    if (l) this.say(`${l.name} · entry point ${ep}. You know this outfitter now: food here, and a board of its own.`, 7);
+    if (l) { const near = nearWords(ep, this.world); this.say(`${l.name}${near ? `, ${near}` : ''}. You know this outfitter now: food here, and a board of its own.`, 7); }
     return true;
   }
 
@@ -217,9 +218,11 @@ export class Trip {
     // the permit it took goes back in your pocket (still good today; a day gone, it lapses)
     const pm = s.permit, kept = !!(pm && this.permits && typeof this.permits.unuse === 'function' && this.permits.unuse(pm.id) && this.permits.held().some((p) => p.id === pm.id));
     const out = { permit: pm ? { ...pm } : null, kept, dayUse: !!s.dayUse, fined: !!s.fined };
+    if (out.fined) this.issueTickets();
     s.active = false; s.camp = null; s.outcome = null; s.log = []; s.permit = null; s.dayUse = false; s.fined = false;
     return out;
   }
+  issueTickets() { const P = this.permits; try { return P && typeof P.issue === 'function' ? P.issue() : 0; } catch (e) { console.warn('trip: the ticket', e); return 0; } }
   abandon() { return this.active ? this.close('abandoned', 'a new season begun', null) : null; }
   close(k, why, ep) {
     const s = this.state, d = this.day, st = this.stats;
@@ -234,6 +237,7 @@ export class Trip {
       permit: s.permit ? { id: s.permit.id, kind: s.permit.kind } : null, dayUse: !!s.dayUse, fined: !!s.fined,
     });
     s.active = false; s.camp = null;
+    this.issueTickets(); // (r2: you came back: the ranger's fine on it is a ticket now, before the tally reads the log)
     this.log('exit', { outcome: s.outcome });
     this.saveBook();
     return s.outcome;

@@ -140,3 +140,24 @@ Lake One stays 104; the lakes and ponds NHDPlus HR adds come after every v8 id. 
   of river channel (Basswood River, South Kawishiwi River) now under the lake beside them, and the unnamed pond
   `way/49614800`, which NHDPlus HR draws as part of Gabimichigami Lake.
 - `migrate-check.mjs` takes `--v8` too.
+
+## The primitive areas (not a map release)
+
+Until 4f5145d (2026-11-05) the ids `pma-1` … `pma-12` meant twelve made-up primitive areas (`scripts/gl-a-pma.mjs`);
+since then they mean the Forest Service's twelve (`src/pma.json`). Only dev builds of the game-loop branch ever ran
+the old table. `src/migrate-pma.js` carries a season's ids once, at boot, right after `migrateSeason`:
+
+- **The stamp.** `bwca-canoe:permits` `pmaSet: 2`. A new season is born with it (permits.js); a stamped season is
+  never touched.
+- **Old or new?** An unstamped season is judged by its own words: the names its trail-survey notices carry (the two
+  tables share no name), and whether its PMA permits are for the area its desk offered first under the old table or the
+  new. With nothing to tell them apart, a dev host (localhost, `*.test`) takes it as old, any other host (Pages) as new.
+- **The mapping** (`src/migrate/pma-v1.json`: the old ids, names and centres): the real area holding the old centre,
+  else the nearest within 8 km, else none. pma-2 → pma-1, 3 → 3, 4 → 4, 5 → 11, 6 → 6, 7 → 12, 8 → 7, 9 → 8,
+  11 → 10; pma-1, pma-10 and pma-12 have none.
+- **What moves.** Held, used and lapsed permits and the trip under way's permit: mapped, or an overnight permit at the
+  same entry point and day when the area has none (`pmaWas` keeps the old name); a held one gets one line at the desk
+  ("The Forest Service redrew the primitive areas …", `permits.takeRedrawn`). A survey notice goes to its real area
+  (name, key, words, hint) when its unwalked marks lie inside it, or when it is done; otherwise it leaves the board,
+  with no penalty.
+- **The check:** `scripts/r2-pma-test.mjs` (an old-shaped save written through the game's store, the page reloaded).

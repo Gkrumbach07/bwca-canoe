@@ -38,6 +38,7 @@
 import { mulberry32, hash2 } from './rng.js';
 import { PREMIUM_BY_HOST, SPECIALTY } from './outfitter-kit.js';
 import { miles, fmtDepth } from './units.js';
+import PLACES from './outfitter-places.json'; // round 2 markers: where each store stands (scripts/r2-outfitter-places.mjs)
 
 const TROUT_WATER = 20;      // fishing.js bites lake trout only where the lake is sounded this deep (m)
 const DEEP_REACH = 12000;    // m: deep lakes looked for
@@ -98,6 +99,43 @@ export function hostOf(ep, world = null) {
 export function reachOf(ep, world = null) { const h = hostOf(ep, world), o = OF_BY_EP.get(h); return o ? [o.ep, ...o.reach] : []; }
 export function countryOf(ep, world = null) { const o = OF_BY_EP.get(hostOf(ep, world)); return o ? o.country : 'gentle'; }
 export function outfitterSet(ep) { return OF_BY_EP.get(Number(ep)) || null; }
+
+// --- where an outfitter stands (round 2, markers) ---------------------------------------------------------------------
+// The owner, 2026-11-05: "the map has the outfitter location a lot of times just like in the middle of the water. So you
+// get spawned there ... we need to place the points on our map and where we get spawned for those after we've placed the
+// buildings ... when you have an outfitter mapped, it doesn't need to be joined with the entry point that it's on." An
+// entry point's own spot is the put-in, out on the water; the store is laid out from the ground up the shore from it
+// (props.js landingPlan, storeSite), 20 to 100 m off and, at Slim Lake (6), 780 m along the lake. placeOf(ep, world) is
+// that store as built, the one place everything locates an outfitter by: the maps' store marker, the start map's pins
+// (outfitterHomes), a season's start, a ride's or a pickup's arrival (dock), the permit desk's distances.
+//   placeOf(ep, world) → { ep, name, store {x, z}, door {x, z, heading}, steps {x, z}, dock {x, z} (the water beside the
+//     dock, where a canoe is tied and an arrival comes in), deck {x, z}, dockHeading, nearEp { ep, name, x, z }, source:
+//     'table' (src/outfitter-places.json, for this release) | 'built' (a store built this session: another release) |
+//     'entry' (neither: the entry point's own spot) } or null for an entry point with no outfitter
+// notePlace(L) is props.js telling a store's layout as it is built (used only where the table is not for the release).
+const LIVE_PLACES = new Map();
+const xz = (a) => (a ? { x: a[0], z: a[1] } : null);
+export function placesFor(world) { const b = world && world.meta && world.meta.source ? world.meta.source.baked : null; return !!(b && PLACES && PLACES.for === b); }
+export function notePlace(L) {
+  if (!L || !OF_BY_EP.has(Number(L.ep))) return;
+  LIVE_PLACES.set(Number(L.ep), { store: { x: L.centre.x, z: L.centre.z }, door: { x: L.door.x, z: L.door.z, heading: L.door.heading }, steps: L.stepsFoot ? { x: L.stepsFoot.x, z: L.stepsFoot.z } : null,
+    dock: L.dockSide ? { x: L.dockSide.x, z: L.dockSide.z } : null, deck: L.dockDeck ? { x: L.dockDeck.x, z: L.dockDeck.z } : null, dockHeading: L.dockHeading });
+}
+export function placeOf(ep, world) {
+  const n = Number(ep && typeof ep === 'object' ? ep.ep : ep);
+  if (!OF_BY_EP.has(n)) return null;
+  const e = world && world.entryPoints ? world.entryPoints.find((q) => q.ep === n) : null;
+  const nearEp = e ? { ep: n, name: e.name, x: e.x, z: e.z } : { ep: n, name: '', x: NaN, z: NaN };
+  const t = placesFor(world) ? PLACES.places[n] : null;
+  if (t) return { ep: n, name: outfitterName(n), store: xz(t.store), door: { x: t.door[0], z: t.door[1], heading: t.door[2] }, steps: xz(t.steps), dock: xz(t.dock), deck: xz(t.deck), dockHeading: t.dockHeading, nearEp, source: 'table' };
+  const L = LIVE_PLACES.get(n);
+  if (L) return { ep: n, name: outfitterName(n), ...L, nearEp, source: 'built' };
+  if (!e) return null;
+  const at = { x: e.x, z: e.z };
+  return { ep: n, name: outfitterName(n), store: at, door: { ...at, heading: 0 }, steps: at, dock: at, deck: at, dockHeading: 0, nearEp, source: 'entry' };
+}
+// the outfitter's words for where it is: "near entry point 6, Slim Lake" (never a bare number for its name)
+export function nearWords(ep, world) { const p = placeOf(ep, world); return p && p.nearEp ? `near entry point ${p.nearEp.ep}${p.nearEp.name ? `, ${p.nearEp.name}` : ''}` : ''; }
 
 // --- the roads --------------------------------------------------------------------------------------------------------
 // A small road graph: each road an ordered line of waypoints from its town ([x, z] in the world's metres, from latitude
@@ -833,13 +871,14 @@ export function homeTurf(ep, world) {
 // what is sold only at an outfitter (outfitter-kit.js), and the kind of thing it sells 15 % under (null elsewhere)
 export function premiumOf(ep) { return (PREMIUM_BY_HOST[Number(ep)] || []).slice(); }
 export function specialtyOf(ep) { const sp = SPECIALTY[Number(ep)]; return sp ? { ...sp } : null; }
-// The outfitters as homes (the start map, stream C): each with its place, its country, the entry points and lakes of
+// The outfitters as homes (the start map, stream C): each at its store (x, z: the door; placeOf), with its place, its country, the entry points and lakes of
 // its reach and a line about its keeper
 export function outfitterHomes(world) {
   return OUTFITTER_EPS.map((n) => {
     const e = epRec(world, n), p = e ? outfitterProfile(e, world) : null; if (!p) return null;
     const lakes = [...new Set(reachOf(n, world).map((r) => { const q = epRec(world, r); return q ? lakeNameOf(world, lakeRec(world, q.lake)) || q.name : null; }).filter(Boolean))];
-    return { ep: n, name: p.name, place: p.place, x: e.x, z: e.z, kind: p.kind, kindWords: p.kindWords, country: p.country, countries: p.countries, gentle: p.gentle, reach: reachOf(n, world), lakes,
+    const pl = placeOf(n, world); // round 2 markers: the pin at the store's door, not out on the water at the put-in
+    return { ep: n, name: p.name, place: p.place, x: pl.door.x, z: pl.door.z, store: pl.store, door: pl.door, dock: pl.dock, nearEp: pl.nearEp, near: nearWords(n, world), kind: p.kind, kindWords: p.kindWords, country: p.country, countries: p.countries, gentle: p.gentle, reach: reachOf(n, world), lakes,
       keeper: { name: p.keeper.name, line: `${p.keeper.name}: ${p.keeper.mannerWords}.`, hello: p.keeper.lines.hello }, road: roadOf(n) };
   }).filter(Boolean);
 }

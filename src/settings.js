@@ -38,6 +38,7 @@ export const DEFAULTS = {
   cornerMap: false,     // a small map that stays up, the old way
   journalLines: true,   // the notes at the bottom left
   keyHints: true,       // the key on the action line
+  tracker: true,        // r3 B: the task pop-ups on the left (tracker.js): a task added or near, and the first steps
   hudScale: 1,          // 0.8..1.4
   cbMarks: false,       // shape as well as colour on the balance arc and the tension line
   // developer
@@ -80,6 +81,7 @@ export const SECTIONS = [
     { key: 'cornerMap', label: 'Corner sheet of the map', desc: 'A small map that stays up, the old way', type: 'toggle' },
     { key: 'journalLines', label: 'Journal lines', inline: '· the notes at the bottom left', type: 'toggle' },
     { key: 'keyHints', label: 'Key hints on the action line', type: 'toggle' },
+    { key: 'tracker', label: 'Task pop-ups', desc: 'A card on the left when a task is added or close by, and through the first steps', type: 'toggle' },
     { key: 'hudScale', label: 'HUD size', desc: 'For a TV across the room', type: 'range', min: 0.8, max: 1.4, step: 0.1, format: (v) => `${v.toFixed(1)}×` },
     { key: 'cbMarks', label: 'Colour-blind marks', desc: 'Adds shape to the balance arc and the tension line, not only colour', type: 'toggle' },
   ] },

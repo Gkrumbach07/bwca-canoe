@@ -531,6 +531,25 @@ unless I pause". Two causes, neither the relay's:
 the other two plans are live. About $1,050 at Opus 5.5 list prices, nearly a third of a Max week. Phase 1 alone (two friends
 on one lake in Sandbox, ~0.75 B, one afternoon) is a good first ship and a real test of the relay and the actor.
 
+### Round 2: one set of parties, four players (2026-11-05)
+
+The owner, 2026-11-05: "fix whatever the co-op campers don't match issue is" and "for now, let's limit to four players".
+Found by play: at 23 of 40 sites round Moose Lake the host and two guests had different parties camped, so a guest was
+told "another party is camped here" where the host saw nobody. The cause: `parties.js` is a pure function of the
+season's seed (`profile.seasonId`), the Traffic setting, the clock and the sites that are the player's (`mine()`), and
+a guest kept its own season's seed and Traffic and counted only its own camp. The clock was already the host's.
+
+- `src/coop-parties.js`: the host sends `{ t: 'parties', seed, traffic, mine }` once a second (and at once on a change);
+  a guest's parties take the host's seed and Traffic (`parties.share`). Each guest sends its own sites
+  (`{ t: 'pmine', mine }`, to the host); the host's list is its own and every guest's (a site twice: the earlier hour)
+  and every page sweeps with it (`parties.mineOf`), so a party never lands at anyone's camp on any screen. With the same
+  inputs the sweep is the same, and the campsite registry's claims (a party's, a friend's tent) agree as well.
+- Out of the room (Leave reloads; `gone`) a browser has its own season's parties again.
+- The rig: `scripts/coop/parties.mjs`, three browsers, every site within 10 km of the host compared at eight hours over
+  two game days with the host and a guest camped: 0 disagreements (718 before the fix).
+- Four players at most: the relay's `MAX_CLIENTS = 4` (a fifth is told "That trip is full (four at most)."); one
+  permit covers the group, up to the room's four.
+
 ## Risks
 
 - **The widest refactor in the game**, in a codebase that changed daily through October: four feedback rounds in two
