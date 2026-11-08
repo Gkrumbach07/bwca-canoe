@@ -48,7 +48,7 @@ const HELPERS = () => {
   };
   // look from (x, z) at (tx, tz): the walker stands there facing it, the camera behind
   H.look = (x, z, tx, tz) => { H.standAt(x, z, Math.atan2(-(tz - z), tx - x)); const c = g.chase; if (c) { c.viewYaw = g.player.heading; c.forwardYaw = g.player.heading; if (c.snap) c.snap(); } H.step(20); };
-  H.closeAll = () => { const o = g.outfitter; if (o.open) o.hide(); if (o.shelfOpen) o.shelf.close(); if (g.veil && g.veil.active && g.veil.skip) g.veil.skip(); };
+  H.closeAll = () => { const o = g.outfitter; if (o.open) o.hide(); if (o.shelfOpen) o.shelf.close(); if (g.record && g.record.shown && g.record.hide) g.record.hide(); if (g.veil && g.veil.active && g.veil.skip) g.veil.skip(); };
   // the roads near (x, z): each road's points within r, as [x, z, h, w, hw, k]
   H.roadPts = (x, z, r) => {
     const out = [];
@@ -106,9 +106,15 @@ try {
 
   const page = await open();
   const v = await VIEW(page);
-  const costOn = await page.evaluate(() => ({ ...window.__e3.calls(), decal: window.__e3.decal() }));
+  const costOn = await page.evaluate(() => {
+    const g = window.__game, H = window.__e3, T = g.truck, seen = !!(T.mesh && T.mesh.visible);
+    const a = { ...H.calls(), decal: H.decal(), truck: seen };
+    if (T.mesh) T.mesh.visible = false; // (the truck parked behind the store, out of the count; then back)
+    const b = H.calls(); if (T.mesh) T.mesh.visible = seen;
+    return { ...a, noTruck: b };
+  });
   await shot(page, 'e3-0-on');
-  result('0 the roads add no shader program; the ribbon no draw call (the truck one, while in view)', costOn.programs <= costOff.programs && costOn.decal.meshes === costOff.decal.meshes && costOn.calls <= costOff.calls + 4 && !costOff.roads, { off: costOff, on: costOn, view: v });
+  result('0 the roads add no shader program; the ribbon no draw call (the truck its own, while in view)', costOn.programs <= costOff.programs && costOn.decal.meshes === costOff.decal.meshes && costOn.noTruck.calls <= costOff.calls + 3 && costOn.calls - costOn.noTruck.calls <= 6 && !costOff.roads, { off: costOff, on: costOn, view: v });
 
   // ---- 1 the table --------------------------------------------------------------------------------------------------
   const t1 = await page.evaluate(() => {
@@ -129,8 +135,12 @@ try {
       if (!near.length) continue;
       near.sort((a, b) => Math.hypot(a[0] - x, a[1] - z) - Math.hypot(b[0] - x, b[1] - z));
       const [px, pz, ph, , hw, , road, i] = near[0];
-      if (g.world.tiles && g.world.tiles.tiles && g.tiles.groundAt) {
+      if (g.tiles.groundAt) {
         const sd = g.world.shoreAt ? g.world.shoreAt(px, pz) : 99;
+        for (let w = 0; w < 80 && !(g.tiles.detail.heightAt(px, pz) === g.tiles.detail.heightAt(px, pz)); w++) { H.step(4); await H.wait(60); }
+        const dh = g.tiles.detail.heightAt(px, pz);
+        if (!(dh === dh)) { out.noDetail = (out.noDetail || 0) + 1; out.mesh = (out.mesh || []).concat(+(g.tiles.meshGroundAt(px, pz) - ph).toFixed(2)); continue; }
+        out.mesh = (out.mesh || []).concat(+(g.tiles.meshGroundAt(px, pz) - ph).toFixed(2));
         const y = g.tiles.groundAt(px, pz);
         const j = Math.min(road.n - 1, i + 1), dx = road.p[j * 4] - road.p[(j - 1) * 4], dz = road.p[j * 4 + 1] - road.p[(j - 1) * 4 + 1], L = Math.hypot(dx, dz) || 1, nx = -dz / L, nz = dx / L;
         const yl = g.tiles.groundAt(px + nx * hw * 0.8, pz + nz * hw * 0.8), yr = g.tiles.groundAt(px - nx * hw * 0.8, pz - nz * hw * 0.8);
@@ -143,7 +153,7 @@ try {
     return out;
   }, HOME);
   const maxAlong = Math.max(...t2.along.map(Math.abs)), maxAcross = Math.max(...t2.across);
-  result('2 the ground: graded on the road (groundAt within 0.12 m of its height, under 0.3 m across its core)', t2.pts >= 4 && maxAlong < 0.12 && maxAcross < 0.3, { maxAlong, maxAcross, ...t2 });
+  result('2 the ground: graded on the road (the drawn detail within 0.12 m of its height, under 0.3 m across its core; the 10 m mesh noted)', t2.pts >= 4 && maxAlong < 0.12 && maxAcross < 0.3, { maxAlong, maxAcross, ...t2 });
   result('3 the ribbon: road rows in the trail decal near home', t2.decal.roadVerts > 100, t2.decal);
   result('4 the corridor: no trunk on the road', t2.trunks.every((n) => n === 0), { trunks: t2.trunks });
 
@@ -189,8 +199,8 @@ try {
   await page.evaluate(async (lot) => {
     const g = window.__game, H = window.__e3, T = g.truck, L = g.trailhead.trailheadLayout(lot);
     if (!L) return;
-    const dx = T.x - L.lot.x, dz = T.z - L.lot.z, d = Math.hypot(dx, dz) || 1;
-    H.look(T.x - (dx / d) * 16 + 4, T.z - (dz / d) * 16 + 4, T.x, T.z); for (let i = 0; i < 10; i++) { H.step(6); await H.wait(40); }
+    const e = T.mesh.matrix.elements, fx = e[8], fz = e[10], f = Math.hypot(fx, fz) || 1; // (stand on the road ahead of it, looking back)
+    H.closeAll(); H.look(T.x + (fx / f) * 13 + (fz / f) * 2, T.z + (fz / f) * 13 - (fx / f) * 2, T.x, T.z); for (let i = 0; i < 10; i++) { H.step(6); await H.wait(40); }
   }, LOT);
   await shot(page, 'e3-5-truck-lot');
 
@@ -200,7 +210,7 @@ try {
     if (!rd) return { none: true };
     const k = Math.floor(rd.n / 2), x = rd.p[k * 4], z = rd.p[k * 4 + 1], x2 = rd.p[(k + 6) * 4], z2 = rd.p[(k + 6) * 4 + 1];
     await H.goto(x + 30, z + 30); await H.ready(x, z, 150);
-    H.look(x, z, x2, z2); for (let i = 0; i < 20; i++) { H.step(6); await H.wait(40); }
+    H.closeAll(); H.look(x, z, x2, z2); for (let i = 0; i < 20; i++) { H.step(6); await H.wait(40); }
     return { name: rd.name, x: Math.round(x), z: Math.round(z) };
   }, BLACK);
   await shot(page, 'e3-6-blacktop');

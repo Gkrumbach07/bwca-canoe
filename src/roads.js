@@ -70,12 +70,15 @@ export function makeRoadGrade(world) {
   return new Float32Array(out);
 }
 
-// the corridor (props.js exclusionsFor): [x1, z1, x2, z2, -radius] lawns along each road, a segment every few points
+// the corridor (props.js exclusionsFor): [x1, z1, x2, z2, radius] along each road, a segment every few points. A gravel
+// or blacktop road is bare (no grass on it: a positive radius, and at least ROAD_BARE so placement.js plants no trail's
+// green tunnel beside it); a two-track a lawn (its crown grows grass)
+export const ROAD_BARE = 5.2;
 export function roadExclusions(world) {
   const R = world && world.roads, segs = [];
   if (!R) return segs;
   for (const r of R.list) {
-    const p = r.p, rad = -(r.hw + ROAD_CLEAR);
+    const p = r.p, rad = r.k === KIND.track ? -(r.hw + ROAD_CLEAR) : Math.max(ROAD_BARE, r.hw + 2.4);
     for (let i = 0; i + 1 < r.n; i += 2) {
       const j = Math.min(r.n - 1, i + 2);
       if (p[i * 4] === p[j * 4] && p[i * 4 + 1] === p[j * 4 + 1]) continue; // (never a point: site.js reads those as campsites)
