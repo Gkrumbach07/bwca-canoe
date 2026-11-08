@@ -8,9 +8,13 @@
 //   4. a stamped season reloaded is left as it is (the same bytes); the store-level cases (a dev host's tie is old,
 //      any other host's is new; the trip under way's permit; a done notice kept)
 //   5. the maps: the HUD's sheet and corner, the book's map, the lake page, the counter's side map (the desk's PMA picked
-//      out), the start map: the outlines drawn (pixels in the outline's slate) and the names lettered; shots with --shots
+//      out), the start map: the outlines drawn and the names lettered; shots with --shots
+//      (r4: the HUD's sheet, its corner and the book's chart are checked along the outline's own length: the same view
+//      painted with the layer on and off, and the share of points walked along each area's edge where the paint
+//      differs within 2-3 px. A raw count of slate-coloured pixels was set on the Mac and failed on Linux's anti-aliasing.)
 //
-//   APP=http://localhost:5202 node scripts/r2-pma-test.mjs [--shots docs/build/shots] [--out dir]
+//   APP=http://localhost:5202 node scripts/r2-pma-test.mjs [--shots docs/build/shots] [--out dir] [--break outline]
+//   --break outline: the outline's ink made clear (the proof that 5a/5b/5c catch a missing outline: they must fail)
 // Exit code 0 when every check passes. Writes <out>/r2-pma-results.json.
 import { createRequire } from 'node:module';
 import { mkdirSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
@@ -33,12 +37,34 @@ const result = (name, pass, more = {}) => { results.push({ name, pass: !!pass, .
 const shot = async (page, name, clip = null) => { if (!SHOTS) return; try { await page.screenshot({ path: path.join(SHOTS, `${name}.png`), ...(clip ? { clip } : {}) }); log('shot', name); } catch (e) { log('shot', name, e.message); } };
 const until = (page, fn, a, timeout = 90000) => page.waitForFunction(fn, a, { timeout, polling: 200 });
 const HOME = 25, START_DOY = 200; // Moose Lake, July 19 (the trail surveys run June to October)
+const BREAK = arg('break', null);
+const COVER = 0.6; // the share of the edge that must show (overlays, names and the portages' dashes hide some)
 const WANT = { 'pma-1': null, 'pma-2': 'pma-1', 'pma-3': 'pma-3', 'pma-4': 'pma-4', 'pma-5': 'pma-11', 'pma-6': 'pma-6', 'pma-7': 'pma-12', 'pma-8': 'pma-7', 'pma-9': 'pma-8', 'pma-10': null, 'pma-11': 'pma-10', 'pma-12': null };
 
 const browser = await chromium.launch({ executablePath: findChrome(), args: ['--use-angle=metal', '--ignore-gpu-blocklist'] });
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
 const page = await ctx.newPage();
 page.on('pageerror', (e) => log('pageerror', e.message));
+// r4: how much of the primitive areas' edges shows on a canvas: dOn / dOff the same view's pixels with the layer on and
+// off (W x H, the view v { x0, z0, mPerPx }); a point walked every 3 px along each edge counts when some pixel within
+// r px of it differs (|Δr|+|Δg|+|Δb| > 20). keep(x, z) → bool: where the paint may show (the sheets you own, the country).
+await ctx.addInitScript(() => {
+  window.__pmaEdge = (dOn, dOff, W, H, v, polys, { r = 2, keep = null, step = 3 } = {}) => {
+    let n = 0, hit = 0;
+    const diff = (i) => Math.abs(dOn[i] - dOff[i]) + Math.abs(dOn[i + 1] - dOff[i + 1]) + Math.abs(dOn[i + 2] - dOff[i + 2]) > 20;
+    const near = (a, b) => { for (let y = Math.max(0, b - r); y <= Math.min(H - 1, b + r); y++) for (let x = Math.max(0, a - r); x <= Math.min(W - 1, a + r); x++) if (diff((y * W + x) * 4)) return true; return false; };
+    for (const poly of polys) for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const [ax, az] = poly[j], [bx, bz] = poly[i], L = Math.hypot(bx - ax, bz - az) / v.mPerPx, m = Math.max(1, Math.round(L / step));
+      for (let t = 0; t < m; t++) {
+        const x = ax + ((bx - ax) * t) / m, z = az + ((bz - az) * t) / m, a = Math.round((x - v.x0) / v.mPerPx), b = Math.round((z - v.z0) / v.mPerPx);
+        if (a < 6 || b < 6 || a > W - 7 || b > H - 7) continue;
+        if (keep && !keep(x, z)) continue;
+        n++; if (near(a, b)) hit++;
+      }
+    }
+    return { n, hit, cover: n ? +(hit / n).toFixed(3) : 0 };
+  };
+});
 page.on('console', (m) => { if (m.type() === 'error' || /migrate: the primitive|primitive areas could not/.test(m.text())) log(m.type(), m.text().slice(0, 300)); });
 const load = async () => {
   await page.goto(APP, { timeout: 180000 });
@@ -58,8 +84,31 @@ const slateIn = (sel) => page.evaluate((sel) => {
   return n;
 }, sel);
 
+// r4: the HUD's base sheet (hud.js drawMap: the paper and all printed on it, in view or a margin past it) with the
+// primitive areas on, then off, then on again; the edge's cover between the two (__pmaEdge)
+const settleBase = async () => { for (let i = 0; i < 60; i++) { await frames(3); await page.waitForTimeout(120); const ok = await page.evaluate(() => { const h = window.__game.hud, b = h.base; return !!b && !b.pending && b.key && b.key.split('|')[4] === Object.values(h.layers).join(''); }); if (ok && i > 4) return true; } return false; };
+const hudEdge = async () => {
+  await settleBase();
+  await page.evaluate(() => { const b = window.__game.hud.base; window.__pmaOn = { d: b.ctx.getImageData(0, 0, b.W, b.H).data, v: { x0: b.x0, z0: b.z0, mPerPx: b.mPerPx }, W: b.W, H: b.H }; window.__game.hud.layers.pmas = false; });
+  await settleBase();
+  const res = await page.evaluate(async () => {
+    const h = window.__game.hud, b = h.base, on = window.__pmaOn, P = await import('/src/pma.js'), w = window.__game.world;
+    const same = b.W === on.W && b.H === on.H && b.x0 === on.v.x0 && b.z0 === on.v.z0 && b.mPerPx === on.v.mPerPx;
+    const off = b.ctx.getImageData(0, 0, b.W, b.H).data;
+    const sh = h.sheetsOn, owned = sh && sh.view() === 'owned' ? sh.ownedSheets() : null, pad = 4 * on.v.mPerPx;
+    const keep = (x, z) => x > w.minX + pad && x < w.maxX - pad && z > w.minZ + pad && z < w.maxZ - pad && (!owned || owned.some((q) => x > q.x0 + pad && x < q.x1 - pad && z > q.z0 + pad && z < q.z1 - pad));
+    const e = window.__pmaEdge(on.d, off, on.W, on.H, on.v, P.PMAS.map((p) => p.poly), { r: on.v.mPerPx > 60 ? 3 : 2, keep });
+    h.layers.pmas = true; window.__pmaOn = null;
+    return { ...e, same, mPerPx: +on.v.mPerPx.toFixed(2) };
+  });
+  await settleBase();
+  return res;
+};
+const edgeOk = (e, min = 30) => e && e.same !== false && e.n >= min && e.cover >= COVER;
+
 try {
   await load();
+  if (BREAK === 'outline') { await page.evaluate(async () => { const R = await import('/src/map-render.js'); R.INK.pma = 'rgba(0, 0, 0, 0)'; }); log('BROKEN on purpose: the outline\'s ink clear'); }
   log('game loaded');
   // --- 1: the table -----------------------------------------------------------------------------------------------------
   const tab = await page.evaluate(async () => { const M = await import('/src/migrate-pma.js'); return { map: M.PMA_MAP, set: M.PMA_SET, n: M.OLD_PMAS.length }; });
@@ -96,9 +145,8 @@ try {
     await page.evaluate(([span, x, z]) => { const h = window.__game.hud; h.setMode('sheet'); h.lookAt(x, z, span); }, [span, x, z]);
     for (let i = 0; i < 40; i++) { await frames(3); await page.waitForTimeout(120); const ok = await page.evaluate(() => { const b = window.__game.hud.base; return b && !b.pending; }); if (ok && i > 6) break; }
     await page.waitForTimeout(300); await frames(2);
-    const px = await slateIn('#minimap');
     await shot(page, name);
-    return px;
+    return hudEdge();
   };
   const sheetMid = await sheetAt(36000, 'r2-sheet-36km');
   const sheetClose = await sheetAt(12000, 'r2-sheet-12km', 1000, 24000);
@@ -110,7 +158,7 @@ try {
     R.paintPmaNames(g, window.__game.world, { x0: 4000 - 18000, z0: 18000 - 12000, mPerPx: 36000 / 1040 }, 1040, 700, { k: 1 });
     return { said, hudPmas: h.layers.pmas };
   });
-  result('5a the HUD sheet: the outlines at 36 km, 12 km and the overview, the names in italics', sheetMid > 200 && sheetClose > 200 && sheetFar > 40 && named.said.some((t) => /Fungus Lake primitive area/.test(t)) && named.hudPmas === true, { sheetMid, sheetClose, sheetFar, named: named.said });
+  result('5a the HUD sheet: the outlines along their length at 36 km, 12 km and the overview, the names in italics', edgeOk(sheetMid) && edgeOk(sheetClose) && edgeOk(sheetFar) && named.said.some((t) => /Fungus Lake primitive area/.test(t)) && named.hudPmas === true, { sheetMid, sheetClose, sheetFar, named: named.said });
   // the book's map side (the HUD's sheet mounted in the book: the sheet above) and its key's new row
   await page.evaluate(() => { const g = window.__game, mb = g.journal.map; mb.tab = 'key'; mb.render(true); });
   await frames(3); await page.waitForTimeout(300);
@@ -126,14 +174,17 @@ try {
   await shot(page, 'r2-lake-page');
   // the chart's own painter on a region across an edge (drawRegion with pmas on and off: the slate only with them)
   const region = await page.evaluate(async () => {
-    const R = await import('/src/map-render.js'), w = window.__game.world, a = window.__game.permits.pmas().find((q) => q.id === 'pma-12');
-    const count = (pmas) => { const c = document.createElement('canvas'); c.width = 620; c.height = 620; R.drawRegion(c, w, { cx: a.box[0], cz: a.centre[1], span: 9000 }, { names: true, build: 0, pmas });
-      const d = c.getContext('2d').getImageData(0, 0, 620, 620).data; let n = 0; for (let i = 0; i < d.length; i += 4) { const r = d[i], gg = d[i + 1], b = d[i + 2]; if (b > r + 6 && b > gg + 10 && r < 150 && gg < 140 && b < 170 && Math.abs(r - gg) < 22) n++; } return n; };
-    return { on: count(true), off: count(false) };
+    const R = await import('/src/map-render.js'), P = await import('/src/pma.js'), w = window.__game.world, a = window.__game.permits.pmas().find((q) => q.id === 'pma-12');
+    const paint = (pmas) => { const c = document.createElement('canvas'); c.width = 620; c.height = 620; const r = R.drawRegion(c, w, { cx: a.box[0], cz: a.centre[1], span: 9000 }, { names: true, build: 3, pmas }); return { r, d: c.getContext('2d').getImageData(0, 0, 620, 620).data }; };
+    let tries = 0; while (!paint(false).r.ready && tries++ < 80) await new Promise((res) => setTimeout(res, 150)); // (the tiles in first, so both paint the same ground)
+    const on = paint(true), off = paint(false);
+    const e = window.__pmaEdge(on.d, off.d, 620, 620, on.r.view, P.PMAS.map((p) => p.poly), { r: 2 });
+    let elsewhere = 0; for (let i = 0; i < on.d.length; i += 4) if (Math.abs(on.d[i] - off.d[i]) + Math.abs(on.d[i + 1] - off.d[i + 1]) + Math.abs(on.d[i + 2] - off.d[i + 2]) > 20) elsewhere++;
+    return { ...e, ready: on.r.ready && off.r.ready, changed: elsewhere };
   });
   await page.evaluate(() => { const g = window.__game; g.journal.close(); });
   await frames(5);
-  result('5c the book: its key has the row, on; a lake page in an area names it; the chart draws the outline', /Primitive areas/.test(book.key || '') && book.on === 'true' && /in the Fungus Lake primitive area/.test(lakePage.sub) && region.on > 15 && region.off < region.on / 4, { book, lakePage, region });
+  result('5c the book: its key has the row, on; a lake page in an area names it; the chart draws the outline', /Primitive areas/.test(book.key || '') && book.on === 'true' && /in the Fungus Lake primitive area/.test(lakePage.sub) && region.ready && edgeOk(region, 40), { book, lakePage, region });
   // the counter's side map, with a primitive area picked at the desk
   await page.evaluate(() => { const o = window.__game.outfitter; o.show(o.visit.landing, 'counter'); });
   await frames(5); await page.waitForTimeout(500);
@@ -239,9 +290,9 @@ try {
   await until(page, () => !window.__game.player.teleporting);
   await page.evaluate(() => { const g = window.__game; g.settings.values.cornerMap = true; g.hud.setMode('corner'); });
   for (let i = 0; i < 20; i++) { await frames(3); await page.waitForTimeout(150); }
-  const corner = await slateIn('#minimap');
   await shot(page, 'r2-corner');
-  result('5b the corner sheet on the water draws them too', corner > 10, { corner });
+  const corner = await hudEdge();
+  result('5b the corner sheet on the water draws them too (along their length, on the sheets you own)', edgeOk(corner, 15), { corner });
   await page.evaluate(() => { const g = window.__game; g.settings.values.cornerMap = false; g.hud.setMode('hidden'); });
 
   // --- 4: a stamped season is left alone ------------------------------------------------------------------------------
