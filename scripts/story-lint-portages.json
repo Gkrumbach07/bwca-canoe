@@ -1,0 +1,33 @@
+{
+ "note": "story-lint.mjs ratchet: raw world.portages iterations outside the allowlist that Round 1 (L, P) converts to world.portagesPublic(). Only ever shrinks.",
+ "hits": [
+  "actors.js: const q = (w.portages || []).find((t) => /^Lake One\\s*[–-]\\s*Kawishiwi River$/.test(t.name || ''));",
+  "fauna.js: if (w.portages.some((p) => p.bbox && c.x > p.bbox[0] - 80 && c.x < p.bbox[2] + 80 && c.z > p.bbox[1] - 80 && c.z < p.bbox[3] + 80)) continue",
+  "forage.js: for (const p of this.world.portages) {",
+  "hud.js: if (lay.portages && mPerPx < 40 && dp < 48) for (let pi = 0; pi < w.portages.length; pi++) { // (further out the red dashes were all you saw",
+  "main.js: const portageAt = () => { let best = null, bd = 40; for (const p of world.portages) for (const l of p.launch || []) { const d = Math.hypot(l",
+  "map-book.js: const portages = w.portages.map((p, i) => [p, i]).filter(([p]) => p.launch && p.launch.some((l) => ids.has(l.lake)) && !p.launch.every((l) =",
+  "map-book.js: for (const [p, i] of portages) { const o = p.launch.find((l) => !ids.has(l.lake)), nm = (o && w.lakeName(o.lake)) || 'unnamed water'; const ",
+  "map-book.js: w.portages.forEach((p, i) => {",
+  "milestones.js: for (const p of world.portages) {",
+  "names.js: for (const p of world.portages) {",
+  "names.js: for (const p of world.portages) {",
+  "npcs.js: w.portages.forEach((p, i) => {",
+  "outfitters.js: const carries = (world.portages || []).filter((p) => p.pts && p.pts.length && Math.hypot(p.pts[0][0] - e.x, p.pts[0][1] - e.z) < 8000).sort(",
+  "outfitters.js: for (const p of world.portages || []) {",
+  "parties.js: w.portages.forEach((p, i) => {",
+  "photo.js: w.portages.forEach((p, i) => {",
+  "props.js: for (const p of ctx.world.portages || []) {",
+  "props.js: for (const p of world.portages) {",
+  "props.js: for (const p of world.portages) { const pts = rounded(p.pts); for (let i = 1; i < pts.length; i++) segs.push([pts[i - 1][0], pts[i - 1][1], ",
+  "record.js: portageByName(name) { const w = this.world; return w && Array.isArray(w.portages) ? w.portages.find((p) => p && p.name === name) || null : n",
+  "sheets.js: for (const p of w.portages || []) { const m = p.pts && p.pts[Math.floor(p.pts.length / 2)]; if (m) add(m[0], m[1], 'portages'); }",
+  "task-kinds-2.js: w.portages.forEach((p, i) => {",
+  "task-kinds.js: w.portages.forEach((p, i) => {",
+  "task-kinds.js: w.portages.forEach((p, i) => {",
+  "tasks.js: this.world.portages.forEach((p, i) => {",
+  "tasks.js: w.portages.forEach((p, i) => {",
+  "uniques.js: for (const p of w.portages) {",
+  "views.js: for (const p of world.portages) {"
+ ]
+}
