@@ -24,9 +24,10 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SRC = path.join(ROOT, 'src');
+// (STORY_LINT_SRC / STORY_LINT_BASELINE: the unit checks point the lint at a fixture tree; astro.js always from the repo)
+const SRC = process.env.STORY_LINT_SRC ? path.resolve(process.env.STORY_LINT_SRC) : path.join(ROOT, 'src');
 const DATA = path.join(SRC, 'story-data');
-const BASELINE = path.join(ROOT, 'scripts', 'story-lint-portages.json');
+const BASELINE = process.env.STORY_LINT_BASELINE ? path.resolve(process.env.STORY_LINT_BASELINE) : path.join(ROOT, 'scripts', 'story-lint-portages.json');
 const argv = process.argv.slice(2);
 const JSON_OUT = argv.includes('--json'), UPDATE = argv.includes('--update-baseline');
 const report = { checks: {} };
@@ -198,7 +199,7 @@ const FORMS = [
 export function atomKind(a) { for (const [re, k] of FORMS) if (re.test(a)) return k; return null; }
 
 // --- the sensor domains: can one clause hold at all? -------------------------------------------------------------------
-const { sunTimes } = await import(pathToFileURL(path.join(SRC, 'astro.js')).href);
+const { sunTimes } = await import(pathToFileURL(path.join(ROOT, 'src', 'astro.js')).href);
 const ELY = { lat: 47.94, lon: -91.46 }; // daycycle.js's place
 const YEAR = 2026;
 const MDAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
