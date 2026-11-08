@@ -29,9 +29,7 @@ import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const OUT = join(ROOT, 'src/story-data/text');
 const LOCK = join(ROOT, 'src/story-data/ids.lock.json');
-const LOGIC = join(ROOT, 'src/story-data');
 export const EXTRACT_V = 1;
 
 // The game-text docs and the file each one extracts to. 00–03 and 90 are design docs: nothing in them is game text
@@ -758,7 +756,7 @@ export function extractAll({ root = ROOT } = {}) {
     let long = 0;
     for (const [id, e] of Object.entries(text)) {
       const len = (e.text || '').length;
-      if ((e.k === 'bark' || e.bark) && len > LIMITS.bark) report.limits.push({ id, kind: 'bark', len, max: LIMITS.bark });
+      if ((e.k === 'bark' || e.bark || e.pool === 'bark') && len > LIMITS.bark) report.limits.push({ id, kind: 'bark', len, max: LIMITS.bark });
       if (e.k === 'hint' && len > LIMITS.hint) report.limits.push({ id, kind: 'hint', len, max: LIMITS.hint });
       if (e.k === 'line' && len > LIMITS.longSpeech) long++;
     }
@@ -812,7 +810,7 @@ export function nextLock(prev, all, today) {
 }
 
 // Text ids that the hand-written logic (src/story-data/**/*.js) references, found as string literals.
-export function logicRefs(dir = LOGIC) {
+export function logicRefs(dir = join(ROOT, 'src/story-data')) {
   const refs = new Map();
   if (!existsSync(dir)) return refs;
   const walk = (d) => {
@@ -838,46 +836,61 @@ export function lockText(lock) {
 
 // ---------------------------------------------------------------------------------------------------------------
 
-function main() {
-  const args = process.argv.slice(2);
-  const check = args.includes('--check');
-  const quiet = args.includes('--quiet');
-  const ri = args.indexOf('--report');
-  const today = new Date().toISOString().slice(0, 10);
-  const { files, all, report } = extractAll();
-  const prev = readLock();
+// One extract (or check) of a tree. Returns the errors, so the rig and the lint can call it without a process.
+export function run({ root = ROOT, check = false, today = new Date().toISOString().slice(0, 10) } = {}) {
+  const out = join(root, 'src/story-data/text');
+  const lockPath = join(root, 'src/story-data/ids.lock.json');
+  const { files, all, report } = extractAll({ root });
+  const prev = readLock(lockPath);
   const { lock, shifted } = nextLock(prev, all, today);
   report.shifted = shifted;
   report.orphans = Object.entries(lock.orphans).map(([id, v]) => ({ id, doc: v[0], since: v[2] }));
-  const refs = logicRefs();
+  const refs = logicRefs(join(root, 'src/story-data'));
   const orphanRefs = report.orphans.filter((o) => refs.has(o.id)).map((o) => ({ ...o, in: refs.get(o.id) }));
   const errors = [];
   if (report.quoteDrift.length) errors.push(`${report.quoteDrift.length} quote(s) that differ from their source`);
   if (report.dup.length) errors.push(`${report.dup.length} duplicate id(s): ${report.dup.slice(0, 5).map((d) => d.id).join(', ')}`);
   if (report.designAnchors.length) errors.push(`anchors in design docs: ${report.designAnchors.map((a) => a.doc + ' ' + a.id).join(', ')}`);
   if (orphanRefs.length) errors.push(`logic references orphaned ids: ${orphanRefs.map((o) => `${o.id} (${o.in})`).join(', ')}`);
-
-  let stale = [];
   if (check) {
     for (const [name, body] of Object.entries(files)) {
-      const p = join(OUT, name);
-      if (!existsSync(p)) { stale.push(`${name}: missing`); continue; }
+      const p = join(out, name);
+      if (!existsSync(p)) { errors.push(`${name}: missing (run npm run story:extract)`); continue; }
       const cur = readFileSync(p, 'utf8');
       let stamp = null;
-      try { stamp = JSON.parse(cur).$hash; } catch { stale.push(`${name}: not JSON`); continue; }
+      try { stamp = JSON.parse(cur).$hash; } catch { errors.push(`${name}: not JSON`); continue; }
       const want = JSON.parse(body).$hash;
-      if (stamp !== want) stale.push(`${name}: hash ${stamp} ≠ doc ${want} (re-run npm run story:extract)`);
-      else if (cur !== body) stale.push(`${name}: contents differ from a fresh extract`);
+      if (stamp !== want) errors.push(`${name}: stale, hash ${stamp} ≠ doc ${want} (run npm run story:extract)`);
+      else if (cur !== body) errors.push(`${name}: contents differ from a fresh extract (run npm run story:extract)`);
     }
-    const lockCur = existsSync(LOCK) ? readFileSync(LOCK, 'utf8') : '';
-    if (lockCur !== lockText(lock)) stale.push('ids.lock.json: out of date');
-    if (stale.length) errors.push(...stale);
+    const lockCur = existsSync(lockPath) ? readFileSync(lockPath, 'utf8') : '';
+    if (lockCur !== lockText(lock)) errors.push('ids.lock.json: out of date (run npm run story:extract)');
   } else {
-    mkdirSync(OUT, { recursive: true });
-    for (const [name, body] of Object.entries(files)) writeFileSync(join(OUT, name), body);
-    writeFileSync(LOCK, lockText(lock));
+    mkdirSync(out, { recursive: true });
+    for (const [name, body] of Object.entries(files)) writeFileSync(join(out, name), body);
+    writeFileSync(lockPath, lockText(lock));
   }
+  return { errors, report, shifted, lock, files };
+}
 
+// The stamps alone (cheap; for the lint): every text file's $hash against its doc's hash now.
+export function staleStamps({ root = ROOT } = {}) {
+  const bad = [];
+  for (const [, [file, outName]] of Object.entries(DOC_FILES)) {
+    const p = join(root, 'src/story-data/text', outName);
+    const want = hashText(readFileSync(join(root, 'docs/story', file), 'utf8'));
+    let got = null;
+    try { got = JSON.parse(readFileSync(p, 'utf8')).$hash; } catch { /* missing */ }
+    if (got !== want) bad.push({ file: outName, doc: file, got, want });
+  }
+  return bad;
+}
+
+function main() {
+  const args = process.argv.slice(2);
+  const quiet = args.includes('--quiet');
+  const ri = args.indexOf('--report');
+  const { errors, report, shifted } = run({ check: args.includes('--check') });
   const total = Object.values(report.counts).reduce((a, b) => a + b, 0);
   const kb = Object.values(report.bytes).reduce((a, b) => a + b, 0) / 1024;
   console.log(`story-extract v${EXTRACT_V}: ${total} ids from ${Object.keys(DOC_FILES).length} docs, ${kb.toFixed(0)} KB` +
