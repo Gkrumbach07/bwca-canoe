@@ -87,6 +87,8 @@ try {
   await page.click('#btn-start');
   await until(page, () => { const g = window.__game; return g.title.state === 'game' && !g.player.teleporting && !!g.outfitter.visit; }, null, 180000);
   await page.evaluate(() => { const g = window.__game; if (g.outfitter.open) g.outfitter.hide(); g.day.setClock(g.day.year, g.day.doy, 9.5); g.chase.setMode('third'); window.__r4.step(30); });
+  // (the page's own loop stopped: every frame is the rig's, so a shot is of the state measured)
+  await page.evaluate(() => window.__game.renderer.setAnimationLoop(null));
 
   // --- 2: over the shoulder by the staffer ---------------------------------------------------------------------------
   if (on('ots')) {
@@ -102,11 +104,11 @@ try {
       const gem = g.locator.shown().find((q) => q.main) || null;
       const out = { cur: cur.id, d: +r.d.toFixed(2), ots: +ch.ots.toFixed(3), maxStep: Math.max(...trace.slice(1).map((v, i) => Math.abs(v - trace[i]))), jump: +jump.toFixed(3),
         face: H.firstHit(face), chest: H.firstHit(chest), faceNdc: H.ndc(face), gem: gem ? { hit: H.firstHit(gem), ndc: H.ndc(gem) } : null, cam: g.camera.position.toArray().map((v) => +v.toFixed(2)) };
-      if (off) { delete ch.story; ch.story = null; }
       return out;
     }, { off });
     const before = await measure('before', true);
     await shot('2a-staffer-chase-before');
+    await page.evaluate(() => { const ch = window.__game.chase; delete ch.story; ch.story = null; });
     const after = await measure('after', false);
     await shot('2b-staffer-over-shoulder');
     log('ots before', JSON.stringify(before)); log('ots after', JSON.stringify(after));
