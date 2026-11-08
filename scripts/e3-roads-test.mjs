@@ -80,7 +80,7 @@ async function open(query = '') {
   await page.evaluate(() => { const w = window.__game.title.wizard; w.setDate(191); w.next(); });
   await page.click('#btn-start');
   await until(page, () => { const g = window.__game; return g.title.state === 'game' && !g.player.teleporting && !!g.outfitter.visit; }, null, 180000);
-  await page.evaluate(async () => { const H = window.__e3; H.closeAll(); for (let i = 0; i < 30; i++) { H.step(10); await H.wait(30); } window.__game.day.setClock ? window.__game.day.setClock(13) : null; H.step(10); });
+  await page.evaluate(async () => { const H = window.__e3; H.closeAll(); for (let i = 0; i < 30; i++) { H.step(10); await H.wait(30); } const d = window.__game.day; if (d.setClock && d.hours < 9) d.setClock(d.year, d.doy, 13); H.step(10); });
   return page;
 }
 const shot = async (page, name) => { const f = path.join(SHOTS, `${name}.png`); await page.screenshot({ path: f }); log('shot', f); };
