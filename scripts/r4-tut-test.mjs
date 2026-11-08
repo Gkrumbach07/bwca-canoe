@@ -174,6 +174,8 @@ try {
 
   // --- the shelf gems against the top bar: 1280x720 and 1920x1080, first and third person, from 1.2, 1.8 and 2.6 m ---------
   const gemRows = [];
+  // (a measuring scene, not play: no moment picked while the views are set up and stepped, so none shows and goes unseen)
+  await ev(() => { const h = window.__game.hints; if (h.cur) h.hide(); h.gapT = 1e9; });
   for (const vp of [[1280, 720], [1920, 1080]]) {
     await page.setViewportSize({ width: vp[0], height: vp[1] }); await run(10); await page.waitForTimeout(400);
     for (const mode of ['first', 'third']) {
@@ -195,7 +197,7 @@ try {
       }
     }
   }
-  await page.setViewportSize({ width: 1280, height: 720 }); await run(10);
+  await page.setViewportSize({ width: 1280, height: 720 }); await ev(() => { window.__game.hints.gapT = 3; }); await run(10);
   await ev(() => { const g = window.__game; if (g.chase.mode !== 'third') g.chase.setMode('third'); window.__p.step(4); });
   for (const r of gemRows) log('gem', JSON.stringify(r));
   result('6 the food shelf\'s gem clear of the top bar: 1280x720, 1920x1080, first and third person, 1.2-2.6 m', gemRows.length === 12 && gemRows.every((r) => r.ok) && gemRows.some((r) => r.on && r.on.inView), gemRows.map((r) => `${r.vp} ${r.mode} ${r.d}: ${r.on ? `${r.on.top}/${r.on.bar}${r.on.inView ? '' : ' out'}` : 'none'} raw ${r.raw ? r.raw.top : '-'}`));
