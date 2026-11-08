@@ -254,7 +254,7 @@ const F_MORE = ['Annika', 'Brenda', 'Cheryl', 'Darla', 'Freya', 'Heidi', 'Janet'
 const M_MORE = ['Aaron', 'Bjorn', 'Curt', 'Doug', 'Erik', 'Fritz', 'Glen', 'Hank', 'Ivan', 'Jens', 'Karl', 'Lars', 'Mitch', 'Neil', 'Otis', 'Paul', 'Ray', 'Stan', 'Ted', 'Vic', 'Warren', 'Zach', 'Brad', 'Craig'];
 const OLD_MORE = ['Alvin', 'Bernie', 'Delmar', 'Eldon', 'Floyd', 'Arlo', 'Mabel', 'Opal', 'Verna', 'Thelma', 'Orville', 'Lyman'];
 const KID_MORE = ['Mia', 'Jack', 'Ella', 'Noah', 'Ivy', 'Sam', 'Zara', 'Eli', 'Hazel', 'Ben', 'Lucas', 'Grace'];
-for (const n of [...F_MORE, 'Mabel', 'Opal', 'Verna', 'Thelma']) FEMALE.add(n);
+for (const n of [...F_MORE, 'Mabel', 'Opal', 'Verna', 'Thelma', 'Josie']) FEMALE.add(n); // (Josie: the summer help, onboarding.js STAFF)
 // the story's own people and the hand-written keepers: never a generated person's name (the keepers' are added from
 // outfitters.js, the summer help's from onboarding.js)
 const STORY_NAMES = ['Walt', 'Oskar']; // (the pools above hold no name of the story's cast: glf-f3 test 1a checks every list)

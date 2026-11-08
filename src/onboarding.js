@@ -43,7 +43,9 @@ const ORDER_R3 = ['walttent', 'sleepingbag', 'pad', 'pfd', 'pot', 'clothes', 'ta
 // player's kit after the scene, with the plain things for the story's (Walt's pack, tent and stove stay the host's story)
 export const GUEST_PLAIN = { waltpack: 'pack3', walttent: 'aframe', waltstove: 'stove' };
 const plain = (id) => GUEST_PLAIN[id] || id;
-export const STAFF = ['Jess', 'Tanner', 'Marcy', 'Kyle', 'Brooke', 'Dani', 'Cody', 'Shelby', 'Megan', 'Logan', 'Paige', 'Trent']; // (never a story name: the brief's reserved names)
+// The summer help at every home is Josie (Josie Hautala, docs/story/01-bible.md 4.8: "works at whichever outfitter the
+// player picks"); the list stays a list for npcs.js, which reserves its names so no one else is given one
+export const STAFF = ['Josie'];
 const ROLE = 'the summer help';
 const DOOR_LINE = 'Got a minute? Come to the counter.';
 const STAFF_LOOK = { age: 'young', shirt: 0x5f7f45, hat: null }; // (E's figure look, as it takes it; ignored without E)
@@ -91,7 +93,7 @@ export class Onboarding {
   isWaltItem(id) { return WALT_IDS.includes(String(id)); }
   permits() { const p = this.t.permits; try { return typeof p === 'function' ? p() : p || null; } catch { return null; } }
   get abs() { const d = this.t.day; return d ? absDay(d.year, d.doy) : 0; }
-  staffName(ep) { return STAFF[((Number(ep) || 0) * 7 + 3) % STAFF.length]; }
+  staffName(ep) { return STAFF[((Number(ep) || 0) * 7 + 3) % STAFF.length]; } // (Josie at every home)
 
   // --- the staffer: E's figure, or a voice at the counter's end --------------------------------------------------------
   // where the staffer stands: a step along the counter from the keeper (the layout's keeper spot), else the landing
