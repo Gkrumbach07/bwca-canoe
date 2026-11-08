@@ -12,7 +12,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { PropBuilder, propMaterial, TILE, buildHull } from './prop-kit.js';
-import { routeOf } from './roads.js';
+import { routeOf, deckAt } from './roads.js';
 import { trailheadLayout, LOT_R } from './trailhead.js';
 import { yardOf } from './props.js';
 import { isOutfitter, OUTFITTER_EPS } from './outfitters.js';
@@ -130,7 +130,7 @@ export class Truck {
     const m = this.ensure(), half = TRUCK.wheelbase / 2;
     const [fx, fz] = at(path, s + half), [bx, bz] = at(path, s - half);
     let dx = fx - bx, dz = fz - bz; const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L;
-    const cx = (fx + bx) / 2, cz = (fz + bz) / 2, rx = dz, rz = -dx, w = TRUCK.track / 2, G = this.groundAt;
+    const cx = (fx + bx) / 2, cz = (fz + bz) / 2, rx = dz, rz = -dx, w = TRUCK.track / 2, G = (x, z) => Math.max(this.groundAt(x, z), deckAt(this.world, x, z)); // (over a bridge: on its deck)
     const yf = G(cx + dx * half, cz + dz * half), yb = G(cx - dx * half, cz - dz * half);
     const yl = G(cx - rx * w, cz - rz * w), yr = G(cx + rx * w, cz + rz * w);
     const y = Math.max((yf + yb) / 2, (yl + yr) / 2);

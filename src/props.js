@@ -14,7 +14,7 @@ import LANDINGS_DATA from './landings.json';
 import { TILE, PropBuilder, propMaterial, trailMaterial, occlude, obb, bakeSelf, MeshGround, buildHull, hullProfile, chunkStone, HULL_LENGTH } from './prop-kit.js';
 import { SIGN_HEAD_UV, SIGN_GLYPH_ASPECT, signGlyphUv } from './prop-kit.js'; // d1 names: the trail sign's words
 import { tileCreeks, BROOK } from './creeks.js'; // the wetlands round: brooks, beaver dams and lodges
-import { roadExclusions } from './roads.js'; // stream E3: the roads in 3D
+import { roadExclusions, DECK } from './roads.js'; // stream E3: the roads in 3D
 
 // The built things: portage trails and their signs, campsites, and at every entry point an outfitter's dock,
 // shack and canoe rack, plus the lost-and-found items of the task board. Simple shapes put together the way
@@ -186,7 +186,7 @@ export function* tilePropsSteps(tg, world, tx, ty) {
   }
   for (const ep of heads) { const a = anchorOf(ep); if (inside(a.x, a.z)) { yield; buildTrailhead({ ...ctx, H: Hdrawn }, ep, pieces, group); yield; } } // (merged into this tile's props: no draw call of its own)
   // stream E3: the roads, in the same decal (after the stores, so a road stops at the yard it comes to)
-  if (world.roads) { roadRows(ctx, decal, lots); yield; }
+  if (world.roads) { roadRows(ctx, decal, lots); roadBridges(ctx, pieces); yield; }
   decal.lift(ctx);
   const trail = decal.mesh();
   if (trail) group.add(trail);
@@ -388,6 +388,31 @@ function roadRows(ctx, decal, lots) {
       if (i > 0 && rowOf[i - 1] >= 0 && want[i - 1] && inside(pts[i - 1].x, pts[i - 1].z)) decal.join(rowOf[i - 1], rowOf[i]);
     }
   }
+}
+// Stream E3: a bridge where a road crosses water (roads.js bridges): a timber deck from bank to bank, a little onto
+// each, with a guard timber along each side on blocks; into the tile's merged props (no draw call). The bank it starts
+// on decides the tile.
+function roadBridges(ctx, pieces) {
+  const { world, inside, ox, oz } = ctx;
+  const b = new PropBuilder(), rng = mulberry32(5519 + Math.round(ox) * 3 + Math.round(oz));
+  for (const B of world.roads.bridges) {
+    if (!inside(B.ax, B.az)) continue;
+    const dx = B.bx - B.ax, dz = B.bz - B.az, dh = B.bh - B.ah, L = Math.hypot(dx, dz);
+    if (!(L > 0.5)) continue;
+    const Z = V(dx, dh, dz).normalize(), X = V(dz / L, 0, -dx / L), Y = Z.clone().cross(X).normalize().negate();
+    if (Y.y < 0) Y.negate();
+    const half = Math.hypot(L, dh) / 2 + 2, top = (B.ah + B.bh) / 2 + DECK;
+    const o = V((B.ax + B.bx) / 2 - ox, top - 0.16, (B.az + B.bz) / 2 - oz), w = B.hw + 0.25;
+    const deck = tone(0x6f665a, rng, 0.06), guard = tone(0x5d5246, rng, 0.06);
+    b.box(o, X, Y, Z, w, 0.16, half, TILE.WOOD, deck, { grain: 'x' });
+    b.box(o.clone().addScaledVector(Y, -0.42), X, Y, Z, w - 0.5, 0.26, half - 1.2, TILE.WOOD, tone(0x4a4038, rng, 0.05), { grain: 'z' }); // the stringers under it
+    for (const sd of [-1, 1]) {
+      const g0 = o.clone().addScaledVector(X, sd * (w - 0.12));
+      for (let k = -1; k <= 1; k += 0.5) b.box(g0.clone().addScaledVector(Z, k * (half - 0.6)).addScaledVector(Y, 0.24), X, Y, Z, 0.12, 0.1, 0.14, TILE.WOOD, guard, { grain: 'y' });
+      b.box(g0.clone().addScaledVector(Y, 0.42), X, Y, Z, 0.13, 0.1, half - 0.3, TILE.WOOD, guard, { grain: 'z' });
+    }
+  }
+  if (b.count) pieces.push(b.build());
 }
 function buildTrail(ctx, p, decal, pieces) {
   const { tg, inside, ox, oz } = ctx;

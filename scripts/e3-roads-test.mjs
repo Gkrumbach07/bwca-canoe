@@ -198,12 +198,15 @@ try {
   }, LOT);
   result('5b a pickup: the truck comes up the road into the lot and stops, on its wheels, drawn, no new program', t5b.came && t5b.inLot < 14 && Math.abs(t5b.onWheels) < 0.4 && t5b.drawn > 0 && t5b.programs === 0, t5b);
   // the lot with the truck, from across it
-  await page.evaluate(async (lot) => {
+  const lookT = await page.evaluate(async (lot) => {
     const g = window.__game, H = window.__e3, T = g.truck, L = g.trailhead.trailheadLayout(lot);
-    if (!L) return;
+    if (!L) return null;
     const e = T.mesh.matrix.elements, fx = e[8], fz = e[10], f = Math.hypot(fx, fz) || 1; // (stand on the road ahead of it, looking back)
     H.closeAll(); H.look(T.x + (fx / f) * 13 + (fz / f) * 2, T.z + (fz / f) * 13 - (fx / f) * 2, T.x, T.z); for (let i = 0; i < 10; i++) { H.step(6); await H.wait(40); }
+    const m = T.mesh, c = g.camera.position;
+    return { vis: m.visible, job: T.job && T.job.kind, truck: [Math.round(T.x), Math.round(T.z), +m.matrixWorld.elements[13].toFixed(1)], world: [Math.round(m.matrixWorld.elements[12]), Math.round(m.matrixWorld.elements[14])], player: [Math.round(g.player.x), Math.round(g.player.z)], cam: [Math.round(c.x), Math.round(c.z)] };
   }, LOT);
+  log('truck look', JSON.stringify(lookT));
   await shot(page, 'e3-5-truck-lot');
 
   // ---- 6 a blacktop, its centre line --------------------------------------------------------------------------------
@@ -217,6 +220,19 @@ try {
   }, BLACK);
   await shot(page, 'e3-6-blacktop');
   result('6 the looks: a blacktop found and shot (and the store road, the lot)', !t6.none, t6);
+
+  // ---- 8 a bridge: the deck over the water, the truck on it --------------------------------------------------------
+  const t8 = await page.evaluate(async () => {
+    const g = window.__game, H = window.__e3, R = g.world.roads, B = R.bridges.slice().sort((a, b) => Math.hypot(b.bx - b.ax, b.bz - b.az) - Math.hypot(a.bx - a.ax, a.bz - a.az)).find((q) => q.name) || R.bridges[0];
+    if (!B) return { none: true, n: R.bridges.length };
+    const mx = (B.ax + B.bx) / 2, mz = (B.az + B.bz) / 2, dx = B.bx - B.ax, dz = B.bz - B.az, L = Math.hypot(dx, dz);
+    await H.goto(B.ax - (dx / L) * 25, B.az - (dz / L) * 25); await H.ready(mx, mz, 120);
+    H.closeAll(); H.look(B.ax - (dx / L) * 22 + (dz / L) * 3, B.az - (dz / L) * 22 - (dx / L) * 3, mx, mz); for (let i = 0; i < 20; i++) { H.step(6); await H.wait(40); }
+    const top = (B.ah + B.bh) / 2, deck = window.__game.truck ? null : null; void deck;
+    return { n: R.bridges.length, name: B.name, m: Math.round(L), x: Math.round(mx), z: Math.round(mz), top: +top.toFixed(2), ground: +g.tiles.groundAt(mx, mz).toFixed(2) };
+  });
+  await shot(page, 'e3-8-bridge');
+  result('8 bridges: a deck where a road crosses water (shot)', !t8.none && t8.n > 5, t8);
 
   result('7 no page errors', errors.length === 0, { errors: errors.slice(0, 5) });
 } catch (e) {

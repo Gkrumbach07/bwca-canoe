@@ -49,8 +49,23 @@ export function readRoads(table, baked) {
     const f = (i) => { const x = r.p[i * 4], z = r.p[i * 4 + 1]; return ends.get(endKey(x, z)) > 1 ? 0 : atStart(x, z) ? 5 : 30; };
     r.fadeA = f(0); r.fadeB = f(r.n - 1);
   }
+  // the water a road crosses mid-way (a run of its points over water, land at both ends): a bridge from bank to bank
+  // (props.js roadBridges draws the deck, truck.js drives on it), level with the road at each bank
+  const bridges = [];
+  for (const r of list) {
+    const p = r.p;
+    for (let i = 1; i < r.n - 1;) {
+      if (!(p[i * 4 + 3] < 0)) { i++; continue; }
+      let j = i; while (j < r.n - 1 && p[j * 4 + 3] < 0) j++;
+      if (j < r.n - 1 || p[j * 4 + 3] >= 0) {
+        const a = i - 1, b = j; // the banks
+        bridges.push({ ax: p[a * 4], az: p[a * 4 + 1], ah: p[a * 4 + 2], bx: p[b * 4], bz: p[b * 4 + 1], bh: p[b * 4 + 2], hw: r.hw, k: r.k, name: r.name });
+      }
+      i = j + 1;
+    }
+  }
   const km = list.reduce((t, r) => { for (let i = 1; i < r.n; i++) t += Math.hypot(r.p[i * 4] - r.p[i * 4 - 4], r.p[i * 4 + 1] - r.p[i * 4 - 3]); return t; }, 0) / 1000;
-  return { list, routes, km };
+  return { list, routes, bridges, km };
 }
 
 // the ground table (road-grade.js): every land segment of every road
@@ -86,6 +101,22 @@ export function roadExclusions(world) {
     }
   }
   return segs;
+}
+
+// the top of a bridge's deck at (x, z), or -Infinity off every bridge (truck.js: it drives over, not through the creek)
+export const DECK = 0.06; // the deck's top over the road's own height at the banks
+export function deckAt(world, x, z) {
+  const R = world && world.roads;
+  if (!R || !R.bridges.length) return -Infinity;
+  for (const b of R.bridges) {
+    const ex = b.bx - b.ax, ez = b.bz - b.az, L2 = ex * ex + ez * ez;
+    const t = L2 > 1e-9 ? ((x - b.ax) * ex + (z - b.az) * ez) / L2 : 0, L = Math.sqrt(L2);
+    if (t < -2 / L || t > 1 + 2 / L) continue;
+    const tc = Math.max(0, Math.min(1, t));
+    if (Math.hypot(x - b.ax - ex * tc, z - b.az - ez * tc) > b.hw + 0.3) continue;
+    return b.ah + (b.bh - b.ah) * tc + DECK;
+  }
+  return -Infinity;
 }
 
 // the road nearest (x, z) within max metres: { road, i (the point), d } or null
