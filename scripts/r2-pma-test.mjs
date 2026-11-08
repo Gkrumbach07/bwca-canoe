@@ -69,6 +69,7 @@ page.on('console', (m) => { if (m.type() === 'error' || /migrate: the primitive|
 const load = async () => {
   await page.goto(APP, { timeout: 180000 });
   await page.waitForFunction(() => window.__game && window.__game.title && window.__game.permits && typeof window.__game.step === 'function', null, { timeout: 240000, polling: 500 });
+  if (BREAK === 'outline') { await page.evaluate(async () => { const R = await import('/src/map-render.js'); R.INK.pma = 'rgba(0, 0, 0, 0)'; }); log('BROKEN on purpose: the outline\'s ink clear'); }
 };
 const frames = (n = 30, dt = 1 / 30) => page.evaluate(([n, dt]) => { for (let k = 0; k < n; k += 300) window.__game.step(dt, Math.min(300, n - k)); }, [n, dt]);
 const intoGame = async () => {
@@ -107,7 +108,6 @@ const edgeOk = (e, min = 30) => e && e.ready !== false && e.n >= min && e.cover 
 
 try {
   await load();
-  if (BREAK === 'outline') { await page.evaluate(async () => { const R = await import('/src/map-render.js'); R.INK.pma = 'rgba(0, 0, 0, 0)'; }); log('BROKEN on purpose: the outline\'s ink clear'); }
   log('game loaded');
   // --- 1: the table -----------------------------------------------------------------------------------------------------
   const tab = await page.evaluate(async () => { const M = await import('/src/migrate-pma.js'); return { map: M.PMA_MAP, set: M.PMA_SET, n: M.OLD_PMAS.length }; });
