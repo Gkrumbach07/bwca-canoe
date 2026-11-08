@@ -84,27 +84,26 @@ const slateIn = (sel) => page.evaluate((sel) => {
   return n;
 }, sel);
 
-// r4: the HUD's base sheet (hud.js drawMap: the paper and all printed on it, in view or a margin past it) with the
-// primitive areas on, then off, then on again; the edge's cover between the two (__pmaEdge)
-const settleBase = async () => { for (let i = 0; i < 60; i++) { await frames(3); await page.waitForTimeout(120); const ok = await page.evaluate(() => { const h = window.__game.hud, b = h.base; return !!b && !b.pending && b.key && b.key.split('|')[4] === Object.values(h.layers).join(''); }); if (ok && i > 4) return true; } return false; };
+// r4: the HUD's sheet as it paints it (hud.js drawLayers, the base drawMap lays down: the paper and all printed on it),
+// at the base's own view, once with the primitive areas and once without, into canvases of our own (the corner's view
+// follows the canoe, so two live bases are never quite the same view); the edge's cover between the two (__pmaEdge)
+const settleBase = async () => { for (let i = 0; i < 60; i++) { await frames(3); await page.waitForTimeout(120); const ok = await page.evaluate(() => { const h = window.__game.hud, b = h.base; return !!b && !b.pending && !!b.key; }); if (ok && i > 4) return true; } return false; };
 const hudEdge = async () => {
   await settleBase();
-  await page.evaluate(() => { const b = window.__game.hud.base; window.__pmaOn = { d: b.ctx.getImageData(0, 0, b.W, b.H).data, v: { x0: b.x0, z0: b.z0, mPerPx: b.mPerPx }, W: b.W, H: b.H }; window.__game.hud.layers.pmas = false; });
-  await settleBase();
-  const res = await page.evaluate(async () => {
-    const h = window.__game.hud, b = h.base, on = window.__pmaOn, P = await import('/src/pma.js'), w = window.__game.world;
-    const same = b.W === on.W && b.H === on.H && b.x0 === on.v.x0 && b.z0 === on.v.z0 && b.mPerPx === on.v.mPerPx;
-    const off = b.ctx.getImageData(0, 0, b.W, b.H).data;
-    const sh = h.sheetsOn, owned = sh && sh.view() === 'owned' ? sh.ownedSheets() : null, pad = 4 * on.v.mPerPx;
+  return page.evaluate(async () => {
+    const g = window.__game, h = g.hud, b = h.base, P = await import('/src/pma.js'), w = g.world;
+    const v = { x0: b.x0, z0: b.z0, mPerPx: b.mPerPx }, W = b.W, H = b.H, k = h.canvas.width / 1040;
+    const paint = (pmas) => { const c = document.createElement('canvas'); c.width = W; c.height = H; const was = h.layers.pmas; h.layers.pmas = pmas; let ready = false; try { ready = h.drawLayers(c.getContext('2d'), W, H, v, k, g.player); } finally { h.layers.pmas = was; } return { ready, d: c.getContext('2d').getImageData(0, 0, W, H).data }; };
+    let on = paint(true), tries = 0;
+    while (!on.ready && tries++ < 60) { await new Promise((r) => setTimeout(r, 150)); on = paint(true); }
+    const off = paint(false);
+    const sh = h.sheetsOn, owned = sh && sh.view() === 'owned' ? sh.ownedSheets() : null, pad = 4 * v.mPerPx;
     const keep = (x, z) => x > w.minX + pad && x < w.maxX - pad && z > w.minZ + pad && z < w.maxZ - pad && (!owned || owned.some((q) => x > q.x0 + pad && x < q.x1 - pad && z > q.z0 + pad && z < q.z1 - pad));
-    const e = window.__pmaEdge(on.d, off, on.W, on.H, on.v, P.PMAS.map((p) => p.poly), { r: on.v.mPerPx > 60 ? 3 : 2, keep });
-    h.layers.pmas = true; window.__pmaOn = null;
-    return { ...e, same, mPerPx: +on.v.mPerPx.toFixed(2) };
+    const e = window.__pmaEdge(on.d, off.d, W, H, v, P.PMAS.map((p) => p.poly), { r: v.mPerPx > 60 ? 3 : 2, keep });
+    return { ...e, ready: on.ready && off.ready, mPerPx: +v.mPerPx.toFixed(2) };
   });
-  await settleBase();
-  return res;
 };
-const edgeOk = (e, min = 30) => e && e.same !== false && e.n >= min && e.cover >= COVER;
+const edgeOk = (e, min = 30) => e && e.ready !== false && e.n >= min && e.cover >= COVER;
 
 try {
   await load();
@@ -184,7 +183,7 @@ try {
   });
   await page.evaluate(() => { const g = window.__game; g.journal.close(); });
   await frames(5);
-  result('5c the book: its key has the row, on; a lake page in an area names it; the chart draws the outline', /Primitive areas/.test(book.key || '') && book.on === 'true' && /in the Fungus Lake primitive area/.test(lakePage.sub) && region.ready && edgeOk(region, 40), { book, lakePage, region });
+  result('5c the book: its key has the row, on; a lake page in an area names it; the chart draws the outline', /Primitive areas/.test(book.key || '') && book.on === 'true' && /in the Fungus Lake primitive area/.test(lakePage.sub) && edgeOk(region, 40), { book, lakePage, region });
   // the counter's side map, with a primitive area picked at the desk
   await page.evaluate(() => { const o = window.__game.outfitter; o.show(o.visit.landing, 'counter'); });
   await frames(5); await page.waitForTimeout(500);
