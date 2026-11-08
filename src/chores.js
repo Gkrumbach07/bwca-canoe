@@ -1291,6 +1291,7 @@ function handOver(T, t, have, take, words) {
 }
 registerKind('berries', {
   label: 'For the kitchen', weight: { local: 0.9, medium: 0.45, far: 0 },
+  inWindow(T, doy) { const d = (T && T.day) || (typeof window !== 'undefined' && window.__game ? window.__game.day : null); return berrySeason(d ? d.year : 2026, doy); },
   make(T, c) {
     const d = T.day || (typeof window !== 'undefined' && window.__game ? window.__game.day : null);
     if (!d || !berrySeason(d.year, d.doy) || c.board.some((t) => t && t.kind === 'berries')) return null;

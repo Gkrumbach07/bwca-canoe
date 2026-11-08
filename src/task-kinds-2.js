@@ -313,6 +313,7 @@ function beaverSeason(T, landing) {
 }
 registerKind('beaver', {
   label: 'Portage crew', weight: { local: 0.4, medium: 0.55, far: 0.45 },
+  inWindow(T, doy, ep) { const L = T && ep != null && typeof T.landing === 'function' ? T.landing(ep) : null; return L ? beaverSeason(T, L) : true; }, // (tasks.js kindInWindow: an untaken notice comes down out of season)
   make(T, c) {
     const Cr = T.world.creeks;
     if (!Cr || !Array.isArray(Cr.dams) || !beaverSeason(T, c.landing)) return null;
@@ -368,6 +369,7 @@ registerKind('beaver', {
 const ICE_DAYS = 21;
 registerKind('iceout', {
   label: 'For the kitchen', weight: { local: 0.3, medium: 0.7, far: 0.6 }, handsIn: true,
+  inWindow(T, doy, ep) { const L = T && ep != null && typeof T.landing === 'function' ? T.landing(ep) : null, F = T && T.world && T.world.facts; let out = LOCAL_ICE.out; try { const ic = L && F && F.iceOf ? F.iceOf(L.lake) : null; if (ic && Number.isFinite(ic.out)) out = ic.out; } catch { /* the lake's facts */ } return doy >= out && doy <= out + ICE_DAYS; },
   make(T, c) {
     if (c.board.some((t) => t && t.kind === 'iceout')) return null;
     const L = c.landing, F = T.world.facts, doy = doyOf(T);
