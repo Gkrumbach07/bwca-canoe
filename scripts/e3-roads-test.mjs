@@ -86,24 +86,20 @@ async function open(query = '') {
 const shot = async (page, name) => { const f = path.join(SHOTS, `${name}.png`); await page.screenshot({ path: f }); log('shot', f); };
 
 // a view along the home store's road: from a point 40 m out along its route, looking back at the store
-const VIEW = async (page) => page.evaluate(async (home) => {
+const VIEW = async (page, at = null) => page.evaluate(async ([home, at]) => {
   const g = window.__game, H = window.__e3, R = g.world.roads && g.world.roads.routes.get(String(home));
   let from, to;
-  if (R) { const n = R.p.length / 2, k = Math.min(n - 1, 6); from = [R.p[k * 2], R.p[k * 2 + 1]]; to = [R.p[0], R.p[1]]; }
+  if (at) ({ from, to } = at);
+  else if (R) { const n = R.p.length / 2, k = Math.min(n - 1, 6); from = [R.p[k * 2], R.p[k * 2 + 1]]; to = [R.p[0], R.p[1]]; }
   else { const e = g.outfitter.entry(home); from = [e.x + 60, e.z]; to = [e.x, e.z]; }
   H.closeAll(); H.look(from[0], from[1], to[0], to[1]);
   for (let i = 0; i < 20; i++) { H.step(10); await H.wait(40); }
+  H.look(from[0], from[1], to[0], to[1]);
   return { from, to };
-}, HOME);
+}, [HOME, at]);
 
 try {
-  // ---- 0 the cost without the roads -----------------------------------------------------------------------------------
-  const off = await open('?roads=off');
-  await VIEW(off);
-  const costOff = await off.evaluate(() => ({ ...window.__e3.calls(), decal: window.__e3.decal(), roads: !!window.__game.world.roads }));
-  await shot(off, 'e3-0-off');
-  await off.context().close();
-
+  // ---- 0 the cost, with the roads and without (the same view) --------------------------------------------------------
   const page = await open();
   const v = await VIEW(page);
   const costOn = await page.evaluate(() => {
@@ -114,6 +110,11 @@ try {
     return { ...a, noTruck: b };
   });
   await shot(page, 'e3-0-on');
+  const off = await open('?roads=off');
+  await VIEW(off, v);
+  const costOff = await off.evaluate(() => ({ ...window.__e3.calls(), decal: window.__e3.decal(), roads: !!window.__game.world.roads }));
+  await shot(off, 'e3-0-off');
+  await off.context().close();
   result('0 the roads add no shader program; the ribbon no draw call (the truck its own, while in view)', costOn.programs <= costOff.programs && costOn.decal.meshes === costOff.decal.meshes && costOn.noTruck.calls <= costOff.calls + 3 && costOn.calls - costOn.noTruck.calls <= 6 && !costOff.roads, { off: costOff, on: costOn, view: v });
 
   // ---- 1 the table --------------------------------------------------------------------------------------------------
@@ -137,7 +138,8 @@ try {
       const [px, pz, ph, , hw, , road, i] = near[0];
       if (g.tiles.groundAt) {
         const sd = g.world.shoreAt ? g.world.shoreAt(px, pz) : 99;
-        for (let w = 0; w < 80 && !(g.tiles.detail.heightAt(px, pz) === g.tiles.detail.heightAt(px, pz)); w++) { H.step(4); await H.wait(60); }
+        for (let w = 0; w < 120 && !((g.tiles.detail.at(px, pz) || {}).r === 2); w++) { H.step(4); await H.wait(60); } // (the 2 m chunk, not its 5 m parent)
+        out.level = (out.level || []).concat((g.tiles.detail.at(px, pz) || {}).r || 10);
         const dh = g.tiles.detail.heightAt(px, pz);
         if (!(dh === dh)) { out.noDetail = (out.noDetail || 0) + 1; out.mesh = (out.mesh || []).concat(+(g.tiles.meshGroundAt(px, pz) - ph).toFixed(2)); continue; }
         out.mesh = (out.mesh || []).concat(+(g.tiles.meshGroundAt(px, pz) - ph).toFixed(2));
