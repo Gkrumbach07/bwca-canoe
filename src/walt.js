@@ -58,6 +58,7 @@ export class Walt {
   // trip.on('sleep'): a night (not a nap, not a sleep by day) with the old canvas tent pitched over you, first time only
   onSleep(e) {
     if (this.found || !e) return false;
+    if (this.t.story && this.t.story.mode === 'mirror') return false; // k1a: a co-op guest never finds a notebook (the host's is the one)
     const camp = this.t.camp, c = camp && camp.camp;
     if (!c || c.item !== 'walttent' || !(c.stage >= 3)) return false;
     const woke = e.at && Number.isFinite(e.at.hours) ? e.at.hours : 7;

@@ -359,6 +359,7 @@ export class Coop {
   async enterAsGuest(w) {
     const g = this.g, { title, trip, outfitter, player, day } = g;
     kv.freeze((k) => k !== VISITOR_KEY);
+    if (g.story && typeof g.story.setMode === 'function') g.story.setMode('mirror'); // k1a: a guest's own story never moves (Part 3 call 7; v2 only)
     const host = (w.peers || []).find((p) => p.host);
     this.hostName = host ? host.name : 'your friend';
     this.visitor.visit = { code: this.code, host: host ? clean(host.name) : '', at: Date.now() }; writeVisitor(this.visitor); // (phase 3: Rejoin)
