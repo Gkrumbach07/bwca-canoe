@@ -380,15 +380,15 @@ for (const r of qRings) { const s = simplify(r, 30).map(([x, z]) => [Math.round(
   // where the main roads leave the box: "to <town> N mi", the town the road heads for beyond the box
   const BEYOND = [['Grand Marais', 47.7504, -90.3343], ['Two Harbors', 47.0227, -91.6707], ['Virginia', 47.5233, -92.5366], ['Cook', 47.8524, -92.6896], ['Orr', 48.0544, -92.8313], ['Atikokan', 48.7570, -91.6216], ['Thunder Bay', 48.3809, -89.2477], ['Silver Bay', 47.2944, -91.2574], ['Finland', 47.4144, -91.2496], ['Grand Portage', 47.9636, -89.6848], ['Hoyt Lakes', 47.5199, -92.1385], ['Babbitt', 47.7085, -91.9446]].map(([n, la, lo]) => { const [x, z] = toXZ([lo, la]); return { n, x, z }; });
   const exits = [];
-  for (const w of roads) {
+  for (const w of [...roads].sort((a, b) => (RANK[a.hw] ?? 5) - (RANK[b.hw] ?? 5))) { // (the highways lettered first)
     const r = RANK[w.hw] ?? 5; if (r > 1) continue;
     for (let k = 1; k < w.xz.length; k++) {
       const a = w.xz[k - 1], b = w.xz[k]; if (inBox(...a) === inBox(...b)) continue;
       const [ix, iz] = inBox(...a) ? a : b, [ox, oz] = inBox(...a) ? b : a, hx = ox - ix, hz = oz - iz, hl = Math.hypot(hx, hz) || 1;
       let best = null, bs = Infinity;
       for (const t of BEYOND) { if (inBox(t.x, t.z)) continue; const dx = t.x - ix, dz = t.z - iz, d = Math.hypot(dx, dz), cos = (dx * hx + dz * hz) / (d * hl); if (cos < 0.3 || d > 60000) continue; const sc = d * (2 - cos); if (sc < bs) { bs = sc; best = { t, d }; } }
-      if (!best || exits.some((q) => Math.hypot(q[1] - ix, q[2] - iz) < 3000)) continue;
-      exits.push([`to ${best.t.n} ${Math.max(1, Math.round((best.d * 1.15) / 1609.34))} mi`, Math.round(ix), Math.round(iz), +Math.atan2(hz, hx).toFixed(3), nm(w.ref || w.name || '')]);
+      if (!best || exits.some((q) => Math.hypot(q[1] - ix, q[2] - iz) < (q[5] === best.t.n ? 20000 : 3000))) continue; // (one label a town in 20 km: the south edge's forest roads all head for Finland)
+      exits.push([`to ${best.t.n} ${Math.max(1, Math.round((best.d * 1.15) / 1609.34))} mi`, Math.round(ix), Math.round(iz), +Math.atan2(hz, hx).toFixed(3), nm(w.ref || w.name || ''), best.t.n]);
     }
   }
   const doc = { v: 1, source: '© OpenStreetMap contributors, ODbL', names, lines, towns, exits };
