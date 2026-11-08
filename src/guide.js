@@ -33,6 +33,7 @@
 //     'near'   its target came within reach (reach().show turned true) ({ d }) · 'far' the other way
 //     '*'      every event, fn(evt, entry, detail)
 //   guide.stats() → { open, done, story, current, marks, sources } (the rigs)
+//   guide.act(id)                      an entry's one button (spec.action { label, run, short }), pressed in the journal
 //
 // An entry: { id, kind: 'story' | 'side' | 'starter' | 'ticket' | 'board', title, next (one plain line: what to do now,
 //   ending in a full stop), target: { kind: 'person' | 'place' | 'thing', key, label, pos() → { x, y, z } | null (the
@@ -133,8 +134,13 @@ export class Guide {
       // r3 replay: { x, z, r } a place the target belongs to (a campsite): anywhere inside it the target shows at full
       within: g.within && Number.isFinite(g.within.x) && Number.isFinite(g.within.z) ? { x: g.within.x, z: g.within.z, r: Math.min(GUIDE.nearMax, Number(g.within.r) || GUIDE.siteNear) } : null,
     } : null;
-    return { id: String(s.id), kind, title: String(s.title || ''), next: cap(stop(s.next)), target, tutorial: !!s.tutorial, hold: !!s.hold, order: Number.isFinite(s.order) ? s.order : 0, done: !!s.done, source: s.source || src, ref: s.ref ?? null };
+    // (loop tasks: an entry may carry one button for its page in the journal, { label, run(), short: words when it
+    // can't be done now (the money short) }: the late season's rescue off the ice)
+    const a = s.action && typeof s.action.run === 'function' ? { label: String(s.action.label || 'Do it'), run: s.action.run, short: s.action.short ? String(s.action.short) : null } : null;
+    return { id: String(s.id), kind, title: String(s.title || ''), next: cap(stop(s.next)), target, tutorial: !!s.tutorial, hold: !!s.hold, order: Number.isFinite(s.order) ? s.order : 0, done: !!s.done, source: s.source || src, ref: s.ref ?? null, action: a };
   }
+  // an entry's button pressed (the journal): → its run()'s answer, or false
+  act(id) { const e = this.get(id); if (!e || !e.action || e.action.short) return false; try { const r = e.action.run(); this.sync(); return r; } catch (err) { console.warn('guide: act', id, err); return false; } }
   get loading() { const ti = this.t.title; return !!(ti && ti.state && ti.state !== 'game'); }
   sync() {
     const specs = new Map();
