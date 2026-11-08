@@ -571,6 +571,8 @@ export class Tasks {
   today() { const d = this.day || (window.__game && window.__game.day); return d ? absDay(d.year, d.doy) : 0; }
   doyNow() { const d = this.day || (typeof window !== 'undefined' && window.__game && window.__game.day); return d ? d.doy : 190; }
   boardTable() { return BOARD_TABLE; }
+  inWindow(kind, doy = this.doyNow(), ep = null) { return kindInWindow(kind, doy, this, ep); }
+  bandRange(band) { return bandRange(band); }
   lakeRec(id) { return id > 0 ? this.world.lakes[id - 1] : null; }
   // d1 lakes: how deep a lake goes (the DNR's contour map, else its max depth: lake-facts.js), and whether lake trout
   // live in it (the DNR's survey where there is one: fishing.js bites them by it); with no facts, 20 m and deeper
