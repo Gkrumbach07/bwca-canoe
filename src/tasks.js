@@ -747,6 +747,8 @@ export class Tasks {
       mine.forEach((t, i) => { b.slots[i] = t.id; if (!t.band) t.band = SLOTS[i]; });
       for (let i = mine.length; i < SLOTS.length; i++) b.pending.push(i);
     } else if (today > b.day) {
+      // (loop tasks: a pin holding a notice that is gone from the list, taken off it elsewhere, is a bare pin)
+      b.slots.forEach((id, i) => { if (id != null && !this.ads.has(id)) b.slots[i] = null; });
       const n = Math.min(SLOTS.length, today - b.day);
       for (let k = 0; k < n; k++) this.changeOne(b);
       b.day = today;

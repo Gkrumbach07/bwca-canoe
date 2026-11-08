@@ -121,7 +121,7 @@ try {
     for (const doy of [135, 191, 262, 290]) {
       window.__setDoy(doy);
       for (const ep of [25, 31, 38, 64, 16, 1]) {
-        for (const [id, t] of [...T.ads]) if (t.status === 'offered') T.ads.delete(id);
+        for (const [id, t] of [...T.ads]) if (t.status === 'offered' && t.from === ep) T.ads.delete(id);
         delete T.boards[ep];
         T.board(ep); await T.write(ep);
         for (const t of T.board(ep)) {
