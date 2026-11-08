@@ -16,6 +16,7 @@ import { KINDS, dateWords } from './permits.js';
 import { dateOfAbs } from './trip.js';
 import { weekdayOf } from './hud.js';
 import * as OF from './outfitters.js';
+import { ticketWhy } from './flyers.js'; // (the edge round: a ticket says what it was for)
 
 const DAYS = 28;
 const NEAR_EPS = 8;          // entry points offered without stream B's reach: the nearest few
@@ -63,7 +64,7 @@ export class PermitDesk {
     // r2: each open ticket, payable here as from the book; the Buy below is shut while any is
     for (const f of typeof P.tickets === 'function' ? P.tickets() : []) {
       const short = !(this.o && this.o.sandbox) && money < (f.n || 0);
-      rows.push(`<div class="pd-fine"><div><b>A ranger's ticket</b> · <span class="soft">${esc(dateWords(f.abs, { weekday: false }))}, out after dark on day use.</span></div>${short ? `<span class="pd-short">$${f.n} — you have $${money}</span>` : `<button type="button" class="stamp small" data-act="permit-pay" data-id="${esc(f.id)}">Pay $${f.n}</button>`}</div>`);
+      rows.push(`<div class="pd-fine"><div><b>A ranger's ticket</b> · <span class="soft">${esc(dateWords(f.abs, { weekday: false }))}, ${esc(ticketWhy(f).toLowerCase())}.</span></div>${short ? `<span class="pd-short">$${f.n} — you have $${money}</span>` : `<button type="button" class="stamp small" data-act="permit-pay" data-id="${esc(f.id)}">Pay $${f.n}</button>`}</div>`);
     }
     for (const p of P.held()) rows.push(`<p class="pd-held">✓ ${esc(KINDS[p.kind])} permit · entry point ${p.ep}${p.ep === at ? '' : ` (${esc(this.place(p.ep))})`} · ${p.abs === today ? 'today' : esc(dateWords(p.abs))}${p.kind === 'pma' && p.pma ? ` · ${esc(this.pmaName(p.pma))}` : ''}</p>`);
     const s = this.selFor(at);

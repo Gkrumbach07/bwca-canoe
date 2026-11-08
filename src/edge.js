@@ -171,16 +171,18 @@ export function decodeRoads(doc) {
   ROADS.ready = true;
   return ROADS;
 }
-// The roads printed faintly under the water and the wilderness's own ink: the highways a double line, the county roads a
+// The roads printed faintly over the ground and under the wilderness's own ink: the highways a double line, the county roads a
 // single firm one, the spurs to the lots finer; the towns in letter-spaced small capitals, the roads leaving the sheet
-// with "to Ely 6 mi" at the paper's edge, the way the agency maps letter them. lettered: boxes already lettered (the
-// lake names), kept off; inView(ax, az, bx, bz).
+// with "to Cook 7 mi" where they leave the baked country, the way the agency maps letter them. lettered: the boxes
+// already lettered ({ x0, y0, x1, y1 } px: the lake names), kept off and added to; inView(ax, az, bx, bz). lines / towns:
+// either half alone (the HUD draws the lines with the ground, the towns after the lake names).
 const ROAD_INK = 'rgba(92, 64, 44, 0.62)', ROAD_FILL = 'rgba(244, 236, 214, 0.9)';
 const SERIF = 'Alegreya, Georgia, "Times New Roman", serif';
 const spaced = (s) => String(s).toUpperCase().split('').join(String.fromCharCode(8202));
-export function paintRoads(ctx, v, W, H, { k = 1, lettered = null, inView = null, towns = true } = {}) {
+export function paintRoads(ctx, v, W, H, { k = 1, lettered = null, inView = null, towns = true, lines = true } = {}) {
   if (!ROADS.ready) { loadMapRoads(); return; }
   const { x0, z0, mPerPx } = v, s = 1 / mPerPx, view = inView || ((ax, az, bx, bz) => !(bx < x0 || ax > x0 + W * mPerPx || bz < z0 || az > z0 + H * mPerPx));
+  if (lines) {
   ctx.save();
   ctx.setTransform(ctx.getTransform().multiply(new DOMMatrix([s, 0, 0, s, -x0 * s, -z0 * s])));
   ctx.lineJoin = 'round'; ctx.lineCap = 'round';
@@ -193,18 +195,19 @@ export function paintRoads(ctx, v, W, H, { k = 1, lettered = null, inView = null
     else { ctx.strokeStyle = ROAD_INK; ctx.lineWidth = 1 * k * mPerPx; ctx.setLineDash([3 * k * mPerPx, 2.5 * k * mPerPx]); ctx.stroke(r.path); ctx.setLineDash([]); }
   }
   ctx.restore();
+  }
   if (!towns) return;
   // the towns and the exits, in screen pixels
   ctx.save();
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
   const boxes = lettered || [];
-  const clear = (bx) => !boxes.some((q) => !(bx[2] < q[0] || bx[0] > q[2] || bx[3] < q[1] || bx[1] > q[3]));
+  const clear = (bx) => !boxes.some((q) => bx.x0 < q.x1 && q.x0 < bx.x1 && bx.y0 < q.y1 && q.y0 < bx.y1); // (hud.js's lettered boxes)
   for (const t of ROADS.towns) {
     if (!t.big && mPerPx > 40) continue;
     if (!view(t.x, t.z, t.x, t.z)) continue;
     const a = (t.x - x0) / mPerPx, b = (t.z - z0) / mPerPx, size = (t.big ? 12 : 9.5) * k;
     ctx.font = `600 ${size}px ${SERIF}`;
-    const txt = spaced(t.name), w = ctx.measureText(txt).width, bx = [a - w / 2 - 2, b - size, a + w / 2 + 2, b + size];
+    const txt = spaced(t.name), w = ctx.measureText(txt).width, bx = { x0: a - w / 2 - 2, y0: b - size - 3 * k, x1: a + w / 2 + 2, y1: b + size * 0.6 };
     if (!clear(bx)) continue;
     boxes.push(bx);
     ctx.fillStyle = 'rgba(92, 64, 44, 0.8)';
@@ -217,7 +220,7 @@ export function paintRoads(ctx, v, W, H, { k = 1, lettered = null, inView = null
     // drawn just inside the paper's edge, along the road's way out
     const a = (e.x - x0) / mPerPx - Math.cos(e.a) * 34 * k, b = (e.z - z0) / mPerPx - Math.sin(e.a) * 34 * k;
     if (a < 0 || b < 0 || a > W || b > H) continue;
-    const w = ctx.measureText(e.label).width, bx = [a - w / 2, b - 8 * k, a + w / 2, b + 8 * k];
+    const w = ctx.measureText(e.label).width, bx = { x0: a - w / 2, y0: b - 8 * k, x1: a + w / 2, y1: b + 8 * k };
     if (!clear(bx)) continue;
     boxes.push(bx);
     ctx.lineWidth = 3 * k; ctx.strokeStyle = 'rgba(236, 228, 207, 0.85)'; ctx.fillStyle = 'rgba(92, 64, 44, 0.85)';
