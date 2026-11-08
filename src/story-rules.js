@@ -38,6 +38,7 @@ export class Rules {
     this.byEvent = new Map();   // evt → Set(rule)
     this.derived = new Set();   // rules reading a derived value (re-checked on any fact)
     this.sensors = new Set();   // rules reading a sensor (re-checked on the tick)
+    this.waiting = new Set();   // push rules the director held back (re-asked on the tick)
     this.running = false; this.queue = [];
     this.errors = [];
   }
@@ -84,7 +85,7 @@ export class Rules {
   tick() {
     if (!this.active()) return [];
     const out = [];
-    for (const r of this.sensors) if (!this.fired(r) && r.c.test(this.story.env)) { if (this.run(r)) out.push(r.id); }
+    for (const r of new Set([...this.sensors, ...this.waiting])) if (!this.fired(r) && r.c.test(this.story.env)) { if (this.run(r)) out.push(r.id); }
     // timers due
     const now = this.story.nowAbs(), due = (this.doc.timers || []).filter((t) => t.at <= now);
     if (due.length) {
@@ -130,7 +131,8 @@ export class Rules {
 
   // --- a rule fires --------------------------------------------------------------------------------------------------
   run(r, args = {}) {
-    if (r.push && !this.quiet && !this.story.push(r, args)) return false; // (the director said not today)
+    if (r.push && !this.quiet && !this.story.push(r, args)) { if (!r.on) this.waiting.add(r); return false; } // (the director said not today: asked again on the tick)
+    this.waiting.delete(r);
     if (!this.doc.fired) this.doc.fired = {};
     if (!r.repeat) this.doc.fired[r.id] = this.story.tickN();
     if (r.after && !this.quiet) {
