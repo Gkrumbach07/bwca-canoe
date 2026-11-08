@@ -253,7 +253,7 @@ try {
   const evN = (k) => r7.ev.filter((e) => e === k).length;
   result('7b the turn: up at seven on 15 June 2027, rested, the permit held; season:close and year:open once each; the same season', r7.year === 2027 && r7.today === r7a.june15 && Math.abs(r7.hours - 7) < 0.1 && r7.energy >= 0.99 && r7.held.includes(r7a.june15) && evN('season:close') === 1 && evN('year:open') === 1 && r7.season && r7a.money - r7.money === 6, r7);
   await frames(30);
-  const r7c = await page.evaluate(async () => { const g = window.__game, T = g.tasks, doy = g.day.doy; T.board(25); await T.write(25); return { board: T.board(25).filter(Boolean).map((t) => ({ kind: t.kind, inWin: T.inWindow(t.kind, doy, 25) })) }; });
+  const r7c = await page.evaluate(async () => { const g = window.__game, T = g.tasks, doy = g.day.doy; const b0 = T.boards[25] ? { slots: T.boards[25].slots.slice(), pending: T.boards[25].pending.slice(), day: T.boards[25].day, today: T.today() } : null; T.board(25); await T.write(25); let probe = null; try { const f = await T.makeKind('fish', 25, 'local'); probe = f ? f.kind : 'null'; if (f) T.ads.delete(f.id); } catch (e) { probe = String(e); } return { b0, b1: { slots: T.boards[25].slots.slice(), pending: T.boards[25].pending.slice() }, probe, board: T.board(25).filter(Boolean).map((t) => ({ kind: t.kind, inWin: T.inWindow(t.kind, doy, 25) })) }; });
   result('7c after the turn the board is this June\'s (every notice in its window)', r7c.board.length >= 3 && r7c.board.every((t) => t.inWin), r7c);
   await shot('june-2027');
 } catch (e) {
