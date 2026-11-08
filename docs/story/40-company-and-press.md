@@ -240,6 +240,7 @@ down with him. After it, at either place, he gives only a nod and "Hello again."
 
 **The notice** (Farm 31's board, from 1 August, and on the café door):
 
+<!-- id: notice.openhouse -->
 ```
 NORTHMARK METALS
 COMMUNITY OPEN HOUSE
@@ -552,6 +553,7 @@ happened, after Wade has gone).
 JOSIE: "Hey, so. Somebody phoned in a leech order for you. Which, I don't think it's for leeches?"
 [She hands it over. Item: **the leech-order slip**, in Josie's round handwriting on the store's pad.]
 
+<!-- id: item.leechslip -->
 ```
 PHONE ORDER
 For: (the one with the old pack)
@@ -706,6 +708,7 @@ These are book pages the player receives at the first meeting (6.4). They are ph
 Northland Ledger, Duluth*, postmarked Ely, 10 September 2019. Ballpoint, in Walt's hand. The sevens are crossed, the
 old way, as they are in every date in the notebook.
 
+<!-- id: paper.walt.2019 -->
 ```
 Ask the state for Boreal's 1976 Kettle creek field sheets.
 Ask why stations 7–12 are background.
@@ -716,6 +719,7 @@ crossed sevens, the same slant, the same short downstroke on the d. See 6.4.]
 
 **Bill Ostrander's note, 1977.** A reporter's notebook page, spiral-torn, in pencil, with a later entry in blue ink.
 
+<!-- id: paper.ostrander.1977 -->
 ```
 Oct 3 '77 — 4:40 pm. Call. E. HAAPALA, Ely. Boreal crew, water sampler.
 Says Q3 water report to state was changed. Stations 7–12 (below the pad)
@@ -726,6 +730,7 @@ Where are they — "put away safe, up by Bald Eagle."
 MEET Fri 14th, here, 2:00. Brother may come.
 ```
 
+<!-- id: paper.ostrander.1977.blue -->
 ```
 [blue ink]
 Fri 14 — no show.
@@ -740,6 +745,7 @@ can match to Walt.)*
 **The state's copy of Boreal's target list.** From Maggie's 2019 records request: the one thing that came back. A
 photocopy of a typed table, two pages; page two shown, with Maggie's pencil in the margin.
 
+<!-- id: paper.boreal.1976 -->
 ```
 BOREAL RANGE MINERALS CO.
 ANNUAL EXPLORATION REPORT — YEAR ENDING DEC. 31, 1976
@@ -1006,6 +1012,7 @@ in that lot 05:30–08:30 on every dawn from `firstDawn` until the dawn lot; on 
 and the meeting set there: the lot holds Wade's truck and two more, engines running, and no grey wagon. Under the
 permit box's lid, where the self-issue forms sit, a leech-order slip folded in four, in Maggie's hand:
 
+<!-- id: note.maggie.meet -->
 ```
 Too many trucks. Farm, tomorrow first light.
 Leeches are on me.

@@ -267,6 +267,7 @@ into its stub; this summary line comes after the third.)
 A torn square of lined school paper, blue ink, a schoolteacher's round hand. Undated; from the 1980s or 1990s, kept in
 a wallet until it went soft, then tucked behind the photograph here.
 
+<!-- id: note.june -->
 ```
 W —
 Coffee's in the blue can, not the red one.
@@ -362,6 +363,7 @@ The paper is a page torn from a pocket field book, ruled in faint green, damp-st
 soft and silver. The pencil is a short field pencil with a rubber band wound round the end, the kind a water sampler
 keeps in his shirt.
 
+<!-- id: note.eino -->
 ```
 W. — Saturday.
 Bring the good coffee.
@@ -413,6 +415,7 @@ close-up. Contents (bible 5.1), with the close-up text:
 player's page: "Four field books. Creek readings below the pad, 1976 and '77. Three hands." Close-up of the 19 August
 1976 page:
 
+<!-- id: cans.fieldbook -->
 ```
 Aug 19 76. Rain 2 days. Kettle cr. below pad running ORANGE.
 Fish dead Stn 7 to past Stn 10, a km at least.
@@ -431,6 +434,7 @@ E.H.  W.H.  T.K.
 with pencil all over it. Stations 7 to 12 moved to 'background'. Initialled C.B. Somebody pulled it out of a fire."
 Close-up:
 
+<!-- id: cans.report.q3 -->
 ```
 BOREAL RANGE MINERALS COMPANY — QUARTERLY WATER REPORT — Q3 1976 — DRAFT
 
@@ -443,6 +447,7 @@ BELOW PAD (Stations 7–12)      [the whole heading struck through in pencil]
 **3. The green ledger.** A small green clothbound cash book, 1975–77. The player's page: "A cash book. Money to 'L.P.'
 and 'H.V.', two years of it. The last line is the second of September, 1977." Two spreads; close-up of one:
 
+<!-- id: cans.ledger -->
 ```
  4/12/75   L.P.    300    insp. W. pads
  7/30/75   H.V.    500    rd. permit
@@ -456,6 +461,7 @@ and 'H.V.', two years of it. The last line is the second of September, 1977." Tw
 **4. The carbon.** A carbon copy on thin yellow paper, letterhead faint. The player's page: "A memo from 1977. 'Re:
 Haapala, E.' Six weeks before he drowned." Close-up:
 
+<!-- id: cans.memo -->
 ```
 BOREAL RANGE MINERALS COMPANY — ELY FIELD OFFICE
 30 August 1977
@@ -663,6 +669,7 @@ The scanner plays lines by state. Voices: **Base** is Wade, pleasant, unhurried,
 per night unless marked (r).
 
 **Quiet**
+<!-- list: scanner.quiet -->
 - One: "One. Nothing moving. Dark as a pocket in here." (r)
 - Base: "Take your time, fellas. He's got all night and so have we."
 - Base: "Nobody gets wet. Nobody gets loud. We just want to say hello."
@@ -671,12 +678,14 @@ per night unless marked (r).
 - Base: "Everybody keep your lights low till you need them."
 
 **Noticed**
+<!-- list: scanner.noticed -->
 - Two: "Two. Light at the south end. Was. It's gone." (r)
 - Three: "Something on the water off the point. Could be a loon." / Base: "Loons don't paddle."
 - One: "Hear that?" / (a pause) / One: "No. Nothing." (r)
 - One: "Loons just went up behind me."
 
 **Seen**
+<!-- list: scanner.seen -->
 - One: "He's on Pietro. Going north."
 - Two: "Got him. Clearwater, west of the island. He's going for the long one."
 - Base: "Two, sit on the Rock Island end. He has to come by you."
@@ -684,27 +693,33 @@ per night unless marked (r).
 - Base: "Three, go round by Turtle. Take your time. He's not going anywhere fast with that load."
 
 **Lost**
+<!-- list: scanner.lost -->
 - One: "Lost him." (r)
 - Base: "Then sit still and listen. Nobody paddles all night without making noise."
 - Base: "He'll have to come out on a landing sometime. Sit on the landings."
 
 **Day**
+<!-- list: scanner.day -->
 - One: "One. I've got him. Broad daylight. He's just sitting there."
 - Base: "Then we sit too. Everybody on the landings. Nobody goes near him on the water."
 
 **Wind**
+<!-- list: scanner.wind -->
 - Two: "It's getting lumpy out here." / Base: "Then get in the lee. He will."
 
 **Denny turned**
+<!-- list: scanner.denny -->
 - Base (at dusk): "Our friend says the river. Three, go up the river."
 - Three (about 02:00): "Three. Nothing on the river. Nothing all night." / Base: "Huh." (a long pause) "All right."
 
 **The feint** (6.10)
+<!-- list: scanner.feint -->
 - Three: "Light on the narrows. He's going west. Bald Eagle."
 - Base: "All right. Three, stay on the narrows. One, go on over behind him."
 - (if the player then goes north) Base: "He's playing with you, fellas. Sit on both."
 
 **Dawn**
+<!-- list: scanner.dawn -->
 - Base (04:30): "Two, go home and sit off the landing."
 - Two (the last pass, 6.7): "Two. Going home. Nothing in the islands." / Base: "Look again."
 - Base (05:00, as his flashlight comes on at the landing): "I'm on the landing. Nobody comes past me in the dark."
@@ -751,6 +766,7 @@ all).
 Maggie's note under the Little Gabbro permit box: the finished text is `40-company-and-press.md` 6.9, quoted here
 word for word (a leech-order slip folded in four, in her hand):
 
+<!-- quote: note.maggie.meet -->
 ```
 Too many trucks. Farm, tomorrow first light.
 Leeches are on me.
@@ -1018,6 +1034,7 @@ record: "Well. I said if." If not: "Good. That's good."
 **Two game weeks later: the story breaks.** The Ledger's front page lies on every counter in the game (a world prop on
 every store's counter, and a book clipping). Finished text, with variants in braces:
 
+<!-- id: paper.ledger.j -->
 ```
 THE NORTHLAND LEDGER
 
@@ -1153,6 +1170,7 @@ look back.
 
 **Two game weeks later: Maggie's column** (a short item on page 4, on every counter; finished text):
 
+<!-- id: paper.column.m -->
 ```
 THE NORTHLAND LEDGER — NORTHERN NOTEBOOK
 
@@ -1212,6 +1230,7 @@ black spruce, a rock point, a cabin chimney with no cabin showing. The camera ca
 a place: it is off the map. **Back:** a Canadian stamp, an **Atikokan** postmark, and the address in a careful
 old-man's capitals:
 
+<!-- id: postcard -->
 ```
 TO THE ONE WITH MY TENT
 c/o {home outfitter}

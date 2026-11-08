@@ -73,10 +73,15 @@ const clean = (s) => s.replace(/\s+/g, ' ').trim();
 
 export function blocks(src) {
   // A blockquote line is a reply: its '>' goes, and the first line of each quote gets the reply mark '⟩'.
+  // qg[k] numbers each run of '>' lines, so an anchor before a quote takes all of its paragraphs.
+  const qg = [];
+  let g = 0;
   const L = src.split('\n').map((l, k, all) => {
     const m = l.match(/^(\s*)>\s?(.*)$/);
-    if (!m) return l;
+    if (!m) { qg.push(0); return l; }
     const prevQ = k > 0 && /^\s*>/.test(all[k - 1]);
+    if (!prevQ) g++;
+    qg.push(g);
     return m[1] + (prevQ ? '' : '⟩ ') + m[2];
   });
   const out = [];
@@ -94,11 +99,11 @@ export function blocks(src) {
       out.push({ t: 'code', text: body.join('\n'), ln });
       continue;
     }
-    if ((m = line.match(/^<!--\s*(id|list):\s*([A-Za-z0-9_.:\-]+)\s*([^>]*?)\s*-->\s*$/))) {
-      out.push({ t: 'anchor', mode: m[1], id: m[2], flags: m[3].split(/\s+/).filter(Boolean), ln });
+    if ((m = line.match(/^\s*<!--\s*(id|list|quote|not-text):\s*([A-Za-z0-9_.:\-]*)\s*([^>]*?)\s*-->\s*$/))) {
+      out.push({ t: 'anchor', mode: m[1], id: m[2], flags: m[1] === 'not-text' ? [] : m[3].split(/\s+/).filter(Boolean), ln });
       i++; continue;
     }
-    if (/^<!--/.test(line)) { while (i < L.length && !/-->/.test(L[i])) i++; i++; continue; }
+    if (/^\s*<!--/.test(line)) { while (i < L.length && !/-->/.test(L[i])) i++; i++; continue; }
     if ((m = line.match(/^(#{1,6})\s+(.*)$/))) { out.push({ t: 'h', level: m[1].length, text: m[2].trim(), ln }); i++; continue; }
     if (/^\s*$/.test(line)) { i++; continue; }
     if (/^---+\s*$/.test(line)) { out.push({ t: 'hr', ln }); i++; continue; }
@@ -118,7 +123,7 @@ export function blocks(src) {
       // this item's own indent inside a numbered list.
       const starts = (l) => /^\s*[-*+]\s+/.test(l) || (/^\s*\d+\.\s+/.test(l) && (numbered && l.match(/^\s*/)[0].length <= ind || l.match(/^\s*/)[0].length > ind && /^\s*1\.\s/.test(l)));
       while (i < L.length && L[i].trim() && !starts(L[i]) && !/^\s*```/.test(L[i]) &&
-        !/^#/.test(L[i]) && !/^\s*\|/.test(L[i]) && !/^<!--/.test(L[i])) {
+        !/^#/.test(L[i]) && !/^\s*\|/.test(L[i]) && !/^\s*<!--/.test(L[i])) {
         parts.push(L[i].trim()); i++;
       }
       out.push({ t: 'item', ind, text: parts.join(' '), ln });
@@ -127,8 +132,8 @@ export function blocks(src) {
     const parts = [line.trim()];
     i++;
     while (i < L.length && L[i].trim() && !/^\s*(?:[-*+]|1\.)\s+/.test(L[i]) && !/^\s*```/.test(L[i]) &&
-      !/^#/.test(L[i]) && !/^\s*\|/.test(L[i]) && !/^<!--/.test(L[i])) { parts.push(L[i].trim()); i++; }
-    out.push({ t: 'p', text: parts.join(' '), ln });
+      !/^#/.test(L[i]) && !/^\s*\|/.test(L[i]) && !/^\s*<!--/.test(L[i])) { parts.push(L[i].trim()); i++; }
+    out.push({ t: 'p', text: parts.join(' '), ln, qg: qg[ln - 1] });
   }
   return out;
 }
@@ -312,7 +317,7 @@ export function extractDoc(key, src, known) {
   const B = blocks(src);
   const ents = {};
   const order = [];
-  const notes = { unwired: [], untranslated: [], codeUnanchored: [], dup: [] };
+  const notes = { unwired: [], untranslated: [], codeUnanchored: [], dup: [], quotes: [] };
   const put = (id, e, ln) => {
     if (ents[id]) { notes.dup.push({ id, ln }); return null; }
     ents[id] = e; order.push(id);
@@ -393,7 +398,8 @@ export function extractDoc(key, src, known) {
   const choiceAt = new Map();
 
   let skipLevel = 0;
-  for (const b of B) {
+  for (let bi = 0; bi < B.length; bi++) {
+    const b = B[bi];
     if (b.t === 'h' && skipLevel && b.level <= skipLevel) skipLevel = 0;
     if (b.t === 'h' && !skipLevel && SKIP_HEAD.test(b.text)) skipLevel = b.level;
     if (skipLevel && b.t !== 'anchor' && !(pending && pending.mode === 'id')) continue;
@@ -411,15 +417,26 @@ export function extractDoc(key, src, known) {
     }
     if (b.t === 'hr') { if (pending && pending.mode === 'list') pending = null; continue; }
 
-    // ---- anchored blocks: the anchor wins over any structural id
+    // ---- anchors: not-text skips the next block; quote checks it against an id; id and list name it
+    if (pending && pending.mode === 'not-text') { pending = null; continue; }
+    if (pending && pending.mode === 'quote') {
+      notes.quotes.push({ of: pending.id, text: b.t === 'code' ? b.text : plain(b.text), ln: b.ln });
+      pending = null; continue;
+    }
     if (pending && (pending.mode === 'id' || b.t === 'item')) {
       const a = pending;
       if (a.mode === 'id') pending = null;
       const id = a.mode === 'list' ? `${a.id}.${++a.n}` : a.id;
-      const text = b.t === 'code' ? b.text : b.t === 'table' ? b.rows.map((r) => r.join(' | ')).join('\n') : quotedOr(b.text);
-      const e = { k: kindOf(a.flags), text };
-      const cond = b.t === 'item' && b.text.match(/\)\s*$/) && b.text.match(/\(([^()]*)\)\s*$/);
-      if (cond) e.if = clean(cond[1]);
+      let e;
+      if (b.t === 'item' && (e = speakerItem(b.text))) {
+        if (a.flags.includes('bark')) e.bark = true;
+      } else {
+        let text = b.t === 'code' ? b.text : b.t === 'table' ? b.rows.map((r) => r.join(' | ')).join('\n') : b.t === 'item' ? quotedOr(b.text) : plain(b.text);
+        while (b.t === 'p' && b.qg && B[bi + 1] && B[bi + 1].t === 'p' && B[bi + 1].qg === b.qg) text += '\n\n' + plain(B[++bi].text);
+        e = { k: kindOf(a.flags), text };
+        const cond = b.t === 'item' && b.text.match(/\)\s*$/) && b.text.match(/\(([^()]*)\)\s*$/);
+        if (cond) e.if = clean(cond[1]);
+      }
       put(id, e, b.ln);
       if (e.if) notes.unwired.push({ id, if: e.if });
       continue;
@@ -489,7 +506,34 @@ export function extractDoc(key, src, known) {
     else if (b.t === 'table') table(b);
   }
 
+  // A plain block's words: emphasis marks and the reply mark go, the text stays.
+  function plain(text) { return clean(text.replace(/⟩/g, '').replace(/\s*\*?\[[^\]]*\]\*?/g, '').replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\*([^*]+)\*/g, '$1')); }
+  // An anchored list item said by someone: `One: "…" / Base: "…"`, `Base (04:30): "…"`, `(if …) Base: "…"`, `(r)`.
+  function speakerItem(text) {
+    const segs = text.split(/\s+\/\s+(?=(?:\([^)]*\)\s*)?[A-Z][\w]*(?: [A-Z][\w]*)?(?: \([^)]*\))?:\s*")/);
+    const parts = [];
+    let pre = null, repeat = false;
+    for (const seg of segs) {
+      const m = seg.match(/^(?:\(([^)]*)\)\s*)?([A-Z][\w]*(?: [A-Z][\w]*)?)(?: \(([^)]*)\))?:\s*((?:"[^"]*"(?:\s*\/?\s*\([^)]*\)\s*)*\s*)+)(.*)$/);
+      if (!m) return null;
+      if (m[1] && !parts.length) pre = clean(m[1]);
+      const words = [...m[4].matchAll(/"([^"]+)"/g)].map((x) => x[1]).join(' ');
+      if (/\(r\)/.test(m[4] + m[5])) repeat = true;
+      const p = { who: m[2], text: clean(words) };
+      if (m[3]) p.how = clean(m[3]);
+      parts.push(p);
+    }
+    if (!parts.length) return null;
+    const e = { k: 'line', who: parts[0].who, text: parts[0].text };
+    if (parts[0].how) e.how = parts[0].how;
+    if (pre) e.if = pre;
+    if (repeat) e.repeat = true;
+    if (parts.length > 1) e.then = parts.slice(1);
+    return e;
+  }
   function quotedOr(text) {
+    const turn = text.match(/^\s*"([^"]+)"\s*→\s*"([^"]+)"/); // a line that turns: "Drowned" → "Went north."
+    if (turn) return clean(turn[2]);
     const q = [...text.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
     return q.length ? clean(q.join(' ')) : clean(text.replace(/^\*+|\*+$/g, ''));
   }
@@ -675,6 +719,8 @@ export function extractAll({ root = ROOT } = {}) {
     quoteDrift: [], quoteOk: 0, designAnchors: [], counts: {}, bytes: {} };
   const all = {}; // id → {docKey, e}
   const nb = {};
+  const quotes = [];
+  const norm = (x) => x.replace(/[*⟩]/g, '').replace(/\s+/g, ' ').trim();
   const results = {};
   const srcs = Object.fromEntries(Object.entries(DOC_FILES).map(([key, [file]]) => [key, readFileSync(join(docs, file), 'utf8')]));
   const known = knownSpeakers(Object.values(srcs));
@@ -699,13 +745,15 @@ export function extractAll({ root = ROOT } = {}) {
     report.untranslated.push(...r.notes.untranslated.map((u) => ({ doc: key, ...u })));
     // code blocks: a verbatim quote of the notebook is fine; anything else wants an anchor
     for (const c of r.notes.codeUnanchored) {
-      const norm = (s) => s.replace(/\s+/g, ' ').trim();
-      const hit = Object.entries(nb).find(([, e]) => e.text && norm(e.text).startsWith(norm(c.text.split('\n')[0])) && norm(c.text.split('\n')[0]).length > 8);
-      if (hit) {
-        if (norm(hit[1].text) === norm(c.text) || norm(hit[1].text).includes(norm(c.text))) report.quoteOk++;
-        else report.quoteDrift.push({ doc: key, ln: c.ln, of: hit[0] });
-      } else report.codeUnanchored.push({ doc: key, ln: c.ln, base: c.base, first: c.first });
+      const body = norm(c.text);
+      const head = norm(c.text.split('\n').find((l) => l.trim()) || '');
+      const exact = Object.values(nb).some((e) => e.text && (norm(e.text) === body || norm(e.text).includes(body)));
+      const hit = !exact && head.length > 5 && Object.entries(nb).find(([, e]) => e.text && norm(e.text).startsWith(head));
+      if (exact) report.quoteOk++;
+      else if (hit) report.quoteDrift.push({ doc: key, ln: c.ln, of: hit[0] });
+      else report.codeUnanchored.push({ doc: key, ln: c.ln, base: c.base, first: head.slice(0, 60) });
     }
+    quotes.push(...r.notes.quotes.map((q) => ({ doc: key, ...q })));
     // limits
     let long = 0;
     for (const [id, e] of Object.entries(text)) {
@@ -719,6 +767,13 @@ export function extractAll({ root = ROOT } = {}) {
     files[outName] = JSON.stringify(doc, null, 0).replace(/,"(?=[^"]+":\{"k")/g, ',\n"') + '\n';
     report.counts[key] = Object.keys(text).length;
     report.bytes[outName] = Buffer.byteLength(files[outName]);
+  }
+  // <!-- quote: id --> blocks must say exactly what the id says
+  for (const q of quotes) {
+    const e = all[q.of];
+    if (!e) report.quoteDrift.push({ doc: q.doc, ln: q.ln, of: q.of, missing: true });
+    else if (norm(e.e.text) === norm(q.text)) report.quoteOk++;
+    else report.quoteDrift.push({ doc: q.doc, ln: q.ln, of: q.of });
   }
   for (const f of DESIGN_DOCS) {
     const p = join(docs, f);
@@ -797,6 +852,7 @@ function main() {
   const refs = logicRefs();
   const orphanRefs = report.orphans.filter((o) => refs.has(o.id)).map((o) => ({ ...o, in: refs.get(o.id) }));
   const errors = [];
+  if (report.quoteDrift.length) errors.push(`${report.quoteDrift.length} quote(s) that differ from their source`);
   if (report.dup.length) errors.push(`${report.dup.length} duplicate id(s): ${report.dup.slice(0, 5).map((d) => d.id).join(', ')}`);
   if (report.designAnchors.length) errors.push(`anchors in design docs: ${report.designAnchors.map((a) => a.doc + ' ' + a.id).join(', ')}`);
   if (orphanRefs.length) errors.push(`logic references orphaned ids: ${orphanRefs.map((o) => `${o.id} (${o.in})`).join(', ')}`);
@@ -833,7 +889,7 @@ function main() {
     for (const o of report.orphans.slice(0, 20)) console.log(`  orphan   ${o.id} (${o.doc}, since ${o.since})`);
     for (const s of shifted.slice(0, 20)) console.log(`  shifted  ${s.id}'s old text is now ${s.now}: anchor it`);
     for (const l of report.limits) console.log(`  limit    ${l.id} ${l.kind} ${l.len ?? l.count} > ${l.max}`);
-    for (const d of report.quoteDrift) console.log(`  drift    ${d.doc} line ${d.ln} quotes ${d.of} but differs`);
+    for (const d of report.quoteDrift) console.log(`  drift    ${d.doc} line ${d.ln} quotes ${d.of} but ${d.missing ? 'no such id' : 'differs'}`);
     for (const c of report.codeUnanchored) console.log(`  anchor?  ${c.doc} line ${c.ln} (${c.base}) ${c.first}`);
   }
   if (ri >= 0 && args[ri + 1]) writeFileSync(args[ri + 1], JSON.stringify(report, null, 1));

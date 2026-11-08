@@ -1,4 +1,4 @@
-{"$doc":"docs/story/20-opening.md","$hash":"d745973041c3","$v":1,"text":{"20:0.1":{"k":"line","text":"Before my time.","when":"Beat: The return"},
+{"$doc":"docs/story/20-opening.md","$hash":"1dbfe80af553","$v":1,"text":{"20:0.1":{"k":"line","text":"Before my time.","when":"Beat: The return"},
 "20:1.2.1":{"k":"line","who":"Keeper","text":"Now. You'll want a pack and a tent. Oh, look at that. Josie? Have we got anything left at all?","when":"Manner: warm"},
 "20:1.2.2":{"k":"line","who":"Keeper","text":"Pack and tent. Normally I'd point at that wall. Josie, tell them why I can't.","when":"Manner: dry"},
 "20:1.2.3":{"k":"line","who":"Keeper","text":"Rentals are out. Josie.","when":"Manner: gruff"},

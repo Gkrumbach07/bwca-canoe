@@ -440,6 +440,7 @@ ashamed of one thing.
 
 ### 6.2 Scene map
 
+<!-- not-text: scene map -->
 ```
 T1 the patch ─┬─ stop ──────────────▶ T2 walk with me ─┬─ walk ─▶ T3 bait and the test ─▶ T4 the hub ─▶ T5 the door ─▶ T6 close
               └─ keep walking ─▶ T1b ─┬─ stop ─▶ T2    └─ "Not today." ─▶ X1 declined (porch)
@@ -1049,6 +1050,7 @@ as in 6.1. In rain he's under the roof. Cold or snow by day puts him in the cab.
 
 ### 12.2 Scene map
 
+<!-- not-text: scene map -->
 ```
 U1 the report ─┬─ (pink tape) ─▶ U2 pink ─┐
                └─ (any other) ────────────┴─▶ U3 Eino ─▶ U4 the word ─▶ U5 the doors ─▶ U6 close
