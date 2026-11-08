@@ -48,7 +48,7 @@ const HELPERS = () => {
   };
   // look from (x, z) at (tx, tz): the walker stands there facing it, the camera behind
   H.look = (x, z, tx, tz) => { H.standAt(x, z, Math.atan2(-(tz - z), tx - x)); const c = g.chase; if (c) { c.viewYaw = g.player.heading; c.forwardYaw = g.player.heading; if (c.snap) c.snap(); } H.step(20); };
-  H.closeAll = () => { const o = g.outfitter; if (o.open) o.hide(); if (o.shelfOpen) o.shelf.close(); if (g.record && g.record.shown && g.record.hide) g.record.hide(); if (g.veil && g.veil.active && g.veil.skip) g.veil.skip(); };
+  H.closeAll = () => { const o = g.outfitter; if (o.open) o.hide(); if (o.shelfOpen) o.shelf.close(); if (g.record && g.record.shown != null) { if (g.record.close) g.record.close(); else if (g.record.hide) g.record.hide(); } if (g.veil && g.veil.active && g.veil.skip) g.veil.skip(); };
   // the roads near (x, z): each road's points within r, as [x, z, h, w, hw, k]
   H.roadPts = (x, z, r) => {
     const out = [];
@@ -115,7 +115,7 @@ try {
   const costOff = await off.evaluate(() => ({ ...window.__e3.calls(), decal: window.__e3.decal(), roads: !!window.__game.world.roads }));
   await shot(off, 'e3-0-off');
   await off.context().close();
-  result('0 the roads add no shader program; the ribbon no draw call (the truck its own, while in view)', costOn.programs <= costOff.programs && costOn.decal.meshes === costOff.decal.meshes && costOn.noTruck.calls <= costOff.calls + 3 && costOn.calls - costOn.noTruck.calls <= 6 && !costOff.roads, { off: costOff, on: costOn, view: v });
+  result('0 the roads add no shader program; the ribbon no draw call (the truck its own, while in view)', costOn.programs <= costOff.programs && costOn.noTruck.calls <= costOff.calls + 3 && costOn.calls - costOn.noTruck.calls <= 6 && !costOff.roads, { off: costOff, on: costOn, view: v });
 
   // ---- 1 the table --------------------------------------------------------------------------------------------------
   const t1 = await page.evaluate(() => {

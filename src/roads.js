@@ -73,7 +73,7 @@ export function makeRoadGrade(world) {
 // the corridor (props.js exclusionsFor): [x1, z1, x2, z2, radius] along each road, a segment every few points. A gravel
 // or blacktop road is bare (no grass on it: a positive radius, and at least ROAD_BARE so placement.js plants no trail's
 // green tunnel beside it); a two-track a lawn (its crown grows grass)
-export const ROAD_BARE = 5.2;
+export const ROAD_BARE = 6.5;
 export function roadExclusions(world) {
   const R = world && world.roads, segs = [];
   if (!R) return segs;
