@@ -143,19 +143,37 @@ try {
       const g = window.__game, H = window.__r4; H.step(60);
       const fig = g.canoe.figure, out = { mode: g.player.mode, pfd: fig.pfd, range: fig.mesh.geometry.drawRange.count, pB: H.programs() };
       // the actors' demo: two canoes crossing and a party on a portage
-      out.demo = !!g.actors.demo(); H.step(90);
-      const ps = g.actors.people.filter((p) => p.bind);
-      out.crew = ps.filter((p) => p.mode === 'crew').map((p) => p.bind.body.fig.pfd);
-      out.carry = ps.filter((p) => p.mode === 'carry' || p.mode === 'walk').map((p) => p.bind.body.fig.pfd);
+      out.demo = !!g.actors.demo(); H.step(10);
+      // (the camera beside each of them in turn: the actors' layer draws figures within 60 m of the view)
+      const near = (a) => { const y = g.world.levelAt(a.x, a.z); H.lookAt({ x: a.x + 9, y: y + 4, z: a.z + 9 }, { x: a.x, y: y + 0.5, z: a.z }); H.step(20); };
+      const boat = g.actors.boats.find((b) => b.key.startsWith('demo:boat'));
+      if (boat) near(boat);
+      out.crew = g.actors.people.filter((p) => p.bind && p.mode === 'crew').map((p) => p.bind.body.fig.pfd);
+      if (boat) { const y = g.world.levelAt(boat.x, boat.z); H.lookAt({ x: boat.x + 6, y: y + 2.5, z: boat.z + 6 }, { x: boat.x, y: y + 0.5, z: boat.z }); }
+      out.crewShot = true;
+      return out;
+    });
+    await shot('1c-actors-crew-pfd');
+    Object.assign(water, await page.evaluate(async () => {
+      const g = window.__game, H = window.__r4, out = {};
+      const port = g.actors.people.find((p) => p.key.startsWith('demo:portage'));
+      if (port) { const y = g.tiles.groundAt(port.x, port.z); H.lookAt({ x: port.x + 7, y: y + 3, z: port.z + 7 }, { x: port.x, y: y + 1, z: port.z }); H.step(30); }
+      out.carry = g.actors.people.filter((p) => p.bind && !p.boat && (p.mode === 'carry' || p.mode === 'walk' || p.mode === 'stand')).map((p) => p.bind.body.fig.pfd);
+      out.portage = !!port;
+      return out;
+    }));
+    await shot('1d-actors-portage-no-pfd');
+    Object.assign(water, await page.evaluate(async () => {
+      const g = window.__game, H = window.__r4, out = {};
       const p = g.player, f = p.forward, y = g.world.levelAt(p.x, p.z);
       H.lookAt({ x: p.x + f.x * 2.4 - f.z * 1.6, y: y + 1.3, z: p.z + f.z * 2.4 + f.x * 1.6 }, { x: p.x, y: y + 0.7, z: p.z });
       out.pC = H.programs();
       return out;
-    });
+    }));
     await shot('1b-canoe-pfd');
     await page.evaluate(() => window.__r4.unframe());
     check(1, 'in the canoe on the water: the life jacket on (the whole figure drawn)', water.mode === 'paddle' && water.pfd === true && water.range === Infinity, water);
-    check(1, 'the actors: crews in their canoes wear one, those on a portage do not', water.crew.length > 0 && water.crew.every(Boolean) && (water.carry.length === 0 || water.carry.every((v) => !v)), { crew: water.crew, carry: water.carry });
+    check(1, 'the actors: crews in their canoes wear one, those on a portage do not', water.crew.length > 0 && water.crew.every(Boolean) && water.carry.length > 0 && water.carry.every((v) => !v), { crew: water.crew, carry: water.carry, portage: water.portage });
     check(1, 'worn or not adds no shader program', water.pB <= store.pA && water.pC <= store.pA, { store: store.pA, canoe: water.pB, actors: water.pC, title: p0 });
     await page.evaluate(() => { const g = window.__game; for (const a of [...g.actors.boats, ...g.actors.people]) if (a.key.startsWith('demo:')) a.remove(); window.__r4.step(5); });
   }
@@ -293,6 +311,7 @@ try {
           us.forEach((u, i) => { if (u > last[i] + 1e-6) out.mono = false; last[i] = u; });
           if (us.every((u) => u <= 0)) break;
         }
+        g.step(1 / 30, 5);
         out.h = +g.day.hours.toFixed(3);
         out.shown = D.tentObjs ? D.tentObjs.filter((o) => o.tent.visible).length : null;
         out.obstacles = D.obstacles.filter((o) => o.tent && (g.tiles.dynamic || []).includes(o)).length;
