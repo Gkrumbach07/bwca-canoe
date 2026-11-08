@@ -1,7 +1,8 @@
 /* The edge's notice (edge.js EdgeWatch): a sign at the top of the screen, in the Forest Service's routed brown and cream,
    up for as long as you are out of the Boundary Waters (Quetico's in its park green). Air: it hides under the paper like
-   the rest of the HUD; the map says the same in its own print (edge.js paintMapNotice). */
-#air > #edge-sign { left: 50%; top: 18px; translate: -50% 0; display: none; flex-direction: column; align-items: center; gap: 4px;
+   the rest of the HUD; the map says the same in its own print (edge.js paintMapNotice). It sits under the energy bar's
+   row (its clock) and clear of the compass. */
+#air > #edge-sign { left: 50%; top: 62px; translate: -50% 0; display: none; flex-direction: column; align-items: center; gap: 4px;
   max-width: min(560px, calc(100vw - 420px)); padding: 7px 20px 8px; box-sizing: border-box; text-align: center; text-shadow: none;
   color: #f1e3b8; background: #5b3d26; border: 2px solid #f1e3b8; outline: 3px solid #5b3d26; border-radius: 5px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, .35); }

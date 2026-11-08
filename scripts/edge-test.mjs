@@ -2,7 +2,8 @@
 // against a running Vite, each check printed PASS or FAIL, a screenshot at each step:
 //   0 the tables load: src/edge.bin (the zones and outlines), src/map-roads.bin; the campsites past the band marked
 //   1 the zones where they should be: Lake One and Basswood wild, the Moose Lake chain and Farm Lake a doorstep or wild,
-//     White Iron, Burntside, Vermilion and Superior out, Kawnipi Quetico; every entry point's put-in, lot and store in
+//     White Iron, Vermilion and Superior out (Burntside out or a doorstep: Crab Lake's way in crosses it), Kawnipi
+//     Quetico; every entry point's put-in, lot and store in
 //   2 out on White Iron (paddled there: nothing stops it): the notice up and it says "You have left the Boundary Waters",
 //     the first time with its second line; the map says it too
 //   3 it stays up: two minutes out, still up; walking on out, the canoe moves as freely as inside (no slow-down)
@@ -85,7 +86,7 @@ try {
   });
   const zo = z1.out;
   result('1 the zones: wild, doorstep, out and Quetico where they belong; every entry point in', zo.lakeOne === 1 && zo.basswood === 1 && [1, 2].includes(zo.mooseLake) && [1, 2].includes(zo.farmLake)
-    && zo.whiteIron === 0 && zo.burntside === 0 && zo.vermilion === 0 && zo.superior === 0 && zo.ely === 0 && zo.kawnipi === 3 && !z1.bad.length, z1);
+    && zo.whiteIron === 0 && [0, 2].includes(zo.burntside) && zo.vermilion === 0 && zo.superior === 0 && zo.ely === 0 && zo.kawnipi === 3 && !z1.bad.length, z1);
 
   // a new season at home
   await page.evaluate(() => window.__game.title.askNewSeason('adventure'));
