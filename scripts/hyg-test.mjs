@@ -31,9 +31,6 @@ try {
     // 1
     const eps = g.world.entryPoints.map((e) => e.ep), staff = new Set(eps.map((ep) => ob.staffName(ep)));
     const reserved = N.names.reserved.has('Josie');
-    const L = g.props.storeLayout(25);
-    const fig = L ? (N.extraPeople(25, L, [{ key: 'staffer:25', name: 'Josie', spot: 'counterEnd' }])[0] || {}).figs[0] : null;
-    const female = !!(fig && fig.look && fig.look.beard === fig.look.skin && fig.look.wear.scale < 0.98);
     // 2
     const bad = [];
     for (const [k, l] of Object.entries(N.nameLists())) for (const n of l) if (NF.includes(n) || NL.includes(n)) bad.push(`${k}: ${n}`);
@@ -60,7 +57,7 @@ try {
     const G = g.grounding || (N && N.grounding) || null;
     const grounded = GUS_NEW.map((t) => (typeof N.grounded === 'function' ? N.grounded(t) : G && typeof G.ok === 'function' ? G.ok(t, {}) : null));
     return {
-      staff: [...staff], staffList: O.STAFF, reserved, female, fig: !!fig,
+      staff: [...staff], staffList: O.STAFF, reserved,
       bad, pools: { first: FIRST && FIRST.length, last: LAST && LAST.length },
       k6: keepers[6], k16: keepers[16], k40: keepers[40], src, ruthOskar: /Oskar/.test(ruth), ruthEino: /Eino|Leif/.test(ruth), minnow: minnow && minnow.name,
       past, gusNew: GUS_NEW.every((t) => past.includes(t)), gusOld: GUS_OLD.some((t) => past.includes(t)), prairie, grounded,
@@ -68,7 +65,7 @@ try {
   }, { NF: NO_FIRST, NL: NO_LAST, SRC, GONE: GONE.source, GUS_NEW, GUS_OLD });
 
   check('1a the summer help is Josie at every home', r.staff.length === 1 && r.staff[0] === 'Josie' && r.staffList.length === 1, { staff: r.staff, STAFF: r.staffList });
-  check('1b Josie is reserved (no generated person takes her name) and drawn as a woman', r.reserved && r.female, { reserved: r.reserved, female: r.female, fig: r.fig });
+  check('1b Josie is reserved (no generated person takes her name)', r.reserved, { reserved: r.reserved });
   check('2 no random pool or generated keeper holds a reserved story name', !r.bad.length && r.pools.first > 40 && r.pools.last > 40, { bad: r.bad, pools: r.pools });
   check('3a Ruth\'s brother is Oskar, and the lure is Oskar\'s cedar minnow', r.ruthOskar && !r.ruthEino && /^Oskar/.test(r.minnow || ''), { minnow: r.minnow });
   check('3b the hand keepers renamed: 6 Joanne Kauppi, 16 Leon Kastelic, 40 Merle Ostrom', r.k6 === 'Joanne Kauppi' && r.k16 === 'Leon Kastelic' && r.k40 === 'Merle Ostrom', { k6: r.k6, k16: r.k16, k40: r.k40 });
@@ -80,11 +77,13 @@ try {
   await seasonAt(page, { ep: 25, year: 2026, doy: 192, hours: 10, mode: 'sandbox' });
   const s = await page.evaluate(() => {
     const g = window.__game, ob = g.onboarding, h = ob.stand(25), sp = ob.speaker(25);
-    const out = { stood: !!h, name: sp && sp.name, staffName: ob.staffName(25) };
+    const L = g.props.storeLayout(25), P = L ? g.npcs.extraPeople(25, L, [{ key: 'staffer:25', name: 'Josie', spot: 'counterEnd' }])[0] : null, fig = P && P.figs[0];
+    const out = { stood: !!h, name: sp && sp.name, staffName: ob.staffName(25), fig: !!fig, female: !!(fig && fig.look && fig.look.beard === fig.look.skin && fig.look.wear.scale < 0.98) };
     ob.dismiss();
     return out;
   });
   check('1c the staffer the onboarding stands at a home speaks as Josie', s.staffName === 'Josie' && (!s.stood || s.name === 'Josie'), s);
+  check('1d Josie is drawn as a woman (no beard, a woman\'s height)', s.female, s);
 } finally {
   await browser.close();
 }
