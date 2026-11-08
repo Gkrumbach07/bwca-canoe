@@ -2052,6 +2052,8 @@ export function yardBlocked(x, z, pad = 0) {
 }
 const yardFns = [];
 export function onYard(fn) { yardFns.push(fn); }
+// a store's yard as built ({ ep, x, z, ax, az, bx, bz, rects, r }: b toward its dock), or null (stream E3: the truck)
+export function yardOf(ep) { return yards.find((Y) => Y.ep === Number(ep)) || null; }
 function clearYards(e, list, size) {
   if (!e || !e.veg || e.ox === undefined) return 0;
   const near = list.filter((Y) => Y.x + Y.r > e.ox && Y.x - Y.r < e.ox + size && Y.z + Y.r > e.oz && Y.z - Y.r < e.oz + size);

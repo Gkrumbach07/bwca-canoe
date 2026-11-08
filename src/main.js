@@ -48,6 +48,7 @@ import { Profile } from './profile.js'; // hubs 1A
 import { storeLayout, onStore, storeLayouts, setStoreNotices, storeStats } from './props.js'; // hubs 2A
 import { outfitterProfile, boardLean } from './outfitters.js'; // hubs 2C
 import { Rides } from './rides.js'; // hubs 2C
+import { Truck } from './truck.js'; // stream E3: the truck on the roads
 import { sheets, sheetAt } from './sheets.js'; // hubs 2D (tuning: sheetAt, Arvid's map)
 import { explored } from './explored.js'; // round A-B: the map filling in
 import { MapTable } from './maptable.js'; // fb2 D
@@ -335,6 +336,10 @@ async function main() {
   // column, and the keeper's voice in its header, until the shop's counter speaks for itself (outfitter.keeperVoice).
   const rides = new Rides({ world, outfitter, day, veil, hud, energy, tasks, teleport });
   outfitter.rides = rides;
+  // stream E3: the truck on the roads (truck.js): left in the lot by a ride and off down the road, up the road for a
+  // pickup, behind the store you are at; one mesh of the props' material, drawn while in view
+  const truck = new Truck({ world, scene, groundAt: (x, z) => tiles.groundAt(x, z), player });
+  outfitter.truck = truck; rides.truck = truck;
   tasks.leanOf = (ep) => boardLean(ep, world);
   outfitter.keeperVoice = true; // the shop's counter (2B) renders the keeper, the signature and the rides itself, so 2C's stand-ins stay off
   // hubs 3B: the camera and the photo notices (photo.js). C raises it (the $25 35 mm, or the disposable the first photo
@@ -420,6 +425,8 @@ async function main() {
   // latrine, blueberries in season, the wake-time card; its berries and firewood notices read the board's notices
   camp.chores.tasks = tasks; window.__game.chores = camp.chores;
   Object.assign(window.__game, { rides, outfitterProfile: (ep) => outfitterProfile(ep, world) }); // hubs 2C
+  window.__game.truck = truck; // stream E3
+  { const upd = actors.update.bind(actors); actors.update = (dt, ...a) => { try { truck.update(dt); } catch (e) { if (!truck.warned) { truck.warned = true; console.warn('truck', e); } } upd(dt, ...a); }; } // (stream E3: the truck's frame, with the people's)
   window.__game.npcs = npcs; // hubs 3C
   window.__game.actors = actors; // p2 A
   // fb A: one physical inventory (items.js, inventory.js): everything you own is an item in a container (the packs,
