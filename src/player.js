@@ -527,7 +527,9 @@ export class Player {
       this.speed *= 0.9; this.yawRate = 0; st.power *= 0.9; this.easeBoost(1, dt);
       this.placeOnWater(dt);
       // (the season round: E walks you ashore over the ice, the canoe left where it is frozen in)
-      this.prompt = { key: 'E', text: 'Iced in until ice-out in early May (= steps the date) · walk ashore over the ice' };
+      // (loop tasks: in Adventure the date keys are off; the way out is the walk, or a rescue from the journal)
+      const adv = typeof window !== 'undefined' && window.__game && window.__game.trip && window.__game.trip.adventure;
+      this.prompt = { key: 'E', text: adv ? 'Frozen in · walk ashore over the ice' : 'Iced in until ice-out in early May (= steps the date) · walk ashore over the ice' };
       if (inp.pressed('KeyE')) this.stepOut();
       return;
     }
