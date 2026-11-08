@@ -618,7 +618,7 @@ export class Tasks {
     return (h != null && String(h).startsWith('party:')) || !!(typeof C.spoken === 'function' && C.spoken(k));
   }
   // a campsite a new notice may send you to: no other notice there, and no party on it today
-  siteOpen(site) { return !!site && !this.spotTaken(site.x, site.z) && !this.partyHolds(site); }
+  siteOpen(site) { return !!site && !site.past && !this.spotTaken(site.x, site.z) && !this.partyHolds(site); } // (the edge round: not past the band)
   // The area a notice describes, for the map's ring: the part of the lake a spot is on (the bay, the arm, the stretch:
   // 400–700 m, the ring pushed out over the water so the spot sits inside it, off its middle), or without a spot the
   // lake's deep middle (a laker notice). Never the whole lake: a big lake gets its side named ("the northeast side").

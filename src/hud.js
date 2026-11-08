@@ -1741,6 +1741,7 @@ export class Hud {
         const r = (close ? 4.2 : 2.6) * k;
         for (let ci = 0; ci < w.campsites.length; ci++) {
           const c = w.campsites[ci], s = c.fire || c; // round 2 markers: at its fire ring as built (world.js campSpot)
+          if (c.past) continue; // (the edge round: the sites past the band are off the maps)
           if (!inView(s.x, s.z, s.x, s.z) || !onMine(s.x, s.z, s.x, s.z)) continue;
           const [a, b] = toPx(s.x, s.z);
           ctx.beginPath(); ctx.arc(a, b, r, 0, 6.28); ctx.fillStyle = '#c0392b'; ctx.fill();

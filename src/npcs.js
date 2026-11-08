@@ -638,7 +638,7 @@ class HintWriter {
     const w = this.world, L = this.P.landingOf(this.ep), sites = [];
     // the sites near by and the water each is on (the record's name where it has one, else the nearest lake's)
     const T = this.P.tasks, near = [], on = new Map();
-    for (const c of w.campsites) { const d = Math.hypot(c.x - L.x, c.z - L.z); if (d <= 9000 && d >= minD) near.push({ c, d }); }
+    for (const c of w.campsites) { if (c.past) continue; const d = Math.hypot(c.x - L.x, c.z - L.z); if (d <= 9000 && d >= minD) near.push({ c, d }); } // (the edge round: not past the band)
     near.sort((a, b) => a.d - b.d);
     for (const { c, d } of near.slice(0, 80)) {
       let lake = siteLake(c), l = lake ? this.f.lakes.find((x) => x.name === lake) : null;
@@ -705,6 +705,7 @@ class HintWriter {
     const w = this.world, L = this.landing, out = [];
     if (!L) return (this._sites = out);
     for (const c of w.campsites) {
+      if (c.past) continue; // (the edge round)
       const d = Math.hypot(c.x - L.x, c.z - L.z); if (d > maxD || d < 250) continue;
       const lake = this.P.lakeAt(c.x, c.z, this.f, c); if (!lake) continue;
       const l = this.f.lakes.find((x) => x.name === lake); if (!l) continue;
