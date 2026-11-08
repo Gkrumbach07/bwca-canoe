@@ -14,6 +14,7 @@ import LANDINGS_DATA from './landings.json';
 import { TILE, PropBuilder, propMaterial, trailMaterial, occlude, obb, bakeSelf, MeshGround, buildHull, hullProfile, chunkStone, HULL_LENGTH } from './prop-kit.js';
 import { SIGN_HEAD_UV, SIGN_GLYPH_ASPECT, signGlyphUv } from './prop-kit.js'; // d1 names: the trail sign's words
 import { tileCreeks, BROOK } from './creeks.js'; // the wetlands round: brooks, beaver dams and lodges
+import { roadExclusions } from './roads.js'; // stream E3: the roads in 3D
 
 // The built things: portage trails and their signs, campsites, and at every entry point an outfitter's dock,
 // shack and canoe rack, plus the lost-and-found items of the task board. Simple shapes put together the way
@@ -78,6 +79,8 @@ export function exclusionsFor(world) {
   for (const ep of world.entryPoints) segs.push([ep.x, ep.z, ep.x, ep.z, isOutfitter(ep.ep) ? -36 : -14]); // the mown yard around an outfitter's dock (a trailhead's landing: a smaller one; its lot is a yard, buildTrailhead)
   // the brooks' stony beds (creeks.js): the trees and brush kept off the line the bed is drawn on
   if (world.creeks) for (const b of world.creeks.brooks) { const pts = rounded(b.pts); for (let i = 1; i < pts.length; i++) if (pts[i - 1][0] !== pts[i][0] || pts[i - 1][1] !== pts[i][1]) segs.push([pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1], BROOK.clear]); } // (never a point: site.js reads those as campsites)
+  // stream E3: each road's cut through the forest (roads.js ROAD_CLEAR past its half width), a lawn: the grass through
+  for (const s of roadExclusions(world)) segs.push(s);
   return segs;
 }
 
@@ -173,11 +176,8 @@ export function* tilePropsSteps(tg, world, tx, ty) {
   }
   // the game-loop round: the trailheads' lots and their paths down to the water, in the same decal (trailheadDecal)
   // (round 2: each at its lot where it has one, an outfitter's entry point's own start too: ep-start.js headRecs)
-  const heads = headRecs(world, isOutfitter);
-  for (const ep of heads) { const a = anchorOf(ep); if (inside(a.x, a.z)) { trailheadDecal({ ...ctx, H: Hdrawn }, ep, decal); yield; } }
-  decal.lift(ctx);
-  const trail = decal.mesh();
-  if (trail) group.add(trail);
+  const heads = headRecs(world, isOutfitter), lots = [];
+  for (const ep of heads) { const a = anchorOf(ep); if (inside(a.x, a.z)) { lots.push(trailheadDecal({ ...ctx, H: Hdrawn }, ep, decal)); yield; } }
 
   for (const ep of world.entryPoints) if (isOutfitter(ep.ep) && inside(ep.x, ep.z)) {
     yield;
@@ -185,6 +185,11 @@ export function* tilePropsSteps(tg, world, tx, ty) {
     yield;
   }
   for (const ep of heads) { const a = anchorOf(ep); if (inside(a.x, a.z)) { yield; buildTrailhead({ ...ctx, H: Hdrawn }, ep, pieces, group); yield; } } // (merged into this tile's props: no draw call of its own)
+  // stream E3: the roads, in the same decal (after the stores, so a road stops at the yard it comes to)
+  if (world.roads) { roadRows(ctx, decal, lots); yield; }
+  decal.lift(ctx);
+  const trail = decal.mesh();
+  if (trail) group.add(trail);
 
   const ledges = [[], []]; // the ledge rocks' matrices, flats and slanted
   for (const c of world.campsites) if (inside(c.x, c.z)) { buildCampsite(ctx, c, pieces, ledges); yield; }
@@ -343,6 +348,45 @@ function campPath(ctx, raw, decal, o, seed) {
     const wear = o.wear * (0.8 + 0.4 * n1(s / 9 + 90, seed));
     rowOf[i] = decal.row(ctx, x + nx * meander, z + nz * meander, nx, nz, hw, fade, wear, 0);
     if (i > 0 && rowOf[i - 1] >= 0 && want[i - 1] && inside(pts[i - 1][0], pts[i - 1][1])) decal.join(rowOf[i - 1], rowOf[i]);
+  }
+}
+// Stream E3: a road as rows of the trail decal (roads.js world.roads), one every ROAD_ROW m, as wide as the road and its
+// shoulder; the shader (prop-kit.js trailMaterial) reads the kind from the row's mire channel, negative (-1 gravel,
+// -2 blacktop, -3 a two-track) and the centre line from its wear. Faded where it meets the water (a ford: the bed stays
+// the bed), in at a lot's own gravel and out at a cut end into the trees; never across a store's yard or a lot (the
+// tile's own: lots). A row belongs to the tile holding its segment's first point, as the portages' do.
+export const ROAD_ROW = 2.5;
+function roadSamples(r) {
+  const p = r.p, out = [];
+  let s = 0;
+  for (let i = 0; i + 1 < r.n; i++) {
+    const x0 = p[i * 4], z0 = p[i * 4 + 1], x1 = p[i * 4 + 4], z1 = p[i * 4 + 5], L = Math.hypot(x1 - x0, z1 - z0), n = Math.max(1, Math.round(L / ROAD_ROW));
+    const wet = p[i * 4 + 3] < 0 || p[i * 4 + 7] < 0;
+    for (let k = 0; k < n; k++) out.push({ x: x0 + ((x1 - x0) * k) / n, z: z0 + ((z1 - z0) * k) / n, s: s + (L * k) / n, wet });
+    s += L;
+  }
+  out.push({ x: p[(r.n - 1) * 4], z: p[(r.n - 1) * 4 + 1], s, wet: p[(r.n - 1) * 4 + 3] < 0 });
+  return out;
+}
+function roadRows(ctx, decal, lots) {
+  const { world, ox, oz, inside, tg } = ctx, size = world.tileMetres;
+  for (const r of world.roads.list) {
+    const b = r.bbox;
+    if (b[2] < ox - 8 || b[0] > ox + size + 8 || b[3] < oz - 8 || b[1] > oz + size + 8) continue;
+    const pts = r.rows || (r.rows = roadSamples(r)), m = pts.length, total = pts[m - 1].s;
+    const want = new Uint8Array(m), rowOf = new Int32Array(m).fill(-1);
+    for (let i = 0; i < m - 1; i++) if (inside(pts[i].x, pts[i].z)) { want[i] = 1; want[i + 1] = 1; }
+    for (let i = 0; i < m; i++) {
+      if (!want[i]) continue;
+      const P = pts[i];
+      if (yardBlocked(P.x, P.z, 0.5) || lots.some((L) => L && Math.hypot(P.x - L.x, P.z - L.z) < LOT_R - 1)) continue;
+      const A = pts[Math.max(0, i - 1)], B = pts[Math.min(m - 1, i + 1)];
+      let dx = B.x - A.x, dz = B.z - A.z; const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L;
+      const sd = tg.shoreAt(P.x, P.z);
+      const fade = Math.min(r.fadeA ? sm(0, r.fadeA, P.s) : 1, r.fadeB ? sm(0, r.fadeB, total - P.s) : 1) * sm(-0.3, 1.2, sd) * (P.wet ? 0 : 1);
+      rowOf[i] = decal.row(ctx, P.x, P.z, -dz, dx, r.hw * 1.12, fade, r.line ? 1 : 0.85 + 0.1 * hash2(Math.round(P.x), Math.round(P.z), 9), -r.k);
+      if (i > 0 && rowOf[i - 1] >= 0 && want[i - 1] && inside(pts[i - 1].x, pts[i - 1].z)) decal.join(rowOf[i - 1], rowOf[i]);
+    }
   }
 }
 function buildTrail(ctx, p, decal, pieces) {
@@ -2443,6 +2487,7 @@ function trailheadDecal(ctx, ep, decal) {
   const a = [lot.x + u.x * (LOT_R - 0.5), lot.z + u.z * (LOT_R - 0.5)], b = P.lotMode ? [P.join.x, P.join.z] : [P.plan.x, P.plan.z];
   const m = [(a[0] + b[0]) / 2 + P.X.x * 0.8, (a[1] + b[1]) / 2 + P.X.z * 0.8];
   if (Math.hypot(b[0] - a[0], b[1] - a[1]) > 2) campPath(ctx, [a, m, b], decal, { hw: 0.75, wear: 0.42 }, ep.ep * 31 + 7);
+  return lot;
 }
 // a board's routed letters (the portage sign's way: a quad per letter from the glyph atlas), centred at (0, top) on the
 // board's face in frame F, each line at most maxW wide
