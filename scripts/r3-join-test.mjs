@@ -160,7 +160,7 @@ try {
   });
   log('4 cards', JSON.stringify(four.at).slice(0, 4000));
   const sayOrder = (four.seq.filter((s) => /story:onboard/.test(s)).map((s) => s.split(':').slice(2).join(':')).filter((v, i, a) => a.indexOf(v) === i));
-  result('4 the tracker says each step in its turn, never a later one early (no "Close by" for a tutorial step) and never one just done (the talk's card after the talk)',
+  result('4 the tracker says each step in its turn, never a later one early (no "Close by" for a tutorial step) and never one just done (the talk\'s card after the talk)',
     !four.seq.some((s) => /Close by:story:onboard/.test(s)) && JSON.stringify(sayOrder) === JSON.stringify(['story:onboard:food', 'story:onboard:leeches', 'story:onboard:canoe']), { ...four, sayOrder });
 
   // 5 a ticket, in the store
