@@ -1217,6 +1217,11 @@ Answered. Where an answer differs from Part 2, the answer wins; Part 2's section
    Walt page) but it is never in the guest's inventory. **Tasks are shared:** the guest's journal and tracker show the
    host's tasks (so the r3 "guest's tracker shows the host's first-night job" is right). No guest delta.
 
+**Quetico is DLC for now (owner, 2026-11-08).** The base game has no Quetico permit and treats Quetico as out of
+   bounds (the edge notice). Chapter 6 ("the family": Gord, the Quetico permit, Danielle at Prairie Portage, the
+   Carp-end stone) must be re-planned on the US side, or its Quetico part moved to the DLC, before it is built: an owner
+   call at chapter 6.
+
 Also answered for the built game (round 3, 2026-11-08): store people keep clear of the current step's target only (left
 as built); the camera near a story person and EP 6's Burntside starter site were not changed by the owner.
 
