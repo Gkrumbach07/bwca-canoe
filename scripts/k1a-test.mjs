@@ -82,6 +82,9 @@ try {
       const g = window.__game, s = g.story; let n = 0;
       s.on('clock', () => { n++; });
       const h0 = g.day.hours;
+      g.day.setClock(g.day.year, g.day.doy, 8.0);
+      g.step(1 / 30, 3);
+      n = 0;
       g.day.setClock(g.day.year, g.day.doy, 9.0);
       g.step(1 / 30, 3);
       const a = n;
@@ -114,7 +117,13 @@ try {
     // the guest has a story of their own first: planted v2 document
     const own = { v: 2, season: 'p-guest-own', legacy: false, rev: 1, tick: 1, data: null, facts: { 'nb.found': [true, 20600, 22, 1, 0, 1] }, src: ['plant'], ppl: {}, nb: { at: { abs: 20600, key: 1, lake: 'Own Lake' }, read: {}, here: {}, und: {}, bc: [], photos: {}, pages: [] }, walt: [['w.found', 20600]], pencil: {}, leads: {}, eps: {}, dir: {}, timers: [], fired: {}, meeting: null, queue: [], end: null, amb: { once: [] }, flags: {}, log: [] };
     const B = await openGame('guest', `story=1&join=${code}`, { fn: (doc) => { try { if (!sessionStorage.getItem('k1a-planted')) { localStorage.setItem('bwca-canoe:story2', JSON.stringify(doc)); sessionStorage.setItem('k1a-planted', '1'); } } catch { /* storage */ } }, arg: own });
-    await until(B, () => window.__game.coop.role === 'guest' && window.__game.title.state === 'game' && !window.__game.player.teleporting, null, 150000);
+    await until(B, () => { const c = document.getElementById('coop-card'); return c && !c.hidden && document.getElementById('coop-code'); });
+    await B.fill('#coop-name', 'Ada');
+    await B.click('#coop-go');
+    try { await until(B, () => window.__game.coop.role === 'guest' && window.__game.title.state === 'game' && !window.__game.player.teleporting, null, 150000); } catch (e) {
+      log('guest state', JSON.stringify(await B.evaluate(() => { const g = window.__game, c = g.coop; return { role: c.role, code: c.code, title: g.title.state, tp: g.player.teleporting, status: c.status, err: c.error, url: location.href }; })));
+      throw e;
+    }
     const g5 = await B.evaluate(() => {
       const g = window.__game, s = g.story;
       const setOk = s.set('tier.1'), foundOk = s.found({ abs: 1 }), sleep = g.walt.onSleep({ hours: 9, at: { hours: 7 } });
