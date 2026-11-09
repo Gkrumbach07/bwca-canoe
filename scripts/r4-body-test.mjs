@@ -95,14 +95,16 @@ try {
     const measure = async (tag, off) => page.evaluate(async ({ off }) => {
       const g = window.__game, H = window.__r4, ch = g.chase, cur = g.guide.current();
       if (!cur || !cur.target || cur.target.kind !== 'person') return { cur: cur && cur.id, kind: cur && cur.target && cur.target.kind };
-      if (off) Object.defineProperty(ch, 'story', { configurable: true, get: () => null, set: () => {} });
-      const r = g.guide.reach(cur); H.face(r.pos, 2.5); H.step(2); ch.snap(); ch.ots = 0;
+      // (placed and settled with the shoulder held off, so the trace starts from the usual chase at rest)
+      Object.defineProperty(ch, 'story', { configurable: true, get: () => null, set: () => {} });
+      const r = g.guide.reach(cur); H.face(r.pos, 2.5); H.step(2); ch.snap(); H.step(45);
+      if (!off) { delete ch.story; ch.story = null; }
       // (frame by frame: the ease and the camera's moves)
       const trace = []; let last = g.camera.position.clone(), jump = 0;
       for (let k = 0; k < 90; k++) { H.step(1); const c = g.camera.position; jump = Math.max(jump, c.distanceTo(last)); last = c.clone(); trace.push(+ch.ots.toFixed(3)); }
       const sp = g.guide.reach(cur).pos, face = { x: sp.x, y: sp.y - 0.5, z: sp.z }, chest = { x: sp.x, y: sp.y - 0.85, z: sp.z };
       const gem = g.locator.shown().find((q) => q.main) || null;
-      const out = { cur: cur.id, d: +r.d.toFixed(2), ots: +ch.ots.toFixed(3), maxStep: Math.max(...trace.slice(1).map((v, i) => Math.abs(v - trace[i]))), jump: +jump.toFixed(3),
+      const out = { cur: cur.id, d: +Math.hypot(g.player.x - sp.x, g.player.z - sp.z).toFixed(2), ots: +ch.ots.toFixed(3), maxStep: Math.max(...trace.slice(1).map((v, i) => Math.abs(v - trace[i]))), jump: +jump.toFixed(3),
         face: H.firstHit(face), chest: H.firstHit(chest), faceNdc: H.ndc(face), gem: gem ? { hit: H.firstHit(gem), ndc: H.ndc(gem) } : null, cam: g.camera.position.toArray().map((v) => +v.toFixed(2)) };
       return out;
     }, { off });
