@@ -10,7 +10,8 @@
 //   P1 May at home: the board's ice-out lake trout taken
 //   P2 on foot over the edge (W held): the notice up and staying, the walker as free as inside; back in: down
 //   P3 by canoe over the edge (W held): the notice up; back in: down
-//   P4 into Quetico by canoe: Quetico's own notice; a night pitched there without its permit: one $50 ticket
+//   P4 into Quetico by canoe (r4 loopfix: plain out of bounds): the one notice, "You have left the Boundary Waters";
+//      no Quetico ticket, permit or off-site camping there
 //   P5 the truck: a ride from the counter to a trailhead lot, the truck in the lot, then gone down its road
 //   P6 September: colour photos taken; October: the last check taken (each in its window, not out of it)
 //   P7 October at the desk: "Fill one out · free" clicked, a self-issued permit held, $0
@@ -70,13 +71,13 @@ const HELPERS = (SPOTS) => {
   // a straight crossing of the zone line near a place: from a point of zone class `from` to one of class `to`, all of
   // it water (by canoe) or land (on foot), within `len` metres; { a, b, yaw } or null
   H.crossing = (c, { from, to, water, len = 160, R = 9000, start = null, skip = null } = {}) => {
-    const okZ = (z, want) => (want === 'out' ? z === 0 : want === 'quetico' ? z === 3 : z === 1 || z === 2);
+    const okZ = (z, want, x, zz) => (want === 'out' ? z === 0 : want === 'quetico' ? z === 0 && window.__edgeQ(x, zz) : z === 1 || z === 2);
     const kindOk = (x, z) => (water ? H.water(x, z) : !H.water(x, z) && g.world.lakeIdAt(x, z) <= 0);
     let best = null;
     for (let k = 0; k < 30000 && !best; k++) {
       const r = Math.sqrt(k / 30000) * R, a = k * 2.399963;
       const x = c.x + Math.cos(a) * r, z = c.z + Math.sin(a) * r;
-      if (!okZ(H.zone(x, z), from) || !kindOk(x, z)) continue;
+      if (!okZ(H.zone(x, z), from, x, z) || !kindOk(x, z)) continue;
       // well clear of the other kind round it (a start in open water, or on open ground)
       let clear = true; for (let q = 0; q < 8 && clear; q++) { const qa = q * Math.PI / 4; if (!kindOk(x + Math.cos(qa) * 25, z + Math.sin(qa) * 25)) clear = false; }
       if (!clear) continue;
@@ -86,11 +87,11 @@ const HELPERS = (SPOTS) => {
         for (let s = 8; s <= len; s += 8) {
           const px = x + dx * s, pz = z + dz * s;
           if (!kindOk(px, pz)) break;
-          if (okZ(H.zone(px, pz), to)) { reach = s; break; }
+          if (okZ(H.zone(px, pz), to, px, pz)) { reach = s; break; }
         }
         if (reach == null) continue;
         // and on past the line a bit more of the same kind, so W held keeps going
-        let past = 0; for (let s = reach; s <= reach + 80; s += 8) { if (!kindOk(x + dx * s, z + dz * s) || !okZ(H.zone(x + dx * s, z + dz * s), to)) break; past = s - reach; }
+        let past = 0; for (let s = reach; s <= reach + 80; s += 8) { if (!kindOk(x + dx * s, z + dz * s) || !okZ(H.zone(x + dx * s, z + dz * s), to, x + dx * s, z + dz * s)) break; past = s - reach; }
         if (past < 40) continue;
         if (!water) { let steep = false; for (let s = 0; s < reach + past && !steep; s += 8) { const h0 = g.world.heightAt(x + dx * s, z + dz * s), h1 = g.world.heightAt(x + dx * (s + 8), z + dz * (s + 8)); if (Math.abs(h1 - h0) > 1.6) steep = true; } if (steep) continue; if (skip && skip.some((q) => Math.hypot(q.x - x, q.z - z) < 300)) continue; }
         best = { a: { x, z }, b: { x: x + dx * (reach + past), z: z + dz * (reach + past) }, reach, past, dir: { x: dx, z: dz } };
@@ -132,7 +133,7 @@ try {
     const tot = { moved: 0, frames: 0, stuck: 0, left: null };
     try {
       for (let f = 0; f < maxFrames; f += 300) {
-        const r = await ev(([q, stop]) => { const H = window.__r4, g = window.__game, p = g.player, x0 = p.x, z0 = p.z; const st = stop === 'quetico' ? () => H.zone(p.x, p.z) === 3 && H.sign().state === 'quetico' : stop === 'out' ? () => H.zone(p.x, p.z) === 0 && H.sign().shown : stop === 'in' ? () => H.zone(p.x, p.z) !== 0 && !H.sign().shown : null; const w = H.walkTo(q, 300, st); return { ...w, moved: Math.round(Math.hypot(p.x - x0, p.z - z0)), done: (st && st()) || w.left < 4 }; }, [q, stop]);
+        const r = await ev(([q, stop]) => { const H = window.__r4, g = window.__game, p = g.player, x0 = p.x, z0 = p.z; const st = stop === 'quetico' ? () => H.zone(p.x, p.z) === 0 && window.__edgeQ(p.x, p.z) && H.sign().shown : stop === 'out' ? () => H.zone(p.x, p.z) === 0 && H.sign().shown : stop === 'in' ? () => H.zone(p.x, p.z) !== 0 && !H.sign().shown : null; const w = H.walkTo(q, 300, st); return { ...w, moved: Math.round(Math.hypot(p.x - x0, p.z - z0)), done: (st && st()) || w.left < 4 }; }, [q, stop]);
         tot.moved += r.moved; tot.frames += r.frames; tot.stuck += r.stuck; tot.left = r.left;
         if (r.done) break;
       }
@@ -144,7 +145,7 @@ try {
   await page.goto(APP, { timeout: 180000 });
   await until(() => { const g = window.__game; return g && g.title && g.edge && g.truck && g.tasks && g.permits && typeof g.step === 'function' && g.title.state === 'title' && g.prewarmed; }, null, 300000);
   await ev(HELPERS, SPOTS);
-  await ev(async () => { const u = [...performance.getEntriesByType('resource')].map((e) => e.name).find((n) => /\/src\/edge\.js/.test(n)) || '/src/edge.js'; const m = await import(u); window.__edgeZone = m.zoneAt; const E = m.EDGE; window.__edgeIn = (x, z) => x >= E.x0 && z >= E.z0 && x < E.x0 + E.W * E.cell && z < E.z0 + E.H * E.cell; const byUrl = async (re, d) => import([...performance.getEntriesByType('resource')].map((e) => e.name).find((n) => re.test(n)) || d); window.__props = await byUrl(/\/src\/props\.js/, '/src/props.js'); window.__OF = await byUrl(/\/src\/outfitters\.js/, '/src/outfitters.js'); });
+  await ev(async () => { const u = [...performance.getEntriesByType('resource')].map((e) => e.name).find((n) => /\/src\/edge\.js/.test(n)) || '/src/edge.js'; const m = await import(u); window.__edgeZone = m.zoneAt; window.__edgeQ = m.inQuetico; const E = m.EDGE; window.__edgeIn = (x, z) => x >= E.x0 && z >= E.z0 && x < E.x0 + E.W * E.cell && z < E.z0 + E.H * E.cell; const byUrl = async (re, d) => import([...performance.getEntriesByType('resource')].map((e) => e.name).find((n) => re.test(n)) || d); window.__props = await byUrl(/\/src\/props\.js/, '/src/props.js'); window.__OF = await byUrl(/\/src\/outfitters\.js/, '/src/outfitters.js'); });
   // a new Adventure season at home, 20 May
   await ev(async (home) => {
     const g = window.__game, t = g.title, ep = g.world.entryPoints.find((e) => e.ep === home);
@@ -290,20 +291,15 @@ try {
     await ev(async (c) => { const H = window.__r4; await H.tp(c.a.x, c.a.z); H.look(Math.atan2(-c.dir.z, c.dir.x)); H.step(90); }, c4);
     const went4 = await walkW(c4.b, 30 * 120, 'quetico');
     await ev(() => window.__r4.step(120));
-    const sign = await ev(() => { const H = window.__r4, g = window.__game; return { ...H.sign(), zone: H.zone(g.player.x, g.player.z) }; });
-    await shot('p4-quetico', 5, 'Into Quetico by canoe: its own notice');
+    const sign = await ev(() => { const H = window.__r4, g = window.__game; return { ...H.sign(), zone: H.zone(g.player.x, g.player.z), inQ: window.__edgeQ(g.player.x, g.player.z) }; });
+    await shot('p4-quetico', 5, 'Into Quetico by canoe: out of bounds, the one notice');
     const night = await ev(() => {
-      const g = window.__game, P = g.trip.permits, s = g.trip.state, keep = { active: s.active, mode: s.mode, finedQuetico: s.finedQuetico };
-      s.active = true; s.mode = 'adventure'; s.finedQuetico = false;
-      const n0 = P.fines.length, first = P.queticoNight(), again = P.queticoNight(), f = P.fines[P.fines.length - 1];
-      const off = g.camp.offsiteOk(g.player.x, g.player.z);
-      const r = { first, again, added: P.fines.length - n0, n: f && f.n, why: f && f.why, off };
-      P.s.fines = P.s.fines.filter((q) => q !== f); if (P.write) P.write(); Object.assign(s, keep);
-      return r;
+      const g = window.__game, P = g.trip.permits;
+      return { off: g.camp.offsiteOk(g.player.x, g.player.z), queticoNight: typeof P.queticoNight, holds: typeof P.holdsQuetico, quetico: (P.fines || []).filter((f) => f.why === 'quetico').length };
     });
     p4 = { sign, night, went4 };
   }
-  result('P4 Quetico by canoe: Quetico\'s notice; off-site camping allowed; one $50 ticket a trip without its permit', !p4.none && p4.sign.shown && p4.sign.state === 'quetico' && p4.night.first && !p4.night.again && p4.night.added === 1 && p4.night.n === 50 && p4.night.off, p4);
+  result('P4 Quetico by canoe: plain out of bounds: "You have left the Boundary Waters"; no Quetico ticket, permit or off-site camping', !p4.none && p4.sign.shown && p4.sign.inQ && p4.sign.state === 'out' && /^You have left the Boundary Waters/.test(p4.sign.text) && !p4.night.off && p4.night.queticoNight === 'undefined' && p4.night.holds === 'undefined' && p4.night.quetico === 0, p4);
 
   // ---- P5 the truck ------------------------------------------------------------------------------------------------------
   await ev(async (home) => { const g = window.__game, H = window.__r4, o = g.outfitter; H.setDoy(196, 9); await H.toDoor(home); H.step(40); o.show(o.landing(home), 'counter'); H.step(5); }, HOME);

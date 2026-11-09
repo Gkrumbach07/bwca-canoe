@@ -1071,6 +1071,7 @@ async function main() {
     trip.permits = permits;
     journal.permits = permits; // r2: the tickets on the Tasks page
     const permitDesk = new PermitDesk({ permits, outfitter, world, day, profile });
+    window.__game.permitDesk = permitDesk; // (the rigs: its note and its next-year view)
     // stream B's counter sections (the join: the claims-hook fallback dropped, B's addDesk is there)
     outfitter.addDesk('permits', { order: 10, html: (l) => permitDesk.section(l.ep), act: (a, id, ev) => permitDesk.act(a, id, ev) });
     { const tu = trip.update.bind(trip); trip.update = (dt) => { tu(dt); try { permits.update(dt); } catch (e) { if (!permits.warned) { permits.warned = true; console.warn('permits', e); } } }; }

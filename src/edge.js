@@ -110,6 +110,13 @@ export function zoneAt(x, z) {
   return EDGE.zones[j * EDGE.W + i];
 }
 export const isPast = (x, z) => EDGE.ready && zoneAt(x, z) === ZONE.OUT;
+// inside Quetico's own outline (geography only: the rigs, a keeper's word), by the drawn path
+let qCtx = null;
+export function inQuetico(x, z) {
+  if (!EDGE.ready || !EDGE.qPath || typeof document === 'undefined') return false;
+  if (!qCtx) qCtx = document.createElement('canvas').getContext('2d');
+  return qCtx.isPointInPath(EDGE.qPath, x, z);
+}
 
 // --- the notice --------------------------------------------------------------------------------------------------------
 // It goes up after a couple of seconds out (a paddle along the line does not flicker it) and comes down after a couple
