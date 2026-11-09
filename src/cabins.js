@@ -22,8 +22,9 @@ import TABLE from './cabins.json';
 const OFF = typeof location !== 'undefined' && /[?&]cabins=off\b/.test(location.search);
 export const CABINS = OFF ? [] : TABLE.cabins || [];
 // a cabin: walls' height to the eave, the roof's pitch (rise per run), its overhang, the front deck's depth; the floor's
-// least height over the highest ground under it; the steepest ground a cabin is built on (m of fall across it)
-export const CABIN = { eave: 2.45, pitch: 0.62, over: 0.45, deck: 1.9, lift: 0.3, steep: 2.6 };
+// least height over the highest ground under it; the steepest ground a cabin is built on (m of fall across it); how far
+// its cleared yard reaches past the walls
+export const CABIN = { eave: 2.45, pitch: 0.62, over: 0.45, deck: 1.9, lift: 0.3, steep: 2.6, yard: 7 };
 // a dock: half width, its deck over the water, how far it starts back on the bank, the depth wanted at its end
 export const CABIN_DOCK = { hw: 0.85, over: 0.42, back: 1.4, deep: 0.45, max: 18 };
 
@@ -45,8 +46,9 @@ function state(world) {
 export function cabinExclusions() {
   const segs = [];
   for (const c of CABINS) {
-    const r = Math.hypot(c.w, c.d + CABIN.deck) / 2 + 3.5;
-    segs.push([c.x, c.z, c.x + c.fx * 1.5, c.z + c.fz * 1.5, -r]);
+    // (a yard: the cabin's own clearing, wider out front toward the lake)
+    const r = Math.hypot(c.w, c.d) / 2 + CABIN.yard, f = c.d / 2 + CABIN.deck + CABIN.yard * 0.6;
+    segs.push([c.x, c.z, c.x + c.fx * f, c.z + c.fz * f, -r]);
     if (c.dock) segs.push([c.x, c.z, c.dock.x + c.dock.dx * 3, c.dock.z + c.dock.dz * 3, -3]);
   }
   return segs;

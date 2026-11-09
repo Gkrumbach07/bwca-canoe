@@ -143,7 +143,7 @@ try {
       // the look: from the side in front, across the deck to the cabin
       H.closeAll();
       let from = null;
-      for (const [a, b] of [[c.w / 2 + 2, c.d / 2 + 6.5], [-c.w / 2 - 2, c.d / 2 + 6.5], [c.w / 2 + 6, c.d / 2 + 2], [-c.w / 2 - 6, c.d / 2 + 2], [c.w / 2 + 9, c.d / 2 + 7], [-c.w / 2 - 9, c.d / 2 + 7]]) { // (in the cabin's lawn first: no brush in the way)
+      for (const [a, b] of [[c.w / 4 + 2, c.d / 2 + 9], [-c.w / 4 - 2, c.d / 2 + 9], [c.w / 2 + 4, c.d / 2 + 4], [-c.w / 2 - 4, c.d / 2 + 4], [c.w / 2 + 9, c.d / 2 + 7], [-c.w / 2 - 9, c.d / 2 + 7]]) { // (in the cabin's lawn first: no brush in the way)
         const [x, z] = W(a, b), lake = g.world.lakes[c.lake - 1];
         if (g.tiles.groundAt(x, z) > (lake ? lake.level : -1e9) + 0.3) { from = [x, z]; break; }
       }
