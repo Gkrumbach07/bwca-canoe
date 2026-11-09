@@ -40,7 +40,7 @@ const HELPERS = () => {
   H.settle = async (ms = 60000) => { const t0 = performance.now(); while (g.player.teleporting && performance.now() - t0 < ms) { H.step(10); await H.wait(30); } H.step(20); };
   H.setDoy = (doy, hours = 10, year = g.day.year) => { const d = g.day; d.year = year; d.doy = doy; d.hours = hours; d.advance(0); };
   H.look = (yaw, pitch = 0.05) => { const ch = g.chase; if (ch) { ch.viewYaw = yaw; ch.forwardYaw = yaw; ch.viewPitch = pitch; if (ch.snap) ch.snap(); } };
-  H.closeAll = () => { const o = g.outfitter; if (o.open) o.hide(); if (g.journal && g.journal.open) g.journal.close(); };
+  H.closeAll = () => { const o = g.outfitter; if (o.open) o.hide(); if (g.journal && g.journal.open) g.journal.close(); if (g.record && g.record.shown) g.record.close(); };
   H.tp = async (x, z) => { H.closeAll(); const ok = await g.player.teleport(x, z); await H.settle(); return ok; };
   H.standAt = (x, z, heading = 0) => {
     const p = g.player;
@@ -79,6 +79,7 @@ try {
   await until(() => window.__game.title.state === 'game' && !window.__game.player.teleporting && !!window.__game.outfitter.visit, null, 180000);
   await ev(() => { const g = window.__game; g.outfitter.arrival = null; window.__lf.closeAll(); if (g.saver) g.saver.enabled = false; g.profile.s.money = 400; window.__lf.step(60); });
 
+  if (process.env.ONLY_D6) {} else {
   // ---- D1 at the Moose Lake desk on 12 October ---------------------------------------------------------------------------
   await ev(async (home) => {
     const g = window.__game, H = window.__lf, o = g.outfitter;
@@ -183,18 +184,22 @@ try {
   }, HOME);
   result('D4 a done notice of a cut kind keeps its pay: on the list as done, the journal says so, paid between trips with a line', d4.kept && /no longer posted/.test(d4.words || '') && /No longer posted/.test(d4.next || '') && !d4.missed && d4.paid === 15 && d4.gone && d4.notes.some((n) => /paid all the same/.test(n)), d4);
 
+  }
   // ---- D6 the south edge at EP 84 and EP 75 ----------------------------------------------------------------------------------
   const d6 = [];
   for (const ep of [84, 75]) {
     const lot = await ev((ep) => { const g = window.__game, e = g.world.entryPoints.find((q) => q.ep === ep); const L = g.trailhead && g.trailhead.trailheadLayout ? g.trailhead.trailheadLayout(ep) : null; const q = (L && L.lot) || e.lot || e; return { x: q.x, z: q.z, maxZ: g.world.maxZ }; }, ep);
-    await ev(async (q) => { const H = window.__lf; await H.tp(q.x, q.z); H.standAt(q.x, q.z, Math.PI / 2); H.step(30); }, lot);
+    await ev(async (q) => { const H = window.__lf; await H.tp(q.x, q.z); H.standAt(q.x, q.z, Math.PI / 2); H.step(30); const g = window.__game; if (g.title.state === 'pause') g.title.resume(); H.step(5); H.closeAll(); H.step(5); // (the hop between two lots is a day trip: its logbook card)
+      if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur(); }, lot); // (headless: a pointer lock let go opens the pause card, its Continue then holds the focus and W)
     await page.keyboard.down('KeyW');
-    const north = await ev(() => { const g = window.__game, H = window.__lf, p = g.player, x0 = p.x, z0 = p.z; for (let k = 0; k < 240; k++) { H.look(Math.PI / 2); g.step(1 / 30, 1); } return Math.round(Math.hypot(p.x - x0, p.z - z0)); });
+    const north = await ev(() => { const g = window.__game, H = window.__lf, p = g.player, x0 = p.x, z0 = p.z, seen = new Set(); window.__pauses = 0; if (g.title.state === 'pause') { window.__pauses++; g.title.resume(); } for (let k = 0; k < 20 && (p.input.paused || (g.record && g.record.shown)); k++) { H.closeAll(); H.step(3); } window.__card = !!(g.record && g.record.shown) || p.input.paused; for (let k = 0; k < 240; k++) { H.look(Math.PI / 2); g.step(1 / 30, 1); if (p.prompt && p.prompt.text) seen.add(p.prompt.text.replace(/<[^>]+>/g, '')); } return Math.round(Math.hypot(p.x - x0, p.z - z0)); });
+    if (process.env.ONLY_D6) await shot(`dbg-${ep}`);
+    if (process.env.ONLY_D6) log('dbg', ep, JSON.stringify(await ev(() => { const g = window.__game, p = g.player, w = g.world; return { title: g.title.state, trip: g.trip.active, mode: p.mode, tele: p.teleporting, x: p.x | 0, z: p.z | 0, ready: w.isReady(p.x, p.z - 5), inB: w.inBounds(p.x, p.z - 5, 40), prompt: p.prompt, speed: p.speed, paused: p.input.paused, held: p.input.held ? p.input.held('KeyW') : null, near: (w.tiles.treesNear(p.x, p.z, 4.5) || []).length, act: document.activeElement ? `${document.activeElement.tagName}#${document.activeElement.id}` : null, oOpen: g.outfitter.open, jOpen: g.journal && g.journal.open, veil: g.veil.active, keys: p.input.keys ? [...p.input.keys].slice(0, 5) : Object.keys(p.input).slice(0, 30), vis: [...document.querySelectorAll('dialog[open], .card.show, .show')].map((e) => e.id || e.className).slice(0, 8), h: w.heightAt(p.x, p.z), water: w.isWater(p.x, p.z), maxZ: w.maxZ, minZ: w.minZ }; })));
     await page.keyboard.up('KeyW');
     await ev(async (q) => { const H = window.__lf; H.standAt(q.x, q.z, -Math.PI / 2); H.step(10); }, lot);
     await page.keyboard.down('KeyW');
     const south = await ev(() => {
-      const g = window.__game, H = window.__lf, p = g.player, seen = new Set(), z0 = p.z; let lz = p.z, still = 0;
+      const g = window.__game, H = window.__lf, p = g.player, seen = new Set(), z0 = p.z; let lz = p.z, still = 0; if (g.title.state === 'pause') { window.__pauses++; g.title.resume(); }
       for (let k = 0; k < 2400; k++) {
         H.look(-Math.PI / 2 + (still > 60 ? Math.sin(k / 20) * 0.6 : 0)); g.step(1 / 30, 1);
         if (p.prompt && p.prompt.text) seen.add(p.prompt.text.replace(/<[^>]+>/g, ''));
@@ -202,7 +207,7 @@ try {
         if ([...seen].some((t) => /off your maps/.test(t))) break;
       }
       const prompt = document.body.innerText;
-      return { went: Math.round(p.z - z0), toEdge: Math.round(g.world.maxZ - p.z), seen: [...seen].slice(0, 6), turnBack: /turn back/i.test(prompt) || [...seen].some((t) => /turn back/i.test(t)) };
+      return { went: Math.round(p.z - z0), toEdge: Math.round(g.world.maxZ - p.z), seen: [...seen].slice(0, 6), pauses: window.__pauses, card: window.__card, turnBack: /turn back/i.test(prompt) || [...seen].some((t) => /turn back/i.test(t)) };
     });
     await page.keyboard.up('KeyW');
     if (ep === 84) await shot('d6-edge-84');
