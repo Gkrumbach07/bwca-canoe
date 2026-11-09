@@ -13,13 +13,17 @@
 //   0 out       past the band: "You have left the Boundary Waters" (private land, cabins and motorboats, the roads to town)
 //   1 wild      inside the BWCAW (src/boundary.bin, the Forest Service's line)
 //   2 doorstep  no notice: 400 m round the BWCAW (the owner's band), 1.5 km round every entry point's put-in, lot, head
-//               and outfitter's yard, each entry point's way in by water (a cheapest path over the water from its put-in
-//               or dock to the band, 250 m wide), the road from each lot 1.5 km toward town and the walk from a lot to
-//               its road, and the roads between lots that sit close (the owner: "lots joined by the road corridor")
+//               and outfitter's yard, each entry point's way in by water (round 4: a cheapest path over the water and
+//               the portages only, never across other dry land nor Quetico, from its put-in or dock to the band, 250 m
+//               wide, and the water within 700 m of it), the road from each lot 1.5 km toward town and the walk from a
+//               lot to its road, the roads between lots that sit close (the owner: "lots joined by the road corridor"),
+//               and every road of src/roads.json (the made two-tracks, a lot's road out to the map's edge)
 //   3 quetico   Quetico Provincial Park (and 400 m round it on the Canadian side), more than 60 m past the BWCAW's
-//               own line (the border lakes' slop): the Quetico notice without a Quetico permit
-// A margin of 200 m inside the box's own edges is out unless it is a doorstep (three lots stand within it, by the south
-// edge near Isabella: Bog Lake, Little Isabella, Snake River); past the box everything is out.
+//               own line (the border lakes' slop). (The owner's later call: Quetico is out of bounds for now, as any
+//               land past the band; src/edge.js decides what the zone shows)
+// A margin of 200 m inside the box's own edges is out unless it is a doorstep (Bog Lake's store and lot, Little Isabella
+// and Snake River's lots stand 170 m in, by the south edge near Isabella, their roads out to it); past the box
+// everything is out. Run it again whenever a lot, a store or a road moves (after scripts/roads.mjs).
 //
 // edge.bin (little-endian, gzipped as a whole): u32 'EDG1', u16 version 1, u16 cell (m), i32 originX, i32 originZ, u16
 // W, u16 H, varint runs, then per run a u8 zone and a varint length (row-major from the north-west corner); u16 rings,
@@ -260,33 +264,72 @@ for (let a = 0; a < eps.length; a++) for (let b = a + 1; b < eps.length; b++) {
 }
 console.log(`roads: ${node.size} nodes; ${joins} lot-to-lot joins`);
 
-// the way in by water: the cheapest path from a put-in or a dock to the band, water 1 a cell, land 6, Quetico 20
+// the carries: every portage's line (the release's, as src/ep-fixes.json replaces them), the cells a way in by water may
+// cross land on
+const carry = new Uint8Array(N);
+{
+  const lines = index.portages.map((p) => p && p.pts);
+  if (fixOn) for (const q of fixes.portages || []) if (q.pts && q.pts.length > 1) lines[q.i] = q.pts;
+  for (const pts of lines) if (pts && pts.length > 1) for (let k = 0; k + 1 < pts.length; k++) {
+    const [ax, az] = pts[k], [bx, bz] = pts[k + 1], L = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.ceil(L / (CELL / 3)));
+    for (let q = 0; q <= n; q++) { const i = ci(ax + ((bx - ax) * q) / n), j = cj(az + ((bz - az) * q) / n); if (i >= 0 && j >= 0 && i < W && j < H) carry[j * W + i] = 1; }
+  }
+}
+// the way in by water (round 4, the adversarial check: South Lake's way crossed 2 km of dry land, so the paddle in left
+// the doorstep): the cheapest path from a put-in or a dock to the band over the water and the portages only (water 1 a
+// cell, a carry 3, any other land shut, Quetico shut: it is out of bounds as any other land past the band), stamped
+// WATER_HALF wide and every water cell within WATER_SPREAD of it (a straight paddle across a wide lake stays in)
+const WATER_SPREAD = 700;
 const inBand = (k) => bw[k] || dBW[k] <= (BAND / CELL) ** 2;
-function waterWay(x, z) {
+function waterWay(x, z, open = (q) => water[q] || carry[q]) {
   const s = cj(z) * W + ci(x); if (s < 0 || s >= N || inBand(s)) return null;
-  const dist = new Map([[s, 0]]), prev = new Map(), heap = [[0, s]], MAXC = 600;
+  const dist = new Map([[s, 0]]), prev = new Map(), heap = [[0, s]], MAXC = 900;
   const push = (e) => { heap.push(e); let i = heap.length - 1; while (i) { const p = (i - 1) >> 1; if (heap[p][0] <= heap[i][0]) break; [heap[p], heap[i]] = [heap[i], heap[p]]; i = p; } };
   const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; let i = 0; for (;;) { const l = 2 * i + 1, r = l + 1; let m = i; if (l < heap.length && heap[l][0] < heap[m][0]) m = l; if (r < heap.length && heap[r][0] < heap[m][0]) m = r; if (m === i) break; [heap[m], heap[i]] = [heap[i], heap[m]]; i = m; } } return top; };
   while (heap.length) {
     const [d, k] = pop(); if (d > (dist.get(k) ?? Infinity)) continue;
-    if (inBand(k) && water[k] && !qt[k]) { const pts = []; for (let q = k; q != null; q = prev.get(q)) pts.push([cx(q % W), cz((q / W) | 0)]); return { pts: pts.reverse(), cost: d }; }
+    if (inBand(k) && water[k] && !qt[k]) { const pts = []; for (let q = k; q != null; q = prev.get(q)) pts.push([cx(q % W), cz((q / W) | 0)]); return { pts: pts.reverse(), cells: (() => { const c = []; for (let q = k; q != null; q = prev.get(q)) c.push(q); return c; })(), cost: d }; }
     const i = k % W, j = (k / W) | 0;
     for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
       if (!di && !dj) continue; const ii = i + di, jj = j + dj; if (ii < 0 || jj < 0 || ii >= W || jj >= H) continue;
-      const q = jj * W + ii, c = (water[q] ? 1 : 6) * (qt[q] ? 20 : 1) * (di && dj ? 1.414 : 1), nd = d + c;
+      const q = jj * W + ii;
+      if (q !== s && (!open(q) || (qt[q] && !bw[q]))) continue;
+      const c = (water[q] ? 1 : 3) * (di && dj ? 1.414 : 1), nd = d + c;
       if (nd <= MAXC && nd < (dist.get(q) ?? Infinity)) { dist.set(q, nd); prev.set(q, k); push([nd, q]); }
     }
   }
   return null;
 }
-const ways = [];
+const ways = [], wayCells = [];
+const spreadC = Math.ceil(WATER_SPREAD / CELL);
 for (const e of eps) {
   for (const p of [[e.x, e.z], e.dock].filter(Boolean)) {
-    const r = waterWay(p[0], p[1]); if (!r) continue;
+    const r = waterWay(p[0], p[1]); if (!r) { if (!inBand(cj(p[1]) * W + ci(p[0]))) console.log(`!! EP ${e.ep} ${e.name}: no way in by water and carries from ${p.map(Math.round)}`); continue; }
     stampLine(r.pts, WATER_HALF); ways.push(`${e.ep} ${(r.pts.length * CELL / 1000).toFixed(1)} km`);
+    wayCells.push({ ep: e.ep, from: p, cells: r.cells });
+    // the water round the way, out to WATER_SPREAD (each water cell of the way's own reach)
+    const seen = new Set();
+    for (const k of r.cells) {
+      if (!water[k]) continue;
+      const i0 = k % W, j0 = (k / W) | 0;
+      for (let dj = -spreadC; dj <= spreadC; dj++) for (let di = -spreadC; di <= spreadC; di++) {
+        if (di * di + dj * dj > spreadC * spreadC) continue;
+        const i = i0 + di, j = j0 + dj; if (i < 0 || j < 0 || i >= W || j >= H) continue;
+        const q = j * W + i; if (!water[q] || qt[q] || seen.has(q)) continue;
+        seen.add(q); door[q] = 1;
+      }
+    }
   }
 }
 console.log(`ways in by water: ${ways.join(', ') || 'none needed'}`);
+// the made two-tracks and every road of src/roads.json (round 4: a lot's road out to the map's edge), stamped as roads
+{
+  let t = null; try { t = JSON.parse(fs.readFileSync('src/roads.json', 'utf8')); } catch { /* none */ }
+  if (t && t.for === (index.source && index.source.baked)) {
+    for (const r of t.roads) { let x = 0, z = 0; const pts = []; for (let k = 0; k + 3 < r.p.length; k += 4) { x += r.p[k]; z += r.p[k + 1]; pts.push([x / 10, z / 10]); } stampLine(pts, ROAD_HALF); }
+    console.log(`roads.json: ${t.roads.length} roads stamped`);
+  }
+}
 
 // --- the zones --------------------------------------------------------------------------------------------------------
 const zone = new Uint8Array(N), m = MARGIN / CELL;
@@ -305,6 +348,8 @@ const area = [0, 0, 0, 0]; for (let k = 0; k < N; k++) area[zone[k]] += CELL * C
 console.log(`zones km²: out ${area[0].toFixed(0)}, wild ${area[1].toFixed(0)}, doorstep ${area[2].toFixed(0)}, quetico ${area[3].toFixed(0)}; no notice ${(((area[1] + area[2]) / (area.reduce((a, b) => a + b))) * 100).toFixed(1)} %`);
 const zoneAt = (x, z) => { const i = ci(x), j = cj(z); return i < 0 || j < 0 || i >= W || j >= H ? 0 : zone[j * W + i]; };
 for (const e of eps) for (const [x, z] of e.spots) if (zoneAt(x, z) === 0 || zoneAt(x, z) === 3) console.log(`!! EP ${e.ep} ${e.name}: a spot in zone ${zoneAt(x, z)} at ${x.toFixed(0)},${z.toFixed(0)}`);
+// every way in by water through the doorstep (round 4: the rig's own check, edge-test.mjs reads the zones the same way)
+for (const w of wayCells) { const outs = w.cells.filter((k) => zone[k] === 0).length; if (outs) console.log(`!! EP ${w.ep}: its way in by water crosses ${outs} out cells`); }
 const past = index.campsites.filter((c) => zoneAt(c.x, c.z) === 0).length;
 console.log(`campsites past the band: ${past} of ${index.campsites.length}`);
 
