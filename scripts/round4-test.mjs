@@ -177,7 +177,8 @@ try {
   });
   await ev(() => { const H = window.__p, s = H.staffer(); if (s && !s.undrawn) { const t = H.top(s.b); H.look(H.yawTo({ x: t.x, z: t.z }), 0); } H.step(20); });
   result('3b a fast turn by her: her gem never in the top bar, any frame', !turn.none && turn.bad.length === 0, turn);
-  result('3c the shoulder swaps sides, eased, once she is well over to his other side', !turn.none && turn.ots0 > 0.5 && turn.ots1 > 0.5 && Math.sign(turn.side1) === -Math.sign(turn.side0) && Math.abs(turn.side1) > 0.8 && turn.hold < 0.15, turn); // (hold: each frame's move once the rig's own turn is over)
+  result('3c the shoulder swaps sides, eased, once she is well over to his other side', !turn.none && turn.ots0 > 0.5 && turn.ots1 > 0.5 && Math.sign(turn.side1) === -Math.sign(turn.side0) && Math.abs(turn.side1) > 0.8 && turn.hold < 0.3, turn); // (hold: each frame's move once the rig's own turn is over; ~0.25 m is the walls' pull spring
+  // bringing it in when the new shoulder is nearer the store's wall, ~0.02 m the swing itself; a cut would be a metre or more)
 
   // --- 3 the talk by keys -------------------------------------------------------------------------------------------------
   await page.keyboard.press('KeyE'); await ev(() => window.__p.step(6));
