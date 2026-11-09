@@ -1016,7 +1016,7 @@ const ASKS = {
   async lost(P, v, c) {
     const k = KINDS.item; if (!k || !k.make) return null;
     let f = null;
-    for (const band of v.arch === 'birder' ? ['local', 'medium'] : ['medium', 'local', 'far']) { f = await k.make(P.tasks, { ...c, band, board: [] }); if (f) break; }
+    for (const band of v.arch === 'birder' ? ['local', 'medium'] : ['medium', 'local', 'far']) { f = await k.make(P.tasks, { ...c, band, board: [] }); if (f && P.tasks.pastNotice && P.tasks.pastNotice({ kind: 'item', ...f }, k)) f = null; if (f) break; } // (r4 loopfix: none past the edge)
     if (!f) return siteErrand(P, v, c, 'lost');
     const what = { locket: 'Grandma’s locket', 'dry bag': 'the blue dry bag', paddle: 'the spare paddle' }[f.label] || `the ${f.label}`, rest = String(f.text || '').replace(/^[^.]*\.\s*/, '');
     const lead = { family: `Our youngest left ${what} at a campsite, and there were tears all the way back.`, trippers: `We left ${what} behind at our last site. Rookie move.`, birder: `I set ${what} down at a campsite and paddled off without it.` }[v.arch] || `We left ${what} behind.`;
@@ -1029,7 +1029,7 @@ const ASKS = {
     if (k && typeof k.make === 'function') {
       try {
         const f = await k.make(P.tasks, { ...c, band: 'medium', board: [] });
-        if (f) return { kind: 'photo', fields: { ...f, sign: v.name }, ask: `I’m short one picture for the magazine: ${String(f.title || 'a photo').toLowerCase()}. ${f.text || ''} Would you take it for me?` };
+        if (f && !(P.tasks.pastNotice && P.tasks.pastNotice({ kind: 'photo', ...f }, k))) return { kind: 'photo', fields: { ...f, sign: v.name }, ask: `I’m short one picture for the magazine: ${String(f.title || 'a photo').toLowerCase()}. ${f.text || ''} Would you take it for me?` };
       } catch (e) { console.warn('people: the photo notice', e); }
     }
     return ASKS.fetch(P, v, c); // no camera in the build yet: the film from another outfitter

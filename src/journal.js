@@ -180,7 +180,7 @@ export class Journal {
     const at = (ep) => { const l = ts && ts.landing ? ts.landing(ep) : null; return l ? l.name : 'the outfitter'; };
     void at;
     // gl-d: pay lands at the trip's end (tasks.js settle), wherever you come in
-    if (t.status === 'done') return { cls: 'done', words: 'paid when you come in' };
+    if (t.status === 'done') return { cls: 'done', words: t.cut ? 'no longer posted, still paid when you come in' : 'paid when you come in' }; // (r4 loopfix: a cut kind's done notice keeps its pay)
     // how far along: the kind's own fraction, else what is in the cooler or handed over against what is wanted
     let f = 0;
     if (k && typeof k.fraction === 'function') { const v = k.fraction(t); if (Number.isFinite(v)) f = v; }

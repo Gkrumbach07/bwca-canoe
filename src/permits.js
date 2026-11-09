@@ -10,7 +10,8 @@
 // the trip under way) the desk sells no overnight or PMA permit, money or not; day use stays free. A PMA permit allows camping off the designated sites in one primitive management area (pma.js).
 // Every permit is one flat price, every day of the year (the owner's call 2026-11-05): the busy months are dear only in
 // what is left, through the quotas and BOOK, never in dollars. The first permit is free (stream C's onboarding grants
-// it). Quetico per-night permits: not yet.
+// it). Quetico is out of bounds (the owner's later call, 2026-11-08: "Quetico is DLC for now"): no permit, ticket or
+// camping of its own there.
 //
 // What is left of a day: QUOTA[ep] (parties.js, recreation.gov's real daily quotas) less the parties booked in less the
 // permits you hold there that day. Booked: the share of the quota parties.js sends in that day before its render
@@ -41,8 +42,6 @@
 //   permits.pmas() · permits.pmaAt(x, z) · permits.allowsOffsite(x, z)
 //   permits.on('bought' | 'used' | 'lapsed' | 'fine' | 'ticket' | 'paid' | 'skip', fn) → off
 //   permits.update(dt) each frame (main.js gl-a): the lapses and the day-use fine
-//   permits.holdsQuetico() -> bool (a Quetico permit for the trip under way: none are sold yet, so false) ·
-//     permits.queticoNight() -> bool (a tent pitched in Quetico without one: a ranger's ticket, once a trip; camp.js)
 import { save } from './save.js';
 import { QUOTA, PARTIES, FILL, WEEKDAY } from './parties.js';
 import { seasonAt } from './season.js';
@@ -66,7 +65,6 @@ export const PRICES = {
   overnight: 6,
   pma: 6,
   fine: 20,                                  // still out after dark on a day-use trip
-  quetico: 50,                               // the edge round: a night camped in Quetico without a Quetico permit (owner's call to tune)
 };
 // How full a day is booked, from the share of the quota the parties' schedule sends in that day (count / PARTIES.start
 // / quota): [share, booked share] pieces between, flat past the ends. Under a quarter of the quota going in books no more
@@ -122,6 +120,8 @@ export class Permits {
     if (!Number.isFinite(this.s.nextId)) this.s.nextId = 1 + this.s.held.length + this.s.used.length;
     // r2 tickets: a save from before tickets kept a fine owed at a counter; an unpaid one is an open ticket now (it was
     // written when it was given), a paid one stays paid
+    // (Quetico made out of bounds: a Quetico ticket from a build that had them is torn up, unpaid ones only)
+    this.s.fines = this.s.fines.filter((f) => f.why !== 'quetico' || f.paid);
     for (const f of this.s.fines) {
       if (typeof f.issued !== 'boolean') f.issued = true;
       if (!f.id) f.id = `F${this.s.nextId++}`;
@@ -464,32 +464,18 @@ export class Permits {
     try { const id = p && w && typeof w.lakeIdAt === 'function' ? w.lakeIdAt(p.x, p.z) : 0; place = (id > 0 && typeof w.lakeName === 'function' && w.lakeName(id)) || ''; } catch { place = ''; }
     if (!place && s && s.from != null) { const e = this.entry(s.from); place = e ? e.place || e.name || '' : ''; }
     const f = { id: `F${this.s.nextId++}`, n, why, abs: this.today, ep: s && s.from != null ? s.from : null, place, issued: false, paid: false, trip: s ? s.id : null };
-    if (why === 'quetico') { f.qplace = place; f.place = place; } // (the edge round: the lake in Quetico it was on)
     this.s.fines.push(f); if (this.s.fines.length > KEEP_FINES) this.s.fines.splice(0, this.s.fines.length - KEEP_FINES);
-    if (s) { if (why === 'quetico') s.finedQuetico = true; else s.fined = true; } // (each rule once a trip)
+    if (s) s.fined = true; // (once a trip)
     this.write();
     if (tr && typeof tr.log === 'function') tr.log('fine', { n, why, id: f.id });
     const hud = this.t.hud;
-    const said = why === 'quetico' ? `An Ontario Parks ranger paddles over: no Quetico permit for a night here. A $${n} ticket, written when you come in.` : `A ranger's canoe pulls alongside: day use ends at dark. A $${n} ticket, written when you come in.`;
+    const said = `A ranger's canoe pulls alongside: day use ends at dark. A $${n} ticket, written when you come in.`;
     if (hud && typeof hud.note === 'function') hud.note(said, 8);
     this.emit('fine', f);
     if (this.t.outfitter && typeof this.t.outfitter.save === 'function') this.t.outfitter.save();
     return true;
   }
 
-  // --- Quetico (the edge round, the owner 2026-11-08: "Quetico open ... camping there without one is a ticket") ---------
-  // Quetico is open to paddle and to walk; it has no designated sites (you camp where you like, as its own rules say),
-  // and a night in it wants a Quetico permit. The desk sells none yet (campaigns.md: paid per night, the story's
-  // "The other side"); a held one (kind 'quetico', for the trip under way) is read here once it exists.
-  holdsQuetico() {
-    const tr = this.t.trip, s = tr && tr.state, p = s && s.permit;
-    return !!(tr && tr.active && p && p.kind === 'quetico');
-  }
-  queticoNight() {
-    const tr = this.t.trip, s = tr && tr.state;
-    if (!tr || !tr.active || !tr.adventure || !s || s.finedQuetico || this.visiting || this.holdsQuetico()) return false;
-    return this.fine('quetico', PRICES.quetico);
-  }
   // for the console and the tests
   stats() { return { held: this.s.held.length, used: this.s.used.length, owed: this.owed(), fines: this.s.fines.length, tickets: this.tickets().length, season: this.s.season }; }
 }

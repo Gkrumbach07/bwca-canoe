@@ -262,7 +262,7 @@ export class Guide {
     return null;
   }
   taskNext(T, t) {
-    if (t.status === 'done') return 'Paid when you come in';
+    if (t.status === 'done') return t.cut ? 'No longer posted, still paid when you come in' : 'Paid when you come in'; // (r4 loopfix: a cut kind's)
     const k = (T.kinds || {})[t.kind];
     if (k && typeof k.next === 'function') { const w = k.next(T, t); if (w) return w; } // (a kind may say its own)
     if (t.kind === 'starter' || t.kind === 'campsite') {
