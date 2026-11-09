@@ -543,12 +543,18 @@ export class Tasks {
     const K = KINDS[kind], landing = this.landing(ep);
     if (!K || !landing) return null;
     const b = this.boards[ep] || { slots: SLOTS.map(() => null), n: 0 };
-    const rng = mulberry32(((this.seed * 2654435761) ^ (ep * 40503) ^ (++b.n * 9973) ^ 0x9d) >>> 0);
     const board = b.slots.map((id) => (id == null ? null : this.ads.get(id)));
-    const f = await K.make(this, { ep, band, rng, landing, reach: this.reach(landing.lake), board, turf: this.turfOf(ep) });
+    // (r4-final: a place past the edge is refused (pastNotice); another draw is tried, as the board's own picking does,
+    // so a kind with places on both sides of the edge (Moose Lake's local portages) is still written)
+    let f = null;
+    for (let k = 0; k < 6 && !f; k++) {
+      const rng = mulberry32(((this.seed * 2654435761) ^ (ep * 40503) ^ (++b.n * 9973) ^ 0x9d) >>> 0);
+      f = await K.make(this, { ep, band, rng, landing, reach: this.reach(landing.lake), board, turf: this.turfOf(ep) });
+      if (!f) return null;
+      if (this.pastNotice({ kind, from: ep, band, ...f }, K)) f = null;
+    }
     if (!f) return null;
     const t = { id: this.nextId++, kind, from: ep, fromName: landing.name, band, status: 'offered', posted: this.today(), ...f };
-    if (this.pastNotice(t, K)) return null;
     t.pay = K.pay(t); t.clue = t.text;
     this.ads.set(t.id, t);
     return t;
