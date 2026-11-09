@@ -227,14 +227,15 @@ try {
     H.step(120);
     const top = A && A.top ? { x: A.top[0], z: A.top[1] } : A && A.landing ? { x: A.landing[0], z: A.landing[1] } : { x: s.x + 6, z: s.z };
     // (the canoe left at the landing, where it came ashore, not under him at the top of the way up)
-    if (A && A.landing) { const p = g.player; p.carry = { trail: null, drop: { x: A.landing[0], z: A.landing[1], heading: p.heading }, hitCooldown: 0, from: null, choice: false }; }
-    H.standAt(top.x, top.z, H.yawTo(s)); H.step(20);
+    let laid = false;
+    if (A && A.landing) for (const k of [0.25, 0.4, 0.6, 0.8]) { const dx = top.x - A.landing[0], dz = top.z - A.landing[1]; const d = { x: A.landing[0] + dx * k, z: A.landing[1] + dz * k, heading: Math.atan2(-dz, dx) }; if ((laid = g.player.standAt({ x: top.x, z: top.z, heading: H.yawTo(s), drop: d }))) break; }
+    if (laid) { H.look(g.player.heading); H.step(20); } else { H.standAt(top.x, top.z, H.yawTo(s)); H.step(20); }
     const f = s.layout && s.layout.fire ? s.layout.fire : s;
     return { ring: { x: f.x, z: f.z } };
   });
   await walkTo(site.ring, 2.4, 30000);
   await realFor(2500);
-  const v7 = await ev(() => ({ mode: window.__game.player.mode, pfd: window.__game.canoe.figure.pfd }));
+  const v7 = await ev(() => { const g = window.__game, h = g.player.canoe.hull, P = new g.THREE.Vector3(); h.getWorldPosition(P); return { mode: g.player.mode, pfd: g.canoe.figure.pfd, hullFromHim: +Math.hypot(P.x - g.player.x, P.z - g.player.z).toFixed(1) }; });
   await shot('site', 7, 'The first night\'s site at dusk: the jacket off in camp');
   result('10 at the site on foot: the life jacket off', v7.mode === 'walk' && !v7.pfd, v7);
   // the first night's job by E on the dot: the grate, the latrine, the pad
