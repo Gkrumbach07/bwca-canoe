@@ -56,12 +56,12 @@ const SEE_STRENGTH = 0.95;
 const SHOULDER = 0.75; // m: how far right of him the view moves looking all the way down (ChaseCamera.update)
 // r4 body: the story's person close by (the guide's step is someone a few metres off: the staffer at the talk): from the
 // usual chase his own body hid her. The view eases over his shoulder (the side she stands on, right if dead ahead), in
-// closer and lower, the look turned partly to her head, so she and the gem over her are both in view; and back out
+// closer and lower, the look on his line at her distance and her face's height (the dot on her), so she and the gem over her are both in view; and back out
 // once she is behind him, further than r or the step is done. near / r: m from him; cos: in front of him within about
 // 70 degrees; dist: the chase's length (m, never longer than the wheel set it); side: m off his line; pitch: the tilt;
-// look: the share of the look turned to her; drop: m under her speaker point (a hand over the head) it aims at; rate:
+// drop: m under her speaker point (a hand over the head) the look is at; rate:
 // the ease's rate (1/s: about a second each way)
-export const OTS = { near: 0.8, r: 4.5, cos: 0.34, dist: 3.4, side: 0.95, pitch: 0.16, look: 0.55, drop: 0.45, rate: 2.2 };
+export const OTS = { near: 0.8, r: 4.5, cos: 0.34, dist: 3.4, side: 0.95, pitch: 0.16, drop: 0.45, rate: 2.2 };
 const CARRY_PITCH = 0.1; // rad: the chase's tilt on foot under the canoe (0.27 elsewhere; polish A)
 const seePars = /* glsl */ `
 uniform vec4 uSee;
@@ -634,8 +634,16 @@ export class ChaseCamera {
         ly = ty + 0.4 + (gy - ty - 0.4) * s * s * (3 - 2 * s);
       }
     }
-    const lookT = new THREE.Vector3(tx + shx + player.forward.x * ahead, ly, tz + shz + player.forward.z * ahead);
-    if (ots > 0 && this.otsAt) lookT.lerp(_ots.set(this.otsAt.x, this.otsAt.y - OTS.drop, this.otsAt.z), OTS.look * ots); // r4 body: turned partly to her
+    // r4 body: over her shoulder the look converges on his line at her distance and her face's height (the camera off to
+    // the side, the look not): the middle of the screen, the dot, is on her while he faces her, and turning him turns it
+    let lx = shx, lz = shz;
+    if (ots > 0 && this.otsAt) {
+      const A = this.otsAt, along = clamp((A.x - tx) * player.forward.x + (A.z - tz) * player.forward.z, 1, OTS.r);
+      const lk = shK ? (SHOULDER * down * (1 - ots)) / shK : 0;
+      lx = shx * lk; lz = shz * lk;
+      ahead += (along - ahead) * ots; ly += (A.y - OTS.drop - ly) * ots;
+    }
+    const lookT = _ots.set(tx + lx + player.forward.x * ahead, ly, tz + lz + player.forward.z * ahead);
     this.look.lerp(lookT, this.first ? 1 : 1 - Math.exp(-dt * (footLook ? 16 : 8)));
     const cam = this.pullIn(dt, tx, ty, tz);
     this.first = false;

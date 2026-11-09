@@ -105,7 +105,7 @@ try {
       const sp = g.guide.reach(cur).pos, face = { x: sp.x, y: sp.y - 0.5, z: sp.z }, chest = { x: sp.x, y: sp.y - 0.85, z: sp.z };
       const gem = g.locator.shown().find((q) => q.main) || null;
       const out = { cur: cur.id, d: +Math.hypot(g.player.x - sp.x, g.player.z - sp.z).toFixed(2), ots: +ch.ots.toFixed(3), maxStep: Math.max(...trace.slice(1).map((v, i) => Math.abs(v - trace[i]))), jump: +jump.toFixed(3),
-        face: H.firstHit(face), chest: H.firstHit(chest), faceNdc: H.ndc(face), gem: gem ? { hit: H.firstHit(gem), ndc: H.ndc(gem) } : null, cam: g.camera.position.toArray().map((v) => +v.toFixed(2)) };
+        face: H.firstHit(face), chest: H.firstHit(chest), faceNdc: H.ndc(face), gem: gem ? { hit: H.firstHit(gem), ndc: H.ndc(gem) } : null, cam: g.camera.position.toArray().map((v) => +v.toFixed(2)), dot: g.pointer && g.pointer.target ? `${g.pointer.target.kind}:${g.pointer.target.label || ''}` : null };
       return out;
     }, { off });
     const before = await measure('before', true);
@@ -115,6 +115,7 @@ try {
     await shot('2b-staffer-over-shoulder');
     log('ots before', JSON.stringify(before)); log('ots after', JSON.stringify(after));
     check(2, 'over the shoulder at 2.5 m from the staffer: her face and the gem in view, not behind his body', after.cur === 'story:onboard:talk' && after.ots > 0.95 && after.face !== 'me' && after.chest !== 'me' && H_on(after.faceNdc) && after.gem && after.gem.hit !== 'me' && H_on(after.gem.ndc), { before, after });
+    check(2, 'the dot is on her over his shoulder (E talks to her)', /^person:/.test(after.dot || ''), { dot: after.dot, before: before.dot });
     check(2, 'the ease is smooth (ots under 0.12 a frame; the camera under 0.35 m a frame at 30 fps)', after.maxStep < 0.12 && after.jump < 0.35, { maxStep: after.maxStep, jump: after.jump });
     const back = await page.evaluate(async () => {
       const g = window.__game, H = window.__r4, ch = g.chase, p = g.player;
