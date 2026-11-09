@@ -267,7 +267,7 @@ for (let a = 0; a < eps.length; a++) for (let b = a + 1; b < eps.length; b++) {
 console.log(`roads: ${node.size} nodes; ${joins} lot-to-lot joins`);
 
 // the way in by water (round 4, the adversarial check: South Lake's way crossed 2 km of dry land, so the paddle in left
-// the doorstep): the shortest path from a put-in, a dock or an outfitter's head put-in to the band over the release's own
+// the doorstep): the shortest path from a put-in, a dock or an outfitter's head put-in to the wilderness's own water over the release's own
 // 10 m water and the portages' lines only (no other dry land, no Quetico: out of bounds as any land past the band; a
 // 50 m cell with any water in it joins water a canoe cannot pass), stamped WATER_HALF wide and every water cell within
 // WATER_SPREAD of it (a straight paddle across a wide lake stays in). scripts/r4-doorstep-check.mjs holds the zones to
@@ -289,14 +289,14 @@ const wet10 = (i, j) => D10.lakeAt(c10x(i), c10z(j)) > 0;
 function waterWay(x, z, maxM = 40000) {
   const k50 = (i, j) => cj(c10z(j)) * W + ci(c10x(i));
   const s = Math.floor((z - Z0) / C10) * GW + Math.floor((x - X0) / C10);
-  if (s < 0 || s >= GW * GH || inBand(k50(s % GW, (s / GW) | 0))) return null;
+  if (s < 0 || s >= GW * GH || bw[k50(s % GW, (s / GW) | 0)]) return null;
   const dist = new Map([[s, 0]]), prev = new Map(), heap = [[0, s]];
   const push = (e) => { heap.push(e); let i = heap.length - 1; while (i) { const p = (i - 1) >> 1; if (heap[p][0] <= heap[i][0]) break; [heap[p], heap[i]] = [heap[i], heap[p]]; i = p; } };
   const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; let i = 0; for (;;) { const l = 2 * i + 1, r = l + 1; let m = i; if (l < heap.length && heap[l][0] < heap[m][0]) m = l; if (r < heap.length && heap[r][0] < heap[m][0]) m = r; if (m === i) break; [heap[m], heap[i]] = [heap[i], heap[m]]; i = m; } } return top; };
   while (heap.length) {
     const [d, k] = pop(); if (d > (dist.get(k) ?? Infinity)) continue;
     const i = k % GW, j = (k / GW) | 0, K = k50(i, j);
-    if (inBand(K) && wet10(i, j) && !(qt[K] && !bw[K])) { const pts = []; for (let q = k; q != null; q = prev.get(q)) pts.push([c10x(q % GW), c10z((q / GW) | 0)]); return { pts: pts.reverse(), m: d }; }
+    if (bw[K] && wet10(i, j)) { // (the wilderness's own water: the band's water may not lead on into it) const pts = []; for (let q = k; q != null; q = prev.get(q)) pts.push([c10x(q % GW), c10z((q / GW) | 0)]); return { pts: pts.reverse(), m: d }; }
     for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
       if (!di && !dj) continue; const ii = i + di, jj = j + dj; if (ii < 0 || jj < 0 || ii >= GW || jj >= GH) continue;
       const q = jj * GW + ii, Q = k50(ii, jj);
@@ -313,7 +313,7 @@ const spreadC = Math.ceil(WATER_SPREAD / CELL);
 for (const e of eps) {
   for (const p of [[e.x, e.z], e.dock, e.headPut].filter(Boolean)) {
     const r = waterWay(p[0], p[1]);
-    if (!r) { if (!inBand(cj(p[1]) * W + ci(p[0]))) console.log(`!! EP ${e.ep} ${e.name}: no way in by water and carries from ${p.map(Math.round)}`); continue; }
+    if (!r) { if (!bw[cj(p[1]) * W + ci(p[0])]) console.log(`!! EP ${e.ep} ${e.name}: no way in by water and carries from ${p.map(Math.round)}`); continue; }
     stampLine(r.pts, WATER_HALF); ways.push(`${e.ep} ${(r.m / 1000).toFixed(1)} km`);
     wayPts.push({ ep: e.ep, pts: r.pts });
     // the water round the way, out to WATER_SPREAD (on the 50 m grid)
