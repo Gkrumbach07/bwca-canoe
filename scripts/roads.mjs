@@ -511,11 +511,11 @@ async function loadGround() {
 const enc = (rows, scales) => { const out = [], prev = scales.map(() => 0); for (const r of rows) r.forEach((v, i) => { const q = Math.round(v * scales[i]); out.push(i < 2 || i === 2 ? q - prev[i] : q); prev[i] = q; }); return out; };
 const roads = [], crossings = [];
 let wet = 0, cuts = [];
+const built = [];
 for (const c of chains) {
   const pts = resample(c.pts, STEP), n = pts.length;
-  let h = new Float64Array(n), w = new Float64Array(n).fill(2.5), water = new Uint8Array(n);
+  const h = new Float64Array(n), w = new Float64Array(n).fill(2.5), water = new Uint8Array(n), raw = new Float64Array(n).fill(NaN);
   if (ground) {
-    const raw = new Float64Array(n).fill(NaN);
     pts.forEach(([x, z], i) => { const g = ground.at(x, z); if (g.sd > 0.5) raw[i] = g.h; else water[i] = 1; });
     // over water, level between the banks (a culvert, a causeway)
     for (let i = 0; i < n; i++) if (!(raw[i] === raw[i])) {
@@ -529,8 +529,29 @@ for (const c of chains) {
       for (let j = Math.max(0, i - R); j <= Math.min(n - 1, i + R); j++) { const d = (j - i) * STEP, k = Math.exp(-(d * d) / (2 * SMOOTH * SMOOTH)); sw += k; sh += k * raw[j]; }
       h[i] = sh / sw;
     }
-    // the ends meet the ground (a junction, the lot)
-    for (const e of [0, n - 1]) h[e] = raw[e];
+  }
+  built.push({ c, pts, n, h, w, water, raw });
+}
+// the ends: a lone end (a lot, a cut end) meets the ground; where roads meet (round 4: the check found the made two-tracks
+// and their roads 0.4-1 m apart at the junction, the ground a blend of both) every road there eased to one height, the
+// mean of theirs, over its last JOIN_EASE m
+const JOIN_EASE = 24;
+if (ground) {
+  const endKey = (p) => `${Math.round(p[0])},${Math.round(p[1])}`, at = new Map();
+  for (const B of built) for (const e of [0, B.n - 1]) { const k = endKey(B.pts[e]); if (!at.has(k)) at.set(k, []); at.get(k).push({ B, e }); }
+  for (const list of at.values()) {
+    const target = list.length > 1 ? list.reduce((t, q) => t + q.B.h[q.e], 0) / list.length : list[0].B.raw[list[0].e];
+    for (const { B, e } of list) {
+      const d0 = target - B.h[e];
+      for (let q = 0; q < B.n; q++) {
+        const i = e === 0 ? q : B.n - 1 - q, d = q * STEP; if (d > JOIN_EASE) break;
+        const t = 1 - d / JOIN_EASE; B.h[i] += d0 * t * t * (3 - 2 * t);
+      }
+    }
+  }
+}
+for (const { c, pts, n, h, w, water, raw } of built) {
+  if (ground) {
     // round 4: by the water the ground the game draws (detail-build.js chunkGround): no road grade within 4 m of the shore
     // (eased in from 1 to 4 m), and never under the lake's level by the shore (sd < 30)
     pts.forEach(([x, z], i) => {

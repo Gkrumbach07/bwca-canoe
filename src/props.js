@@ -15,6 +15,7 @@ import { TILE, PropBuilder, propMaterial, trailMaterial, occlude, obb, bakeSelf,
 import { SIGN_HEAD_UV, SIGN_GLYPH_ASPECT, signGlyphUv } from './prop-kit.js'; // d1 names: the trail sign's words
 import { tileCreeks, BROOK } from './creeks.js'; // the wetlands round: brooks, beaver dams and lodges
 import { roadExclusions, DECK } from './roads.js'; // stream E3: the roads in 3D
+import { nearRoad } from './road-grade.js'; // round 4: a portage's sign kept off the roads (the truck's way)
 
 // The built things: portage trails and their signs, campsites, and at every entry point an outfitter's dock,
 // shack and canoe rack, plus the lost-and-found items of the task board. Simple shapes put together the way
@@ -509,7 +510,10 @@ function portageSign(ctx, pts, end, seed, p = null) {
   while (k < Math.min(10, m - 2) && ctx.tg.shoreAt(pts[idx(k)][0], pts[idx(k)][1]) < 2.2) k++;
   const [x, z] = pts[idx(k)], [xn, zn] = pts[idx(k + 1)];
   let fx = x - xn, fz = z - zn; const L = Math.hypot(fx, fz) || 1; fx /= L; fz /= L; // facing out along the path, to the water
-  const side = rng() < 0.5 ? 1 : -1, px = x + fz * side * 1.15, pz = z - fx * side * 1.15;
+  // (round 4: never on a road, where a trail starts at a road's end or a lot: the other side, else further off the path)
+  let side = rng() < 0.5 ? 1 : -1, off = 1.15;
+  for (const [sd, o] of [[side, 1.15], [-side, 1.15], [side, 2.6], [-side, 2.6], [side, 4], [-side, 4]]) if (!nearRoad(x + fz * sd * o, z - fx * sd * o, 0.4)) { side = sd; off = o; break; }
+  const px = x + fz * side * off, pz = z - fx * side * off;
   const F = frame(ctx, px, pz, { x: fx, z: fz }), g = F.G(0, 0), b = new PropBuilder();
   ctx.obstacles.push({ x: px, z: pz, r: 0.15, low: true }); // (low: a canoe carried overhead rides over the post, player.js)
   const post = tone(0x7f6851, rng, 0.06), top = g + 1.12, ref = F.P(0, g + 0.5, 0);

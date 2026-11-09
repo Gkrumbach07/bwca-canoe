@@ -59,7 +59,7 @@ const HELPERS = () => {
     for (let w = 0; w < 80 && !(g.tiles.detail && g.tiles.detail.at(x, z)); w++) { H.step(4); await H.wait(50); }
     H.step(10);
   };
-  H.deckTop = (x, z) => { const R = g.world.roads; let top = -Infinity; if (R) for (const B of R.bridges) { const ex = B.bx - B.ax, ez = B.bz - B.az, L2 = ex * ex + ez * ez, t = L2 > 1e-9 ? ((x - B.ax) * ex + (z - B.az) * ez) / L2 : 0; if (t < -0.05 || t > 1.05) continue; const tc = Math.max(0, Math.min(1, t)); if (Math.hypot(x - B.ax - ex * tc, z - B.az - ez * tc) <= B.hw + 0.3) top = Math.max(top, B.ah + (B.bh - B.ah) * tc + 0.06); } return top; };
+  H.deckTop = (x, z) => { const R = g.world.roads; let top = -Infinity; if (R) for (const B of R.bridges) { const ex = B.bx - B.ax, ez = B.bz - B.az, L2 = ex * ex + ez * ez, t = L2 > 1e-9 ? ((x - B.ax) * ex + (z - B.az) * ez) / L2 : 0; const Lb = Math.sqrt(L2) || 1; if (t < -2 / Lb || t > 1 + 2 / Lb) continue; const tc = Math.max(0, Math.min(1, t)); if (Math.hypot(x - B.ax - ex * tc, z - B.az - ez * tc) <= B.hw + 0.3) top = Math.max(top, B.ah + (B.bh - B.ah) * tc + 0.06); } return top; };
   H.deck = (x, z) => { const R = g.world.roads; if (!R || !R.bridges.length) return -Infinity; for (const B of R.bridges) { const ex = B.bx - B.ax, ez = B.bz - B.az, L2 = ex * ex + ez * ez, t = L2 > 1e-9 ? ((x - B.ax) * ex + (z - B.az) * ez) / L2 : 0; if (t < -0.05 || t > 1.05) continue; const tc = Math.max(0, Math.min(1, t)); if (Math.hypot(x - B.ax - ex * tc, z - B.az - ez * tc) <= B.hw + 0.3) return 1; } return -Infinity; };
 };
 
@@ -108,8 +108,10 @@ try {
   const drives = {}, grades = { pts: 0, off: [], trunks: [] };
   for (const key of keys) {
     const r = await page.evaluate(async ([key, STEP]) => {
-      const g = window.__game, H = window.__r4r, T = g.truck, w = g.world, S = T.spot(key, true);
-      if (!S) return { key, none: true };
+      const g = window.__game, H = window.__r4r, T = g.truck, w = g.world, S0 = T.spot(key, true);
+      if (!S0) return { key, none: true };
+      await H.goNear(S0.x, S0.z); // (the lot's layout is known once its tile is built: the truck's spot reads it)
+      const S = T.spot(key, true);
       const out = { key, m: Math.round(S.path.len), samples: 0, wet: [], trunks: [], tilt: [], wheels: null, graded: { pts: 0, off: [], trunks: [] } };
       const at = (s) => { const { pts, cum } = S.path, n = pts.length; if (s >= S.path.len) return pts[n - 1]; let lo = 0, hi = n - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (cum[m] <= s) lo = m; else hi = m; } const t = (s - cum[lo]) / Math.max(1e-6, cum[hi] - cum[lo]); return [pts[lo][0] + (pts[hi][0] - pts[lo][0]) * t, pts[lo][1] + (pts[hi][1] - pts[lo][1]) * t]; };
       let here = null;
