@@ -31,6 +31,7 @@ export const TURN = {
   checkS: 2,       // seconds between looks at the ice under a trip
   wake: 7,         // the hour the turn wakes you at
   iced: 0.5,       // season.ice at or over this: frozen (player.js walks you over it from here)
+  fallFrom: 182,   // and from 1 July on (day of the year): the freeze-up, not the spring's last ice
 };
 const GUIDE_ID = 'late:ice';
 
@@ -54,7 +55,9 @@ export class SeasonTurn {
   get grouped() { const c = this.coop; return !!(c.ct && c.ct.grouped); }
   get guest() { const c = this.coop; return !!(c.coop && c.coop.role === 'guest'); }
   get today() { const P = this.t.permits; return P ? P.today : 0; }
-  frozen() { const d = this.t.day; return !!(d && d.season && d.season.ice >= TURN.iced); }
+  // (loop-r4 join: the freeze-up only, never the spring: a trip that reaches a lake still holding its ice in May, a later
+  // lake's ice-out than the landing's, was told "Ice is making: the lakes are closing" and offered the $75 rescue)
+  frozen() { const d = this.t.day; return !!(d && d.season && d.season.ice >= TURN.iced && d.doy >= TURN.fallFrom); }
 
   // --- 1. ice on a trip ------------------------------------------------------------------------------------------------
   update(dt = 0) {

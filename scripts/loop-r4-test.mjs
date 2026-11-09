@@ -132,7 +132,7 @@ try {
     const tot = { moved: 0, frames: 0, stuck: 0, left: null };
     try {
       for (let f = 0; f < maxFrames; f += 300) {
-        const r = await ev(([q, stop]) => { const H = window.__r4, g = window.__game, p = g.player, x0 = p.x, z0 = p.z; const st = stop === 'out' ? () => H.zone(p.x, p.z) === 0 && H.sign().shown : stop === 'in' ? () => H.zone(p.x, p.z) !== 0 && !H.sign().shown : null; const w = H.walkTo(q, 300, st); return { ...w, moved: Math.round(Math.hypot(p.x - x0, p.z - z0)), done: (st && st()) || w.left < 4 }; }, [q, stop]);
+        const r = await ev(([q, stop]) => { const H = window.__r4, g = window.__game, p = g.player, x0 = p.x, z0 = p.z; const st = stop === 'quetico' ? () => H.zone(p.x, p.z) === 3 && H.sign().state === 'quetico' : stop === 'out' ? () => H.zone(p.x, p.z) === 0 && H.sign().shown : stop === 'in' ? () => H.zone(p.x, p.z) !== 0 && !H.sign().shown : null; const w = H.walkTo(q, 300, st); return { ...w, moved: Math.round(Math.hypot(p.x - x0, p.z - z0)), done: (st && st()) || w.left < 4 }; }, [q, stop]);
         tot.moved += r.moved; tot.frames += r.frames; tot.stuck += r.stuck; tot.left = r.left;
         if (r.done) break;
       }
@@ -233,12 +233,13 @@ try {
     home = ep;
     T.take(t.id);
     const late = T.inWindow('iceout', out + 60, home);
-    return { made: true, out, doy: g.day.doy, pay: t.pay, taken: t.status, late, title: t.title };
+    H.step(90); g.guide.sync();
+    return { made: true, out, doy: g.day.doy, pay: t.pay, taken: t.status, late, title: t.title, springIce: !!g.guide.get('late:ice') || H.notes.some((q) => /Ice is making/.test(q)), trip: g.trip.active };
   }, HOME);
   await ev(() => { const g = window.__game; g.journal.show('journal'); window.__r4.step(5); });
   await shot('p1-iceout-taken', 1, `May: "${p1.title || 'Ice-out lake trout'}" taken`);
   await ev(() => window.__r4.closeAll());
-  result('P1 May: the ice-out lake trout written after ice-out and taken; out of its window by July', p1.made && p1.taken === 'open' && p1.late === false, p1);
+  result('P1 May: the ice-out lake trout written after ice-out and taken; out of its window by July; no "Frozen in" in spring', p1.made && p1.taken === 'open' && p1.late === false && !p1.springIce, p1);
 
   // ---- P2 on foot over the edge ------------------------------------------------------------------------------------------
   let p2 = { none: true }; const tried = [];
@@ -287,7 +288,7 @@ try {
   let p4 = { none: true };
   if (c4) {
     await ev(async (c) => { const H = window.__r4; await H.tp(c.a.x, c.a.z); H.look(Math.atan2(-c.dir.z, c.dir.x)); H.step(90); }, c4);
-    await holdW(Math.round((c4.reach + c4.past) / 2 * 30 / 8) + 150, c4.dir);
+    const went4 = await walkW(c4.b, 30 * 120, 'quetico');
     await ev(() => window.__r4.step(120));
     const sign = await ev(() => { const H = window.__r4, g = window.__game; return { ...H.sign(), zone: H.zone(g.player.x, g.player.z) }; });
     await shot('p4-quetico', 5, 'Into Quetico by canoe: its own notice');
@@ -300,7 +301,7 @@ try {
       P.s.fines = P.s.fines.filter((q) => q !== f); if (P.write) P.write(); Object.assign(s, keep);
       return r;
     });
-    p4 = { sign, night };
+    p4 = { sign, night, went4 };
   }
   result('P4 Quetico by canoe: Quetico\'s notice; off-site camping allowed; one $50 ticket a trip without its permit', !p4.none && p4.sign.shown && p4.sign.state === 'quetico' && p4.night.first && !p4.night.again && p4.night.added === 1 && p4.night.n === 50 && p4.night.off, p4);
 
@@ -316,11 +317,11 @@ try {
     await ev((ep) => { window.__game.outfitter.rides.take(ep); }, pick.ep);
     await until(() => window.__game.veil.active, null, 20000).catch(() => null);
     await until(() => !window.__game.veil.active && !window.__game.player.teleporting, null, 120000);
-    await ev(() => window.__r4.step(20));
+    for (let i = 0; i < 8; i++) { await page.waitForTimeout(500); await ev(() => window.__r4.step(2)); }
     const at0 = await ev(() => { const g = window.__game, T = g.truck, p = g.player; return { job: T.job && T.job.kind, vis: !!(T.mesh && T.mesh.visible), d: Math.round(Math.hypot(T.x - p.x, T.z - p.z)), x: T.x, z: T.z }; });
     await ev(() => { const g = window.__game, T = g.truck, H = window.__r4; H.look(H.yawTo({ x: T.x, z: T.z }), -0.05); H.step(2); });
     await shot('p5-truck-lot', 6, `The truck in the lot at EP ${pick.ep}`);
-    await ev(() => window.__r4.step(30 * 12));
+    for (let i = 0; i < 12; i++) { await ev(() => window.__r4.step(30)); await page.waitForTimeout(300); }
     await ev(() => { const g = window.__game, T = g.truck, H = window.__r4; H.look(H.yawTo({ x: T.x, z: T.z }), -0.03); H.step(2); });
     await shot('p5-truck-road', 7, 'The truck pulls out down its road');
     const mid = await ev(() => { const g = window.__game, T = g.truck; return { x: T.x, z: T.z, job: T.job && T.job.kind }; });
@@ -368,10 +369,11 @@ try {
     return { active: g.trip.active, permit: !!g.trip.state.permit };
   }, HOME);
   const iceIn = await ev((home) => { const g = window.__game, L = g.outfitter.landing(home), ic = g.world.facts && g.world.facts.iceOf ? g.world.facts.iceOf(L.lake) : null; return Math.round((ic && ic.in) || 329); }, HOME);
+  const n8 = await ev(() => window.__r4.notes.length);
   const go8 = await pushOff();
   await ev((doy) => { const g = window.__game, H = window.__r4; H.setDoy(Math.min(364, doy + 3), 11); g.energy.value = 1; H.step(150); }, iceIn);
-  const iced8 = await ev(() => { const g = window.__game, H = window.__r4; g.guide.sync(); const e = g.guide.get('late:ice'); return { iced: !!g.trip.state.iced, active: g.trip.active, entry: e ? e.title : null, line: H.notes.filter((t) => /Ice is making/.test(t)).length, ice: g.day.season.ice, mode: g.player.mode }; });
-  await ev(() => { const g = window.__game; window.__r4.step(30); window.__r4.closeAll(); g.journal.showTask('late:ice'); window.__r4.step(5); });
+  const iced8 = await ev((n8) => { const g = window.__game, H = window.__r4; g.guide.sync(); const e = g.guide.get('late:ice'); const lines = H.notes.slice(n8).filter((t) => /Ice is making/.test(t)); return { iced: !!g.trip.state.iced, active: g.trip.active, entry: e ? e.title : null, line: lines.length, lines, all: H.notes.filter((t) => /Ice is making/.test(t)), ice: g.day.season.ice, mode: g.player.mode }; }, n8);
+  await ev(() => { window.__r4.step(30); window.__r4.closeAll(); }); await page.waitForTimeout(1500); await ev(() => { const g = window.__game; window.__r4.closeAll(); g.journal.showTask('late:ice'); window.__r4.step(5); });
   await shot('p8-frozen-in', 10, 'Iced in: "Frozen in" in the journal');
   await ev(() => window.__r4.closeAll());
   // walk out: stood on the ice off the landing, W held to the store's door
@@ -401,7 +403,7 @@ try {
   await until(() => !window.__game.veil.active && !window.__game.trip.active, null, 90000);
   await ev(() => window.__r4.step(20));
   const p9 = await ev(() => { const g = window.__game, b = g.trip.book.trips, t = b[b.length - 1]; return { money: g.profile.money, active: g.trip.active, k: t && t.k, why: t && t.why }; });
-  await page.waitForTimeout(1500); await ev(() => { const H = window.__r4, g = window.__game; H.step(30); H.closeAll(); H.step(30); H.closeAll(); const q = window.__props.yardOf(g.profile.home); if (q) H.look(H.yawTo(q), 0.02); H.step(3); });
+  await page.waitForTimeout(1500); await page.keyboard.press('Escape'); await page.waitForTimeout(1200); await ev(() => { const H = window.__r4, g = window.__game; H.step(30); H.closeAll(); H.step(30); H.closeAll(); const q = window.__props.yardOf(g.profile.home); if (q) H.look(H.yawTo(q), 0.02); H.step(3); });
   await shot('p9-rescued', 11, 'Rescued off the ice: $75, back at a store');
   result('P9 iced in again: "Send for a rescue · $75" clicked, $75 paid, the trip brought in', go9.active && /Send for a rescue · \$75/.test(btn || '') && m9 - p9.money === 75 && !p9.active && p9.k === 'evacuated', { go9, btn, m9, ...p9 });
 
