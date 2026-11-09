@@ -89,8 +89,12 @@ const H10 = (x, z) => terrain.meshHeightAt(world, x, z, cache);
 const r1 = (v) => +v.toFixed(1), r3 = (v) => +v.toFixed(3);
 const places = {};
 const rows = [];
+// round 4: the entry points as the game has them (src/ep-fixes.json, world.js applyEpFixes): a store moved to its road end
+// (ep-fixes.mjs `store`) is built from its row's x, z
+const epFix = (() => { try { const f = JSON.parse(fs.readFileSync(path.join(root, 'src/ep-fixes.json'), 'utf8')); return f.for === (index.source && index.source.baked) ? f : null; } catch { return null; } })();
+const fixedEp = (e) => { const r = epFix && epFix.entryPoints.find((q) => q.ep === e.ep); return r && Number.isFinite(r.x) && Number.isFinite(r.z) && index.lakes[r.lake - 1] ? { ...e, x: r.x, z: r.z, lake: r.lake } : e; };
 for (const n of OF.OUTFITTER_EPS) {
-  const ep = index.entryPoints.find((e) => e.ep === n);
+  const ep0 = index.entryPoints.find((e) => e.ep === n), ep = ep0 && fixedEp(ep0);
   if (!ep) { rows.push(`${n}: no such entry point in the release`); continue; }
   const tx = Math.floor((ep.x - g.originX) / (g.tile * g.cell)), ty = Math.floor((ep.z - g.originZ) / (g.tile * g.cell));
   const [ox, oz] = world.tileOrigin(tx, ty);
