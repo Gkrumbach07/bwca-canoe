@@ -119,7 +119,8 @@ try {
       return { v: s.v, found: s.has('nb.found'), abs: s.fact('nb.found') && s.fact('nb.found').abs, walt: s.walt(), legacy: s.legacy, flag: s.get('legacy.r0'), v2: !!raw2 && JSON.parse(raw2).v, v1: raw1 && JSON.parse(raw1) }; });
     result('4a v1 → v2: the finder\'s notebook at its day, the Walt lines, legacy, its flags under legacy.*; story2 saved; a v1 copy kept', m.v === 2 && m.found && m.abs === 20640 && m.walt.includes('w.found') && m.legacy && m.flag === 'old' && m.v2 === 2 && m.v1 && m.v1.v === 1 && m.v1.notebook.found, m);
     await A.evaluate(() => window.__game.story.debug.set && window.__game.story.debug.set('crews.seen'));
-    await A.evaluate(() => { const s = window.__game.story; s.flush && s.flush(); });
+    // the store writes through IndexedDB a microtask later: flush it before leaving the page, as pagehide would
+    await A.evaluate(async () => { const g = window.__game, s = g.story; s.flush && s.flush(); await new Promise((r) => setTimeout(r, 50)); if (g.store.flush) await g.store.flush(); await new Promise((r) => setTimeout(r, 200)); });
     // back: the same browser without the flag reads the v1 document (a rollback to main finds the season true)
     await A.goto(`${APP}/`, { timeout: 180000 });
     await A.waitForFunction(() => window.__game && window.__game.story && window.__game.title && window.__game.title.state === 'title', null, { timeout: 300000, polling: 500 });
