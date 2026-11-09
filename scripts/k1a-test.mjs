@@ -104,7 +104,7 @@ try {
     const v1 = { v: 1, season: null, legacy: true, notebook: { found: true, abs: 20640, key: 2, lake: 'Farm Lake' }, read: [0, 1, 2], flags: { k1a: 'old' } };
     const A = await openGame('migrate', 'story=1', { fn: (doc) => { try { if (!sessionStorage.getItem('k1a-planted')) { localStorage.setItem('bwca-canoe:story', JSON.stringify(doc)); sessionStorage.setItem('k1a-planted', '1'); } } catch { /* storage */ } }, arg: v1 });
     const m = await A.evaluate(() => { const g = window.__game, s = g.story, raw = g.store.getItem('bwca-canoe:story2'); return { v: s.v, found: s.has('nb.found'), abs: s.fact('nb.found') && s.fact('nb.found').abs, walt: s.walt(), legacy: s.legacy, flag: s.get('legacy.k1a'), read: s.state.read.slice(), saved: !!raw, migrated: s.state.log.some((r) => r[3] === 'migrate'), v1left: JSON.parse(g.store.getItem('bwca-canoe:story') || 'null') }; });
-    result('4 a v1 finder migrates: nb.found at its day, the Walt lines, legacy kept, flags under legacy.*, read[] dropped, story2 saved', m.v === 2 && m.found && m.abs === 20640 && m.walt.join() === 'w.found,w.cellar' && m.legacy && m.flag === 'old' && !m.read.length && m.saved && m.migrated && m.v1left && m.v1left.notebook.found, m);
+    result('4 a v1 finder migrates: nb.found at its day, the Walt lines, legacy kept, flags under legacy.*, read[] kept (the R0 fix), story2 saved', m.v === 2 && m.found && m.abs === 20640 && m.walt.join() === 'w.found,w.cellar' && m.legacy && m.flag === 'old' && m.read.join() === '0,1,2' && m.saved && m.migrated && m.v1left && m.v1left.notebook.found && (m.v1left.read || []).join() === '0,1,2', m);
     await A.context().browser().close();
   }
 
