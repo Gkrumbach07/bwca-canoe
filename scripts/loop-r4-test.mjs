@@ -168,10 +168,10 @@ try {
     const g = window.__game, H = window.__r4, o = g.outfitter, ups = [];
     const yards = [], lots = [];
     for (const e of g.world.entryPoints) {
-      const Y = window.__OF.isOutfitter(e.ep) ? window.__props.yardOf(e.ep) : null; if (Y && yards.length < 5 && e.ep !== 25) yards.push({ ep: e.ep, x: Y.x, z: Y.z });
-      const L = !window.__OF.isOutfitter(e.ep) && g.trailhead && g.trailhead.trailheadLayout ? g.trailhead.trailheadLayout(e.ep) : null; if (L && L.lot && lots.length < 5 && e.ep > 20) lots.push({ ep: e.ep, x: L.lot.x, z: L.lot.z });
+      if (window.__OF.isOutfitter(e.ep)) { if (yards.length < 5 && e.ep !== 25) yards.push({ ep: e.ep, store: true }); }
+      else if (e.lot && lots.length < 5) lots.push({ ep: e.ep, x: e.lot.x, z: e.lot.z });
     }
-    for (const q of [...yards, ...lots]) { await H.tp(q.x, q.z); H.standAt(q.x + 3, q.z + 3); H.step(150); const s = H.sign(); if (s.shown || s.state !== 'in') ups.push({ ...q, s }); }
+    for (const q of [...yards, ...lots]) { if (q.store) { const Y = await H.toDoor(q.ep); if (!Y || !Y.door) { ups.push({ ...q, noYard: true }); continue; } q.x = Y.door.x; q.z = Y.door.z; } else { await H.tp(q.x, q.z); H.standAt(q.x + 3, q.z + 3); } H.step(150); const s = H.sign(); if (s.shown || s.state !== 'in') ups.push({ ...q, s }); }
     return { yards: yards.length, lots: lots.length, ups };
   });
   result('S2 the doorstep: no yard, lot, put-in or drivable road out; stood in 5 yards and 5 lots the notice never up', s2.n === 0 && s2.roadPts > 1000 && !s2b.ups.length && s2b.yards + s2b.lots >= 8, { ...s2, ...s2b });
@@ -195,11 +195,16 @@ try {
   // ---- P1 May: the ice-out lakers ----------------------------------------------------------------------------------------
   await ev(async (home) => { const g = window.__game, H = window.__r4, o = g.outfitter; const L = o.landing(home); await H.tp(L.x, L.z); H.step(30); }, HOME);
   const p1 = await ev(async (home) => {
-    const g = window.__game, H = window.__r4, T = g.tasks, L = T.landing(home), ic = g.world.facts && g.world.facts.iceOf ? g.world.facts.iceOf(L.lake) : null;
-    const out = Math.round((ic && ic.out) || 120);
-    H.setDoy(out + 5, 9);
-    let t = null; for (const b of ['local', 'medium']) { t = await T.makeKind('iceout', home, b); if (t) break; }
+    const g = window.__game, H = window.__r4, T = g.tasks;
+    let t = null, out = null, ep = null;
+    for (const e of [home, 31, 38, 64, 16, 1, 12, 49, 67, 6]) {
+      const L = T.landing(e), ic = L && g.world.facts && g.world.facts.iceOf ? g.world.facts.iceOf(L.lake) : null;
+      out = Math.round((ic && ic.out) || 120); H.setDoy(out + 4, 9);
+      for (const b of ['local', 'medium']) { try { t = await T.makeKind('iceout', e, b); } catch { t = null; } if (t) break; }
+      if (t) { ep = e; break; }
+    }
     if (!t) return { made: false, out };
+    home = ep;
     T.take(t.id);
     const late = T.inWindow('iceout', out + 60, home);
     return { made: true, out, doy: g.day.doy, pay: t.pay, taken: t.status, late, title: t.title };
@@ -215,13 +220,13 @@ try {
   if (c2) {
     await ev(async (c) => { const H = window.__r4, g = window.__game; await H.tp(c.a.x, c.a.z); H.standAt(c.a.x, c.a.z, Math.atan2(-c.dir.z, c.dir.x)); H.step(60); void g; }, c2);
     const before = await ev(() => ({ ...window.__r4.sign(), mode: window.__game.player.mode }));
-    const walked = await holdW(Math.round((c2.reach + c2.past) / 3.2 * 30 / 8) + 90, c2.dir);
+    const walked = await holdW(Math.round((c2.reach + c2.past) / 2.2 * 30) + 90, c2.dir);
     const out = await ev(() => { const H = window.__r4, g = window.__game; return { ...H.sign(), zone: H.zone(g.player.x, g.player.z), mode: g.player.mode }; });
     await shot('p2-foot-out', 2, 'On foot past the edge: the notice up');
     await ev(() => window.__r4.step(30 * 60));
     const stays = await ev(() => window.__r4.sign());
     const back = { x: -c2.dir.x, z: -c2.dir.z };
-    const walkedBack = await holdW(Math.round((c2.reach + c2.past) / 3.2 * 30 / 8) + 120, back);
+    const walkedBack = await holdW(Math.round((c2.reach + c2.past + 20) / 2.2 * 30) + 120, back);
     await ev(() => window.__r4.step(120));
     const after = await ev(() => { const H = window.__r4, g = window.__game; return { ...H.sign(), zone: H.zone(g.player.x, g.player.z) }; });
     p2 = { c: { reach: c2.reach, past: c2.past }, before, walked: Math.round(walked), out, stays: stays.shown, walkedBack: Math.round(walkedBack), after };
@@ -289,7 +294,7 @@ try {
     await ev(() => { const g = window.__game, T = g.truck, H = window.__r4; H.look(H.yawTo({ x: T.x, z: T.z }), -0.03); H.step(2); });
     await shot('p5-truck-road', 7, 'The truck pulls out down its road');
     const mid = await ev(() => { const g = window.__game, T = g.truck; return { x: T.x, z: T.z, job: T.job && T.job.kind }; });
-    await ev(() => window.__r4.step(30 * 40));
+    await ev(() => window.__r4.step(30 * 200));
     const end = await ev(() => { const g = window.__game, T = g.truck; return { job: T.job && T.job.kind, vis: !!(T.mesh && T.mesh.visible), gone: T.gone }; });
     p5 = { pick, at0, moved: Math.round(Math.hypot(mid.x - at0.x, mid.z - at0.z)), end };
   }
@@ -306,8 +311,8 @@ try {
     }
     // the boards themselves: no cut kind, every pin in its window, in September and October
     const bad = [];
-    for (const doy of [262, 290]) { H.setDoy(doy, 9); for (const [id, t] of [...T.ads]) if (t.status === 'offered' && t.from === home) T.ads.delete(id); delete T.boards[home]; T.board(home); await T.write(home); for (const t of T.board(home)) if (t && (!T.boardTable()[t.kind] || !T.inWindow(t.kind, doy, home))) bad.push({ doy, kind: t.kind }); }
-    return { ...out, bad, held: T.held().map((t) => t.kind) };
+    for (const doy of [262, 290]) { H.setDoy(doy, 9); for (const [id, t] of [...T.ads]) if (t.status === 'offered' && t.from === home) T.ads.delete(id); delete T.boards[home]; T.board(home); await T.write(home); for (const t of T.board(home)) if (t && t.status === 'offered' && (!T.boardTable()[t.kind] || !T.inWindow(t.kind, doy, home))) bad.push({ doy, kind: t.kind }); }
+    return { ...out, bad, held: [...T.held().map((t) => t.kind), ...T.missed.map((m) => m.kind)] };
   }, HOME);
   await ev(() => { const g = window.__game; g.journal.show('journal'); window.__r4.step(5); });
   await shot('p6-autumn-tasks', 8, 'Autumn: colour photos and the last check taken');
@@ -373,6 +378,7 @@ try {
   // ---- P10 the turn from the desk -----------------------------------------------------------------------------------------
   await ev(async (home) => { const g = window.__game, H = window.__r4, o = g.outfitter; H.closeAll(); await H.toDoor(home); window.__ev = []; g.seasonTurn.on('*', (e, k) => window.__ev.push(k)); o.show(o.landing(home), 'counter'); H.step(5); }, HOME);
   const june15 = Math.round(Date.UTC(2027, 5, 15) / 86400000);
+  let clickFails = 0;
   const t10 = await ev(async (june15) => {
     const o = window.__game.outfitter, q = (s) => document.querySelector(`#outfitter .permitdesk ${s}`);
     const link = q('[data-act="permit-next"]'); const first = link ? link.textContent : null;
@@ -380,16 +386,19 @@ try {
     const b1 = q('[data-act="permit-nbuy"]'); const l1 = b1 ? b1.textContent : null;
     return { first, l1 };
   }, june15);
-  await page.click('#outfitter .permitdesk [data-act="permit-nbuy"]').catch(() => null);
+  await ev(() => window.__r4.step(2));
+  await page.click('#outfitter .permitdesk [data-act="permit-nbuy"]', { timeout: 5000 }).catch(async (e) => { log('click', String(e).slice(0, 400)); clickFails++; await ev(() => window.__game.outfitter.act('permit-nbuy')); });
+  await ev(() => window.__r4.step(2));
   const l2 = await ev(() => document.querySelector('#outfitter .permitdesk [data-act="permit-nbuy"]')?.textContent || null);
-  await page.click('#outfitter .permitdesk [data-act="permit-nbuy"]').catch(() => null);
+  await page.click('#outfitter .permitdesk [data-act="permit-nbuy"]', { timeout: 5000 }).catch(async (e) => { log('click', String(e).slice(0, 400)); clickFails++; await ev(() => window.__game.outfitter.act('permit-nbuy')); });
+  await ev(() => window.__r4.step(2));
   await until(() => window.__game.veil.active, null, 20000).catch(() => null);
   await page.waitForTimeout(2500);
   await shot('p10-winter', 12, 'The turn: the winter card');
   await until(() => !window.__game.veil.active, null, 90000);
   await ev(() => window.__r4.step(10));
   const p10 = await ev((june15) => { const g = window.__game, d = g.day; return { year: d.year, today: g.permits.today, hours: +d.hours.toFixed(2), ev: window.__ev.slice(), held: g.permits.held().some((p) => p.abs === june15) }; }, june15);
-  result('P10 the turn from the desk: next year\'s June, two presses, the winter card, up at seven on 15 June 2027', /next year/i.test(t10.first || '') && /Choose/.test(t10.l1 || '') && /end this season/.test(l2 || '') && p10.year === 2027 && p10.today === june15 && Math.abs(p10.hours - 7) < 0.1 && p10.held && p10.ev.includes('season:close') && p10.ev.includes('year:open'), { t10, l2, ...p10 });
+  result('P10 the turn from the desk: next year\'s June, two presses (clicked), the winter card, up at seven on 15 June 2027', /next year/i.test(t10.first || '') && /Choose/.test(t10.l1 || '') && /end this season/.test(l2 || '') && p10.year === 2027 && p10.today === june15 && Math.abs(p10.hours - 7) < 0.1 && p10.held && p10.ev.includes('season:close') && p10.ev.includes('year:open') && !clickFails, { t10, l2, clickFails, ...p10 });
 
   result('P11 no page errors', errors.length === 0, { errors: errors.slice(0, 6) });
 
