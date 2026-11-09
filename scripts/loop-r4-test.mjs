@@ -65,7 +65,7 @@ const HELPERS = (SPOTS) => {
   H.sign = () => { const el = document.getElementById('edge-sign'); return { shown: !!(el && el.classList.contains('show')), text: el ? el.textContent : '', state: g.edge.state }; };
   H.zone = (x, z) => window.__edgeZone(x, z);
   H.water = (x, z) => g.world.lakeIdAt(x, z) > 0 && g.world.isWater(x, z);
-  H.closeAll = () => { const o = g.outfitter; if (o.open) o.hide(); if (g.journal && g.journal.open) g.journal.close(); if (g.record && g.record.shown) g.record.close(); };
+  H.closeAll = () => { const o = g.outfitter; if (o.open) o.hide(); try { if (g.hud.mode) { g.hud.setMode('glance'); g.hud.setMode(null); } } catch { /* */ } if (g.journal && g.journal.open) g.journal.close(); if (g.record && g.record.shown) g.record.close(); };
   H.tp = async (x, z) => { H.closeAll(); const ok = await g.player.teleport(x, z); await H.settle(); return ok; };
   // a straight crossing of the zone line near a place: from a point of zone class `from` to one of class `to`, all of
   // it water (by canoe) or land (on foot), within `len` metres; { a, b, yaw } or null
@@ -256,7 +256,7 @@ try {
     await shot('p3-canoe-out', 3, 'By canoe past the edge: the notice up');
     await page.keyboard.press('KeyM'); await ev(() => window.__r4.step(20)); await page.waitForTimeout(400);
     await shot('p3-map-out', 4, 'The map while out: washed a little, the tag');
-    await page.keyboard.press('KeyM'); await ev(() => { const hud = window.__game.hud; try { hud.setMode(null); } catch { /* */ } window.__r4.step(10); });
+    await ev(() => { window.__r4.closeAll(); window.__r4.step(10); });
     const went2 = await holdW(Math.round((c3.reach + c3.past) / 2 * 30 / 8) + 200, { x: -c3.dir.x, z: -c3.dir.z });
     await ev(() => window.__r4.step(120));
     const after = await ev(() => { const H = window.__r4, g = window.__game; return { ...H.sign(), zone: H.zone(g.player.x, g.player.z) }; });
@@ -353,7 +353,7 @@ try {
   const go8 = await pushOff();
   await ev((doy) => { const g = window.__game, H = window.__r4; H.setDoy(Math.min(364, doy + 3), 11); g.energy.value = 1; H.step(150); }, iceIn);
   const iced8 = await ev(() => { const g = window.__game, H = window.__r4; g.guide.sync(); const e = g.guide.get('late:ice'); return { iced: !!g.trip.state.iced, active: g.trip.active, entry: e ? e.title : null, line: H.notes.filter((t) => /Ice is making/.test(t)).length, ice: g.day.season.ice, mode: g.player.mode }; });
-  await ev(() => { const g = window.__game; g.journal.showTask('late:ice'); window.__r4.step(5); });
+  await ev(() => { const g = window.__game; window.__r4.step(30); window.__r4.closeAll(); g.journal.showTask('late:ice'); window.__r4.step(5); });
   await shot('p8-frozen-in', 10, 'Iced in: "Frozen in" in the journal');
   await ev(() => window.__r4.closeAll());
   // walk out: stood on the ice off the landing, W held to the store's door
@@ -383,12 +383,14 @@ try {
   await until(() => !window.__game.veil.active && !window.__game.trip.active, null, 90000);
   await ev(() => window.__r4.step(20));
   const p9 = await ev(() => { const g = window.__game, b = g.trip.book.trips, t = b[b.length - 1]; return { money: g.profile.money, active: g.trip.active, k: t && t.k, why: t && t.why }; });
-  await page.waitForTimeout(1500); await ev(() => { window.__r4.step(10); window.__r4.closeAll(); });
+  await page.waitForTimeout(1500); await ev(() => { const H = window.__r4, g = window.__game; H.step(30); H.closeAll(); H.step(30); H.closeAll(); const q = window.__props.yardOf(g.profile.home); if (q) H.look(H.yawTo(q), 0.02); H.step(3); });
   await shot('p9-rescued', 11, 'Rescued off the ice: $75, back at a store');
   result('P9 iced in again: "Send for a rescue · $75" clicked, $75 paid, the trip brought in', go9.active && /Send for a rescue · \$75/.test(btn || '') && m9 - p9.money === 75 && !p9.active && p9.k === 'evacuated', { go9, btn, m9, ...p9 });
 
   // ---- P10 the turn from the desk -----------------------------------------------------------------------------------------
   await ev(async (home) => { const g = window.__game, H = window.__r4, o = g.outfitter; H.closeAll(); await H.toDoor(home); window.__ev = []; g.seasonTurn.on('*', (e, k) => window.__ev.push(k)); o.show(o.landing(home), 'counter'); H.step(5); }, HOME);
+  let paid = 0;
+  for (let i = 0; i < 4; i++) { const b = await page.$('#outfitter .permitdesk [data-act="permit-pay"]'); if (!b) break; await b.click({ timeout: 5000 }).catch(() => null); paid++; await ev(() => window.__r4.step(3)); }
   const june15 = Math.round(Date.UTC(2027, 5, 15) / 86400000);
   let clickFails = 0;
   const t10 = await ev(async (june15) => {
@@ -410,7 +412,7 @@ try {
   await until(() => !window.__game.veil.active, null, 90000);
   await ev(() => window.__r4.step(10));
   const p10 = await ev((june15) => { const g = window.__game, d = g.day, D = g.permitDesk; return { note: D && D.note, canTurn: g.seasonTurn.canTurn(), trip: g.trip.active, owed: g.permits.owed(), year: d.year, today: g.permits.today, hours: +d.hours.toFixed(2), ev: window.__ev.slice(), held: g.permits.held().some((p) => p.abs === june15) }; }, june15);
-  result('P10 the turn from the desk: next year\'s June, two presses (clicked), the winter card, up at seven on 15 June 2027', /next year/i.test(t10.first || '') && /Choose/.test(t10.l1 || '') && /end this season/.test(l2 || '') && p10.year === 2027 && p10.today === june15 && Math.abs(p10.hours - 7) < 0.1 && p10.held && p10.ev.includes('season:close') && p10.ev.includes('year:open') && !clickFails, { t10, l2, clickFails, ...p10 });
+  result('P10 the turn from the desk: next year\'s June, two presses (clicked), the winter card, up at seven on 15 June 2027', /next year/i.test(t10.first || '') && /Choose/.test(t10.l1 || '') && /end this season/.test(l2 || '') && p10.year === 2027 && p10.today === june15 && Math.abs(p10.hours - 7) < 0.1 && p10.held && p10.ev.includes('season:close') && p10.ev.includes('year:open') && !clickFails, { paid, t10, l2, clickFails, ...p10 });
 
   result('P11 no page errors', errors.length === 0, { errors: errors.slice(0, 6) });
 
