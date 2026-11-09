@@ -234,6 +234,17 @@ try {
   const v7 = await ev(() => ({ mode: window.__game.player.mode, pfd: window.__game.canoe.figure.pfd }));
   await shot('site', 7, 'The first night\'s site at dusk: the jacket off in camp');
   result('10 at the site on foot: the life jacket off', v7.mode === 'walk' && !v7.pfd, v7);
+  // the first night's job by E on the dot: the grate, the latrine, the pad
+  const parts = [];
+  for (const k of ['grate', 'latrine', 'pad']) {
+    const pr = await ev((k) => { const g = window.__game, H = window.__p, t = g.tasks.active.find((x) => x.kind === 'starter'); if (!t) return { none: 'no job' }; const q = g.guide.partsOf(t) && g.guide.partsOf(t)[k]; if (!q) return { none: 'no part' }; if (g.chase.mode !== 'first') g.chase.setMode('first'); H.face({ x: q.x, z: q.z }, 2.0, -0.5); H.step(30); const gy = g.player.groundAt(q.x, q.z); H.aimAt({ x: q.x, z: q.z }, gy + 0.25); H.step(6); return { target: H.target() }; }, k);
+    if (pr.none) { parts.push({ k, ...pr }); continue; }
+    await page.keyboard.press('KeyE'); await ev(() => window.__p.step(20));
+    pr.after = await ev((k) => { const g = window.__game, t = g.tasks.active.find((x) => x.kind === 'starter'); return { checked: !!(t && t.checks && t.checks[k]), status: t && t.status }; }, k);
+    parts.push({ k, ...pr });
+  }
+  await ev(() => { const g = window.__game; if (g.chase.mode !== 'third') g.chase.setMode('third'); window.__p.step(6); });
+  result('10b the site\'s grate, latrine and pad looked over by E: the job done', parts.length === 3 && parts.every((q) => q.after && q.after.checked), parts);
 
   // --- 8 the night -------------------------------------------------------------------------------------------------------
   await ev(() => { const g = window.__game; g.day.setClock(g.day.year, g.day.doy, 23.2); window.__p.step(300); });
