@@ -786,9 +786,9 @@ export function drawRegion(canvas, world, view, opts = {}) {
   ctx.fillStyle = INK.paper; ctx.fillRect(0, 0, W, H);
   const ready = paintGround(ctx, world, v, W, H, { k, budget: { build: opts.build ?? 3 }, depths: opts.soundAll || mPerPx < 6, ink: opts.ink || null, inkV: opts.inkV || 0, detail, far: opts.fine ? false : null, all: !!opts.soundAll });
   if (opts.roads !== false) paintRoads(ctx, v, W, H, { k, towns: false }); // (the edge round)
+  if (opts.boundary !== false && opts.edge !== false) paintEdge(ctx, v, k, { box: [world.minX, world.minZ, world.maxX, world.maxZ] }); // (the edge round)
   if (opts.burns) paintBurns(ctx, v, burnsInView(v, W, H), k);
   if (opts.boundary !== false) { if (BOUNDARY.ready) paintBoundary(ctx, v, k); else loadBoundary(); }
-  if (opts.boundary !== false && opts.edge !== false) paintEdge(ctx, v, k, { box: [world.minX, world.minZ, world.maxX, world.maxZ] }); // (the edge round)
   if (opts.pmas !== false) paintPmas(ctx, v, W, H, { k, focus: opts.pmaFocus || null, wash: !!opts.pmaWash });
   const lettered = opts.names !== false ? paintLakeNames(ctx, world, v, W, H, { k, detail }) : [];
   if (opts.pmas !== false) paintPmaNames(ctx, world, v, W, H, { k, lettered, focus: opts.pmaFocus || null, onMine: detail ? (x, z) => detail(x, z, x, z) : null });
