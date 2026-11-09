@@ -23,7 +23,13 @@
 //   head      (an outfitter's entry point) the entry point's own start is a trailhead of its own near the store, which
 //             stays where it was built (the markers stream reads it): the trailhead's fields as above
 //   drop      words: 'boat' (no road: an outfitter's boat leaves you at the portage)
-//   clipped   the real lot lies off the release's map (its south edge, 47.78): the lot at the edge, the carry shorter
+//   clipped   the real lot lies off the release's map (its south edge, 47.78): the lot near the edge (CLIP_IN m in at
+//             least, so its yard, the truck's turn and the road in stand well inside the map), the carry shorter
+//   store     (an outfitter's entry point: round 4, the owner 2026-11-08 "Bog Lake and Moose River North stores move to
+//             their road ends") the store's own landing moved to the road end: { put: [lat, lon], lake } the water its
+//             dock stands on, or { nearLot: lake } the water of `lake` nearest the head's lot (a lot clipped at the edge);
+//             written as the row's x, z, lake (world.js applyEpFixes: the spot the store is built from, props.js
+//             landingPlan), `storeMoved` the store's old spot (the saves standing there are moved: outfitters.js)
 // PORTAGES: renames and posted rods. LAKES: names the release has wrong.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -32,7 +38,7 @@ import { loadData, lineLen, nearestOn, cutAt, ROOT, RODS, r1 } from './ep-lib.mj
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
 const D = loadData(path.resolve(arg('--data', path.join(ROOT, 'public/data'))));
 const I = D.index, FOR = I.source && I.source.baked;
-const LOT_DRY = 12, LOT_SEARCH = 160;
+const LOT_DRY = 12, LOT_SEARCH = 160, CLIP_IN = 170; // (CLIP_IN: a clipped lot at least this far in from the map's edge)
 
 export const SPEC = {
   1: { name: 'Trout Lake', start: 'paddle', head: { put: [47.88938, -92.37867], lake: 2 } }, // Moccasin Point access; the store by the portages stays
@@ -43,7 +49,9 @@ export const SPEC = {
   9: { name: 'Little Indian Sioux River South', start: 'river' },
   12: { name: 'Little Vermilion Lake', start: 'lake' },
   14: { name: 'Little Indian Sioux River North', start: 'portage', lot: [48.14645, -92.21108], open: { i: 851, mode: 'new', to: 1117, posted: 40, name: 'Little Indian Sioux River North Portage' } },
-  16: { name: 'Moose/Portage River North', start: 'portage', head: { lot: [48.12378, -92.09857], open: { i: 1266, lake: 1, mode: 'join', posted: 160, name: 'Moose River North Portage' } } },
+  // round 4: the store at the road end, on the Moose River where it runs under Forest Road 206 (outside the line; the
+  // river north of the road is the wilderness), the head's lot and carry as before
+  16: { name: 'Moose/Portage River North', start: 'portage', store: { put: [48.12304, -92.10062], lake: 25661 }, head: { lot: [48.12378, -92.09857], open: { i: 1266, lake: 1, mode: 'join', posted: 160, name: 'Moose River North Portage' } } },
   19: { name: 'Stuart River', start: 'portage', lot: [48.09618, -91.98897], open: { i: 1241, lake: 0, mode: 'join', posted: 480 } },
   20: { name: 'Angleworm Lake', start: 'portage', lot: [48.0631, -91.92923], open: { i: 1244, lake: 0, mode: 'join', posted: 640 } },
   22: { name: 'Mudro Lake – Restricted', start: 'portage', lot: [48.03203, -91.83457], open: { i: 714, lake: 1, mode: 'join', posted: 24, name: 'Mudro Lake Portage' } },
@@ -82,7 +90,9 @@ export const SPEC = {
   62: { name: 'Clearwater Lake', start: 'lake', put: [48.0697, -90.3776], lake: 74 },
   64: { name: 'East Bearskin Lake', start: 'lake' },
   66: { name: 'Crocodile River', start: 'paddle', shares: 64 },
-  67: { name: 'Bog Lake', start: 'portage', clipped: true, head: { lot: [47.7724, -91.387], open: { i: 1173, mode: 'new', to: 310, posted: 232, name: 'Bog Lake Portage' } } },
+  // round 4: the store at the road end (the real lot is 1.2 km off the map's south edge): by the head's lot near the edge,
+  // its dock on Bush Creek, the road in from the edge
+  67: { name: 'Bog Lake', start: 'portage', clipped: true, store: { nearLot: 18148 }, head: { lot: [47.7724, -91.387], open: { i: 1173, mode: 'new', to: 310, posted: 232, name: 'Bog Lake Portage' } } },
   68: { name: 'Pine Lake', start: 'paddle', put: [48.05056, -90.05722], lake: 228 },
   69: { name: 'John Lake', start: 'paddle' },
   70: { name: 'North Fowl Lake', start: 'paddle', shares: 69 },
@@ -133,7 +143,7 @@ function trailhead(ep, S) {
         for (let z = bottom - 1500; z < bottom - 90; z += 10) for (let x = tx - 2400; x <= tx + 2400; x += 10) if (D.lakeAt(x, z) === o.to) cells.push([x, z]);
         // (a straight carry that meets no other water before its own)
         const clear = (x, z, cx, cz) => { const L = Math.hypot(cx - x, cz - z); for (let s = 0; s < L; s += 4) { const id = D.lakeAt(x + ((cx - x) * s) / L, z + ((cz - z) * s) / L); if (id) return id === o.to; } return true; };
-        for (let x = tx - 1500; x <= tx + 1500; x += 10) for (let z = bottom - 60; z > bottom - 320; z -= 10) {
+        for (let x = tx - 1500; x <= tx + 1500; x += 10) for (let z = bottom - CLIP_IN; z > bottom - CLIP_IN - 260; z -= 10) {
           if (D.shoreAt(x, z) < LOT_DRY) continue;
           let wd = Infinity, wc = null; for (const c of cells) { const d = Math.hypot(c[0] - x, c[1] - z); if (d < wd) { wd = d; wc = c; } }
           if (wd > 900 || !clear(x, z, wc[0], wc[1])) continue;
@@ -202,6 +212,13 @@ for (const e of I.entryPoints) {
   } else if (S.head) {
     const R = trailhead(e.ep, S.head);
     row.head = { x: R.put ? R.put.x : e.x, z: R.put ? R.put.z : e.z, lake: R.put ? R.put.lake : e.lake, ...(R.lot ? { lot: R.lot } : {}), ...(R.open ? { open: R.open } : {}) };
+    if (S.store) { // round 4: the store's landing at the road end
+      let w = null;
+      if (S.store.put) { const [x, z] = P(S.store.put); w = D.waterNear(x, z, 120, S.store.lake || 0, 0.5) || D.waterNear(x, z, 120, S.store.lake || 0, 0); }
+      else if (S.store.nearLot && R.lot) w = D.waterNear(R.lot.x, R.lot.z, 400, S.store.nearLot, 0);
+      if (!w) throw new Error(`EP ${e.ep}: no water for the store at its road end`);
+      Object.assign(row, { x: w.x, z: w.z, lake: w.lake, storeMoved: { x: e.x, z: e.z } });
+    }
   } else if (S.lot || S.put) {
     const R = trailhead(e.ep, S);
     if (R.put) Object.assign(row, { x: R.put.x, z: R.put.z, lake: R.put.lake });
@@ -210,7 +227,7 @@ for (const e of I.entryPoints) {
   }
   out.entryPoints.push(row);
   const st = row.head || row;
-  report.push([e.ep, S.name, S.start + (S.shares ? ` shares ${S.shares}` : '') + (S.head ? ' (head)' : ''), st.lot ? `lot ${st.lot.x},${st.lot.z} sd ${D.shoreAt(st.lot.x, st.lot.z).toFixed(0)}` : '', st.open ? `#${st.open.i} ${st.open.rods}r/${st.open.posted}r join ${st.open.lotToTrail}m` : '', Number.isFinite(st.x) ? `put ${D.lakeName(st.lake)} (${st.x},${st.z})` : '']);
+  report.push([e.ep, S.name, S.start + (S.shares ? ` shares ${S.shares}` : '') + (S.head ? ' (head)' : '') + (row.storeMoved ? ` store at ${row.x},${row.z} (${D.lakeName(row.lake)}, edge ${Math.round(bottom - row.z)} m)` : ''), st.lot ? `lot ${st.lot.x},${st.lot.z} sd ${D.shoreAt(st.lot.x, st.lot.z).toFixed(0)}` : '', st.open ? `#${st.open.i} ${st.open.rods}r/${st.open.posted}r join ${st.open.lotToTrail}m` : '', Number.isFinite(st.x) ? `put ${D.lakeName(st.lake)} (${st.x},${st.z})` : '']);
 }
 for (const [i, f] of Object.entries(PORTAGES)) { const q = portageOut.get(+i); portageOut.set(+i, q ? { ...q, ...f } : { i: +i, ...f, renameOnly: true }); }
 out.portages = [...portageOut.values()].sort((a, b) => a.i - b.i).map(({ replaces, ...p }) => (replaces ? { ...p, replaces } : p));
