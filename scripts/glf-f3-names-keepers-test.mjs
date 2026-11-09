@@ -42,7 +42,7 @@ try {
       const K = await import('/src/talk-keepers.js');
       for (const [rel, , names] of K.RELS) for (const n of names) if (CF.includes(n)) bad.push(`RELS ${rel}: ${n}`);
       const staff = new Set(); for (const e of g.world.entryPoints) staff.add(g.onboarding.staffName(e.ep));
-      for (const n of staff) if (CF.includes(n)) bad.push(`staff: ${n}`);
+      for (const n of staff) if (n !== 'Josie') bad.push(`staff: ${n}`); // (the summer help is Josie at every home: story hygiene, 90 §12)
       const src = {};
       for (const f of SRC) { const t = await (await fetch(`/src/${f}`)).text(), m = t.match(new RegExp(GONE, 'g')); if (m) src[f] = [...new Set(m)]; }
       const item = g.items.itemDef('lure:cedarminnow');
