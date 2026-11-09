@@ -154,6 +154,15 @@ try {
     for (const lot of lots) for (const h of window.__rf.OF.OUTFITTER_EPS) { if (h === lot) continue; const r = rides.offer(h).find((x) => x.ep === lot); if (r && !r.walk) out.push({ home: h, lot, km: r.km }); }
     out.sort((a, b) => a.km - b.km); return out;
   }, lots);
+  // a ride to a moved store (16 or 67) first, from the season's own counter at 67 where one drives (a new season begun
+  // from a trailhead lot mid-trip waits on the trip's logbook card)
+  const storePicks = (await pickHome([16, 67])).filter((q) => q.home !== q.lot).sort((x, y) => (y.home === 67) - (x.home === 67) || x.km - y.km);
+  let b3 = { none: 'no counter drives to 16 or 67', storePicks };
+  if (storePicks.length) b3 = await rideTo(storePicks[0].home, storePicks[0].lot);
+  const b3door = !b3.none && !b3.refused ? await ev((ep) => { const g = window.__game, pl = window.__rf.places.places || window.__rf.places, P = pl[String(ep)], p = g.player; return Math.round(Math.hypot(p.x - P.door[0], p.z - P.door[1])); }, b3.lot) : null;
+  result('B3 a ride to a moved store: in at its door, the truck behind it (leaving), no jacket on foot, no edge notice',
+    !b3.none && !b3.refused && b3.visit === b3.lot && b3door != null && b3door < 40 && b3.job === 'leave' && b3.dTruck < 80 && !b3.pfd && !b3.sign.shown, { pick: storePicks[0], b3, b3door });
+
   const lotPicks = await pickHome([84, 75]);
   let b1 = { none: 'no counter drives to 84 or 75', lotPicks };
   if (lotPicks.length) b1 = await rideTo(lotPicks[0].home, lotPicks[0].lot);
@@ -178,14 +187,6 @@ try {
   }
   result('B2 down the moved lot\'s way to the water on foot: no jacket, no shoulder, no edge notice; the truck gone',
     !b2.none && b2.dEnd != null && b2.dEnd < Math.max(12, b2.d0 * 0.5) && b2.pfdOn === 0 && b2.otsMax === 0 && b2.signs === 0 && !b2.truckEnd.vis, b2);
-  // a ride to a moved store (16 or 67)
-  const storePicks = (await pickHome([16, 67])).filter((q) => q.home !== 16 && q.home !== 67);
-  let b3 = { none: 'no counter drives to 16 or 67', storePicks };
-  if (storePicks.length) b3 = await rideTo(storePicks[0].home, storePicks[0].lot);
-  const b3door = !b3.none && !b3.refused ? await ev((ep) => { const g = window.__game, pl = window.__rf.places.places || window.__rf.places, P = pl[String(ep)], p = g.player; return Math.round(Math.hypot(p.x - P.door[0], p.z - P.door[1])); }, b3.lot) : null;
-  result('B3 a ride to a moved store: in at its door, the truck behind it (leaving), no jacket on foot, no edge notice',
-    !b3.none && !b3.refused && b3.visit === b3.lot && b3door != null && b3door < 40 && b3.job === 'leave' && b3.dTruck < 80 && !b3.pfd && !b3.sign.shown, { pick: storePicks[0], b3, b3door });
-
   // ---- C the party tents -------------------------------------------------------------------------------------------------
   const c = await ev(async () => {
     const g = window.__game, P = g.parties, H = window.__rf, w = g.world, T0 = P.today, bad = [], qSites = [];
