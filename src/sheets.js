@@ -225,7 +225,7 @@ class Sheets {
     if (!this.counts) {
       const c = this.counts = new Map(SHEETS.map((t) => [t.id, { campsites: 0, portages: 0, lakes: 0 }]));
       const add = (x, z, k) => { const t = sheetAt(x, z); if (t) c.get(t.id)[k]++; };
-      for (const p of w.campsites || []) add(p.x, p.z, 'campsites');
+      for (const p of w.campsites || []) if (!p.past) add(p.x, p.z, 'campsites'); // (the edge round: not past the band)
       for (const p of w.portages || []) { const m = p.pts && p.pts[Math.floor(p.pts.length / 2)]; if (m) add(m[0], m[1], 'portages'); }
       for (const l of w.lakes || []) if (l && l.name) add(l.cx, l.cz, 'lakes');
     }

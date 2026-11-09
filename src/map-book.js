@@ -204,7 +204,7 @@ export class MapBook {
       const m = p.pts[Math.floor(p.pts.length / 2)];
       out.push({ name: p.proper ? p.name : `${p.name} portage`, kind: 'portage', x: m[0], z: m[1], sub: `${p.rods} rods`, i });
     });
-    w.campsites.forEach((c, i) => { const nm = names.siteWords(c), s = c.fire || c; if (nm) out.push({ name: nm, kind: 'site', x: s.x, z: s.z, sub: '', i }); }); // (round 2 markers: at the ring)
+    w.campsites.forEach((c, i) => { const nm = !c.past && names.siteWords(c), s = c.fire || c; if (nm) out.push({ name: nm, kind: 'site', x: s.x, z: s.z, sub: '', i }); }); // (round 2 markers: at the ring)
     // round 2 markers: an outfitter at its store, by its name ("near entry point 6, Slim Lake"); an entry point at its
     // put-in, by its number and place
     for (const e of w.entryPoints) {
@@ -343,7 +343,7 @@ export class MapBook {
     const surveyed = !!(rec && rec.fish), fish = f && f.fishList ? f.fishList(id) : [];
     const ice = f && f.iceOf ? f.iceOf(id) : null, year = (this.journal.day && this.journal.day.year) || 2026;
     const ids = this.pieces(id);
-    const sites = w.campsites.map((c, i) => [c, i]).filter(([c]) => ids.has(c.lake ?? lakeAt(w, c.x, c.z)));
+    const sites = w.campsites.map((c, i) => [c, i]).filter(([c]) => !c.past && ids.has(c.lake ?? lakeAt(w, c.x, c.z))); // (the edge round: not past the band)
     const portages = w.portages.map((p, i) => [p, i]).filter(([p]) => p.launch && p.launch.some((l) => ids.has(l.lake)) && !p.launch.every((l) => ids.has(l.lake)));
     const eps = w.entryPoints.filter((e) => ids.has(e.lake));
     const tea = teaWord(L.cdom);
@@ -390,7 +390,7 @@ export class MapBook {
     const box = cv.parentNode.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2);
     if (box.width < 10) { this.portraitT = setTimeout(() => this.drawPortrait(id, tries + 1), 60); return; }
     cv.width = Math.round(box.width * dpr); cv.height = Math.round(box.height * dpr);
-    const w = this.w, ext = this.extent(id), ids = this.pieces(id), sites = w.campsites.filter((c) => ids.has(c.lake ?? 0));
+    const w = this.w, ext = this.extent(id), ids = this.pieces(id), sites = w.campsites.filter((c) => !c.past && ids.has(c.lake ?? 0)); // (the edge round)
     const r = drawRegion(cv, w, { ...ext, margin: 0.14 }, { names: false, docks: true, boundary: true, build: 3, ink: null, k: (cv.width / 620), fine: true, soundAll: true,
       markers: sites.map((c) => ({ x: (c.fire || c).x, z: (c.fire || c).z, kind: 'dot', color: '#c0392b', r: 3.6 })) }); // (round 2 markers: at the ring)
     // the lake's own name across it, the rest of the water left unlettered

@@ -111,19 +111,22 @@ const FLYER = {
 };
 // a ranger's ticket (permits.js fines, written up as the trip ended): f { id, n, why, abs, place, paid }; o { date (the
 // day in words), paid (stamp it), fresh (the stamp comes down now) }
-const WHY = { dayuse: 'Out after dark on a day-use permit' };
+const WHY = { dayuse: 'Out after dark on a day-use permit', quetico: 'Camped in Quetico without a Quetico permit' }; // (quetico: the edge round)
 export const ticketWhy = (f) => WHY[f && f.why] || 'A wilderness rule broken';
 export function ticketHtml(f, o = {}) {
   const t = { id: f.id, title: 'ticket' }, h = hash(t), tilt = (((h % 7) - 3) * 0.4).toFixed(2);
   const no = String(f.id || '').replace(/\D/g, '').padStart(4, '0');
+  // the edge round: Quetico's is Ontario's own notice, its warden's (the rest are the Forest Service's)
+  const q = f.why === 'quetico', who = q ? ['Ontario Parks · Quetico Provincial Park', 'Offence notice', 'D. Morriseau', 'Park warden'] : ['U.S. Department of Agriculture · Forest Service', 'Violation notice', 'R. Lindahl', 'Wilderness ranger'];
+  const where = q ? (f.qplace ? `${f.qplace}, Quetico Provincial Park` : 'Quetico Provincial Park') : f.place ? `${f.place}, Boundary Waters` : 'Boundary Waters Canoe Area Wilderness';
   return `<article class="fl fl-ticket${o.paid ? ' paid' : ''}${o.fresh ? ' fresh' : ''}" style="--tilt:${tilt}deg" aria-label="A ranger's ticket, $${f.n || 0}${o.paid ? ', paid' : ''}">
     <div class="tk-perf" aria-hidden="true"></div>
-    <header>${SHIELD}<span><small>U.S. Department of Agriculture · Forest Service</small><b>Violation notice</b></span><i>No. ${esc(`F ${(h % 89) + 10}${no}`)}</i></header>
+    <header>${SHIELD}<span><small>${esc(who[0])}</small><b>${esc(who[1])}</b></span><i>No. ${esc(`F ${(h % 89) + 10}${no}`)}</i></header>
     <div class="tk-row"><span>Date</span><b>${esc(o.date || '')}</b></div>
-    <div class="tk-row"><span>Place</span><b>${esc(f.place ? `${f.place}, Boundary Waters` : 'Boundary Waters Canoe Area Wilderness')}</b></div>
+    <div class="tk-row"><span>Place</span><b>${esc(where)}</b></div>
     <div class="tk-row"><span>Offence</span><b>${esc(ticketWhy(f))}</b></div>
     <div class="tk-due"><span>Amount due</span><b>$${f.n || 0}</b></div>
-    <footer><span class="tk-sig">R. Lindahl</span><span>Wilderness ranger · violator’s copy</span></footer>
+    <footer><span class="tk-sig">${esc(who[2])}</span><span>${esc(who[3])} · violator’s copy</span></footer>
     <span class="tk-stamp" aria-hidden="true">Paid</span>
   </article>`;
 }

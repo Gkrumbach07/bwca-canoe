@@ -48,6 +48,7 @@ import { Profile } from './profile.js'; // hubs 1A
 import { storeLayout, onStore, storeLayouts, setStoreNotices, storeStats } from './props.js'; // hubs 2A
 import { outfitterProfile, boardLean } from './outfitters.js'; // hubs 2C
 import { Rides } from './rides.js'; // hubs 2C
+import { Truck } from './truck.js'; // stream E3: the truck on the roads
 import { sheets, sheetAt } from './sheets.js'; // hubs 2D (tuning: sheetAt, Arvid's map)
 import { explored } from './explored.js'; // round A-B: the map filling in
 import { MapTable } from './maptable.js'; // fb2 D
@@ -111,6 +112,7 @@ import { bonk } from './audio-voices.js'; // d1 rapids
 import { loadBurns, setBurnDate, burnStats, burnLook, eventsAt } from './burns.js'; // the real burns
 import { BurnNotes } from './burn-notes.js'; // the real burns
 import { Permits } from './permits.js'; // gl-a: permits
+import { EdgeWatch } from './edge.js'; // the edge round: the notice while you are out of the Boundary Waters
 import { PermitDesk } from './permit-desk.js'; // gl-a: the permit desk
 import { story } from './story-hooks.js'; // gl-c: the story's event bus and saved state
 import { onboarding } from './onboarding.js'; // gl-c: the home counter's first visit, the old gear
@@ -344,6 +346,10 @@ async function main() {
   // column, and the keeper's voice in its header, until the shop's counter speaks for itself (outfitter.keeperVoice).
   const rides = new Rides({ world, outfitter, day, veil, hud, energy, tasks, teleport });
   outfitter.rides = rides;
+  // stream E3: the truck on the roads (truck.js): left in the lot by a ride and off down the road, up the road for a
+  // pickup, behind the store you are at; one mesh of the props' material, drawn while in view
+  const truck = new Truck({ world, scene, groundAt: (x, z) => tiles.groundAt(x, z), player });
+  outfitter.truck = truck; rides.truck = truck;
   tasks.leanOf = (ep) => boardLean(ep, world);
   outfitter.keeperVoice = true; // the shop's counter (2B) renders the keeper, the signature and the rides itself, so 2C's stand-ins stay off
   // hubs 3B: the camera and the photo notices (photo.js). C raises it (the $25 35 mm, or the disposable the first photo
@@ -429,6 +435,8 @@ async function main() {
   // latrine, blueberries in season, the wake-time card; its berries and firewood notices read the board's notices
   camp.chores.tasks = tasks; window.__game.chores = camp.chores;
   Object.assign(window.__game, { rides, outfitterProfile: (ep) => outfitterProfile(ep, world) }); // hubs 2C
+  window.__game.truck = truck; // stream E3
+  { const upd = actors.update.bind(actors); actors.update = (dt, ...a) => { try { truck.update(dt); } catch (e) { if (!truck.warned) { truck.warned = true; console.warn('truck', e); } } upd(dt, ...a); }; } // (stream E3: the truck's frame, with the people's)
   window.__game.npcs = npcs; // hubs 3C
   window.__game.actors = actors; // p2 A
   // fb A: one physical inventory (items.js, inventory.js): everything you own is an item in a container (the packs,
@@ -1075,6 +1083,16 @@ async function main() {
     // stream B's counter sections (the join: the claims-hook fallback dropped, B's addDesk is there)
     outfitter.addDesk('permits', { order: 10, html: (l) => permitDesk.section(l.ep), act: (a, id, ev) => permitDesk.act(a, id, ev) });
     { const tu = trip.update.bind(trip); trip.update = (dt) => { tu(dt); try { permits.update(dt); } catch (e) { if (!permits.warned) { permits.warned = true; console.warn('permits', e); } } }; }
+    // the edge round (docs/build/edge-and-roads.md, the owner 2026-11-08): no wall and no turn-back; out of the Boundary
+    // Waters a notice stays up until you are back (edge.js), and the map says it too (hud.edgeState); in Quetico
+    // without its permit the same, in its own words. Per player: a co-op friend reads their own spot, no relay message.
+    {
+      const edgeWatch = new EdgeWatch({ permits, trip, hud });
+      window.__game.edge = edgeWatch;
+      hud.edgeState = () => edgeWatch.state;
+      const tu = trip.update.bind(trip);
+      trip.update = (dt) => { tu(dt); try { edgeWatch.update(dt, player); } catch (e) { if (!edgeWatch.warned) { edgeWatch.warned = true; console.warn('edge', e); } } };
+    }
     // the push-off's title over the water says a day trip is one (outfitter.start shows it just after trip.start)
     {
       const startA = outfitter.start.bind(outfitter);
@@ -1303,6 +1321,18 @@ async function main() {
     const updL = pointer.update.bind(pointer);
     pointer.update = (dt, shell) => { updL(dt, shell); try { locator.update(dt, shell); } catch (e) { if (!locator.warnedU) { locator.warnedU = true; console.warn('locator', e); } } };
     window.__game.locator = locator;
+  }
+
+  // ==== loop tasks (2026-11-08): the late season ====
+  // season-turn.js (campaign-design.md Part 3, owner call 3): ice catching a trip (walk out, or a paid rescue from the
+  // journal), and the winter turn behind the desk's "Look at next year's permits" (permits.buy → turnTo). Its events
+  // ('iced', 'rescue', 'season:close', 'year:open') are the seam the story's winter hooks will take.
+  {
+    const { seasonTurn } = await import('./season-turn.js');
+    seasonTurn.attach({ permits: window.__game.permits || null, trip, day, energy, outfitter, veil, hud, player, profile, guide, tasks, world });
+    const tu = trip.update.bind(trip);
+    trip.update = (dt) => { tu(dt); try { seasonTurn.update(dt); } catch (e) { if (!seasonTurn.warnedU) { seasonTurn.warnedU = true; console.warn('seasonTurn', e); } } };
+    window.__game.seasonTurn = seasonTurn;
   }
 
   window.__game.siteFeature = siteFeature; // (scripts/r2-starter-routes.mjs: a site's kind of shore)

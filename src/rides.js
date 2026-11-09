@@ -241,8 +241,12 @@ export class Rides {
       onDark: () => this.pickedUp(at, by, r, paid),
     };
     const done = () => { this.busy = false; };
-    if (this.veil) return this.veil.card(card).then(() => { done(); return true; }, () => { done(); return false; });
-    return Promise.resolve(card.onDark()).then((v) => { done(); return v; }, () => { done(); return false; });
+    // stream E3: the truck comes up the road into the lot and stops first, where there is a road and you are there to
+    // see it (truck.js come; not in the sandbox, nor under a test driver, whose timing it would change)
+    const T = this.truck, wait = T && !this.sandbox && !(typeof navigator !== 'undefined' && navigator.webdriver && !T.forceCome)
+      ? Promise.race([T.come(at.ep), new Promise((r) => setTimeout(r, 14000))]).catch(() => false) : Promise.resolve(false);
+    if (this.veil) return wait.then(() => this.veil.card(card)).then(() => { done(); return true; }, () => { done(); return false; });
+    return wait.then(() => card.onDark()).then((v) => { done(); return v; }, () => { done(); return false; });
   }
   async pickedUp(at, by, r, paid) {
     const o = this.outfitter, core = this.core, pr = this.profile;

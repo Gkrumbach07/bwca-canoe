@@ -6,6 +6,8 @@ import { LakeFacts } from './lake-facts.js'; // d1 lakes
 import { useV4 as rapidsV4 } from './rapids.js'; // d2 bake: a v4 release's own drops (its levels hold them)
 import { Creeks } from './creeks.js'; // the wetlands round: brooks and beaver dams (index.creeks)
 import { waterKinds, isFlowage } from './water-build.js'; // the season round: every water's level through the year
+import { loadEdge, isPast, EDGE } from './edge.js'; // the edge round: where the Boundary Waters end (the sites past the band marked c.past)
+import { readRoads } from './roads.js'; // the roads in 3D (stream E3): the last stretch of the real roads into each lot
 
 // Where the baked data lives: VITE_DATA_URL (a bucket behind a CDN, see docs/HOSTING.md), else `data/`
 // under the app's own base path (public/data in development). Always ends in a slash.
@@ -101,23 +103,30 @@ export class World extends GridQueries {
     // were worked out on (their own chunk too)
     // (round 2, entry points true to life: the v9 release's entry points as they start in real life, ep-fixes.json, for
     // the release it was made from, applied in the constructor before any tile or worker starts)
-    const [fixes, facts, access, fires, epFixes] = await Promise.all([
+    // (the edge round: src/edge.bin, the zones, so the campsites past the band can be marked before anything reads them)
+    // (stream E3: the last stretch of the real roads into each lot and yard, scripts/roads.mjs, for the release they were
+    // graded on: roads.js readRoads)
+    const [fixes, facts, access, fires, epFixes, , roads] = await Promise.all([
       index.source && index.source.baked === FIXES_FOR ? import('./world-fixes.json').then((m) => m.default, () => null) : null,
       (index.version >= 4 ? import('./lake-facts-v4.json') : import('./lake-facts.json')).then((m) => m.default, () => null), // (d2 bake: each release its own, by its lake ids)
       import('./camp-access.json').then((m) => m.default, () => null),
       import('./camp-fires.json').then((m) => m.default, () => null), // round 2 markers: each site's ring, for the maps
       import('./ep-fixes.json').then((m) => m.default, () => null),
+      loadEdge(),
+      import('./roads.json').then((m) => m.default, () => null),
     ]);
     if (index.version >= 4) rapidsV4(); // d2 bake
     const epOff = typeof location !== 'undefined' && /[?&]eps=off\b/.test(location.search); // (`?eps=off`: as before, for a before and after)
     const w = new World(index, base, fixes, epOff ? null : epFixes);
     if (access && access.for === (index.source && index.source.baked) && !(typeof location !== 'undefined' && /[?&]access=off\b/.test(location.search))) w.setCampAccess(access); // (`?access=off`: as before, for a before and after)
     if (fires && fires.for === (index.source && index.source.baked) && w.campAccess) w.setCampFires(fires);
+    w.roads = readRoads(roads, index.source && index.source.baked); // stream E3 (`?roads=off`: none)
     // d1 lakes (`?facts=off` leaves them out, for a before and after)
     const off = typeof location !== 'undefined' && /[?&]facts=off\b/.test(location.search);
     if (facts && !off && facts.for === (index.source && index.source.baked)) w.facts = new LakeFacts(facts, w);
     // the wetlands round: the brooks (land now, a stony bed) and the beaver dams, from a release that has them
     if (index.creeks) { onProgress(0.08, 'Reading the creeks…'); w.creeks = await Creeks.load(w, base); }
+    w.markPast();
     return w;
   }
 
@@ -167,6 +176,7 @@ export class World extends GridQueries {
     this.lowIds = Int32Array.from(index.lakes.filter((l) => l && ((l.creek && l.seasonal) || isFlowage(this.waterKinds[l.id]))).map((l) => l.id));
     this.fixed = fixes ? this.applyFixes(fixes) : null;
     this.epFixed = epFixes ? this.applyEpFixes(epFixes) : null; // round 2: the entry points as they start in real life
+    this.roads = null; // stream E3: roads.js readRoads's once load() has read roads.json (null on another release)
     this.facts = null; // d1 lakes: a LakeFacts once load() has joined lake-facts.json (null on another release)
     this.creeks = null; // the wetlands round: a creeks.js Creeks once load() has read creeks.json (null on an older release)
     for (const p of this.portages) {
@@ -180,6 +190,17 @@ export class World extends GridQueries {
     this.gridDesc = { cell: g.cell, originX: g.originX, originZ: g.originZ, tile: g.tile, halo: g.halo, fields: this.fields || undefined };
   }
 
+  // The edge round (2026-11-08, the owner: "campsites past the band dropped from maps and parties"): a site past the
+  // band round the wilderness (edge.js zone 0: Vermilion, Burntside, Sand Point, Superior...) is marked c.past. It stays
+  // in the list (the saves, the explored bits and the release's tables go by its place in it) and stays built where it
+  // stands, but no map draws it, no party camps on it, no notice or visitor sends you to it. `?edge=off` marks none.
+  markPast() {
+    let n = 0;
+    const off = typeof location !== 'undefined' && /[?&]edge=off\b/.test(location.search);
+    for (const c of this.campsites) { const p = !off && EDGE.ready && isPast(c.x, c.z); if (p) { c.past = true; n++; } else if (c.past) delete c.past; }
+    this.pastSites = n;
+    return n;
+  }
   // Round world (2026-11-02): each campsite's way from the water and its latrine (scripts/camp-access.mjs), as
   // c.access = { way: [[x, z], ...] from the fire ring to the waterline, landing: [x, z] (the waterline's point), ramp (round
   // ramps, scripts/camp-ramps.mjs: the way graded into the ground, ramps.js), latrine:
