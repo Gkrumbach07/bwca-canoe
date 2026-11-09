@@ -296,7 +296,8 @@ function waterWay(x, z, maxM = 40000) {
   while (heap.length) {
     const [d, k] = pop(); if (d > (dist.get(k) ?? Infinity)) continue;
     const i = k % GW, j = (k / GW) | 0, K = k50(i, j);
-    if (bw[K] && wet10(i, j)) { // (the wilderness's own water: the band's water may not lead on into it) const pts = []; for (let q = k; q != null; q = prev.get(q)) pts.push([c10x(q % GW), c10z((q / GW) | 0)]); return { pts: pts.reverse(), m: d }; }
+    // (the wilderness's own water: the band's water may not lead on into it)
+    if (bw[K] && wet10(i, j)) { const pts = []; for (let q = k; q != null; q = prev.get(q)) pts.push([c10x(q % GW), c10z((q / GW) | 0)]); return { pts: pts.reverse(), m: d }; }
     for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
       if (!di && !dj) continue; const ii = i + di, jj = j + dj; if (ii < 0 || jj < 0 || ii >= GW || jj >= GH) continue;
       const q = jj * GW + ii, Q = k50(ii, jj);
