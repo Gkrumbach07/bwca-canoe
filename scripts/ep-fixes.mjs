@@ -215,7 +215,13 @@ for (const e of I.entryPoints) {
     if (S.store) { // round 4: the store's landing at the road end
       let w = null;
       if (S.store.put) { const [x, z] = P(S.store.put); w = D.waterNear(x, z, 120, S.store.lake || 0, 0.5) || D.waterNear(x, z, 120, S.store.lake || 0, 0); }
-      else if (S.store.nearLot && R.lot) w = D.waterNear(R.lot.x, R.lot.z, 400, S.store.nearLot, 0);
+      else if (S.store.nearLot && R.lot) { // (the water nearest the lot that is as far in from the map's edge as the lot)
+        for (let dz = -400; dz <= 400; dz += 10) for (let dx = -400; dx <= 400; dx += 10) {
+          const x = R.lot.x + dx, z = R.lot.z + dz, d = Math.hypot(dx, dz);
+          if (d > 400 || z > bottom - CLIP_IN + 10 || D.lakeAt(x, z) !== S.store.nearLot || (w && d >= w.d)) continue;
+          w = { x: Math.floor((x - D.grid.originX) / 10) * 10 + D.grid.originX + 5, z: Math.floor((z - D.grid.originZ) / 10) * 10 + D.grid.originZ + 5, lake: S.store.nearLot, d };
+        }
+      }
       if (!w) throw new Error(`EP ${e.ep}: no water for the store at its road end`);
       Object.assign(row, { x: w.x, z: w.z, lake: w.lake, storeMoved: { x: e.x, z: e.z } });
     }
