@@ -125,6 +125,19 @@ try {
   const ev = (fn, a) => page.evaluate(fn, a);
   const until = (fn, a, timeout = 120000) => page.waitForFunction(fn, a, { timeout, polling: 250 });
   const shot = async (name, n = null, cap = null) => { const f = path.join(SHOTS, `loop-r4-${name}.png`); await page.screenshot({ path: f }); log('shot', f); if (n) sheet.push({ n, file: f, cap }); return f; };
+  // W held toward a point, in pieces of 300 frames (a long evaluate starves the page), till there or `stop` says so
+  const walkW = async (q, maxFrames, stop) => {
+    await page.keyboard.down('KeyW');
+    const tot = { moved: 0, frames: 0, stuck: 0, left: null };
+    try {
+      for (let f = 0; f < maxFrames; f += 300) {
+        const r = await ev(([q, stop]) => { const H = window.__r4, g = window.__game, p = g.player, x0 = p.x, z0 = p.z; const st = stop === 'out' ? () => H.zone(p.x, p.z) === 0 && H.sign().shown : stop === 'in' ? () => H.zone(p.x, p.z) !== 0 && !H.sign().shown : null; const w = H.walkTo(q, 300, st); return { ...w, moved: Math.round(Math.hypot(p.x - x0, p.z - z0)), done: (st && st()) || w.left < 4 }; }, [q, stop]);
+        tot.moved += r.moved; tot.frames += r.frames; tot.stuck += r.stuck; tot.left = r.left;
+        if (r.done) break;
+      }
+    } finally { await page.keyboard.up('KeyW'); }
+    return tot;
+  };
   const holdW = async (n, dir) => { await page.keyboard.down('KeyW'); const d = await ev(([n, dir]) => window.__r4.hold(n, dir), [n, dir]); await page.keyboard.up('KeyW'); await ev(() => window.__r4.step(5)); return d; };
 
   await page.goto(APP, { timeout: 180000 });
@@ -232,13 +245,13 @@ try {
   if (c2) {
     await ev(async (c) => { const H = window.__r4, g = window.__game; await H.tp(c.a.x, c.a.z); H.standAt(c.a.x, c.a.z, Math.atan2(-c.dir.z, c.dir.x)); H.step(60); void g; }, c2);
     const before = await ev(() => ({ ...window.__r4.sign(), mode: window.__game.player.mode }));
-    await page.keyboard.down('KeyW'); const walked = await ev((b) => window.__r4.walkTo(b, 30 * 240), c2.b); await page.keyboard.up('KeyW'); await ev(() => window.__r4.step(90));
+    const walked = await walkW(c2.b, 30 * 120, 'out'); await ev(() => window.__r4.step(90));
     const out = await ev(() => { const H = window.__r4, g = window.__game; return { ...H.sign(), zone: H.zone(g.player.x, g.player.z), mode: g.player.mode }; });
     await shot('p2-foot-out', 2, 'On foot past the edge: the notice up');
     await ev(() => window.__r4.step(30 * 60));
     const stays = await ev(() => window.__r4.sign());
     const back = { x: -c2.dir.x, z: -c2.dir.z };
-    void back; await page.keyboard.down('KeyW'); const walkedBack = await ev((a) => window.__r4.walkTo(a, 30 * 240), c2.a); await page.keyboard.up('KeyW');
+    void back; const walkedBack = await walkW(c2.a, 30 * 120, 'in');
     await ev(() => window.__r4.step(120));
     const after = await ev(() => { const H = window.__r4, g = window.__game; return { ...H.sign(), zone: H.zone(g.player.x, g.player.z) }; });
     p2 = { c: { reach: c2.reach, past: c2.past }, before, walked, out, stays: stays.shown, walkedBack, after };
