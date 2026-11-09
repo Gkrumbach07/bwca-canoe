@@ -14,11 +14,22 @@ import LANDINGS_DATA from './landings.json';
 import { TILE, PropBuilder, propMaterial, trailMaterial, occlude, obb, bakeSelf, MeshGround, buildHull, hullProfile, chunkStone, HULL_LENGTH } from './prop-kit.js';
 import { SIGN_HEAD_UV, SIGN_GLYPH_ASPECT, signGlyphUv } from './prop-kit.js'; // d1 names: the trail sign's words
 import { tileCreeks, BROOK } from './creeks.js'; // the wetlands round: brooks, beaver dams and lodges
-import { roadExclusions, DECK, nearestRoad } from './roads.js'; // stream E3: the roads in 3D
+import { roadExclusions, DECK } from './roads.js'; // stream E3: the roads in 3D
 import { nearRoad } from './road-grade.js'; // round 4: a portage's sign kept off the roads (the truck's way)
 // round 4: whether (x, z) stands on a road (its half width and pad m, the water's pieces too: the graded table has only
 // the land's)
-const onRoad = (world, x, z, pad = 0.6) => { if (nearRoad(x, z, pad)) return true; const r = nearestRoad(world, x, z, 6); return !!(r && r.d < r.road.hw + pad); };
+const onRoad = (world, x, z, pad = 0.6) => {
+  if (nearRoad(x, z, pad)) return true;
+  const R = world && world.roads; if (!R) return false;
+  for (const r of R.list) { // (each segment of its line, not only its points: they stand 6 m apart)
+    const b = r.bbox, m = r.hw + pad; if (x < b[0] - m || x > b[2] + m || z < b[1] - m || z > b[3] + m) continue;
+    for (let i = 0; i + 1 < r.n; i++) {
+      const ax = r.p[i * 4], az = r.p[i * 4 + 1], ex = r.p[i * 4 + 4] - ax, ez = r.p[i * 4 + 5] - az, L2 = ex * ex + ez * ez, t = L2 ? Math.max(0, Math.min(1, ((x - ax) * ex + (z - az) * ez) / L2)) : 0;
+      if (Math.hypot(x - ax - ex * t, z - az - ez * t) < m) return true;
+    }
+  }
+  return false;
+};
 
 // The built things: portage trails and their signs, campsites, and at every entry point an outfitter's dock,
 // shack and canoe rack, plus the lost-and-found items of the task board. Simple shapes put together the way
