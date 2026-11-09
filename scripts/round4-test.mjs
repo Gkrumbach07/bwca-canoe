@@ -171,9 +171,9 @@ try {
     let off = 0.3; if (lat(y0 + off) < 0) off = -off;
     for (let i = 0; i < 120; i++) { face(y0 + off); g.step(1 / 30, 1); }
     const side0 = ch.otsSide, ots0 = ch.ots;
-    let jump = 0, last = g.camera.position.clone();
-    for (let i = 1; i <= 150; i++) { const k = Math.min(1, i / 30); face(y0 + off + (-off * 3.3 - off) * k); g.step(1 / 30, 1); const c = g.camera.position; jump = Math.max(jump, c.distanceTo(last)); last = c.clone(); }
-    return { bad, side0: +side0.toFixed(2), ots0: +ots0.toFixed(2), side1: +ch.otsSide.toFixed(2), ots1: +ch.ots.toFixed(2), latEnd: +lat(y0 - off * 3.3).toFixed(2), jump: +jump.toFixed(3) };
+    let jump = 0, last = g.camera.position.clone(), at = null; const tr = [];
+    for (let i = 1; i <= 150; i++) { const k = Math.min(1, i / 30); face(y0 + off + (-off * 3.3 - off) * k); g.step(1 / 30, 1); const c = g.camera.position, d = c.distanceTo(last); if (i % 5 === 0 || d > 0.3) tr.push(`${i} s${ch.otsSide.toFixed(2)} d${d.toFixed(2)} p${Number.isFinite(ch.pull) ? ch.pull.toFixed(2) : 'inf'} w${(ch.sight && ch.sight.what) || '-'}`); if (d > jump) { jump = d; at = i; } last = c.clone(); }
+    return { bad, side0: +side0.toFixed(2), ots0: +ots0.toFixed(2), side1: +ch.otsSide.toFixed(2), ots1: +ch.ots.toFixed(2), latEnd: +lat(y0 - off * 3.3).toFixed(2), jump: +jump.toFixed(3), at, tr: tr.slice(0, 40) };
   });
   await ev(() => { const H = window.__p, s = H.staffer(); if (s && !s.undrawn) { const t = H.top(s.b); H.look(H.yawTo({ x: t.x, z: t.z }), 0); } H.step(20); });
   result('3b a fast turn by her: her gem never in the top bar, any frame', !turn.none && turn.bad.length === 0, turn);
