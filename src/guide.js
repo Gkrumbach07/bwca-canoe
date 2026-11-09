@@ -54,6 +54,9 @@ export const GUIDE = {
 };
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 const stop = (s) => { const w = String(s || '').trim(); return !w ? '' : /[.!?)]$/.test(w) ? w : `${w}.`; };
+// r4: metres over a shelf's `at` (props.js storeLayout) the gem's target sits, under the beams: a hand over the food and
+// tackle gondolas' tops, in front of the gear wall's upper shelves
+const SHELF_UP = { food: 0.75, tackle: 0.75, gear: 0.4 };
 const PART_LABEL = { grate: 'grate', latrine: 'latrine', pad: 'tent pad' };
 const PARTS = ['grate', 'latrine', 'pad'];
 
@@ -217,7 +220,10 @@ export class Guide {
       if (key === 'door') return flat(L.door, 1.0);
       if (key === 'dock') { const q = L.dockSide || L.dockLand; return q ? { x: q.x, y: this.groundY(q.x, q.z) + 0.6, z: q.z } : null; }
       if (key === 'maps') return L.mapTable ? flat(L.mapTable.at || L.mapTable, 0.25) : null;
-      if (key === 'food' || key === 'tackle' || key === 'gear') { const s = (L.shelves || []).find((q) => q.kind === key); return s ? flat(s.at || s, 1.0) : null; }
+      // (r4: a hand over the shelf's own top, not a metre over its middle: the gem had sat up in the beams, at the top of
+      // the view against the HUD's bar; the food and tackle gondolas stand 1.45 m, the gear wall 1.92, their `at` 0.8 and
+      // 1.0 up)
+      if (key === 'food' || key === 'tackle' || key === 'gear') { const s = (L.shelves || []).find((q) => q.kind === key); return s ? flat(s.at || s, SHELF_UP[key]) : null; }
       const q = L[key];
       return q ? flat(q.at || q, 0.5) : null;
     };

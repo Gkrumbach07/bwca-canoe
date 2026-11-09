@@ -1194,7 +1194,8 @@ async function main() {
     // the moments: the first notice done on a trip ("it pays when you come in"), and the first tally (E finishes it)
     let doneAt = -1e9;
     tasks.on('done', () => { if (trip.active) doneAt = performance.now() / 1000; });
-    const glD = [{ id: 'paylater', prio: 1, recur: 'once', text: 'Done. Notices pay when you come in.', due: () => trip.active && performance.now() / 1000 - doneAt < 30 }, ...record.tallyMoments()];
+    // (r4: with the tracker's pop-ups on, its own Done card says "Paid when you come in": the moment only without them)
+    const glD = [{ id: 'paylater', prio: 1, recur: 'once', text: 'Done. Notices pay when you come in.', due: () => trip.active && performance.now() / 1000 - doneAt < 30 && settings.get('tracker') === false }, ...record.tallyMoments()];
     for (const m of glD) if (!MOMENTS.some((q) => q.id === m.id)) { const { due, ...rest } = m; void due; MOMENTS.push(rest); }
     const glDM = new Map(glD.map((m) => [m.id, m]));
     const dueD = hints.due.bind(hints);
@@ -1255,6 +1256,11 @@ async function main() {
       if (id === sAsk.id) { const v = outfitter.visit; return !!(v && v.inside && Number(v.ep) !== starter.home && starter.available(v.ep) && !talk.talking && !outfitter.open); }
       const r = dueS(id, rec);
       if (id === 'start' && r) { let n = []; try { n = starter.notes(); } catch { n = []; } if (n.length) return { lv: 1, text: 'Your first night’s way is pencilled on your map: {M}.' }; }
+      // (r4: the evening names the site pencilled for you, not the nearest free one: the keeper held it, the job is there)
+      if (id === 'evening' && r) {
+        let q = null; try { q = starter.notes().filter((x) => x.site).map((x) => ({ x, d: Math.hypot(x.site.x - player.x, x.site.z - player.z) })).sort((a, b) => a.d - b.d)[0] || null; } catch { q = null; }
+        if (q && q.d < 6000 && q.d > 60) { const w = hints.placeWords(q.x.site.x, q.x.site.z); return { lv: 1, text: `Before dark: your site is pencilled on your map, ${w}. {M}`, short: `Before dark: your site, ${w} {M}` }; }
+      }
       return r;
     };
     window.__game.starter = starter;
@@ -1280,7 +1286,7 @@ async function main() {
   {
     journal.guide = guide;
     tracker.attach({ guide, settings, journal, hud, title, talk });
-    journal.taskPeek = () => tracker.peek();
+    journal.taskPeek = () => (hints.wantsKey('I') ? null : tracker.peek()); // (r4: a line up saying {I} opens what it says)
     const updT = tasks.update.bind(tasks);
     tasks.update = (dt) => { updT(dt); try { tracker.update(dt); } catch (e) { if (!tracker.warnedU) { tracker.warnedU = true; console.warn('tracker', e); } } };
     window.__game.tracker = tracker;

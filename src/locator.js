@@ -46,6 +46,14 @@ export const LOCATOR = {
   minPerson: 0.14,    // m tall at least: over a tall person under a store's beams the gem shrinks to fit, no smaller
   water: 0.6,         // m over the water at least, when the target is over water (the canoe tied at the dock)
   shades: [0xffe58a, 0xf2b01e, 0xb57a0a], // light, mid and dark facets: the gold
+  // r4 (the tutorial polish): on the screen a gem keeps clear of the HUD's top bar (the energy bar and its clock, the
+  // strip over a paper, the compass). Standing at a store's shelf the gem sat up in the beams, at the top of the view,
+  // against the bar; a place's or a thing's gem is lowered (never a person's: it would sink into the head) until its top
+  // is this many px under the bar's lowest edge, its point at most `sink` m under the target's top
+  barGap: 10,         // px under the top bar
+  sink: 0.45,         // m: the lowest the point goes under the target's top to keep clear of the bar
+  barIds: ['energy', 'strip', 'compass'], // the top bar's pieces (hud.css), read four times a second
+  barEvery: 0.25,     // s between two reads of the bar
 };
 
 // a six-sided bipyramid: the top point short, the bottom long (a plumbob), 12 faces, each its own three vertices (so
@@ -72,6 +80,21 @@ function gemGeometry() {
   return g;
 }
 
+// r4: the lowest edge on the screen (px) of the HUD's top bar as it is up now, 0 when none of it is (only pieces in the
+// top third count: the bar moves down under the spot card, never that far)
+function topBar() {
+  if (typeof document === 'undefined') return 0;
+  let low = 0;
+  const H = window.innerHeight;
+  for (const id of LOCATOR.barIds) {
+    const e = document.getElementById(id); if (!e) continue;
+    const r = e.getBoundingClientRect(); if (!r.width || !r.height || r.top > H / 3) continue;
+    let shown = true;
+    for (let q = e; q && q !== document.body && shown; q = q.parentElement) { const cs = getComputedStyle(q); if (cs.display === 'none' || cs.visibility === 'hidden' || parseFloat(cs.opacity) < 0.05) shown = false; }
+    if (shown) low = Math.max(low, r.bottom);
+  }
+  return low;
+}
 const smooth = (t) => { const x = Math.max(0, Math.min(1, t)); return x * x * (3 - 2 * x); };
 
 export class Locator {
@@ -84,6 +107,7 @@ export class Locator {
     this.geometry = null;
     this.group = null;
     this.warned = false;
+    this.bar = 0; this.barT = 0; // the top bar's lowest edge on the screen, px (0: none up), and the time to read it again
   }
   attach(t = {}) {
     Object.assign(this.t, t);
@@ -158,7 +182,9 @@ export class Locator {
       if (s.a <= 0) { this.free(s); this.slots.delete(id); }
     }
     if (off) return;
-    const cp = this.t.camera ? this.t.camera.position : null;
+    const cam = this.t.camera, cp = cam ? cam.position : null;
+    if ((this.barT -= dt) <= 0) { this.barT = LOCATOR.barEvery; this.bar = topBar(); }
+    if (cam && this.bar > 0) cam.updateMatrixWorld();
     const bob = Math.sin(this.time * Math.PI * 2 * LOCATOR.bobHz) * LOCATOR.bob;
     for (const s of this.slots.values()) {
       const me = s.mesh, p = s.pos;
@@ -173,6 +199,7 @@ export class Locator {
         if (room < h + LOCATOR.bob) { h = Math.max(LOCATOR.minPerson, Math.min(h, room)); y = p.y + LOCATOR.gapPerson + LOCATOR.low * h; }
       }
       y = Math.min(y, p.roof - 0.38 * h); // indoors its top under the beams
+      if (!s.person && cam && this.bar > 0) y = this.underBar(cam, p, y, h);
       const op = (s.fade ?? 1) * k;
       s.spin += dt * LOCATOR.spin;
       me.position.set(p.x, y, p.z);
@@ -182,6 +209,21 @@ export class Locator {
       for (const mat of me.material) { mat.opacity = op; mat.depthTest = !xr; }
       me.visible = op > 0.01 && dc > LOCATOR.closeCam;
     }
+  }
+  // r4: the gem's centre height that keeps its top under the top bar on the screen (y as it is when it is clear already,
+  // off the screen sideways or behind the camera); lowered no further than its point `sink` m under the target's top
+  underBar(cam, p, y, h, H = window.innerHeight) {
+    const v = this._bv || (this._bv = new THREE.Vector3());
+    const want = this.bar + LOCATOR.barGap;
+    const topPx = (cy) => { v.set(p.x, cy + 0.38 * h, p.z).project(cam); return v.z > 1 || v.z < -1 || v.x < -1.1 || v.x > 1.1 ? null : ((1 - v.y) / 2) * H; };
+    const t0 = topPx(y);
+    if (t0 == null || t0 >= want) return y;
+    const lo = Math.min(y, p.y - LOCATOR.sink + LOCATOR.low * h);
+    const tl = topPx(lo);
+    if (tl == null || tl < want) return lo; // (right under it, looking up: as low as it goes)
+    let a = lo, b = y; // a clear, b not
+    for (let k = 0; k < 10; k++) { const m = (a + b) / 2, t = topPx(m); if (t != null && t >= want) a = m; else b = m; }
+    return a;
   }
   // each gem shown, as a box on the screen in px ({ x, y, w, h }, a little padded), for the barks to keep clear of
   screenRects(cam = this.t.camera, W = window.innerWidth, H = window.innerHeight) {
