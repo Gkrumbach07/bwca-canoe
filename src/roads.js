@@ -3,8 +3,12 @@
 // release), read once at load (world.js setRoads) into world.roads:
 //   list    [{ k (KIND), hw (half width m), line (a centre line), name, n (points), p: Float32Array [x, z, h, w] per
 //           point (w < 0 over water: no grade there), bbox [x0, z0, x1, z1] }]
-//   routes  Map key → { key, ep, at ('store' | 'lot' | 'landing'), snap, p: Float32Array [x, z] }: the truck's way out
-//           from the road's end at the start (key: the entry point, 'h<ep>' an outfitter's own portage-first lot)
+//   routes  Map key → { key, ep, at ('store' | 'lot' | 'landing'), snap, p: Float32Array [x, z], stand, drive, edge }: the
+//           truck's way out from the road's end at the start (key: the entry point, 'h<ep>' an outfitter's own
+//           portage-first lot); round 4: stand (a store's route begins where the truck stands behind it), drive (the
+//           truck can drive it: every metre on a road or a made two-track, never over water or through the trees; a
+//           table without it: drive when the start is a two-track's reach off its road), edge (it runs out at the
+//           map's edge, toward the real road off the map)
 // What reads it: props.js (the ribbon in each tile's trail decal, and the corridor kept clear: exclusionsFor),
 // road-grade.js (the ground), truck.js (the truck), the maps (later: the edge-and-roads stream E2).
 // `?roads=off` leaves them all out.
@@ -38,7 +42,7 @@ export function readRoads(table, baked) {
     const a = r.p, n = Math.floor(a.length / 2), p = new Float32Array(n * 2);
     let x = 0, z = 0;
     for (let i = 0; i < n; i++) { x += a[i * 2]; z += a[i * 2 + 1]; p[i * 2] = x / 10; p[i * 2 + 1] = z / 10; }
-    routes.set(String(r.key), { key: String(r.key), ep: r.ep, at: r.at, snap: r.snap, p });
+    routes.set(String(r.key), { key: String(r.key), ep: r.ep, at: r.at, snap: r.snap, p, stand: !!r.stand, drive: r.drive == null ? null : !!r.drive, edge: !!r.edge });
   }
   // each road's two ends: joined to another road (no fade), at a start (faded in over a few metres: the lot's own
   // gravel or the landing), or cut off into the trees (faded out over the last 30 m, so it reads as going on)
@@ -63,6 +67,12 @@ export function readRoads(table, baked) {
       }
       i = j + 1;
     }
+  }
+  // round 4: the routes' own crossings (scripts/roads.mjs: water at a junction or a chain's end), where none is drawn
+  for (const b of table.bridges || []) {
+    const mx = (b.ax + b.bx) / 2, mz = (b.az + b.bz) / 2;
+    if (bridges.some((q) => { const ex = q.bx - q.ax, ez = q.bz - q.az, L2 = ex * ex + ez * ez, t = L2 ? Math.max(0, Math.min(1, ((mx - q.ax) * ex + (mz - q.az) * ez) / L2)) : 0; return Math.hypot(mx - q.ax - ex * t, mz - q.az - ez * t) < 4; })) continue;
+    bridges.push({ ax: b.ax, az: b.az, ah: b.ah, bx: b.bx, bz: b.bz, bh: b.bh, hw: b.hw, k: b.k || 1, name: '' });
   }
   const km = list.reduce((t, r) => { for (let i = 1; i < r.n; i++) t += Math.hypot(r.p[i * 4] - r.p[i * 4 - 4], r.p[i * 4 + 1] - r.p[i * 4 - 3]); return t; }, 0) / 1000;
   return { list, routes, bridges, km };

@@ -101,31 +101,38 @@ export class Truck {
   }
   // where the truck stands at a start (an entry point, or 'h<ep>'): { x, z, heading, path (from there out the road) } or
   // null (no road)
-  // (loop-r4 join: a start whose road is more than a two-track's reach off, EP 6 and 16's stores 421 and 686 m, EP 75
-  // and 84's lots 614 and 850 m, has no way to drive: the truck would cross the woods to it. It can stand there (park),
-  // never drive in or out: drive = true)
+  // (round 4: every start's road is drawn to it, a made two-track over dry ground where it is off its road, so the truck
+  // drives to them all; a route the table marks drive 0 is park only. A store's route begins at the truck's stand behind
+  // it: stand)
   spot(key, drive = false) {
     const R = routeOf(this.world, key);
     if (!R || R.pts.length < 2) return null;
-    if (drive && R.snap > TRUCK.maxSnap) return null;
+    if (drive && (R.drive === false || (R.drive == null && R.snap > TRUCK.maxSnap))) return null;
     const ep = Number(String(key).replace(/^h/, ''));
     let P = null;
-    if (isOutfitter(ep) && !String(key).startsWith('h')) {
+    if (R.stand) P = R.pts[0];
+    else if (isOutfitter(ep) && !String(key).startsWith('h')) {
       const Y = yardOf(ep);
       if (Y) { const back = Math.min(...Y.rects.map((r) => r[2])) - 4.5; P = [Y.x + Y.bx * back, Y.z + Y.bz * back]; }
-    } else {
-      const L = trailheadLayout(ep);
-      if (L && L.lot) P = [L.lot.x, L.lot.z];
     }
+    // (round 4: in a lot, clear of its sign, its permit box and the portage's sign at the trail's road end, the lot's
+    // middle: the way out of the lot is the nearest of the road's points the truck can reach without passing them)
+    const L = !R.stand ? trailheadLayout(ep) : null, inLot = !!(L && L.lot && !(isOutfitter(ep) && !String(key).startsWith('h')));
+    if (inLot) P = [L.lot.x, L.lot.z];
+    const keep = inLot ? [L.sign, L.box].filter(Boolean).map((q) => [q.x, q.z]) : [];
+    const clearOf = (a, b) => keep.every(([x, z]) => { const ex = b[0] - a[0], ez = b[1] - a[1], L2 = ex * ex + ez * ez, t = L2 ? Math.max(0, Math.min(1, ((x - a[0]) * ex + (z - a[1]) * ez) / L2)) : 0; return Math.hypot(x - a[0] - ex * t, z - a[1] - ez * t) > 2.4; });
     // out along the road from the nearest of its points to the spot (never back through the lot or the yard)
     let j = 0;
-    if (P) { let bd = Infinity; for (let i = 0; i < R.pts.length; i++) { const d = Math.hypot(R.pts[i][0] - P[0], R.pts[i][1] - P[1]); if (d < bd) { bd = d; j = i; } } }
+    if (P) {
+      let bd = Infinity;
+      for (let i = 0; i < R.pts.length; i++) { const d = Math.hypot(R.pts[i][0] - P[0], R.pts[i][1] - P[1]); if (d < bd && (d > 60 || clearOf(P, R.pts[i]))) { bd = d; j = i; } }
+    }
     const way = R.pts.slice(j);
     if (P && Math.hypot(way[0][0] - P[0], way[0][1] - P[1]) > 1) way.unshift(P);
     if (!P) P = way[0];
-    // stand a few metres into the way, facing out (in a lot: inside its ring)
+    // stand a few metres into the way, facing out (in a lot: inside its ring, its tail past the lot's middle)
     const path = pathOf(smooth(way));
-    const s0 = Math.min(path.len * 0.5, P === way[0] ? 1 : Math.min(LOT_R - 3, 3));
+    const s0 = Math.min(path.len * 0.5, inLot ? LOT_R - 1.5 : P === way[0] ? 1 : 3);
     const [x, z] = at(path, s0), [x1, z1] = at(path, s0 + 2);
     return { x, z, heading: Math.atan2(x1 - x, z1 - z), path, s0 };
   }

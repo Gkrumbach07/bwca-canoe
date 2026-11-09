@@ -2,8 +2,9 @@
 // seams first, then a season played in real keys (W held to walk and paddle, clicks at the desk; __game only to set a
 // scene: the day, a place to stand and face, a teleport), PASS or FAIL at each step, and a 12-shot contact sheet
 // (docs/build/shots/loop-r4-contact.png):
-//   S1 the truck drives only where a road reaches: every drivable start's way out runs along a road; the starts whose
-//      road is past a two-track's reach (EP 6, 16 stores, EP 75, 84 lots) are never driven to (park only)
+//   S1 the truck drives only where a road reaches: every start's way out runs along a drawn road from its first metre
+//      (round 4, stream B: every start has its road, a made two-track over dry ground where it was off one, so every
+//      route is driven; scripts/r4-roads-test.mjs drives each every 2 m)
 //   S2 the doorstep: no store yard, trailhead lot, put-in, road point or way in by water is "out"; standing in five
 //      yards and five lots the notice never goes up
 //   S3 a held notice of a cut kind in an old save goes to the missed list (no penalty), its pin empty, the board fills
@@ -162,20 +163,19 @@ try {
     if (!R) return { none: true };
     const near = (x, z) => { let bd = Infinity; for (const r of R.list) { const b = r.bbox; if (x < b[0] - 30 || x > b[2] + 30 || z < b[1] - 30 || z > b[3] + 30) continue; for (let i = 0; i < r.n; i++) bd = Math.min(bd, Math.hypot(r.p[i * 4] - x, r.p[i * 4 + 1] - z)); } return bd; };
     let driven = 0;
-    for (const [key, q] of R.routes) {
+    for (const [key] of R.routes) {
       const S = T.spot(key, true);
-      if (q.snap > 320) { if (S) far.push(key); if (T.spot(key)) parkFar.push(key); continue; }
-      if (!S) continue;
+      if (!S) { far.push(key); if (T.spot(key)) parkFar.push(key); continue; }
       driven++;
-      // the way out past its first 320 m (the lot's own two-track) runs on a road: sample every 20 m
-      for (let s = Math.min(S.path.len, 330); s < S.path.len; s += 20) {
+      // the way out runs on a drawn road from the truck's stand: sample every 20 m
+      for (let s = S.s0; s < S.path.len; s += 20) {
         const i = S.path.cum.findIndex((c) => c >= s), pt = S.path.pts[Math.max(0, i)];
         const d = near(pt[0], pt[1]); if (d > 12) { bad.push({ key, s: Math.round(s), d: Math.round(d) }); break; }
       }
     }
     return { routes: R.routes.size, driven, bad: bad.slice(0, 8), far, parkFar };
   });
-  result('S1 the truck: every driven way out runs on a road; the far starts (EP 6, 16, 75, 84) never driven, still parkable', !s1.none && s1.driven > 30 && !s1.bad.length && !s1.far.length && s1.parkFar.length >= 4, s1);
+  result('S1 the truck: every start driven (round 4: a road to each), every way out on a drawn road', !s1.none && s1.driven === s1.routes && !s1.bad.length && !s1.far.length, s1);
 
   // ---- S2 the doorstep --------------------------------------------------------------------------------------------------
   const s2 = await ev(async () => {

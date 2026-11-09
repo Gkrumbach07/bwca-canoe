@@ -46,7 +46,7 @@ import { Fires } from './fire.js'; // trip core C
 import { Headlamp } from './headlamp.js'; // trip core C
 import { Profile } from './profile.js'; // hubs 1A
 import { storeLayout, onStore, storeLayouts, setStoreNotices, storeStats } from './props.js'; // hubs 2A
-import { outfitterProfile, boardLean } from './outfitters.js'; // hubs 2C
+import { outfitterProfile, boardLean, fromMovedStore } from './outfitters.js'; // hubs 2C (round 4: fromMovedStore)
 import { Rides } from './rides.js'; // hubs 2C
 import { Truck } from './truck.js'; // stream E3: the truck on the roads
 import { sheets, sheetAt } from './sheets.js'; // hubs 2D (tuning: sheetAt, Arvid's map)
@@ -187,7 +187,7 @@ async function main() {
   scene.add(water.group);
   const tiles = new TileManager(world, scene, { terrainMaterial: makeTerrainMaterial(), water, vegetation: makeVegetationKit(3), aquatic: makeAquaticKit(water, 9), seed: 3 });
   world.tiles = tiles;
-  const saved = TripSaver.read(); // the spot saved at the last stop: the title shows it, and Paddle in continues there
+  const saved0 = TripSaver.read(), saved = (saved0 && fromMovedStore(world, saved0)) || saved0; // the spot saved at the last stop: the title shows it, and Paddle in continues there (round 4: at a store that moved, the store where it stands now)
   const start = saved ? { x: saved.x, z: saved.z } : world.meta.start;
   // the real burns (burns.js): a tile shows the burns begun by the season's date, so the date is set before the first tile
   // is asked for: the saved trip's, else today's (a new season starts today, title.js); the frame keeps it to the clock.
@@ -1155,7 +1155,7 @@ async function main() {
     hints.due = (id, rec) => (glbDue.has(id) ? glbDue.get(id)() : dueB(id, rec));
     window.__game.outfitters = { OUTFITTER_EPS: OF.OUTFITTER_EPS, OUTFITTERS: OF.OUTFITTERS, isOutfitter: OF.isOutfitter, hostOf: (ep) => OF.hostOf(ep, world), reachOf: (ep) => OF.reachOf(ep, world),
       countryOf: (ep) => OF.countryOf(ep, world), roadKm: (a, b) => OF.roadKm(a, b, world), roadWay: (a, b) => OF.roadWay(a, b, world), premiumOf: OF.premiumOf, specialtyOf: OF.specialtyOf,
-      outfitterHomes: () => OF.outfitterHomes(world), placeOf: (ep) => OF.placeOf(ep, world), homeTurf: (ep) => OF.homeTurf(ep, world) };
+      outfitterHomes: () => OF.outfitterHomes(world), placeOf: (ep) => OF.placeOf(ep, world), homeTurf: (ep) => OF.homeTurf(ep, world), fromMovedStore: (t) => OF.fromMovedStore(world, t) };
     window.__game.trailhead = { trailheadLayout: TH.trailheadLayout, trailheadLayouts: TH.trailheadLayouts, trailheadAt: TH.trailheadAt, onTrailhead: TH.onTrailhead };
   }
   // gl-c: a new save and its first day (docs/build/game-loop-brief.md, stream C). The title's first step is a map of the
