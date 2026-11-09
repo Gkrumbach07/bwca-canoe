@@ -3,15 +3,17 @@
 //   0 the tables load: src/edge.bin (the zones and outlines), src/map-roads.bin; the campsites past the band marked
 //   1 the zones where they should be: Lake One and Basswood wild, the Moose Lake chain and Farm Lake a doorstep or wild,
 //     White Iron, Vermilion and Superior out (Burntside out or a doorstep: Crab Lake's way in crosses it), Kawnipi
-//     Quetico; every entry point's put-in, lot and store in
+//     (Quetico) out like any land past the band; every entry point's put-in, lot and store in
 //   2 out on White Iron (paddled there: nothing stops it): the notice up and it says "You have left the Boundary Waters",
 //     the first time with its second line; the map says it too
 //   3 it stays up: two minutes out, still up; walking on out, the canoe moves as freely as inside (no slow-down)
 //   4 back in on Lake One: the notice down
 //   5 settle: a step over the line and back within a second does not raise it; held out for 3 s it does (and the second
 //     time it is the title alone)
-//   6 Quetico (Kawnipi): its own notice; camping off a site allowed there; a night without a Quetico permit is one $50
-//     ticket (once a trip), on Ontario's notice in the book; no notice at all with a Quetico permit held
+//   6 Quetico (Kawnipi) is plain out of bounds (the owner's later call, "DLC for now"): the same "You have left the
+//     Boundary Waters" notice, no Quetico notice, permit, ticket or off-site camping; no campsite, party or board notice
+//     in it; its map washed like the rest past the edge (its dashed outline kept); the Canadian half of a border lake
+//     within the band (400 m) of the line a doorstep, as the band round the rest
 //   7 the campsites past the band: on no map, in no party's choices, no notice's site
 //   8 the map: the wash past the edge (lighter than inside, but only a little) and the roads round Ely, by the painters
 //     themselves on sheets of their own; the notice while out; a shot of the book's map on the Ely side
@@ -86,7 +88,7 @@ try {
   });
   const zo = z1.out;
   result('1 the zones: wild, doorstep, out and Quetico where they belong; every entry point in', zo.lakeOne === 1 && zo.basswood === 1 && [1, 2].includes(zo.mooseLake) && [1, 2].includes(zo.farmLake)
-    && zo.whiteIron === 0 && [0, 2].includes(zo.burntside) && zo.vermilion === 0 && zo.superior === 0 && zo.ely === 0 && zo.kawnipi === 3 && !z1.bad.length, z1);
+    && zo.whiteIron === 0 && [0, 2].includes(zo.burntside) && zo.vermilion === 0 && zo.superior === 0 && zo.ely === 0 && zo.kawnipi === 0 && !z1.bad.length, z1);
 
   // a new season at home
   await page.evaluate(() => window.__game.title.askNewSeason('adventure'));
@@ -142,33 +144,48 @@ try {
   });
   result('5 a blip over the line raises nothing; three seconds out does, the title alone the second time', !s5.none && s5.before === 'in' && s5.blip === 'in' && s5.back === 'in' && s5.held === 'out' && s5.text === 'You have left the Boundary Waters', s5);
 
-  // 6 Quetico
+  // 6 Quetico: plain out of bounds
   const s6 = await page.evaluate(async () => {
-    const H = window.__edge, g = window.__game, P = g.trip.permits;
+    const H = window.__edge, g = window.__game, P = g.trip.permits, m = window.__edgeMod, w = g.world;
     const ok = await H.go('kawnipi'); H.step(150);
-    const sign = H.sign();
-    const off = g.camp.offsiteOk(g.player.x, g.player.z), offUS = g.camp.offsiteOk(H.at.lakeOne.x, H.at.lakeOne.z);
-    // a night pitched there on an Adventure trip, without a Quetico permit: the trip's state as a push-off leaves it
-    const s = g.trip.state, keep = { active: s.active, mode: s.mode, finedQuetico: s.finedQuetico, fined: s.fined };
-    s.active = true; s.mode = 'adventure'; s.finedQuetico = false;
-    const n0 = P.fines.length, first = P.queticoNight(), again = P.queticoNight(), f = P.fines[P.fines.length - 1];
-    const fine = f ? { why: f.why, n: f.n, place: f.place } : null;
-    // with a Quetico permit held, no notice
-    const pk = s.permit; s.permit = { kind: 'quetico', id: 'Ptest' }; const e = g.edge;
-    for (let i = 0; i < 40; i++) e.update(0.1, g.player); const held = e.state;
-    s.permit = pk; for (let i = 0; i < 40; i++) e.update(0.1, g.player); const after = e.state;
-    // the ticket, written up: Ontario's notice
-    P.issue(); const tk = P.tickets().find((q) => q.why === 'quetico');
-    const m = await import([...performance.getEntriesByType('resource')].map((q) => q.name).find((n) => /\/src\/flyers\.js/.test(n)) || '/src/flyers.js');
-    const html = tk ? m.ticketHtml(tk, { date: 'July 10' }) : '';
-    // tidy: the test's fine out of the season
-    P.s.fines = P.s.fines.filter((q) => q !== f || !f || f.why !== 'quetico'); P.write && P.write();
-    Object.assign(s, keep);
-    return { ok, sign, off, offUS, first, again, added: P.fines.length - n0, fine, held, after, ontario: /Ontario Parks/.test(html) && /Quetico Provincial Park/.test(html) && /Camped in Quetico without a Quetico permit/.test(html) };
+    const sign = H.sign(), inQ = m.inQuetico(g.player.x, g.player.z);
+    const off = g.camp.offsiteOk(g.player.x, g.player.z);
+    const perm = await import([...performance.getEntriesByType('resource')].map((q) => q.name).find((n) => /\/src\/permits\.js/.test(n)) || '/src/permits.js');
+    const noQ = typeof P.queticoNight !== 'function' && typeof P.holdsQuetico !== 'function' && !('quetico' in perm.PRICES);
+    // no campsite, party camp or board notice in it
+    const qSites = w.campsites.filter((c) => m.inQuetico(c.x, c.z));
+    const openSites = qSites.filter((c) => !c.past && m.zoneAt(c.x, c.z) !== 2).length;
+    const pa = g.parties; let inParties = 0;
+    if (pa && pa.basinSites) for (const l of pa.basinSites.values()) for (const i of l) { const c = w.campsites[i]; if (c && m.inQuetico(c.x, c.z) && m.zoneAt(c.x, c.z) === 0) inParties++; }
+    // the table's own zone 3 is gone (each cell out, or a doorstep near the line); the Canadian side near the line a doorstep
+    const E = m.EDGE; let z3 = 0; for (let k = 0; k < E.zones.length; k += 7) if (E.zones[k] === 3) z3++;
+    // the board notices of the border outfitters: none sends you past the edge (each kind tried at each, every band)
+    const T = g.tasks, bad = [], made = { n: 0 };
+    for (const ep of [16, 12, 14, 4, 24, 25, 55, 66]) {
+      if (!T.landing(ep)) continue;
+      for (const kind of Object.keys(T.kinds)) for (const band of ['local', 'medium', 'far']) {
+        let t = null; try { t = await T.makeKind(kind, ep, band); } catch { t = null; }
+        if (!t) continue; made.n++;
+        // the exact places (a spot, a dam, a station, a tight ring) never past; an area (a lake's hint, a loose ring) never
+        // wholly past (its middle and eight points round it at 0.6 r: a lake the edge cuts is still a wilderness lake)
+        const exact = [T.spotOf(t), t.at, t.station, ...(t.dams || []), ...(t.pts || [])].filter((q) => q && Number.isFinite(q.x));
+        const rings = [t.hint && { ...t.hint, r: t.hint.r || 1200 }, ...(T.kinds[kind].targets ? T.kinds[kind].targets(T, { ...t, status: 'open' }) || [] : []), T.ringOf({ ...t, status: 'open' })].filter((q) => q && Number.isFinite(q.x));
+        for (const q of rings) if (q.tight || !q.r) exact.push(q);
+        const wholly = (q) => m.isPast(q.x, q.z) && [...Array(8)].every((_, k) => m.isPast(q.x + Math.cos(k * Math.PI / 4) * q.r * 0.6, q.z + Math.sin(k * Math.PI / 4) * q.r * 0.6));
+        const hit = exact.find((q) => m.isPast(q.x, q.z)) || rings.find((q) => q.r && !q.tight && wholly(q));
+        if (hit) bad.push({ ep, kind, x: hit.x | 0, z: hit.z | 0 });
+        T.ads.delete(t.id);
+      }
+    }
+    // the map: Kawnipi washed as White Iron is, the wilderness not
+    const W = 600, cv = document.createElement('canvas'); cv.width = W; cv.height = W; const ctx = cv.getContext('2d');
+    const lumAt = (c) => { const v = { x0: c.x - 4800, z0: c.z - 4800, mPerPx: 16 }; ctx.fillStyle = '#c8bfa0'; ctx.fillRect(0, 0, W, W); m.paintEdge(ctx, v, 1, { line: false, quetico: false }); const d = ctx.getImageData(300, 300, 1, 1).data; return d[0] + d[1] + d[2]; };
+    const lumQ = lumAt(H.at.kawnipi), lumIn = lumAt(H.at.lakeOne), lumOut = lumAt(H.at.whiteIron);
+    return { ok, sign, inQ, off, noQ, qSites: qSites.length, openSites, inParties, z3, made: made.n, bad: bad.slice(0, 6), nBad: bad.length, lumQ, lumIn, lumOut, qOut: E.qOut, qDoor: E.qDoor };
   });
   await shot('6-quetico');
-  result('6 Quetico: its own notice; camping off a site allowed there (not in the US); one $50 ticket a trip on Ontario\'s notice; none with its permit', s6.ok && s6.sign.shown && /Quetico Provincial Park/.test(s6.sign.text) && s6.sign.state === 'quetico'
-    && s6.off && !s6.offUS && s6.first && !s6.again && s6.fine && s6.fine.why === 'quetico' && s6.fine.n === 50 && s6.held === 'in' && s6.after === 'quetico' && s6.ontario, s6);
+  result('6 Quetico plain out: the one notice, no Quetico permit/ticket/off-site camping; no campsite, party or board notice in it; washed like out', s6.ok && s6.inQ && s6.sign.shown && s6.sign.state === 'out' && s6.sign.text.startsWith('You have left the Boundary Waters')
+    && !s6.off && s6.noQ && s6.openSites === 0 && s6.inParties === 0 && s6.z3 === 0 && s6.made > 20 && s6.nBad === 0 && Math.abs(s6.lumQ - s6.lumOut) <= 3 && s6.lumQ > s6.lumIn + 15, s6);
 
   // 7 the campsites past the band
   const s7 = await page.evaluate(() => {

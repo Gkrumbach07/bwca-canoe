@@ -1897,7 +1897,7 @@ export class Hud {
       ctx.font = `600 ${24 * k}px ${PENCIL}`; ctx.fillStyle = 'rgba(74, 64, 54, 0.62)'; ctx.textAlign = 'center';
       ctx.fillText(none ? 'No sheets yet. The map tables at the outfitters sell them.' : 'None of your sheets covers this.', W / 2, H * 0.74);
     }
-    // the edge round: out of the Boundary Waters (or in Quetico without its permit), the map says so too, for as long
+    // the edge round: out of the Boundary Waters (Quetico included), the map says so too, for as long
     if (!this.table) { let st = null; try { st = typeof this.edgeState === 'function' ? this.edgeState() : null; } catch { st = null; } if (st && st !== 'in') paintMapNotice(ctx, W, H, k, st); }
     // a place found in the book's search (map-book.js): a ring that draws itself round it for a few seconds
     const f = this.focus;

@@ -8,6 +8,7 @@ import { itemDef } from './items.js';
 import { fmtIn, fmtInUp } from './units.js';
 import { flyerHtml, flyerStyle } from './flyers.js'; // the notices as the paper they are, on the cork and in the pile as in the journal
 import './flyers.css';
+import { isPast } from './edge.js'; // (r4 loopfix: no notice sends you past the edge of the Boundary Waters, Quetico included)
 
 // The board: notices pinned up at each outfitter, the tasks they set, and the money they pay.
 //
@@ -529,7 +530,8 @@ export class Tasks {
     if (!done.length) return null;
     const lines = done.map((t) => { const pay = this.pay(t, t.from); this.emit('paid', t); return { id: t.id, title: t.title || 'A notice', pay, from: t.from, kind: t.kind, npc: t.npc || null, npcName: t.npcName || null }; });
     const total = lines.reduce((a, l) => a + l.pay, 0);
-    const words = lines.length === 1 ? `$${total} for “${lines[0].title}”.` : `$${total} for ${word(lines.length)} notices.`;
+    const cut = done.some((t) => t.cut) ? ' No longer posted, paid all the same.' : ''; // (r4 loopfix: a cut kind's)
+    const words = (lines.length === 1 ? `$${total} for “${lines[0].title}”.` : `$${total} for ${word(lines.length)} notices.`) + cut;
     this.note(words);
     this.changed(); this.boardChanged();
     const out = { lines, missed: [], total, words, now: true };
@@ -546,9 +548,30 @@ export class Tasks {
     const f = await K.make(this, { ep, band, rng, landing, reach: this.reach(landing.lake), board, turf: this.turfOf(ep) });
     if (!f) return null;
     const t = { id: this.nextId++, kind, from: ep, fromName: landing.name, band, status: 'offered', posted: this.today(), ...f };
+    if (this.pastNotice(t, K)) return null;
     t.pay = K.pay(t); t.clue = t.text;
     this.ads.set(t.id, t);
     return t;
+  }
+  // r4 loopfix (the adversarial check: board notices sat past the edge at dams, views and portages): a notice any of whose
+  // places (its spot, its ring or rings, its area) is past the edge (edge.js isPast: out of the Boundary Waters, Quetico
+  // included) is never written. An exact place (a spot, a dam, a station, a tight ring) is past when it is; an area (a
+  // lake's hint, a loose ring) only when all of it is: a lake the edge cuts (Snowbank: its south shore private land) is
+  // still a lake in the wilderness. t: a notice (or the make's fields with its kind)
+  pastNotice(t, K = KINDS[t && t.kind]) {
+    if (!t) return false;
+    const pts = [];
+    const add = (q, area = false) => { if (q && Number.isFinite(q.x) && Number.isFinite(q.z)) pts.push({ x: q.x, z: q.z, r: area || (q.r > 0 && !q.tight) ? q.r || AREA[1] : 0 }); };
+    add(this.spotOf(t)); add(t.at); add(t.hint, true); add(t.station);
+    for (const d of t.dams || []) add({ x: d.x, z: d.z });
+    for (const q of t.pts || []) add({ x: q.x, z: q.z });
+    const tt = { status: 'open', ...t };
+    if (K) {
+      try { if (typeof K.targets === 'function') for (const r of K.targets(this, tt) || []) add(r); } catch { /* the kind's own */ }
+      try { if (typeof K.target === 'function') add(K.target(this, tt)); } catch { /* the kind's own */ }
+    }
+    const pastArea = (q) => { if (!isPast(q.x, q.z)) return false; if (!q.r) return true; for (let k = 0; k < 8; k++) { const a = (k * Math.PI) / 4; if (!isPast(q.x + Math.cos(a) * q.r * 0.6, q.z + Math.sin(a) * q.r * 0.6)) return false; } return true; };
+    return pts.some(pastArea);
   }
   // home turf (stream B's reach): the basins of the lakes of the entry points an outfitter serves, or null without it
   turfOf(ep) {
@@ -757,7 +780,7 @@ export class Tasks {
       const doy = this.doyNow();
       b.slots.forEach((id, i) => {
         const t = id != null ? this.ads.get(id) : null;
-        if (t && t.status === 'offered' && !kindInWindow(t.kind, doy, this, ep)) { this.ads.delete(t.id); b.slots[i] = null; if (!b.pending.includes(i)) b.pending.push(i); }
+        if (t && t.status === 'offered' && (!kindInWindow(t.kind, doy, this, ep) || this.pastNotice(t))) { /* (r4 loopfix: or one past the edge, written before it) */ this.ads.delete(t.id); b.slots[i] = null; if (!b.pending.includes(i)) b.pending.push(i); }
       });
       this.changed();
     }
@@ -822,6 +845,7 @@ export class Tasks {
       // to it; this catches the rest, a visitor's task written meanwhile among them)
       const sp = this.spotOf(f);
       if (sp && (this.spotTaken(sp.x, sp.z) || (sp.camp && this.partyHolds(sp.camp)))) continue;
+      if (this.pastNotice({ kind: kind.key, from: ep, band, ...f }, kind)) continue; // (r4 loopfix: none past the edge)
       const t = { id: this.nextId++, kind: kind.key, from: ep, fromName: landing.name, band, status: 'offered', posted: this.today(), ...f };
       t.pay = kind.pay(t); t.clue = t.text;
       this.ads.set(t.id, t);
@@ -1230,6 +1254,10 @@ export class Tasks {
     this.dueDay = null;
     if (d.v >= 3) {
       for (const t of d.ads || []) if (t && t.id != null && KINDS[t.kind]) this.ads.set(t.id, t);
+      // (r4 loopfix, the adversarial check: a notice of a cut kind you had already done, waiting to be handed in, kept
+      // its pay: it stays on the list as done, t.cut, and is paid as any done one is, when you come in; the journal says
+      // it is no longer posted but still paid)
+      for (const t of d.ads || []) if (t && t.id != null && !KINDS[t.kind] && t.status === 'done') { t.cut = true; this.ads.set(t.id, t); }
       // (loop-r4 join: a notice you had taken of a kind cut from the boards, the owner's table 2026-11-08, is not
       // dropped without a word: it goes to the missed list, no penalty, with a line saying it was sorted without you)
       for (const t of d.ads || []) {

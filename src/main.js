@@ -1080,12 +1080,13 @@ async function main() {
     trip.permits = permits;
     journal.permits = permits; // r2: the tickets on the Tasks page
     const permitDesk = new PermitDesk({ permits, outfitter, world, day, profile });
+    window.__game.permitDesk = permitDesk; // (the rigs: its note and its next-year view)
     // stream B's counter sections (the join: the claims-hook fallback dropped, B's addDesk is there)
     outfitter.addDesk('permits', { order: 10, html: (l) => permitDesk.section(l.ep), act: (a, id, ev) => permitDesk.act(a, id, ev) });
     { const tu = trip.update.bind(trip); trip.update = (dt) => { tu(dt); try { permits.update(dt); } catch (e) { if (!permits.warned) { permits.warned = true; console.warn('permits', e); } } }; }
     // the edge round (docs/build/edge-and-roads.md, the owner 2026-11-08): no wall and no turn-back; out of the Boundary
-    // Waters a notice stays up until you are back (edge.js), and the map says it too (hud.edgeState); in Quetico
-    // without its permit the same, in its own words. Per player: a co-op friend reads their own spot, no relay message.
+    // Waters a notice stays up until you are back (edge.js), and the map says it too (hud.edgeState); Quetico is
+    // out like the rest (the owner: "DLC for now"). Per player: a co-op friend reads their own spot, no relay message.
     {
       const edgeWatch = new EdgeWatch({ permits, trip, hud });
       window.__game.edge = edgeWatch;

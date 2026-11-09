@@ -10,7 +10,8 @@
 // the trip under way) the desk sells no overnight or PMA permit, money or not; day use stays free. A PMA permit allows camping off the designated sites in one primitive management area (pma.js).
 // Every permit is one flat price, every day of the year (the owner's call 2026-11-05): the busy months are dear only in
 // what is left, through the quotas and BOOK, never in dollars. The first permit is free (stream C's onboarding grants
-// it). Quetico per-night permits: not yet.
+// it). Quetico is out of bounds (the owner's later call, 2026-11-08: "Quetico is DLC for now"): no permit, ticket or
+// camping of its own there.
 //
 // What is left of a day: QUOTA[ep] (parties.js, recreation.gov's real daily quotas) less the parties booked in less the
 // permits you hold there that day. Booked: the share of the quota parties.js sends in that day before its render
@@ -41,8 +42,6 @@
 //   permits.pmas() · permits.pmaAt(x, z) · permits.allowsOffsite(x, z)
 //   permits.on('bought' | 'used' | 'lapsed' | 'fine' | 'ticket' | 'paid' | 'skip', fn) → off
 //   permits.update(dt) each frame (main.js gl-a): the lapses and the day-use fine
-//   permits.holdsQuetico() -> bool (a Quetico permit for the trip under way: none are sold yet, so false) ·
-//     permits.queticoNight() -> bool (a tent pitched in Quetico without one: a ranger's ticket, once a trip; camp.js)
 import { save } from './save.js';
 import { QUOTA, PARTIES, FILL, WEEKDAY } from './parties.js';
 import { seasonAt } from './season.js';
@@ -66,7 +65,6 @@ export const PRICES = {
   overnight: 6,
   pma: 6,
   fine: 20,                                  // still out after dark on a day-use trip
-  quetico: 50,                               // the edge round: a night camped in Quetico without a Quetico permit (owner's call to tune)
 };
 // How full a day is booked, from the share of the quota the parties' schedule sends in that day (count / PARTIES.start
 // / quota): [share, booked share] pieces between, flat past the ends. Under a quarter of the quota going in books no more
@@ -122,6 +120,8 @@ export class Permits {
     if (!Number.isFinite(this.s.nextId)) this.s.nextId = 1 + this.s.held.length + this.s.used.length;
     // r2 tickets: a save from before tickets kept a fine owed at a counter; an unpaid one is an open ticket now (it was
     // written when it was given), a paid one stays paid
+    // (Quetico made out of bounds: a Quetico ticket from a build that had them is torn up, unpaid ones only)
+    this.s.fines = this.s.fines.filter((f) => f.why !== 'quetico' || f.paid);
     for (const f of this.s.fines) {
       if (typeof f.issued !== 'boolean') f.issued = true;
       if (!f.id) f.id = `F${this.s.nextId++}`;
@@ -303,8 +303,14 @@ export class Permits {
     this.write();
     return p;
   }
-  // why a permit can't be sold, in a word (null: it can)
-  refusal({ ep, abs, kind = 'overnight', pma = null }) {
+  // where a later day's permit wakes you (the bunkhouse, or the winter's turn): the counter you are at, else the desk
+  // that sells it (at), else the permit's own landing
+  wakeAt(at = null, ep = null) {
+    const o = this.t.outfitter;
+    return (o && o.at) || (at != null ? this.entry(at) : null) || (ep != null ? this.entry(ep) : null) || null;
+  }
+  // why a permit can't be sold, in a word (null: it can). at: the desk selling it (a later day wakes you there)
+  refusal({ ep, abs, kind = 'overnight', pma = null, at = null }) {
     const tr = this.t.trip;
     if (this.owed() > 0 && !selfIssued(abs)) return 'ticket'; // (day use needs no permit, so it stays open: the way to earn the money; a self-issued one asks nobody)
     if (dateOfAbs(abs).year > dateOfAbs(this.today).year && this.visiting) return 'company'; // (next year's: not on a friend's trip)
@@ -317,6 +323,14 @@ export class Permits {
     const a = this.available(ep, abs);
     if (a.closed) return 'closed';
     if (a.left <= 0) return 'full';
+    // r4 loopfix (the adversarial check, D1: next year's EP 29 permit on 25 April, bought at Moose Lake, was charged and
+    // held while the turn refused, Moose Lake still frozen that day): a later day moves time and wakes you at this
+    // counter, so a day its own lake is still iced is no day to sell; and nothing is sold while time is already moving
+    if (abs > this.today) {
+      if (this.skipping || (this.turn && this.turn.turning)) return 'busy';
+      const L = this.wakeAt(at, ep);
+      if (L && L.ep !== ep && this.iced(L.ep, abs)) return 'wake';
+    }
     return null;
   }
   words(why, { price = 0 } = {}) {
@@ -333,13 +347,15 @@ export class Permits {
       money: `Not enough in hand: it's $${price}.`,
       ice: 'The lakes are freezing up by then.',
       company: 'Not on a friend’s trip.',
+      wake: 'The lake here is still iced in then: you would wake to the ice.',
+      busy: 'Not just now.',
     }[why] || 'Not today.';
   }
   get grouped() { const c = typeof window !== 'undefined' && window.__game ? window.__game.coopTrip : null; return !!(c && c.grouped); }
   buy({ ep, abs = this.today, kind = 'overnight', pma = null, at = null } = {}) {
     ep = Number(ep); abs = Math.round(abs);
     if (kind === 'pma' && !pma) { const n = this.pmasNear(at ?? ep, 1)[0]; pma = n ? n.id : null; }
-    const why = this.refusal({ ep, abs, kind, pma });
+    const why = this.refusal({ ep, abs, kind, pma, at });
     const price = this.sandbox ? 0 : this.price(kind, abs);
     if (why) return { ok: false, why, words: this.words(why, { price }) };
     const pr = this.t.profile, e = this.entry(ep);
@@ -348,10 +364,24 @@ export class Permits {
     if (this.t.trip && typeof this.t.trip.log === 'function') this.t.trip.log('permit', { id: permit.id, kind: permit.kind, ep, abs, price, bought: true });
     this.emit('bought', permit);
     const later = abs > this.today, turn = dateOfAbs(abs).year > dateOfAbs(this.today).year;
-    const at0 = at != null ? this.entry(at) : null, L = (this.t.outfitter && this.t.outfitter.at) || at0 || e;
+    const L = this.wakeAt(at, ep) || e;
     // next year's permit ends this open-water season: the winter, then that day (season-turn.js); else the bunkhouse
-    const skip = turn && this.turn ? this.turn.turnTo(abs, { landing: L, permit }) : later ? this.skipTo(abs, { landing: L }) : null;
+    let skip = turn && this.turn ? this.turn.turnTo(abs, { landing: L, permit }) : later ? this.skipTo(abs, { landing: L }) : null;
+    // (r4 loopfix, D1: should time not move after all, the sale is undone: the permit off the held list, the money back)
+    if (skip && typeof skip.then === 'function') skip = skip.then((moved) => { if (!moved) this.refund(permit, pr); return moved; });
     return { ok: true, permit, skip, turn, words: `${KINDS[permit.kind]} permit${permit.why === 'self' ? ' (self-issued)' : ''}, entry point ${ep} (${e ? e.place || e.name : ''}), ${dateWords(abs)}${turn ? `, ${dateOfAbs(abs).year}` : ''}.` };
+  }
+  // a sale undone (the skip or the turn it was bought for did not happen): off the held list, its price back
+  refund(permit, pr = this.t.profile) {
+    const i = this.s.held.findIndex((p) => p.id === (permit && permit.id));
+    if (i < 0) return false;
+    this.s.held.splice(i, 1);
+    if (permit.price && pr && typeof pr.earn === 'function') pr.earn(permit.price, `a permit refunded, entry point ${permit.ep}`);
+    this.write();
+    if (this.t.trip && typeof this.t.trip.log === 'function') this.t.trip.log('permit', { id: permit.id, refunded: true });
+    this.emit('refunded', permit);
+    if (this.t.outfitter && typeof this.t.outfitter.save === 'function') this.t.outfitter.save();
+    return true;
   }
   grant({ ep, abs = this.today, kind = 'overnight', pma = null, from = null, why = null } = {}) {
     // r2 tickets: a keeper's gift is not a sale, so it is not gated; the free first permit is, should a ticket somehow be
@@ -464,32 +494,18 @@ export class Permits {
     try { const id = p && w && typeof w.lakeIdAt === 'function' ? w.lakeIdAt(p.x, p.z) : 0; place = (id > 0 && typeof w.lakeName === 'function' && w.lakeName(id)) || ''; } catch { place = ''; }
     if (!place && s && s.from != null) { const e = this.entry(s.from); place = e ? e.place || e.name || '' : ''; }
     const f = { id: `F${this.s.nextId++}`, n, why, abs: this.today, ep: s && s.from != null ? s.from : null, place, issued: false, paid: false, trip: s ? s.id : null };
-    if (why === 'quetico') { f.qplace = place; f.place = place; } // (the edge round: the lake in Quetico it was on)
     this.s.fines.push(f); if (this.s.fines.length > KEEP_FINES) this.s.fines.splice(0, this.s.fines.length - KEEP_FINES);
-    if (s) { if (why === 'quetico') s.finedQuetico = true; else s.fined = true; } // (each rule once a trip)
+    if (s) s.fined = true; // (once a trip)
     this.write();
     if (tr && typeof tr.log === 'function') tr.log('fine', { n, why, id: f.id });
     const hud = this.t.hud;
-    const said = why === 'quetico' ? `An Ontario Parks ranger paddles over: no Quetico permit for a night here. A $${n} ticket, written when you come in.` : `A ranger's canoe pulls alongside: day use ends at dark. A $${n} ticket, written when you come in.`;
+    const said = `A ranger's canoe pulls alongside: day use ends at dark. A $${n} ticket, written when you come in.`;
     if (hud && typeof hud.note === 'function') hud.note(said, 8);
     this.emit('fine', f);
     if (this.t.outfitter && typeof this.t.outfitter.save === 'function') this.t.outfitter.save();
     return true;
   }
 
-  // --- Quetico (the edge round, the owner 2026-11-08: "Quetico open ... camping there without one is a ticket") ---------
-  // Quetico is open to paddle and to walk; it has no designated sites (you camp where you like, as its own rules say),
-  // and a night in it wants a Quetico permit. The desk sells none yet (campaigns.md: paid per night, the story's
-  // "The other side"); a held one (kind 'quetico', for the trip under way) is read here once it exists.
-  holdsQuetico() {
-    const tr = this.t.trip, s = tr && tr.state, p = s && s.permit;
-    return !!(tr && tr.active && p && p.kind === 'quetico');
-  }
-  queticoNight() {
-    const tr = this.t.trip, s = tr && tr.state;
-    if (!tr || !tr.active || !tr.adventure || !s || s.finedQuetico || this.visiting || this.holdsQuetico()) return false;
-    return this.fine('quetico', PRICES.quetico);
-  }
   // for the console and the tests
   stats() { return { held: this.s.held.length, used: this.s.used.length, owed: this.owed(), fines: this.s.fines.length, tickets: this.tickets().length, season: this.s.season }; }
 }

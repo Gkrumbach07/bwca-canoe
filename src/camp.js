@@ -1,6 +1,5 @@
 import { tentPose } from './props.js';
 import { save } from './save.js';
-import { zoneAt, ZONE } from './edge.js'; // the edge round: Quetico (no designated sites; a night there wants its permit)
 import { clock12, longDate, plural, fmtDays, compassLong, word } from './hud.js';
 import { daysInYear } from './astro.js';
 import { sheets } from './sheets.js'; // the dusk word names only a site on a sheet you own (fb2 D: owned, not carried)
@@ -591,9 +590,9 @@ export class Camp {
     for (const c of inv.campReach()) for (const e of c.grid) if (e.uid === uid && !e.box) { const d = itemDef(e.id); return d && d.slot === 'tent' ? { c, e, def: d } : null; }
     return null;
   }
-  // off the designated sites in Adventure: only inside the primitive area of the trip's PMA permit (permits.allowsOffsite),
-  // or in Quetico (the edge round: it has no designated sites; without a Quetico permit the night is a ticket, pitched)
-  offsiteOk(x, z) { const P = this.trip && this.trip.permits; return zoneAt(x, z) === ZONE.QUETICO || !!(P && typeof P.allowsOffsite === 'function' && P.allowsOffsite(x, z)); }
+  // off the designated sites in Adventure: only inside the primitive area of the trip's PMA permit (permits.allowsOffsite).
+  // (Quetico is out of bounds, the owner's later call: no camping of its own there)
+  offsiteOk(x, z) { const P = this.trip && this.trip.permits; return !!(P && typeof P.allowsOffsite === 'function' && P.allowsOffsite(x, z)); }
   // why that tent can't be pitched from here now, or null; site: the one you stand at (or null off one)
   pitchRefused(tent) {
     const p = this.player;
@@ -795,8 +794,6 @@ export class Camp {
     this.poseTent(c);
     this.setStage(c, 1);
     this.log('camp', { key, x: Math.round(c.x), z: Math.round(c.z), offsite: !key, item: c.item });
-    // the edge round: a tent up in Quetico without a Quetico permit is a ranger's ticket (permits.queticoNight, once a trip)
-    if (this.adventure && zoneAt(c.x, c.z) === ZONE.QUETICO) { const P = this.trip && this.trip.permits; try { if (P && typeof P.queticoNight === 'function') P.queticoNight(); } catch (e) { console.warn('camp: quetico', e); } }
     return true;
   }
   pitched() {

@@ -625,7 +625,7 @@ export class Player {
     else if (ok(this.x, nz, this.heading)) { this.z = nz; this.speed *= 0.7; }
     else {
       this.speed *= -0.15;
-      if (!w.inBounds(nx, nz, 40)) this.prompt = { text: 'Edge of the map — turn back', key: null };
+      if (!w.inBounds(nx, nz, 40)) this.prompt = { text: 'Past here is off your maps', key: null };
       else if (!w.isReady(nx, nz)) this.prompt = { text: 'Loading the lake ahead…', key: null };
     }
     this.damHold(); // a beaver dam across the creek holds the hull off (creeks.js)
@@ -1533,7 +1533,7 @@ export class Player {
         this.lapsing = boostWant > 1 && (onTrail || (!campArea && !yard)); // (travelling: a trail or open land, as before; a camp's and a store's walk is not)
         this.easeBoost(boostWant, dt);
         nx = this.x + mx * this.speed * this.boost * dt; nz = this.z + mz * this.speed * this.boost * dt;
-        if (!w.inBounds(nx, nz, 40)) { nx = this.x; nz = this.z; this.speed = 0; note = 'Edge of the map — turn back'; }
+        if (!w.inBounds(nx, nz, 40)) { nx = this.x; nz = this.z; this.speed = 0; note = 'Past here is off your maps'; }
         else if (!w.isReady(nx, nz)) { nx = this.x; nz = this.z; this.speed = 0; note = 'Loading the land ahead…'; }
         const near = w.tiles ? w.tiles.treesNear(nx, nz, 4.5) : [];
         ft.near = near;

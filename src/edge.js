@@ -1,23 +1,29 @@
 // The edge of the Boundary Waters (the edge round, streams E1 + E2: docs/build/edge-and-roads.md and its "Owner
 // decisions (2026-11-08)"). Nothing stops you anywhere: the world is as open as it was. What changes is that you are
 // told, plainly and for as long as it is true, when you are out of the wilderness: "You have left the Boundary Waters"
-// stays up (on screen and on the map) from the moment you pass the band round it until you are back. Quetico is open
-// too, with its own notice while you hold no Quetico permit (a night camped there without one is a ranger's ticket:
-// camp.js, permits.js). The store yards, the lots, their roads and the ways in by water are the doorstep: no notice.
+// stays up (on screen and on the map) from the moment you pass the band round it until you are back. The store yards,
+// the lots, their roads and the ways in by water are the doorstep: no notice. Quetico is out of bounds like any other
+// land past the band (the owner, later call 2026-11-08: "Quetico is DLC for now - keep it as unplayable like we do with
+// the other out of bounds areas"): the same notice, no Quetico permit, ticket or camping of its own; its outline stays
+// on the map as geography (a dashed line and the park washed like the rest past the edge).
 //
 // The table is src/edge.bin (scripts/edge.mjs): a 50 m grid of zones over the baked box and the outlines the map draws.
 //   loadEdge() → Promise<EDGE>          once (world.js load awaits it, so the campsites can be marked)
-//   zoneAt(x, z) → 0 out · 1 wild · 2 doorstep · 3 Quetico (past the box: 0; before the table is in: 1)
+//   zoneAt(x, z) → 0 out · 1 wild · 2 doorstep (past the box: 0; before the table is in: 1). The table's own zone 3
+//                                       (Quetico) is read as any other land past the edge: within the band (400 m) of
+//                                       the wilderness a doorstep, else out (decodeEdge, remapQuetico)
 //   isPast(x, z)                        zone 0: off the maps' campsites and the parties' nights (world.js marks c.past)
 //   paintEdge(ctx, v, k)                the map: the paper past the edge washed a little, the edge a fine pencil line,
-//                                       Quetico's own line; v { x0, z0, mPerPx }
+//                                       Quetico washed as out with its dashed outline; v { x0, z0, mPerPx }
 //   loadMapRoads() · paintRoads(ctx, v, W, H, { k, lettered, inView })   the roads and the towns on the map
 //   new EdgeWatch({ hud, permits, coop }) · watch.update(dt, player)     the notice (main.js, each frame)
-//   watch.state → 'in' | 'out' | 'quetico' (what the notice says now) · watch.raw (the zone under you this frame)
+//   watch.state → 'in' | 'out' (what the notice says now) · watch.raw (the zone under you this frame)
 import './edge.css';
 
-export const ZONE = { OUT: 0, WILD: 1, DOOR: 2, QUETICO: 3 };
-export const EDGE = { ready: false, cell: 50, x0: 0, z0: 0, W: 0, H: 0, zones: null, rings: [], inPath: null, qPath: null };
+export const ZONE = { OUT: 0, WILD: 1, DOOR: 2, QUETICO: 3 }; // (QUETICO: the table's own code only; zoneAt never returns it)
+export const EDGE = { ready: false, cell: 50, x0: 0, z0: 0, W: 0, H: 0, zones: null, rings: [], inPath: null, qPath: null, qWash: null, qOut: 0, qDoor: 0 };
+// the band round the wilderness (scripts/edge.mjs BAND): a Quetico cell this near a wild one is a doorstep, as any land
+export const BAND = 400;
 let eLoading = null;
 
 const gunzip = async (gz) => new Response(new Blob([gz]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
@@ -53,8 +59,49 @@ export function decodeEdge(buf) {
     if (path) path.closePath();
     EDGE.rings.push({ kind, pts });
   }
-  EDGE.inPath = inPath; EDGE.qPath = qPath; EDGE.ready = true;
+  EDGE.inPath = inPath; EDGE.qPath = qPath;
+  remapQuetico();
+  EDGE.ready = true;
   return EDGE;
+}
+// Quetico as plain out of bounds (the owner's later call): each zone-3 cell of the table becomes what any land past the
+// wilderness is: a doorstep within BAND of a wild cell (the border lakes' Canadian half near the line, as the band round
+// the rest), else out. The wash for the cells that turn out (the map's "slightly faded", which the table's outline
+// leaves round Quetico) is a path of row runs, EDGE.qWash. A table with no zone 3 is left as it is.
+export function remapQuetico() {
+  const { W, H } = EDGE, Z = EDGE.zones, N = W * H;
+  EDGE.qWash = null; EDGE.qOut = 0; EDGE.qDoor = 0;
+  let any = false;
+  for (let k = 0; k < N; k++) if (Z[k] === 3) { any = true; break; }
+  if (!any) return;
+  // the distance in cells to the nearest wild cell, over the Quetico cells only (a chamfer pass each way, 1 / √2)
+  const R = BAND / EDGE.cell, INF = 1e9, d = new Float32Array(N).fill(INF);
+  for (let k = 0; k < N; k++) if (Z[k] === 1) d[k] = 0;
+  const D2 = Math.SQRT2;
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const k = j * W + i; if (Z[k] !== 3) continue;
+    let v = d[k];
+    if (i > 0) v = Math.min(v, d[k - 1] + 1);
+    if (j > 0) { v = Math.min(v, d[k - W] + 1); if (i > 0) v = Math.min(v, d[k - W - 1] + D2); if (i < W - 1) v = Math.min(v, d[k - W + 1] + D2); }
+    d[k] = v;
+  }
+  for (let j = H - 1; j >= 0; j--) for (let i = W - 1; i >= 0; i--) {
+    const k = j * W + i; if (Z[k] !== 3) continue;
+    let v = d[k];
+    if (i < W - 1) v = Math.min(v, d[k + 1] + 1);
+    if (j < H - 1) { v = Math.min(v, d[k + W] + 1); if (i < W - 1) v = Math.min(v, d[k + W + 1] + D2); if (i > 0) v = Math.min(v, d[k + W - 1] + D2); }
+    d[k] = v;
+  }
+  const wash = typeof Path2D !== 'undefined' ? new Path2D() : null, c = EDGE.cell;
+  for (let j = 0; j < H; j++) {
+    let run = -1;
+    for (let i = 0; i <= W; i++) {
+      const k = j * W + i, q = i < W && Z[k] === 3;
+      if (q) { if (d[k] <= R) { Z[k] = ZONE.DOOR; EDGE.qDoor++; } else { Z[k] = ZONE.OUT; EDGE.qOut++; if (run < 0) run = i; continue; } }
+      if (run >= 0) { if (wash) wash.rect(EDGE.x0 + run * c, EDGE.z0 + j * c, (i - run) * c, c); run = -1; }
+    }
+  }
+  EDGE.qWash = wash;
 }
 export function zoneAt(x, z) {
   if (!EDGE.ready) return ZONE.WILD;
@@ -63,30 +110,32 @@ export function zoneAt(x, z) {
   return EDGE.zones[j * EDGE.W + i];
 }
 export const isPast = (x, z) => EDGE.ready && zoneAt(x, z) === ZONE.OUT;
+// inside Quetico's own outline (geography only: the rigs, a keeper's word), by the drawn path
+let qCtx = null;
+export function inQuetico(x, z) {
+  if (!EDGE.ready || !EDGE.qPath || typeof document === 'undefined') return false;
+  if (!qCtx) qCtx = document.createElement('canvas').getContext('2d');
+  return qCtx.isPointInPath(EDGE.qPath, x, z);
+}
 
 // --- the notice --------------------------------------------------------------------------------------------------------
 // It goes up after a couple of seconds out (a paddle along the line does not flicker it) and comes down after a couple
 // back in; a jump (a ride, a season's start) is taken at once. The second line the first time only (teach once); the
-// first line is the notice, there as long as you are out.
+// first line is the notice, there as long as you are out. Quetico says the same (it is out of bounds like the rest).
 const SETTLE = 2.2; // seconds
 const TOLD_KEY = 'bwca-canoe:edge-told';
 export const WORDS = {
   out: { title: 'You have left the Boundary Waters', first: 'Private land, cabins and the roads to town from here on. Go where you like; the wilderness is behind you.' },
-  quetico: { title: 'Quetico Provincial Park', first: 'Ontario. Without a Quetico permit, a night camped here is a ranger’s ticket.' },
 };
-export const MAP_WORDS = { out: 'You are outside the Boundary Waters', quetico: 'You are in Quetico, without its permit' };
+export const MAP_WORDS = { out: 'You are outside the Boundary Waters' };
 
 export class EdgeWatch {
   constructor(t = {}) {
     this.t = t; this.state = 'in'; this.raw = ZONE.WILD; this.want = 'in'; this.held = 0; this.el = null; this.shown = '';
     try { this.told = JSON.parse(localStorage.getItem(TOLD_KEY) || '{}') || {}; } catch { this.told = {}; }
   }
-  // what the zone under you says, given the permits you hold
-  stateOf(z) {
-    if (z === ZONE.OUT) return 'out';
-    if (z === ZONE.QUETICO) { const P = this.t.permits; return P && typeof P.holdsQuetico === 'function' && P.holdsQuetico() ? 'in' : 'quetico'; }
-    return 'in';
-  }
+  // what the zone under you says (Quetico's cells are read as out already: remapQuetico)
+  stateOf(z) { return z === ZONE.OUT || z === ZONE.QUETICO ? 'out' : 'in'; }
   update(dt, player) {
     if (!player || !EDGE.ready) return this.state;
     const z = zoneAt(player.x, player.z); this.raw = z;
@@ -127,7 +176,8 @@ export class EdgeWatch {
 
 // --- the map -------------------------------------------------------------------------------------------------------------
 // The paper past the edge a little washed toward the paper colour (the owner: "slightly faded", never so you can't read
-// it), the edge a fine pencil line; Quetico's own outline in a fine dashed green, as the agencies' maps draw a park.
+// it), the edge a fine pencil line; Quetico washed the same (out of bounds), its own outline in a fine dashed green as
+// geography, as the agencies' maps draw a park.
 const WASH = 'rgba(236, 228, 207, 0.34)', EDGE_PENCIL = 'rgba(70, 60, 50, 0.55)', QUETICO_LINE = 'rgba(46, 104, 60, 0.75)';
 export function paintEdge(ctx, v, k = 1, { wash = true, line = true, quetico = true, box = null } = {}) {
   if (!EDGE.ready || !EDGE.inPath) return;
@@ -138,6 +188,7 @@ export function paintEdge(ctx, v, k = 1, { wash = true, line = true, quetico = t
     const b = box || [EDGE.x0, EDGE.z0, EDGE.x0 + EDGE.W * EDGE.cell, EDGE.z0 + EDGE.H * EDGE.cell];
     const p = new Path2D(); p.rect(b[0], b[1], b[2] - b[0], b[3] - b[1]); p.addPath(EDGE.inPath);
     ctx.fillStyle = WASH; ctx.fill(p, 'evenodd');
+    if (EDGE.qWash) ctx.fill(EDGE.qWash); // (Quetico past the band: inside the table's outline, out all the same)
   }
   if (quetico && EDGE.qPath) { ctx.setLineDash([6 * k * px, 4 * k * px]); ctx.strokeStyle = QUETICO_LINE; ctx.lineWidth = 1.3 * k * px; ctx.lineJoin = 'round'; ctx.stroke(EDGE.qPath); ctx.setLineDash([]); }
   if (line) { ctx.strokeStyle = EDGE_PENCIL; ctx.lineWidth = 1.1 * k * px; ctx.lineJoin = 'round'; ctx.stroke(EDGE.inPath); }
@@ -234,10 +285,10 @@ export function paintMapNotice(ctx, W, H, k, state) {
   ctx.save();
   ctx.font = `700 ${14 * k}px ${SERIF}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   const w = ctx.measureText(txt).width + 26 * k, h = 26 * k, a = W / 2, b = 54 * k;
-  ctx.fillStyle = state === 'quetico' ? 'rgba(232, 240, 226, 0.94)' : 'rgba(246, 232, 214, 0.94)';
-  ctx.strokeStyle = state === 'quetico' ? 'rgba(46, 104, 60, 0.95)' : 'rgba(176, 52, 36, 0.95)'; ctx.lineWidth = 2 * k;
+  ctx.fillStyle = 'rgba(246, 232, 214, 0.94)';
+  ctx.strokeStyle = 'rgba(176, 52, 36, 0.95)'; ctx.lineWidth = 2 * k;
   ctx.beginPath(); ctx.rect(a - w / 2, b - h / 2, w, h); ctx.fill(); ctx.stroke();
-  ctx.fillStyle = state === 'quetico' ? 'rgba(30, 80, 44, 1)' : 'rgba(150, 40, 28, 1)';
+  ctx.fillStyle = 'rgba(150, 40, 28, 1)';
   ctx.fillText(txt, a, b + 1 * k);
   ctx.restore();
 }
