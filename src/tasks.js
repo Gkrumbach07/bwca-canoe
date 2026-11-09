@@ -1230,6 +1230,13 @@ export class Tasks {
     this.dueDay = null;
     if (d.v >= 3) {
       for (const t of d.ads || []) if (t && t.id != null && KINDS[t.kind]) this.ads.set(t.id, t);
+      // (loop-r4 join: a notice you had taken of a kind cut from the boards, the owner's table 2026-11-08, is not
+      // dropped without a word: it goes to the missed list, no penalty, with a line saying it was sorted without you)
+      for (const t of d.ads || []) {
+        if (!t || t.id == null || KINDS[t.kind] || t.status !== 'open' || this.missed.some((m) => m.id === t.id)) continue;
+        this.missed.push({ id: t.id, kind: t.kind, title: t.title || 'A notice', from: t.from, npc: t.npc || null, line: 'Taken off the board: it got sorted without you. No harm done.', abs: this.today(), told: false, cut: true });
+      }
+      if (this.missed.length > MISSED_KEEP) this.missed.splice(0, this.missed.length - MISSED_KEEP);
       if (!(d.v >= 4)) { const today = this.today(); for (const t of this.ads.values()) if ((t.status === 'open' || t.status === 'done') && !Number.isFinite(t.due)) t.due = today + this.daysFor(t); }
       for (const [ep, b] of Object.entries(d.boards || {})) {
         if (!b || !Array.isArray(b.slots)) continue;

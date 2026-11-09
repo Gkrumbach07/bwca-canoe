@@ -19,7 +19,7 @@ import { isOutfitter, OUTFITTER_EPS } from './outfitters.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const C = (hex) => new THREE.Color(hex);
-export const TRUCK = { speed: 9, accel: 1.6, wheelbase: 3.35, track: 1.7, wait: 2.5, come: 80, see: 260, parkNear: 320, comeMax: 12 };
+export const TRUCK = { speed: 9, accel: 1.6, wheelbase: 3.35, track: 1.7, wait: 2.5, come: 80, see: 260, parkNear: 320, comeMax: 12, maxSnap: 320 };
 
 // the pickup, in its own frame: +z forward, y up from the ground under its wheels
 function truckGeometry() {
@@ -101,9 +101,13 @@ export class Truck {
   }
   // where the truck stands at a start (an entry point, or 'h<ep>'): { x, z, heading, path (from there out the road) } or
   // null (no road)
-  spot(key) {
+  // (loop-r4 join: a start whose road is more than a two-track's reach off, EP 6 and 16's stores 421 and 686 m, EP 75
+  // and 84's lots 614 and 850 m, has no way to drive: the truck would cross the woods to it. It can stand there (park),
+  // never drive in or out: drive = true)
+  spot(key, drive = false) {
     const R = routeOf(this.world, key);
     if (!R || R.pts.length < 2) return null;
+    if (drive && R.snap > TRUCK.maxSnap) return null;
     const ep = Number(String(key).replace(/^h/, ''));
     let P = null;
     if (isOutfitter(ep) && !String(key).startsWith('h')) {
@@ -152,7 +156,7 @@ export class Truck {
     return true;
   }
   leave(key) {
-    const S = this.spot(key);
+    const S = this.spot(key, true);
     if (!S) return false;
     this.job = { kind: 'leave', key: String(key), path: S.path, s: S.s0, v: 0, wait: TRUCK.wait };
     this.parkedAt = null; this.gone = String(key);
@@ -160,7 +164,7 @@ export class Truck {
     return true;
   }
   come(key) {
-    const S = this.spot(key), p = this.player;
+    const S = this.spot(key, true), p = this.player;
     if (!S || (p && Math.hypot(p.x - S.x, p.z - S.z) > TRUCK.see)) return Promise.resolve(false);
     return new Promise((done) => {
       const from = Math.min(S.path.len, S.s0 + TRUCK.come);
