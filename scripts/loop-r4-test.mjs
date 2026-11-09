@@ -100,6 +100,18 @@ const HELPERS = (SPOTS) => {
   };
   // W held (the key itself, sent by the driver) for n frames, the view kept on a bearing
   H.hold = (n, dir) => { const p = g.player, x0 = p.x, z0 = p.z; for (let k = 0; k < n; k++) { if (dir) H.look(Math.atan2(-dir.z, dir.x)); g.step(1 / 30, 1); } return Math.hypot(p.x - x0, p.z - z0); };
+  // W held toward a point, the way a player does it: straight at it, and when the walker is held up (a trunk, a rock)
+  // a turn of the view to one side for a second, then on at it again
+  H.walkTo = (q, n, stopIf = null) => {
+    const p = g.player, x0 = p.x, z0 = p.z; let lx = p.x, lz = p.z, det = 0, side = 1, k = 0, stuck = 0;
+    for (; k < n; k++) {
+      if (k % 30 === 0) { if (Math.hypot(p.x - lx, p.z - lz) < 0.8 && det <= 0) { det = 30; side = -side; stuck++; } lx = p.x; lz = p.z; }
+      const y = H.yawTo(q) + (det > 0 ? side * 1.1 : 0); det--;
+      H.look(y); g.step(1 / 30, 1);
+      if (Math.hypot(q.x - p.x, q.z - p.z) < 4 || (stopIf && stopIf())) break;
+    }
+    return { moved: Math.round(Math.hypot(p.x - x0, p.z - z0)), frames: k, stuck, left: Math.round(Math.hypot(q.x - p.x, q.z - p.z)) };
+  };
   const note = g.hud.note.bind(g.hud);
   g.hud.note = (t, ...a) => { H.notes.push(`${g.day.doy} ${g.day.hours.toFixed(2)} ${t}`); return note(t, ...a); };
 };
@@ -220,16 +232,16 @@ try {
   if (c2) {
     await ev(async (c) => { const H = window.__r4, g = window.__game; await H.tp(c.a.x, c.a.z); H.standAt(c.a.x, c.a.z, Math.atan2(-c.dir.z, c.dir.x)); H.step(60); void g; }, c2);
     const before = await ev(() => ({ ...window.__r4.sign(), mode: window.__game.player.mode }));
-    const walked = await holdW(Math.round((c2.reach + c2.past) / 2.2 * 30) + 90, c2.dir);
+    await page.keyboard.down('KeyW'); const walked = await ev((b) => window.__r4.walkTo(b, 30 * 240), c2.b); await page.keyboard.up('KeyW'); await ev(() => window.__r4.step(90));
     const out = await ev(() => { const H = window.__r4, g = window.__game; return { ...H.sign(), zone: H.zone(g.player.x, g.player.z), mode: g.player.mode }; });
     await shot('p2-foot-out', 2, 'On foot past the edge: the notice up');
     await ev(() => window.__r4.step(30 * 60));
     const stays = await ev(() => window.__r4.sign());
     const back = { x: -c2.dir.x, z: -c2.dir.z };
-    const walkedBack = await holdW(Math.round((c2.reach + c2.past + 20) / 2.2 * 30) + 120, back);
+    void back; await page.keyboard.down('KeyW'); const walkedBack = await ev((a) => window.__r4.walkTo(a, 30 * 240), c2.a); await page.keyboard.up('KeyW');
     await ev(() => window.__r4.step(120));
     const after = await ev(() => { const H = window.__r4, g = window.__game; return { ...H.sign(), zone: H.zone(g.player.x, g.player.z) }; });
-    p2 = { c: { reach: c2.reach, past: c2.past }, before, walked: Math.round(walked), out, stays: stays.shown, walkedBack: Math.round(walkedBack), after };
+    p2 = { c: { reach: c2.reach, past: c2.past }, before, walked, out, stays: stays.shown, walkedBack, after };
   }
   result('P2 on foot over the edge (W held): up, "You have left the Boundary Waters", still up a minute on; back in: down', !p2.none && !p2.before.shown && p2.out.shown && /left the Boundary Waters/.test(p2.out.text) && p2.stays && !p2.after.shown, p2);
 
@@ -387,7 +399,7 @@ try {
     return { first, l1 };
   }, june15);
   await ev(() => window.__r4.step(2));
-  await page.click('#outfitter .permitdesk [data-act="permit-nbuy"]', { timeout: 5000 }).catch(async (e) => { log('click', String(e).slice(0, 400)); clickFails++; await ev(() => window.__game.outfitter.act('permit-nbuy')); });
+  await page.click('#outfitter .permitdesk [data-act="permit-nbuy"]', { timeout: 5000 }).catch(async (e) => { log('click', String(e).replace(/\s+/g, ' ').slice(0, 900)); log('on top', await ev(() => { const b = document.querySelector('#outfitter .permitdesk [data-act="permit-nbuy"]'); if (!b) return 'no button'; const r = b.getBoundingClientRect(), t = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return JSON.stringify({ r: [r.x | 0, r.y | 0, r.width | 0, r.height | 0], top: t ? `${t.tagName}#${t.id}.${t.className}` : null, vh: innerHeight }); })); clickFails++; await ev(() => window.__game.outfitter.act('permit-nbuy')); });
   await ev(() => window.__r4.step(2));
   const l2 = await ev(() => document.querySelector('#outfitter .permitdesk [data-act="permit-nbuy"]')?.textContent || null);
   await page.click('#outfitter .permitdesk [data-act="permit-nbuy"]', { timeout: 5000 }).catch(async (e) => { log('click', String(e).slice(0, 400)); clickFails++; await ev(() => window.__game.outfitter.act('permit-nbuy')); });
@@ -397,7 +409,7 @@ try {
   await shot('p10-winter', 12, 'The turn: the winter card');
   await until(() => !window.__game.veil.active, null, 90000);
   await ev(() => window.__r4.step(10));
-  const p10 = await ev((june15) => { const g = window.__game, d = g.day; return { year: d.year, today: g.permits.today, hours: +d.hours.toFixed(2), ev: window.__ev.slice(), held: g.permits.held().some((p) => p.abs === june15) }; }, june15);
+  const p10 = await ev((june15) => { const g = window.__game, d = g.day, D = g.permitDesk; return { note: D && D.note, canTurn: g.seasonTurn.canTurn(), trip: g.trip.active, owed: g.permits.owed(), year: d.year, today: g.permits.today, hours: +d.hours.toFixed(2), ev: window.__ev.slice(), held: g.permits.held().some((p) => p.abs === june15) }; }, june15);
   result('P10 the turn from the desk: next year\'s June, two presses (clicked), the winter card, up at seven on 15 June 2027', /next year/i.test(t10.first || '') && /Choose/.test(t10.l1 || '') && /end this season/.test(l2 || '') && p10.year === 2027 && p10.today === june15 && Math.abs(p10.hours - 7) < 0.1 && p10.held && p10.ev.includes('season:close') && p10.ev.includes('year:open') && !clickFails, { t10, l2, clickFails, ...p10 });
 
   result('P11 no page errors', errors.length === 0, { errors: errors.slice(0, 6) });
