@@ -7,7 +7,7 @@
 //     (the detail) by more than its re-seating; the piers reach the ground
 //   4 no tree trunk inside a cabin or on its dock's line
 //   5 the walker is held off (walks into the front: stops outside the box), and the dock is stood on (a box with a top)
-//   6 the cost: no shader program and no mesh of its own (the same tile with ?cabins=off: the same props meshes)
+//   6 the cost: no shader program, and no mesh a cabin (the tile's one props mesh; ?cabins=off for the A/B)
 //   7 no page errors
 //
 //   APP=http://localhost:5521 node scripts/r4-cabins-test.mjs [--shots <dir>]
@@ -143,7 +143,7 @@ try {
       // the look: from the side in front, across the deck to the cabin
       H.closeAll();
       let from = null;
-      for (const [a, b] of [[c.w / 2 + 9, c.d / 2 + 7], [-c.w / 2 - 9, c.d / 2 + 7], [c.w / 2 + 12, 0], [-c.w / 2 - 12, 0], [0, c.d / 2 + 14]]) {
+      for (const [a, b] of [[c.w / 2 + 2, c.d / 2 + 6.5], [-c.w / 2 - 2, c.d / 2 + 6.5], [c.w / 2 + 6, c.d / 2 + 2], [-c.w / 2 - 6, c.d / 2 + 2], [c.w / 2 + 9, c.d / 2 + 7], [-c.w / 2 - 9, c.d / 2 + 7]]) { // (in the cabin's lawn first: no brush in the way)
         const [x, z] = W(a, b), lake = g.world.lakes[c.lake - 1];
         if (g.tiles.groundAt(x, z) > (lake ? lake.level : -1e9) + 0.3) { from = [x, z]; break; }
       }
@@ -192,7 +192,7 @@ try {
   const off = await open('?cabins=off');
   const offCost = await costOf(off);
   await off.context().close();
-  result('6 the cost: no mesh and no shader program of their own', on.meshes === offCost.meshes && on.programs <= offCost.programs, { on, off: offCost });
+  result('6 the cost: no shader program, no mesh a cabin (the tile\'s one props mesh: made by them only where the tile had none)', on.meshes <= Math.max(1, offCost.meshes) && on.programs <= offCost.programs, { on, off: offCost });
 
   result('7 no page errors', errors.length === 0, { errors: errors.slice(0, 5) });
 } catch (e) {
