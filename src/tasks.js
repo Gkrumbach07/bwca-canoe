@@ -555,20 +555,23 @@ export class Tasks {
   }
   // r4 loopfix (the adversarial check: board notices sat past the edge at dams, views and portages): a notice any of whose
   // places (its spot, its ring or rings, its area) is past the edge (edge.js isPast: out of the Boundary Waters, Quetico
-  // included) is never written. fields: a notice's (or the make's fields with its kind)
+  // included) is never written. An exact place (a spot, a dam, a station, a tight ring) is past when it is; an area (a
+  // lake's hint, a loose ring) only when all of it is: a lake the edge cuts (Snowbank: its south shore private land) is
+  // still a lake in the wilderness. t: a notice (or the make's fields with its kind)
   pastNotice(t, K = KINDS[t && t.kind]) {
     if (!t) return false;
     const pts = [];
-    const add = (q) => { if (q && Number.isFinite(q.x) && Number.isFinite(q.z)) pts.push(q); };
-    add(this.spotOf(t)); add(t.at); add(t.hint); add(t.station);
-    for (const d of t.dams || []) add(d);
-    for (const q of t.pts || []) add(q);
+    const add = (q, area = false) => { if (q && Number.isFinite(q.x) && Number.isFinite(q.z)) pts.push({ x: q.x, z: q.z, r: area || (q.r > 0 && !q.tight) ? q.r || AREA[1] : 0 }); };
+    add(this.spotOf(t)); add(t.at); add(t.hint, true); add(t.station);
+    for (const d of t.dams || []) add({ x: d.x, z: d.z });
+    for (const q of t.pts || []) add({ x: q.x, z: q.z });
     const tt = { status: 'open', ...t };
     if (K) {
       try { if (typeof K.targets === 'function') for (const r of K.targets(this, tt) || []) add(r); } catch { /* the kind's own */ }
       try { if (typeof K.target === 'function') add(K.target(this, tt)); } catch { /* the kind's own */ }
     }
-    return pts.some((q) => isPast(q.x, q.z));
+    const pastArea = (q) => { if (!isPast(q.x, q.z)) return false; if (!q.r) return true; for (let k = 0; k < 8; k++) { const a = (k * Math.PI) / 4; if (!isPast(q.x + Math.cos(a) * q.r * 0.6, q.z + Math.sin(a) * q.r * 0.6)) return false; } return true; };
+    return pts.some(pastArea);
   }
   // home turf (stream B's reach): the basins of the lakes of the entry points an outfitter serves, or null without it
   turfOf(ep) {

@@ -166,9 +166,14 @@ try {
       for (const kind of Object.keys(T.kinds)) for (const band of ['local', 'medium', 'far']) {
         let t = null; try { t = await T.makeKind(kind, ep, band); } catch { t = null; }
         if (!t) continue; made.n++;
-        const pts = [T.spotOf(t), t.hint, t.at, ...(T.kinds[kind].targets ? T.kinds[kind].targets(T, { ...t, status: 'open' }) || [] : [])].filter((q) => q && Number.isFinite(q.x));
-        const r = T.ringOf({ ...t, status: 'open' }); if (r) pts.push(r);
-        for (const q of pts) if (m.isPast(q.x, q.z)) { bad.push({ ep, kind, x: q.x | 0, z: q.z | 0 }); break; }
+        // the exact places (a spot, a dam, a station, a tight ring) never past; an area (a lake's hint, a loose ring) never
+        // wholly past (its middle and eight points round it at 0.6 r: a lake the edge cuts is still a wilderness lake)
+        const exact = [T.spotOf(t), t.at, t.station, ...(t.dams || []), ...(t.pts || [])].filter((q) => q && Number.isFinite(q.x));
+        const rings = [t.hint && { ...t.hint, r: t.hint.r || 1200 }, ...(T.kinds[kind].targets ? T.kinds[kind].targets(T, { ...t, status: 'open' }) || [] : []), T.ringOf({ ...t, status: 'open' })].filter((q) => q && Number.isFinite(q.x));
+        for (const q of rings) if (q.tight || !q.r) exact.push(q);
+        const wholly = (q) => m.isPast(q.x, q.z) && [...Array(8)].every((_, k) => m.isPast(q.x + Math.cos(k * Math.PI / 4) * q.r * 0.6, q.z + Math.sin(k * Math.PI / 4) * q.r * 0.6));
+        const hit = exact.find((q) => m.isPast(q.x, q.z)) || rings.find((q) => q.r && !q.tight && wholly(q));
+        if (hit) bad.push({ ep, kind, x: hit.x | 0, z: hit.z | 0 });
         T.ads.delete(t.id);
       }
     }
