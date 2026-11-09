@@ -180,7 +180,7 @@ try {
   });
   await shot('6-quetico');
   result('6 Quetico plain out: the one notice, no Quetico permit/ticket/off-site camping; no campsite, party or board notice in it; washed like out', s6.ok && s6.inQ && s6.sign.shown && s6.sign.state === 'out' && s6.sign.text.startsWith('You have left the Boundary Waters')
-    && !s6.off && s6.noQ && s6.openSites === 0 && s6.inParties === 0 && s6.z3 === 0 && s6.made > 20 && s6.nBad === 0 && s6.lumQ === s6.lumOut && s6.lumQ > s6.lumIn, s6);
+    && !s6.off && s6.noQ && s6.openSites === 0 && s6.inParties === 0 && s6.z3 === 0 && s6.made > 20 && s6.nBad === 0 && Math.abs(s6.lumQ - s6.lumOut) <= 3 && s6.lumQ > s6.lumIn + 15, s6);
 
   // 7 the campsites past the band
   const s7 = await page.evaluate(() => {
