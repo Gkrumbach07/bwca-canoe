@@ -539,15 +539,25 @@ const JOIN_EASE = 24;
 if (ground) {
   const endKey = (p) => `${Math.round(p[0])},${Math.round(p[1])}`, at = new Map();
   for (const B of built) for (const e of [0, B.n - 1]) { const k = endKey(B.pts[e]); if (!at.has(k)) at.set(k, []); at.get(k).push({ B, e }); }
-  for (const list of at.values()) {
-    const target = list.length > 1 ? list.reduce((t, q) => t + q.B.h[q.e], 0) / list.length : list[0].B.raw[list[0].e];
-    for (const { B, e } of list) {
+  const tgt = new Map();
+  for (const [k, list] of at) {
+    const dry = list.filter((q) => !q.B.water[q.e]);
+    if (!dry.length) continue; // (an end in the water: the bridge's)
+    const target = list.length > 1 ? dry.reduce((t, q) => t + q.B.h[q.e], 0) / dry.length : dry[0].B.raw[dry[0].e];
+    tgt.set(k, target);
+    for (const { B, e } of dry) {
       const d0 = target - B.h[e];
       for (let q = 0; q < B.n; q++) {
         const i = e === 0 ? q : B.n - 1 - q, d = q * STEP; if (d > JOIN_EASE) break;
         const t = 1 - d / JOIN_EASE; B.h[i] += d0 * t * t * (3 - 2 * t);
       }
     }
+  }
+  // a road all over the water (a bridge's piece between two junctions): level from one end's height to the other's
+  for (const B of built) if (B.water.every((v) => v)) {
+    const a = tgt.get(endKey(B.pts[0])), b = tgt.get(endKey(B.pts[B.n - 1]));
+    if (a == null && b == null) continue;
+    for (let i = 0; i < B.n; i++) B.h[i] = B.raw[i] = a != null && b != null ? a + ((b - a) * i) / Math.max(1, B.n - 1) : (a ?? b);
   }
 }
 for (const { c, pts, n, h, w, water, raw } of built) {
