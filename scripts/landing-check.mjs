@@ -281,7 +281,10 @@ function outfitterChecks(B, ctx, F, P, S, ep, fails, notes) {
 }
 
 const rows = [];
-for (const mode of grounds) for (const ep of index.entryPoints) {
+// round 4: the entry points as the game has them (src/ep-fixes.json: a store moved to its road end is built from its row)
+const epFix = (() => { try { const f = JSON.parse(fs.readFileSync(path.join(root, 'src/ep-fixes.json'), 'utf8')); return f.for === (index.source && index.source.baked) ? f : null; } catch { return null; } })();
+const fixedEps = index.entryPoints.map((e) => { const r = epFix && epFix.entryPoints.find((q) => q.ep === e.ep); return r && Number.isFinite(r.x) && Number.isFinite(r.z) && index.lakes[r.lake - 1] ? { ...e, x: r.x, z: r.z, lake: r.lake } : e; });
+for (const mode of grounds) for (const ep of fixedEps) {
   if (only && !only.has(ep.ep)) continue;
   H = mode === '2' ? H2 : H10;
   const [tx, ty] = [Math.floor((ep.x - g.originX) / (g.tile * g.cell)), Math.floor((ep.z - g.originZ) / (g.tile * g.cell))];
