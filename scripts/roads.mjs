@@ -323,12 +323,12 @@ for (const S of starts) {
     // the water, nor one across it)
     const tx = sn.i >= 0 ? nodes[sn.i].x : S.x, tz = sn.i >= 0 ? nodes[sn.i].z : S.z;
     let b = null;
-    for (let r = 0; r <= 120 && !b; r += 2) for (let a = 0; a < 360; a += r ? Math.max(3, 360 / (r * 1.5)) : 360) {
+    for (let r = 0; r <= 250 && !b; r += 2) for (let a = 0; a < 360; a += r ? Math.max(3, 360 / (r * 1.5)) : 360) {
       const x = S.x + r * Math.cos((a * Math.PI) / 180), z = S.z + r * Math.sin((a * Math.PI) / 180);
       if (ground.coarse(x, z).sd <= 4) continue;
       // the straight way back to the landing crosses no other water
-      let ok = true; const L = Math.hypot(x - S.x, z - S.z);
-      for (let d = 2; d < L && ok; d += 2) { const q = ground.coarse(x + ((S.x - x) * d) / L, z + ((S.z - z) * d) / L).sd; if (q < 0 && d < L - 25) ok = false; }
+      let wetRun = false, ok = true; const L = Math.hypot(x - S.x, z - S.z);
+      for (let d = 2; d < L && ok; d += 2) { const q = ground.coarse(x + ((S.x - x) * d) / L, z + ((S.z - z) * d) / L).sd; if (q < 0) wetRun = true; else if (wetRun) ok = false; }
       if (!ok) continue;
       const sc = r + 0.15 * Math.hypot(tx - x, tz - z);
       if (!b || sc < b.sc) b = { x, z, sc };
