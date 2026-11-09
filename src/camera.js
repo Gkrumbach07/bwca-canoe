@@ -61,7 +61,7 @@ const SHOULDER = 0.75; // m: how far right of him the view moves looking all the
 // 70 degrees; dist: the chase's length (m, never longer than the wheel set it); side: m off his line; pitch: the tilt;
 // drop: m under her speaker point (a hand over the head) the look is at; rate:
 // the ease's rate (1/s: about a second each way)
-export const OTS = { near: 0.8, r: 4.5, cos: 0.34, dist: 3.4, side: 0.95, pitch: 0.16, drop: 0.45, rate: 2.2 };
+export const OTS = { near: 0.8, r: 4.5, cos: 0.34, dist: 3.4, side: 0.95, pitch: 0.16, drop: 0.45, rate: 2.2, swap: 0.6, swapRate: 1.6 };
 const CARRY_PITCH = 0.1; // rad: the chase's tilt on foot under the canoe (0.27 elsewhere; polish A)
 const seePars = /* glsl */ `
 uniform vec4 uSee;
@@ -587,7 +587,13 @@ export class ChaseCamera {
       if (d > OTS.near && d < OTS.r && (dx * fw.x + dz * fw.z) / d > OTS.cos) otsWant = 1;
       (this.otsAt || (this.otsAt = new THREE.Vector3())).set(S.x, S.y, S.z); // (kept: the ease back out after the step is gone)
     }
-    if (this.ots < 0.02 && otsWant) this.otsSide = otsLat < -0.25 ? -1 : 1; // (the side chosen as it starts, then kept)
+    if (this.ots < 0.02 && otsWant) this.otsSide = this.otsSideWant = otsLat < -0.25 ? -1 : 1; // (the side chosen as it starts)
+    // (round 4 fix: then kept until the person is well over to his other side (OTS.swap m across), where his head would
+    // stand between the camera and them: the camera then swings over to that shoulder, eased, never a cut)
+    else if (otsWant) {
+      if (otsLat < -OTS.swap) this.otsSideWant = -1; else if (otsLat > OTS.swap) this.otsSideWant = 1;
+      this.otsSide += ((this.otsSideWant ?? this.otsSide) - this.otsSide) * (1 - Math.exp(-dt * OTS.swapRate));
+    }
     this.ots = this.first ? otsWant : this.ots + (otsWant - this.ots) * (1 - Math.exp(-dt * OTS.rate));
     if (this.ots < 1e-3) this.ots = 0;
     const ots = smoothstep(0, 1, this.ots);
