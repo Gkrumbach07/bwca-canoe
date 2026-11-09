@@ -318,10 +318,23 @@ const avoidAll = OUTFITTERS.map((n) => placeOf(n)).filter(Boolean).flatMap((pl) 
 for (const S of starts) {
   const sn = nearest(S.x, S.z, SNAP_MAX, true) || { i: -1, d: Infinity };
   // a landing's or a dock's point lies at (or in) the water: the start is the first dry ground from it toward its road
-  if (ground && S.at === 'landing' && sn.i >= 0) {
-    const tx = nodes[sn.i].x, tz = nodes[sn.i].z, L = Math.hypot(tx - S.x, tz - S.z);
-    for (let d = 0; d < L; d += 2) { const x = S.x + ((tx - S.x) * d) / L, z = S.z + ((tz - S.z) * d) / L; if (ground.at(x, z).sd > 4) { S.x = x; S.z = z; break; } }
-    sn.d = Math.hypot(tx - S.x, tz - S.z);
+  if (ground && S.at === 'landing') {
+    // (round 4: the dry ground nearest the landing, 4 m up from the water, leaning toward its road: never a start out on
+    // the water, nor one across it)
+    const tx = sn.i >= 0 ? nodes[sn.i].x : S.x, tz = sn.i >= 0 ? nodes[sn.i].z : S.z;
+    let b = null;
+    for (let r = 0; r <= 120 && !b; r += 2) for (let a = 0; a < 360; a += r ? Math.max(3, 360 / (r * 1.5)) : 360) {
+      const x = S.x + r * Math.cos((a * Math.PI) / 180), z = S.z + r * Math.sin((a * Math.PI) / 180);
+      if (ground.coarse(x, z).sd <= 4) continue;
+      // the straight way back to the landing crosses no other water
+      let ok = true; const L = Math.hypot(x - S.x, z - S.z);
+      for (let d = 2; d < L && ok; d += 2) { const q = ground.coarse(x + ((S.x - x) * d) / L, z + ((S.z - z) * d) / L).sd; if (q < 0 && d < L - 25) ok = false; }
+      if (!ok) continue;
+      const sc = r + 0.15 * Math.hypot(tx - x, tz - z);
+      if (!b || sc < b.sc) b = { x, z, sc };
+    }
+    if (b) { S.x = b.x; S.z = b.z; }
+    if (sn.i >= 0) sn.d = Math.hypot(tx - S.x, tz - S.z);
   }
   // a start off its road (a store's stand, a lot back in the trees or by the map's edge, a landing below the road's end):
   // a made two-track to it over the ground
