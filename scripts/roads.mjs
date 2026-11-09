@@ -171,12 +171,25 @@ for (const file of ensureOsm()) {
   }
 }
 console.log(`roads: ${ways} ways, ${nodes.length} nodes, ${edges.length} edges, ${starts.length} starts`);
+// (round 4: a store standing on an OSM way, Thimbleberry's (6) on North Arm Road: the way's pieces through its footprint and
+// dock are let go, so no road runs through a store and the truck reaches it by its stand; the road ends at the yard)
+{
+  let cut = 0;
+  const shut = OUTFITTERS.map((n) => placeOf(n)).filter(Boolean).flatMap((pl) => [[pl.store[0], pl.store[1], 10], [pl.dockLand[0], pl.dockLand[1], 5]]);
+  const segD = (e, x, z) => { const a = nodes[e.a], b = nodes[e.b], ex = b.x - a.x, ez = b.z - a.z, L2 = ex * ex + ez * ez, t = L2 ? Math.max(0, Math.min(1, ((x - a.x) * ex + (z - a.z) * ez) / L2)) : 0; return Math.hypot(x - a.x - ex * t, z - a.z - ez * t); };
+  edges.forEach((e, id) => {
+    if (!shut.some(([x, z, r]) => Math.abs(nodes[e.a].x - x) < 60 && Math.abs(nodes[e.a].z - z) < 60 && segD(e, x, z) < r)) return;
+    for (const k of [e.a, e.b]) nodes[k].adj = nodes[k].adj.filter((q) => q !== id);
+    e.shut = true; cut++;
+  });
+  console.log(`roads: ${cut} pieces of way let go under the stores`);
+}
 
 function nearest(x, z, max, real = false) { // (real: the OSM's own nodes only, no made two-track's)
   let best = -1, bd = max;
   const r = Math.ceil(max / BIN), bx = Math.floor(x / BIN), bz = Math.floor(z / BIN);
   for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) {
-    for (const i of bins.get(`${bx + dx},${bz + dz}`) || []) { if (real && nodes[i].made) continue; const d = Math.hypot(nodes[i].x - x, nodes[i].z - z); if (d < bd) { bd = d; best = i; } }
+    for (const i of bins.get(`${bx + dx},${bz + dz}`) || []) { if (real && (nodes[i].made || !nodes[i].adj.length)) continue; const d = Math.hypot(nodes[i].x - x, nodes[i].z - z); if (d < bd) { bd = d; best = i; } }
   }
   return best < 0 ? null : { i: best, d: bd };
 }
@@ -216,7 +229,7 @@ function madeTrack(S, avoid) {
   const target = new Map(); // cell -> { i (node), extra }
   const rb = Math.ceil(R / BIN), bx0 = Math.floor(S.x / BIN), bz0 = Math.floor(S.z / BIN);
   for (let dz = -rb; dz <= rb; dz++) for (let dx = -rb; dx <= rb; dx++) for (const i of bins.get(`${bx0 + dx},${bz0 + dz}`) || []) {
-    const q = nodes[i]; if (q.made || q.rank > 7) continue;
+    const q = nodes[i]; if (q.made || q.rank > 7 || !q.adj.length) continue;
     const ci = Math.round((q.x - ox) / GRID), cj = Math.round((q.z - oz) / GRID);
     if (ci < 0 || cj < 0 || ci >= n || cj >= n || edgeDist(q.x, q.z) < EDGE_IN) continue;
     const extra = q.rank >= 7 ? 150 : q.rank >= 6 ? 40 : 0, k = cj * n + ci, t = target.get(k);

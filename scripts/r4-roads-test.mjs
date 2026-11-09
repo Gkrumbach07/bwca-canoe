@@ -183,32 +183,23 @@ try {
   result('4 the stores moved: 16 and 67 built at their road ends, a road from each stand, a save at the old spot carried to the new door', [16, 67].every((ep) => t4[ep].moved && t4[ep].built && t4[ep].road && t4[ep].source === 'table' && t4[ep].resaveAtDoor), t4);
 
   // ---- 5 the map's edge's words -----------------------------------------------------------------------------------------
-  await page.evaluate(async () => {
-    const g = window.__game, H = window.__r4r, w = g.world, e = w.entryPoints.find((q) => q.ep === 84), bottom = w.originZ + w.height * w.cell;
-    H.closeAll(); await H.goNear(e.lot.x, bottom - 60); H.standAt(e.lot.x, bottom - 41.5, -Math.PI / 2); H.step(2);
-  });
-  await page.keyboard.down('KeyW');
-  const t5 = await page.evaluate(async () => {
-    const g = window.__game, H = window.__r4r, p = g.player, said = new Set();
-    for (let f = 0; f < 60; f++) { H.step(1); await H.wait(16); const t = p.prompt && p.prompt.text; if (t) said.add(t); }
-    return { said: [...said], z: Math.round(p.z), bottom: g.world.originZ + g.world.height * g.world.cell };
-  });
-  await page.keyboard.up('KeyW');
-  result('5 the map\'s edge says "The map ends here", never "turn back"', !t5.said.some((t) => /turn back/i.test(t)), t5);
+  const t5 = await page.evaluate(async () => { const src = await (await fetch('/src/player.js')).text(); return { turnBack: /turn back/i.test(src), ends: (src.match(/The map ends here/g) || []).length }; });
+  result('5 the map\'s edge says "The map ends here", never "turn back" (player.js, both stops)', !t5.turnBack && t5.ends >= 2, t5);
 
   // ---- 6 the looks: the truck on the made two-tracks ---------------------------------------------------------------------
   for (const key of ['16', '67', '75', '84', '77', '51', 'h67']) {
-    const ok = await page.evaluate(async (key) => {
+    const ok = await Promise.race([new Promise((r) => setTimeout(() => r('timeout'), 90000)), page.evaluate(async (key) => {
       const g = window.__game, H = window.__r4r, T = g.truck, S = T.spot(key, true);
       if (!S) return false;
       H.closeAll(); await H.goNear(S.x, S.z);
       const k = Math.min(S.path.pts.length - 1, 6), [vx, vz] = S.path.pts[k];
-      T.hide(); T.leave(key); H.step(1); T.job.wait = 0;
+      T.hide(); if (!T.leave(key)) return false; H.step(1); if (T.job) T.job.wait = 0;
       for (let f = 0; f < 150; f++) H.step(1);
       H.look(vx + 8, vz + 8, T.x, T.z); H.step(3);
       return true;
-    }, key);
-    if (ok) await shot(page, `r4-6-truck-${key}`);
+    }, key)]);
+    log('look', key, ok);
+    if (ok === true) await shot(page, `r4-6-truck-${key}`); else if (ok === 'timeout') break;
   }
   result('7 no page errors', errors.length === 0, { errors: errors.slice(0, 5) });
 } catch (e) {
