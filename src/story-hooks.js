@@ -19,7 +19,6 @@
 // read, flag), saved under `bwca-canoe:story2`. With the flag off this file is exactly what it was.
 import { save } from './save.js';
 import { STORY_ON } from './story-flag.js';
-import { StoryV2 } from './story.js';
 
 const NS = 'story';
 export const blankStory = (season = null) => ({ v: 1, season, notebook: { found: false, abs: null, key: null, lake: null }, read: [], flags: {} });
@@ -94,5 +93,8 @@ export class Story {
   }
 }
 
+// (the R0 join: story.js and its rules are imported only under the flag, so with it off not one v2 module is fetched or
+// evaluated; the build keeps them as a chunk never loaded. es2022 target: top-level await is fine)
+const StoryV2 = STORY_ON ? (await import('./story.js')).StoryV2 : null;
 export const story = STORY_ON ? new StoryV2({ io: save }) : new Story();
 export { STORY_ON };
