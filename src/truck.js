@@ -101,16 +101,17 @@ export class Truck {
   }
   // where the truck stands at a start (an entry point, or 'h<ep>'): { x, z, heading, path (from there out the road) } or
   // null (no road)
-  // (loop-r4 join: a start whose road is more than a two-track's reach off, EP 6 and 16's stores 421 and 686 m, EP 75
-  // and 84's lots 614 and 850 m, has no way to drive: the truck would cross the woods to it. It can stand there (park),
-  // never drive in or out: drive = true)
+  // (round 4: every start's road is drawn to it, a made two-track over dry ground where it is off its road, so the truck
+  // drives to them all; a route the table marks drive 0 is park only. A store's route begins at the truck's stand behind
+  // it: stand)
   spot(key, drive = false) {
     const R = routeOf(this.world, key);
     if (!R || R.pts.length < 2) return null;
-    if (drive && R.snap > TRUCK.maxSnap) return null;
+    if (drive && (R.drive === false || (R.drive == null && R.snap > TRUCK.maxSnap))) return null;
     const ep = Number(String(key).replace(/^h/, ''));
     let P = null;
-    if (isOutfitter(ep) && !String(key).startsWith('h')) {
+    if (R.stand) P = R.pts[0];
+    else if (isOutfitter(ep) && !String(key).startsWith('h')) {
       const Y = yardOf(ep);
       if (Y) { const back = Math.min(...Y.rects.map((r) => r[2])) - 4.5; P = [Y.x + Y.bx * back, Y.z + Y.bz * back]; }
     } else {
