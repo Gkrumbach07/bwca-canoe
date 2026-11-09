@@ -54,8 +54,10 @@ const KNOWN_REACH = 30;             // metres from a landing that make its outfi
 export const absDay = (year, doy) => Math.round(Date.UTC(year, 0, doy) / 86400000);
 export function dateOfAbs(n) { const d = new Date(n * 86400000), year = d.getUTCFullYear(); return { year, doy: n - absDay(year, 0) }; }
 
-const REASONS = { food: 'spent, and gone hungry', water: 'spent, and gone without water', spent: 'spent, with nothing left to eat or drink', awake: 'spent, after too long awake', cold: 'spent, and chilled through' };
+const REASONS = { ice: 'caught by the ice', food: 'spent, and gone hungry', water: 'spent, and gone without water', spent: 'spent, with nothing left to eat or drink', awake: 'spent, after too long awake', cold: 'spent, and chilled through' };
 const LINES = {
+  // the late season (season-turn.js): a rescue off the ice, paid for
+  ice: ['Ice was making all round you. We came in with the airboat; that is what it costs, and it is cheap at the price.', 'You cut it fine out there. The ice does not wait for anybody. Come in and get warm.'],
   food: ['You let yourself go hungry out there. We took the motor out and fetched you in. Hot food first.', 'It happens to everyone once. Come in and eat something; the lake will keep.'],
   water: ['You were dry as a bone out there. Drink this first, slowly.', 'No water and nothing left in you. We brought you in; sit, drink, rest.'],
   spent: ['You were about done in out there. We brought you in to rest.', 'Nothing left to eat or drink. We came and got you; that is what we are here for.'],
@@ -69,7 +71,7 @@ function blank(mode = 'adventure') {
     v: 4, id: null, mode: mode === 'sandbox' ? 'sandbox' : 'adventure', active: false,
     since: null, from: null, packs: { count: 1, canoe: 'aluminium', foodDays: 0 },
     camp: null, wet: false, offsite: 0, log: [], outcome: null,
-    permit: null, dayUse: false, grandfathered: false, fined: false,
+    permit: null, dayUse: false, grandfathered: false, fined: false, iced: null, // iced: the day the ice caught the trip (season-turn.js)
     via: null, // the outfitter that drove you to the put-in or saw you off (stream B's pickups; the join)
   };
 }
@@ -187,7 +189,7 @@ export class Trip {
   start(f) {
     const s = this.state, d = this.day;
     s.id = `${f.ep}-${absDay(d.year, d.doy)}-${Math.floor(Math.random() * 1e5).toString(36)}`;
-    s.active = true; s.outcome = null; s.camp = null; s.offsite = 0; s.log = []; s.grandfathered = false; s.fined = false; s.finedQuetico = false;
+    s.active = true; s.outcome = null; s.camp = null; s.offsite = 0; s.log = []; s.grandfathered = false; s.fined = false; s.finedQuetico = false; s.iced = null;
     s.since = { year: d.year, doy: d.doy, hours: +d.hours.toFixed(2) }; s.from = f.ep;
     s.packs = { count: 1, canoe: CANOES.includes(f.canoe) ? f.canoe : 'aluminium', foodDays: f.foodDays ?? 0 };
     this.syncKit();
@@ -199,7 +201,9 @@ export class Trip {
     this.seen('eps', f.ep); this.learn(f.ep);
     // the permit for this landing today, else day use (Sandbox needs none)
     const P = this.permits, abs = absDay(d.year, d.doy);
-    const pm = this.adventure && P && typeof P.forTrip === 'function' ? P.forTrip(f.ep, abs) : null;
+    let pm = this.adventure && P && typeof P.forTrip === 'function' ? P.forTrip(f.ep, abs) : null;
+    // the late season (permits.js SELF): from 1 October no permit is sold; the box at the landing gives one, free
+    if (!pm && this.adventure && P && typeof P.selfIssue === 'function' && P.selfIssued(abs)) { try { pm = P.selfIssue(f.ep, abs); } catch (e) { console.warn('trip: the self-issued permit', e); pm = null; } }
     s.permit = pm ? { id: pm.id, kind: pm.kind, ep: pm.ep, abs: pm.abs, pma: pm.pma ?? null, from: pm.from ?? null, price: pm.price ?? 0 } : null;
     s.dayUse = this.adventure && !pm;
     this.log(f.fresh ? 'start' : 'leave', { ep: f.ep, permit: s.permit ? s.permit.id : null, dayUse: s.dayUse });
@@ -259,18 +263,19 @@ export class Trip {
     return best || (o.nearest(x, z) || {}).l || null;
   }
   // when the bar has sat empty an hour (energy.onEvac): why 'food' | 'water' | 'awake' | 'cold' (the need that ran it down) | 'spent'
-  evacuate(why = 'food') {
+  // fee (the late season's rescue off the ice, season-turn.js): already paid, said in the card
+  evacuate(why = 'food', { fee = 0 } = {}) {
     if (!this.adventure || !this.active || this.evacuating) return false;
     this.evacuating = true;
     const o = this.outfitter, w = this.world;
     const to = this.nearestKnownOutfitter();
     const lake = to ? w.lakeName(to.lake) || to.place : null;
     const reason = REASONS[why] || REASONS.spent;
-    this.log('evac', { why, reason, to: to ? to.ep : null });
+    this.log('evac', { why, reason, to: to ? to.ep : null, ...(fee ? { fee } : {}) });
     const card = {
       kicker: to ? `${to.name} · entry point ${to.ep}` : 'The outfitter',
       text: `“${pick(LINES[why] || LINES.spent)}”`,
-      sub: `You wake at the ${lake ? `${lake} ` : ''}landing at half past seven. The trip is logged as brought in: ${reason}. The tasks are still yours, and there is nothing to pay; the stringer and the rest of the day stayed out there.`,
+      sub: `You wake at the ${lake ? `${lake} ` : ''}landing at half past seven. The trip is logged as brought in: ${reason}. The tasks are still yours, and ${fee ? `the rescue cost $${fee}` : 'there is nothing to pay'}; the stringer and the rest of the day stayed out there.`,
       fadeIn: 1.6, hold: 5.5, fadeOut: 2.2,
       onDark: async () => {
         if (to && o && o.onTeleport) await o.onTeleport(to.x, to.z);

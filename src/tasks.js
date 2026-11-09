@@ -66,6 +66,52 @@ const STANDING = 0.25;       // standing with an outfitter for each notice claim
 export const KIND_DAYS = { fish: 3, lunch: 3, firewood: 3, berries: 5, item: 7, deadfall: 7, litter: 7, fetch: 7, npc: 7, survey: 10, secchi: 10,
   creel: 10, campsite: 10, beaver: 10, colour: 10, report: 14, photo: 14, pma: 14, iceout: 5, lastcheck: 7, loons: 7, starter: 3 };
 const DAYS_ELSE = 7;
+// The owner's board table (docs/plans/campaigns.md §1 "Board tasks", the sign-off marks 2026-11-02, checked again
+// 2026-11-08): each kind kept, its name there, whether it fits a day trip ('day': never on the far pin), wants a trip
+// ('trip': never on a close-by pin) or either, its pay band ($ under $15, $$ $15–40, $$$ over $40; "$–$$" spans both;
+// per: the band is for each pint or armful) and its season window in days of the year (null: all season; a kind
+// with a window of its own says so in inWindow(T, doy, ep), as the beaver dams and the ice-out lakers by the lake's own
+// ice). The kinds cut there (a rental left behind, odd jobs, a rental brought home, the latrine dig, the invasive
+// check, the smoke report, the bird list) are not in it and never written. The starter job and a visitor's favour are
+// never pinned (weight 0); the favour keeps its band. tasks.boardTable() for the rigs.
+export const BOARD_TABLE = {
+  fish: { name: 'Fish for the kitchen', fit: 'day', band: '$-$$' },
+  lunch: { name: 'Shore lunch class', fit: 'day', band: '$$' },
+  item: { name: 'Lost item', fit: 'either', band: '$$' },
+  survey: { name: 'Portage survey', fit: 'either', band: '$$' },
+  deadfall: { name: 'Blowdown', fit: 'either', band: '$$' },
+  litter: { name: 'Litter', fit: 'either', band: '$' },
+  secchi: { name: 'Secchi reading', fit: 'either', band: '$$' },
+  loons: { name: 'Loon count', fit: 'either', band: '$$', window: [152, 243] },
+  report: { name: 'Route report', fit: 'trip', band: '$$$' },
+  photo: { name: 'Photo wanted', fit: 'either', band: '$-$$$' },
+  berries: { name: 'Blueberries', fit: 'day', band: '$', per: true },
+  firewood: { name: 'Firewood', fit: 'day', band: '$', per: true },
+  fetch: { name: 'An errand', fit: 'trip', band: '$$-$$$' },
+  npc: { name: 'A favour', fit: 'either', band: '$$' },
+  creel: { name: 'Creel survey', fit: 'either', band: '$$', window: [121, 273] },
+  campsite: { name: 'Campsite check', fit: 'either', band: '$$' },
+  beaver: { name: 'Beaver dam report', fit: 'either', band: '$$' },
+  iceout: { name: 'Ice-out lake trout', fit: 'day', band: '$$$' },
+  colour: { name: 'Colour photos', fit: 'either', band: '$$$', window: [255, 273] },
+  lastcheck: { name: 'Last check', fit: 'trip', band: '$$$', window: [274, 334] },
+  pma: { name: 'Primitive area survey', fit: 'trip', band: '$$$', window: [152, 304] },
+};
+export const PAY_BANDS = { $: [1, 14], $$: [15, 40], $$$: [41, 60] };
+// a band's dollars: "$$" → [15, 40], "$-$$$" → [1, 60]
+export function bandRange(band) {
+  const parts = String(band || '').split('-').map((b) => PAY_BANDS[b]).filter(Boolean);
+  return parts.length ? [parts[0][0], parts[parts.length - 1][1]] : null;
+}
+// a kind's pay kept inside its band (for each pint or armful where the band is per one)
+function inBand(key, n, t) {
+  const r = BOARD_TABLE[key] && bandRange(BOARD_TABLE[key].band);
+  if (!r || !Number.isFinite(n)) return n;
+  const k = BOARD_TABLE[key].per ? Math.max(1, (t && t.need) || 1) : 1;
+  return Math.round(Math.max(r[0] * k, Math.min(r[1] * k, n)));
+}
+// a kind fits the pin: a day kind never on the far pin, a trip kind never on a close-by one
+export const fitsBand = (key, band) => { const f = BOARD_TABLE[key] ? BOARD_TABLE[key].fit : 'either'; return !((f === 'day' && band === 'far') || (f === 'trip' && band === 'local')); };
 const MISSED_KEEP = 30;      // the missed notices kept for the journal
 // a missed notice's line, by kind, from whoever posted it ({who}: the first word of the signature; {they}: someone else)
 const MISSED_WORDS = {
@@ -177,7 +223,21 @@ export const NUMBERS = { HOPS, RANGE, BAND_KM, DEEP, TROUT_WATER, SPECIES_PAY, P
 // t) → several (a route's lakes), fraction(t) → 0..1 for the book, doneWords(t) for the notice once done. The new kinds
 // are in task-kinds.js.
 export const KINDS = {};
-export function registerKind(key, def) { KINDS[key] = { key, label: key, weight: { local: 1, medium: 1, far: 1 }, ...def }; return KINDS[key]; }
+export function registerKind(key, def) {
+  const K = { key, label: key, weight: { local: 1, medium: 1, far: 1 }, ...def };
+  // the owner's table: the band's pay, and the pins it fits (BOARD_TABLE)
+  if (typeof def.pay === 'function' && BOARD_TABLE[key]) { const raw = def.pay; K.rawPay = raw; K.pay = function (t, ...a) { return inBand(key, raw.call(this, t, ...a), t); }; }
+  if (BOARD_TABLE[key]) K.weight = Object.fromEntries(Object.entries(K.weight).map(([b, w]) => [b, fitsBand(key, b) ? w : 0]));
+  KINDS[key] = K;
+  return K;
+}
+// the kind is in its season on doy (the table's window, else its own inWindow; a kind with neither: all season)
+export function kindInWindow(key, doy, T = null, ep = null) {
+  const K = KINDS[key], row = BOARD_TABLE[key];
+  if (K && typeof K.inWindow === 'function') { try { return !!K.inWindow(T, doy, ep); } catch { return true; } }
+  const w = row && row.window;
+  return !w || (doy >= w[0] && doy <= w[1]);
+}
 
 registerKind('fish', {
   label: 'For the kitchen', weight: { local: 1.4, medium: 1.2, far: 1.1 }, handsIn: true,
@@ -509,6 +569,10 @@ export class Tasks {
   changed() { if (this.onChange) this.onChange(); }
   boardChanged() { if (this.onBoard) this.onBoard(); }
   today() { const d = this.day || (window.__game && window.__game.day); return d ? absDay(d.year, d.doy) : 0; }
+  doyNow() { const d = this.day || (typeof window !== 'undefined' && window.__game && window.__game.day); return d ? d.doy : 190; }
+  boardTable() { return BOARD_TABLE; }
+  inWindow(kind, doy = this.doyNow(), ep = null) { return kindInWindow(kind, doy, this, ep); }
+  bandRange(band) { return bandRange(band); }
   lakeRec(id) { return id > 0 ? this.world.lakes[id - 1] : null; }
   // d1 lakes: how deep a lake goes (the DNR's contour map, else its max depth: lake-facts.js), and whether lake trout
   // live in it (the DNR's survey where there is one: fishing.js bites them by it); with no facts, 20 m and deeper
@@ -683,9 +747,18 @@ export class Tasks {
       mine.forEach((t, i) => { b.slots[i] = t.id; if (!t.band) t.band = SLOTS[i]; });
       for (let i = mine.length; i < SLOTS.length; i++) b.pending.push(i);
     } else if (today > b.day) {
+      // (loop tasks: a pin holding a notice that is gone from the list, taken off it elsewhere, is a bare pin)
+      b.slots.forEach((id, i) => { if (id != null && !this.ads.has(id)) b.slots[i] = null; });
       const n = Math.min(SLOTS.length, today - b.day);
       for (let k = 0; k < n; k++) this.changeOne(b);
       b.day = today;
+      // a notice nobody took whose season has gone (the colour photos in October, the loon count in September) comes
+      // down with the day's change, a bare pin to fill
+      const doy = this.doyNow();
+      b.slots.forEach((id, i) => {
+        const t = id != null ? this.ads.get(id) : null;
+        if (t && t.status === 'offered' && !kindInWindow(t.kind, doy, this, ep)) { this.ads.delete(t.id); b.slots[i] = null; if (!b.pending.includes(i)) b.pending.push(i); }
+      });
       this.changed();
     }
     if (b.pending.length && !this.filling.has(ep)) this.write(ep);
@@ -732,7 +805,8 @@ export class Tasks {
     const rng = mulberry32(((this.seed * 2654435761) ^ (ep * 40503) ^ (++b.n * 9973)) >>> 0);
     const board = b.slots.map((id) => (id == null ? null : this.ads.get(id)));
     const count = (k) => board.filter((t) => t && t.kind === k).length;
-    const kinds = Object.values(KINDS).filter((k) => (k.weight[band] || 0) > 0 && count(k.key) < 2);
+    const doy = this.doyNow();
+    const kinds = Object.values(KINDS).filter((k) => (k.weight[band] || 0) > 0 && count(k.key) < 2 && fitsBand(k.key, band) && kindInWindow(k.key, doy, this, ep));
     const lean = (this.leanOf && this.leanOf(ep)) || {}, wt = (k) => k.weight[band] * (count(k.key) ? 0.35 : 1) * (lean[k.key] ?? 1); // hubs 2C: each outfitter's board leans its own way (outfitters.js boardLean)
     const order = [];
     while (kinds.length) {
@@ -740,7 +814,7 @@ export class Tasks {
       for (; j < kinds.length - 1; j++) { r -= wt(kinds[j]); if (r <= 0) break; }
       order.push(kinds.splice(j, 1)[0]);
     }
-    if (!order.some((k) => k.key === 'fish') && KINDS.fish) order.push(KINDS.fish); // fish can always be asked for
+    if (!order.some((k) => k.key === 'fish') && KINDS.fish && fitsBand('fish', band)) order.push(KINDS.fish); // fish can always be asked for (on a pin a day trip reaches)
     for (const kind of order) {
       const f = await kind.make(this, { ep, band, rng, landing, reach, board, turf: this.turfOf(ep) });
       if (!f) continue;

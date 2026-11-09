@@ -306,13 +306,14 @@ function creekName(T, x, z) {
   for (const l of T.world.lakes) { if (!l || !l.name) continue; const d = Math.hypot(l.cx - x, l.cz - z); if (d < bd) { bd = d; best = l; } }
   return best ? `the creek off ${best.name}` : null;
 }
-function beaverSeason(T, landing) {
-  const doy = doyOf(T), F = T.world.facts;
+function beaverSeason(T, landing, doy = doyOf(T)) {
+  const F = T.world.facts;
   let out = LOCAL_ICE.out; try { const ic = F && F.iceOf ? F.iceOf(landing.lake) : null; if (ic && Number.isFinite(ic.out)) out = ic.out; } catch { /* the lake's facts */ }
   return (doy >= out && doy <= WINDOW.spring[1]) || within(doy, WINDOW.fall);
 }
 registerKind('beaver', {
   label: 'Portage crew', weight: { local: 0.4, medium: 0.55, far: 0.45 },
+  inWindow(T, doy, ep) { const L = T && ep != null && typeof T.landing === 'function' ? T.landing(ep) : null; return L ? beaverSeason(T, L, doy) : true; }, // (tasks.js kindInWindow: an untaken notice comes down out of season)
   make(T, c) {
     const Cr = T.world.creeks;
     if (!Cr || !Array.isArray(Cr.dams) || !beaverSeason(T, c.landing)) return null;
@@ -368,6 +369,7 @@ registerKind('beaver', {
 const ICE_DAYS = 21;
 registerKind('iceout', {
   label: 'For the kitchen', weight: { local: 0.3, medium: 0.7, far: 0.6 }, handsIn: true,
+  inWindow(T, doy, ep) { const L = T && ep != null && typeof T.landing === 'function' ? T.landing(ep) : null, F = T && T.world && T.world.facts; let out = LOCAL_ICE.out; try { const ic = L && F && F.iceOf ? F.iceOf(L.lake) : null; if (ic && Number.isFinite(ic.out)) out = ic.out; } catch { /* the lake's facts */ } return doy >= out && doy <= out + ICE_DAYS; },
   make(T, c) {
     if (c.board.some((t) => t && t.kind === 'iceout')) return null;
     const L = c.landing, F = T.world.facts, doy = doyOf(T);
@@ -472,6 +474,15 @@ registerKind('lastcheck', {
   onDrop(T, t) { t.seen = (t.sites || []).map(() => false); },
   targets(T, t) { return (t.sites || []).map((i, k) => ((t.seen || [])[k] ? null : siteRing(T, i, T.lakeNear(T.world.campsites[i].x, T.world.campsites[i].z), null, 'a site to check'))).filter(Boolean); },
   target(T, t) { const k = (t.seen || []).findIndex((v) => !v); const i = k >= 0 ? t.sites[k] : null; return i != null ? siteRing(T, i, T.lakeNear(T.world.campsites[i].x, T.world.campsites[i].z), null, 'a site to check') : null; },
+  // (loop tasks: the gem over the nearest site of the chain still to check, at its fire ring, as you come to it; the
+  // sites are checked in any order)
+  guideTarget(T, t, G) {
+    const p = T.player, seen = t.seen || [];
+    let i = null, bd = Infinity;
+    (t.sites || []).forEach((si, k) => { const q = T.world.campsites[si]; if (!q || seen[k]) return; const d = p ? Math.hypot(q.x - p.x, q.z - p.z) : k; if (d < bd) { bd = d; i = si; } });
+    const s = i != null ? T.world.campsites[i] : null, f = s && s.fire ? s.fire : s;
+    return f ? { kind: 'place', key: `lastcheck:${t.id}:${i}`, label: 'a site to check', near: 60, pos: () => ({ x: f.x, y: G.groundY(f.x, f.z) + 1.2, z: f.z }) } : null;
+  },
   progress(t) { const n = (t.sites || []).length, s = (t.seen || []).filter(Boolean).length; return s ? `${word(s)} of ${word(n)} sites checked` : `${word(n)} sites to check`; },
   fraction(t) { const n = (t.sites || []).length; return n ? (t.seen || []).filter(Boolean).length / n : 0; },
   doneWords(t) { return `${word((t.sites || []).length)} sites checked`; },

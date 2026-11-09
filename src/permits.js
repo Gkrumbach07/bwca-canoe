@@ -73,6 +73,14 @@ export const PRICES = {
 // than goes in; three quarters books it out. (Straight count / start left a mid-September Tuesday at Moose Lake 63–85 %
 // open and a July Saturday 0–6 left; the brief asks ≥ 80 % and ≤ 3.)
 export const BOOK = [[0, 0], [0.25, 0.04], [0.45, 0.3], [0.7, 0.92], [0.9, 1]];
+// The late season (loop tasks, 2026-11-08; docs/build/campaign-design.md Part 3, owner call 3): from 1 October the desk
+// sells no permits. An overnight permit (and a primitive area's) is free and self-issued, as in life: no quota, filled
+// out at the landing's box as you push off (trip.js start, selfIssue) or picked up at a desk for a later day. Till the
+// ice: an iced day is closed as before. The year's own permits run out with September, so the desk's "Look at next
+// year's permits" (permit-desk.js, season-turn.js) comes forward from then.
+export const SELF = { month: 10, day: 1, left: 99 };
+export const selfFrom = (year) => Math.round(Date.UTC(year, SELF.month - 1, SELF.day) / 86400000);
+export const selfIssued = (abs) => { const { year } = dateOfAbs(Math.round(abs)); return Math.round(abs) >= selfFrom(year); };
 export const KINDS = { overnight: 'Overnight', pma: 'Primitive area' };
 
 const blank = (season = null) => ({ v: V, season, pmaSet: PMA_SET, held: [], used: [], fines: [], lapsed: [], nextId: 1, told: {} });
@@ -167,6 +175,7 @@ export class Permits {
     const held = this.s.held.filter((p) => p.ep === ep && p.abs === abs).length;
     // a permit you hold is one of the day's quota, the first trip's free one too (the outfitter held it back on a
     // sold-out day): the parties have the rest, so booked and held never add up past the quota (glf-3)
+    if (selfIssued(abs)) return { quota, booked: closed ? quota : 0, held, left: closed ? 0 : SELF.left, closed, mine: held > 0, self: true }; // (the late season: no quota)
     const booked = closed ? quota : Math.min(this.booked(ep, abs), Math.max(0, quota - held));
     return { quota, booked, held, left: closed ? 0 : Math.max(0, quota - booked - held), closed, mine: held > 0 };
   }
@@ -174,12 +183,30 @@ export class Permits {
     const out = [];
     for (let i = 0; i < days; i++) {
       const abs = fromAbs + i, a = this.available(ep, abs);
-      out.push({ abs, left: a.left, quota: a.quota, price: this.price('overnight', abs), closed: a.closed, mine: a.mine });
+      out.push({ abs, left: a.left, quota: a.quota, price: this.price('overnight', abs), closed: a.closed, mine: a.mine, self: !!a.self });
     }
     return out;
   }
   price(kind = 'overnight', abs = this.today) {
+    if (selfIssued(abs)) return 0;
     return kind === 'pma' ? PRICES.pma : PRICES.overnight;
+  }
+  selfIssued(abs = this.today) { return selfIssued(abs); }
+  // the box at the landing: a push-off with no permit on a self-issued day fills one out (trip.js start) → permit
+  selfIssue(ep, abs = this.today, { kind = 'overnight', pma = null } = {}) {
+    if (!selfIssued(abs)) return null;
+    const permit = this.make({ ep, abs, kind, pma, from: ep, price: 0, why: 'self' });
+    if (this.t.trip && typeof this.t.trip.log === 'function') this.t.trip.log('permit', { id: permit.id, kind: permit.kind, ep: permit.ep, abs: permit.abs, price: 0, self: true });
+    this.emit('bought', { ...permit, free: true, self: true });
+    return permit;
+  }
+  // the open-water season's last sold day and the year's ice at a landing: { year, lastSold (abs), iceIn (abs), iceOut
+  // (next year's, abs) } (the desk's "Look at next year's permits", season-turn.js)
+  yearOf(ep, abs = this.today) {
+    const { year } = dateOfAbs(abs), e = this.entry(ep), w = this.t.world;
+    let ice = null; try { ice = e && w && w.facts && typeof w.facts.iceOf === 'function' ? w.facts.iceOf(e.lake) : null; } catch { ice = null; }
+    const out = ice && Number.isFinite(ice.out) ? ice.out : ICE_ELSE.out, inn = ice && Number.isFinite(ice.in) ? ice.in : ICE_ELSE.in;
+    return { year, lastSold: selfFrom(year) - 1, iceIn: absDay(year, 0) + Math.round(inn), iceOut: absDay(year + 1, 0) + Math.round(out), outDoy: out, inDoy: inn };
   }
 
   // --- what you hold ------------------------------------------------------------------------------------------------
@@ -279,7 +306,8 @@ export class Permits {
   // why a permit can't be sold, in a word (null: it can)
   refusal({ ep, abs, kind = 'overnight', pma = null }) {
     const tr = this.t.trip;
-    if (this.owed() > 0) return 'ticket'; // (day use needs no permit, so it stays open: the way to earn the money)
+    if (this.owed() > 0 && !selfIssued(abs)) return 'ticket'; // (day use needs no permit, so it stays open: the way to earn the money; a self-issued one asks nobody)
+    if (dateOfAbs(abs).year > dateOfAbs(this.today).year && this.visiting) return 'company'; // (next year's: not on a friend's trip)
     if (abs < this.today) return 'past';
     if (abs > this.today && tr && tr.active) return 'trip'; // a later day skips to it: only between trips
     if (abs > this.today && this.grouped) return 'group';
@@ -304,6 +332,7 @@ export class Permits {
       full: 'Sold out that day.',
       money: `Not enough in hand: it's $${price}.`,
       ice: 'The lakes are freezing up by then.',
+      company: 'Not on a friend’s trip.',
     }[why] || 'Not today.';
   }
   get grouped() { const c = typeof window !== 'undefined' && window.__game ? window.__game.coopTrip : null; return !!(c && c.grouped); }
@@ -315,13 +344,14 @@ export class Permits {
     if (why) return { ok: false, why, words: this.words(why, { price }) };
     const pr = this.t.profile, e = this.entry(ep);
     if (price && (!pr || !pr.spend(price, `a ${kind === 'pma' ? 'primitive area' : 'overnight'} permit, entry point ${ep}`))) return { ok: false, why: 'money', words: this.words('money', { price }) };
-    const permit = this.make({ ep, abs, kind, pma, from: at ?? ep, price });
+    const permit = this.make({ ep, abs, kind, pma, from: at ?? ep, price, why: selfIssued(abs) ? 'self' : null });
     if (this.t.trip && typeof this.t.trip.log === 'function') this.t.trip.log('permit', { id: permit.id, kind: permit.kind, ep, abs, price, bought: true });
     this.emit('bought', permit);
-    const later = abs > this.today;
-    const at0 = at != null ? this.entry(at) : null;
-    const skip = later ? this.skipTo(abs, { landing: (this.t.outfitter && this.t.outfitter.at) || at0 || e }) : null;
-    return { ok: true, permit, skip, words: `${KINDS[permit.kind]} permit, entry point ${ep} (${e ? e.place || e.name : ''}), ${dateWords(abs)}.` };
+    const later = abs > this.today, turn = dateOfAbs(abs).year > dateOfAbs(this.today).year;
+    const at0 = at != null ? this.entry(at) : null, L = (this.t.outfitter && this.t.outfitter.at) || at0 || e;
+    // next year's permit ends this open-water season: the winter, then that day (season-turn.js); else the bunkhouse
+    const skip = turn && this.turn ? this.turn.turnTo(abs, { landing: L, permit }) : later ? this.skipTo(abs, { landing: L }) : null;
+    return { ok: true, permit, skip, turn, words: `${KINDS[permit.kind]} permit${permit.why === 'self' ? ' (self-issued)' : ''}, entry point ${ep} (${e ? e.place || e.name : ''}), ${dateWords(abs)}${turn ? `, ${dateOfAbs(abs).year}` : ''}.` };
   }
   grant({ ep, abs = this.today, kind = 'overnight', pma = null, from = null, why = null } = {}) {
     // r2 tickets: a keeper's gift is not a sale, so it is not gated; the free first permit is, should a ticket somehow be

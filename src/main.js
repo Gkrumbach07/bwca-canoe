@@ -1308,6 +1308,18 @@ async function main() {
     window.__game.locator = locator;
   }
 
+  // ==== loop tasks (2026-11-08): the late season ====
+  // season-turn.js (campaign-design.md Part 3, owner call 3): ice catching a trip (walk out, or a paid rescue from the
+  // journal), and the winter turn behind the desk's "Look at next year's permits" (permits.buy → turnTo). Its events
+  // ('iced', 'rescue', 'season:close', 'year:open') are the seam the story's winter hooks will take.
+  {
+    const { seasonTurn } = await import('./season-turn.js');
+    seasonTurn.attach({ permits: window.__game.permits || null, trip, day, energy, outfitter, veil, hud, player, profile, guide, tasks, world });
+    const tu = trip.update.bind(trip);
+    trip.update = (dt) => { tu(dt); try { seasonTurn.update(dt); } catch (e) { if (!seasonTurn.warnedU) { seasonTurn.warnedU = true; console.warn('seasonTurn', e); } } };
+    window.__game.seasonTurn = seasonTurn;
+  }
+
   window.__game.siteFeature = siteFeature; // (scripts/r2-starter-routes.mjs: a site's kind of shore)
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);
 
