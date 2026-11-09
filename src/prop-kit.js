@@ -796,6 +796,32 @@ export function trailMaterial() {
 		col = mix( col, vec3( 0.02, 0.02, 0.016 ), trailPool );
 		alpha = max( alpha, mudW * mk );
 	}
+	// stream E3: a road (vTrail.y negative, props.js roadRows: -1 gravel, -2 blacktop, -3 a two-track): straighter edges
+	// than a foot path's, gravel in the tracks and on the shoulders, blacktop worn grey in patches with a faded centre line
+	// (vTrail.w 1), a two-track's two ruts with the ground's own cover up the crown
+	if ( vTrail.y < -0.5 ) {
+		float kind = -vTrail.y;
+		float ar = abs( vTrail.x ) + wob * 0.12;
+		float gn = lookFbm( q / 0.3, 41u, 2 ), gb = lookFbm( q / 2.6, 42u, 2 );
+		vec3 gravel = mix( vec3( 0.29, 0.26, 0.21 ), vec3( gl ) * vec3( 1.05, 1.0, 0.92 ) * 1.25, 0.25 ) * ( 0.82 + 0.3 * gn ) * mix( 0.92, 1.08, gb );
+		gravel *= 1.0 + 0.25 * smoothstep( 0.6, 0.75, lookFbm( q / 0.07, 43u, 2 ) ) * lookFade( 0.07, lookPx );
+		float wheel = 1.0 - smoothstep( 0.06, 0.2, abs( ar - 0.45 ) );
+		if ( kind > 2.5 ) {
+			col = mix( groundC * 0.93, soil, wheel );
+			alpha = max( wheel, 0.35 * ( 1.0 - smoothstep( 0.6, 0.95, ar ) ) );
+		} else if ( kind > 1.5 ) {
+			vec3 tar = vec3( 0.055, 0.055, 0.058 ) * ( 0.85 + 0.3 * gn ) * mix( 0.9, 1.1, gb );
+			tar = mix( tar, tar * 1.6, 0.5 * smoothstep( 0.55, 0.8, lookFbm( q / 1.7, 44u, 2 ) ) );
+			col = mix( tar, gravel, smoothstep( 0.8, 0.86, ar ) );
+			float cl = ( 1.0 - smoothstep( 0.012, 0.03, abs( vTrail.x ) ) ) * step( 0.97, vTrail.w ) * smoothstep( 0.25, 0.55, lookFbm( q / 0.9, 45u, 2 ) );
+			col = mix( col, vec3( 0.55, 0.40, 0.05 ), cl * 0.8 );
+			alpha = 1.0 - smoothstep( 0.9, 1.0, ar );
+		} else {
+			col = mix( gravel, gravel * 0.82, wheel * 0.6 * vTrail.w );
+			alpha = 1.0 - smoothstep( 0.82, 1.0, ar );
+		}
+		trailPool = 0.0;
+	}
 	diffuseColor.rgb = col;
 	diffuseColor.a = alpha * vTrail.z;`)
         .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n\t{ vec2 r = groundRelief( vLookWorld.xz, lookPx ) * ( 1.0 - vFloor.z ) * ( 1.0 - trailPool ); normal = normalize( normal + mat3( viewMatrix ) * vec3( r.x, 0.0, r.y ) ); normal = normalize( mix( normal, mat3( viewMatrix ) * vec3( 0.0, 1.0, 0.0 ), trailPool ) ); }')

@@ -7,6 +7,7 @@ import { burnLook, burnOpenAt } from './burns.js';
 import { isFlowage } from './water-build.js'; // the season round: a flowage's bed is mud
 import { mireAttr, coverByte } from './mire-relief.js'; // the density round: the wetlands' floor (terrain.js aRelief)
 import { rampAt } from './ramps.js'; // round ramps: the campsites' landings graded into the ground
+import { roadGradeAt } from './road-grade.js'; // stream E3: the roads graded into the ground
 
 // the cliff band strength (site.js CLIFF.band) a cell needs to be a cliff
 const CLIFF_BAND = 0.45, TALUS_MIN = 0.4;
@@ -348,7 +349,12 @@ const halfAt = (grid, x, z, sd) => (sd < 0 ? narrowAt(grid, x, z) : NARROW.wide)
 // own level near the shore (a ramp's shelf is worked out at the release's level; the season's may stand higher). On this
 // mesh it fades out from 16 to 20 m inland, short of the fine band's edge (FINE_BAND), where a subdivided cell's mid-edge
 // vertex must stay the mean of its ends for the undivided neighbour (the tees): the detail draws the rest.
+// Stream E3 (road-grade.js): a road's grade too, on this mesh only clear of the fine band (ROAD_FROM, past every vertex
+// of a subdivided quad: FINE_BAND plus a cell's diagonal), where no tee's mid-edge vertex has to stay its ends' mean; the
+// 5 m and 2 m detail grade the rest of a road's way (detail-build.js chunkGround).
+export const ROAD_FROM = 40;
 export function rampGround(grid, x, z, h, sd) {
+  if (sd > ROAD_FROM) h = roadGradeAt(x, z, h, smoothstep(ROAD_FROM, ROAD_FROM + 8, sd));
   if (!(sd > 0) || sd >= 20) return h;
   let r = rampAt(x, z, h);
   if (r === h) return h;

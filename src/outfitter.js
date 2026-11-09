@@ -387,6 +387,7 @@ export class Outfitter {
     if (this.distTo(l, p.x, p.z) > ARRIVAL_FAR || !(p.mode === 'paddle' || p.onFoot)) { if (a.why === 'season' || a.pending) this.pendingShow = true; return; }
     this.tieUp(l, L, a.why === 'reload' || a.why === 'ride' || a.why === 'evac');
     if (a.why === 'ride') this.hud.note(`The truck leaves you at ${l.name}: the canoe at the dock, the door open.`, 5);
+    if (a.why === 'ride' && this.truck) { const r = this.rides && this.rides.last; if (r && r.pickup) this.truck.park(a.ep); else this.truck.leave(a.ep); } // stream E3: the truck that brought you, behind the store (truck.js)
     if (a.why === 'evac' && a.pending) this.pendingShow = true;
     const v = this.visit;
     if (a.why === 'reload') {
@@ -412,6 +413,7 @@ export class Outfitter {
     this.arrival = null;
     if (this.distTo(e, p.x, p.z) > ARRIVAL_FAR || !(p.mode === 'paddle' || p.onFoot)) return;
     this.setDown(T, e);
+    if (a.why === 'ride' && this.truck) this.truck.leave(e.ep); // stream E3: the truck in the lot, then off down the road (truck.js)
     // (round 2: a portage-first start: the canoe off the roof in the lot, the carry from its edge; a boat drop at a portage)
     const o = T.open, carry = o ? `the ${o.posted || o.rods}-rod portage` : 'the portage', far = o && o.i != null && this.world.portages[o.i] ? this.world.portages[o.i].launch[o.end] : null, toLake = far ? this.world.lakeName(far.lake) : null;
     if (a.why === 'ride' && T.water && T.water.dry && T.drop === 'boat') this.hud.note(`The outfitter's boat leaves you at the start of ${carry}${toLake ? ` to ${toLake}` : ''}. The canoe is on the shore: Q on it to shoulder it.`, 7);
