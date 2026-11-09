@@ -78,7 +78,9 @@ export class PermitDesk {
       const short = !(this.o && this.o.sandbox) && money < (f.n || 0);
       rows.push(`<div class="pd-fine"><div><b>A ranger's ticket</b> · <span class="soft">${esc(dateWords(f.abs, { weekday: false }))}, ${esc(ticketWhy(f).toLowerCase())}.</span></div>${short ? `<span class="pd-short">$${f.n} — you have $${money}</span>` : `<button type="button" class="stamp small" data-act="permit-pay" data-id="${esc(f.id)}">Pay $${f.n}</button>`}</div>`);
     }
-    for (const p of P.held()) rows.push(`<p class="pd-held">✓ ${esc(KINDS[p.kind])} permit · entry point ${p.ep}${p.ep === at ? '' : ` (${esc(this.place(p.ep))})`} · ${p.abs === today ? 'today' : esc(dateWords(p.abs))}${p.kind === 'pma' && p.pma ? ` · ${esc(this.pmaName(p.pma))}` : ''}</p>`);
+    // (r4 loopfix: a permit in another year says the year)
+    const yearNow = dateOfAbs(today).year, yearOf = (abs) => { const y = dateOfAbs(abs).year; return y !== yearNow ? `, ${y}` : ''; };
+    for (const p of P.held()) rows.push(`<p class="pd-held">✓ ${esc(KINDS[p.kind])} permit · entry point ${p.ep}${p.ep === at ? '' : ` (${esc(this.place(p.ep))})`} · ${p.abs === today ? 'today' : esc(dateWords(p.abs) + yearOf(p.abs))}${p.kind === 'pma' && p.pma ? ` · ${esc(this.pmaName(p.pma))}` : ''}</p>`);
     // the next year's permits, open: their own view in place of this year's calendar
     if (this.next && this.next.at === at) return this.wrap([...rows, ...this.nextRows(at)], at);
     const fwd = this.forward(at);
@@ -90,7 +92,7 @@ export class PermitDesk {
     const kinds = ['overnight', 'pma'].map((k) => `<button type="button" class="stamp small ${s.kind === k ? '' : 'outline'}" data-act="permit-kind" data-id="${k}" aria-pressed="${s.kind === k}">${KINDS[k]}</button>`).join('');
     const pmas = s.kind === 'pma' ? `<select data-act="permit-pma" aria-label="Primitive area">${P.pmasNear(at, 4).map((a) => `<option value="${a.id}" ${a.id === s.pma ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select>` : '';
     rows.push(`<div class="pd-pick">${epSel}<span class="pd-kinds">${kinds}</span>${pmas}</div>`);
-    const cal = P.calendar(s.ep, today, DAYS);
+    const cal = P.calendar(s.ep, today, DAYS).map((c) => (!c.closed && c.abs > today && at !== s.ep && P.iced(at, c.abs) ? { ...c, closed: true, left: 0 } : c)); // (a later day wakes you here: this lake iced, no day: r4 loopfix)
     const lead = ((cal[0].abs + 4) % 7 + 7) % 7; // the first day's weekday (abs 0 was a Thursday)
     const cells = cal.map((c, i) => {
       const { year, doy } = dateOfAbs(c.abs), dd = new Date(c.abs * 86400000).getUTCDate(), wd = WD[(lead + i) % 7];
@@ -132,9 +134,11 @@ export class PermitDesk {
     const P = this.permits, today = P.today, n = this.next, y = P.yearOf(at, today), year = y.year + 1;
     const T = this.turnOf(), why = T && typeof T.canTurn === 'function' ? T.canTurn() : null;
     const out = [];
-    // the months the landing's lake is open next year: its own ice-out (yearOf's, a year on) to its ice-in
-    const ny = P.yearOf(n.ep, today), mOut = new Date(ny.iceOut * 86400000).getUTCMonth() + 1;
-    const mIn = new Date((monthAbs(year, 1) + Math.min(364, Math.round(ny.inDoy) - 1)) * 86400000).getUTCMonth() + 1;
+    // the months the landing's lake is open next year: its own ice-out (yearOf's, a year on) to its ice-in; and the turn
+    // wakes you here, so this counter's own lake must be open too (r4 loopfix, D1): the later ice-out, the earlier ice-in
+    const ny = P.yearOf(n.ep, today), hy = P.yearOf(at, today);
+    const mOut = new Date(Math.max(ny.iceOut, hy.iceOut) * 86400000).getUTCMonth() + 1;
+    const mIn = new Date((monthAbs(year, 1) + Math.min(364, Math.round(Math.min(ny.inDoy, hy.inDoy)) - 1)) * 86400000).getUTCMonth() + 1;
     if (!(n.month >= mOut && n.month <= mIn)) n.month = Math.max(mOut, Math.min(mIn, 6));
     out.push(`<div class="pd-next head"><div><b>Next year’s permits · ${year}</b> · <span class="soft">choosing one ends this open-water season: the winter, then up at seven on its day.</span></div><button type="button" class="stamp small outline" data-act="permit-next-close">This year’s</button></div>`);
     const eps = this.epsFor(at);
@@ -143,7 +147,8 @@ export class PermitDesk {
     for (let m = mOut; m <= mIn; m++) months.push(`<button type="button" class="stamp small ${m === n.month ? '' : 'outline'}" data-act="permit-nmonth" data-id="${m}" aria-pressed="${m === n.month}">${MONTHS[m - 1].slice(0, 3)}</button>`);
     out.push(`<div class="pd-pick">${epSel}<span class="pd-kinds pd-months">${months.join('')}</span></div>`);
     const a0 = monthAbs(year, n.month), a1 = monthAbs(n.month === 12 ? year + 1 : year, n.month === 12 ? 1 : n.month + 1);
-    const cal = P.calendar(n.ep, a0, a1 - a0);
+    // (a day this counter's lake is still iced reads as ice: the turn would wake you to it, r4 loopfix D1)
+    const cal = P.calendar(n.ep, a0, a1 - a0).map((c) => (!c.closed && at !== n.ep && P.iced(at, c.abs) ? { ...c, closed: true, left: 0 } : c));
     const blanks = Array.from({ length: wdOf(a0) }, () => '<span class="pd-blank" aria-hidden="true"></span>').join('');
     const cells = cal.map((c) => {
       const { year: yy, doy } = dateOfAbs(c.abs), dd = new Date(c.abs * 86400000).getUTCDate(), wd = WD[wdOf(c.abs)];
@@ -153,7 +158,7 @@ export class PermitDesk {
     out.push(`<div class="pd-cal" role="group" aria-label="${esc(MONTHS[n.month - 1])} ${year} at entry point ${n.ep}">${blanks}${cells}</div>`);
     if (n.abs != null && n.abs >= a0 && n.abs < a1) {
       const self = selfIssued(n.abs), price = P.sandbox || self ? 0 : P.price('overnight', n.abs), money = this.o && Number.isFinite(this.o.money) ? Math.floor(this.o.money) : Math.floor(P.money || 0);
-      const short = !self && !(this.o && this.o.sandbox) && money < price, refusal = P.refusal({ ep: n.ep, abs: n.abs, kind: 'overnight' });
+      const short = !self && !(this.o && this.o.sandbox) && money < price, refusal = P.refusal({ ep: n.ep, abs: n.abs, kind: 'overnight', at });
       const shut = why ? (why === 'trip' ? P.words('trip') : why === 'company' ? 'Not with company: the season turns alone.' : 'Not just now.') : refusal ? P.words(refusal, { price }) : short ? P.words('money', { price }) : null;
       const label = n.sure ? 'Yes: end this season' : self ? 'Choose · free' : `Choose · $${price}`;
       const sub = shut || (n.sure ? `The open-water season ends here. Winter, then ${dateWords(n.abs)}, ${year}.` : `${self ? 'Self-issued, free. ' : ''}${esc('The winter goes by in one card.')}`);

@@ -303,8 +303,14 @@ export class Permits {
     this.write();
     return p;
   }
-  // why a permit can't be sold, in a word (null: it can)
-  refusal({ ep, abs, kind = 'overnight', pma = null }) {
+  // where a later day's permit wakes you (the bunkhouse, or the winter's turn): the counter you are at, else the desk
+  // that sells it (at), else the permit's own landing
+  wakeAt(at = null, ep = null) {
+    const o = this.t.outfitter;
+    return (o && o.at) || (at != null ? this.entry(at) : null) || (ep != null ? this.entry(ep) : null) || null;
+  }
+  // why a permit can't be sold, in a word (null: it can). at: the desk selling it (a later day wakes you there)
+  refusal({ ep, abs, kind = 'overnight', pma = null, at = null }) {
     const tr = this.t.trip;
     if (this.owed() > 0 && !selfIssued(abs)) return 'ticket'; // (day use needs no permit, so it stays open: the way to earn the money; a self-issued one asks nobody)
     if (dateOfAbs(abs).year > dateOfAbs(this.today).year && this.visiting) return 'company'; // (next year's: not on a friend's trip)
@@ -317,6 +323,14 @@ export class Permits {
     const a = this.available(ep, abs);
     if (a.closed) return 'closed';
     if (a.left <= 0) return 'full';
+    // r4 loopfix (the adversarial check, D1: next year's EP 29 permit on 25 April, bought at Moose Lake, was charged and
+    // held while the turn refused, Moose Lake still frozen that day): a later day moves time and wakes you at this
+    // counter, so a day its own lake is still iced is no day to sell; and nothing is sold while time is already moving
+    if (abs > this.today) {
+      if (this.skipping || (this.turn && this.turn.turning)) return 'busy';
+      const L = this.wakeAt(at, ep);
+      if (L && L.ep !== ep && this.iced(L.ep, abs)) return 'wake';
+    }
     return null;
   }
   words(why, { price = 0 } = {}) {
@@ -333,13 +347,15 @@ export class Permits {
       money: `Not enough in hand: it's $${price}.`,
       ice: 'The lakes are freezing up by then.',
       company: 'Not on a friend’s trip.',
+      wake: 'The lake here is still iced in then: you would wake to the ice.',
+      busy: 'Not just now.',
     }[why] || 'Not today.';
   }
   get grouped() { const c = typeof window !== 'undefined' && window.__game ? window.__game.coopTrip : null; return !!(c && c.grouped); }
   buy({ ep, abs = this.today, kind = 'overnight', pma = null, at = null } = {}) {
     ep = Number(ep); abs = Math.round(abs);
     if (kind === 'pma' && !pma) { const n = this.pmasNear(at ?? ep, 1)[0]; pma = n ? n.id : null; }
-    const why = this.refusal({ ep, abs, kind, pma });
+    const why = this.refusal({ ep, abs, kind, pma, at });
     const price = this.sandbox ? 0 : this.price(kind, abs);
     if (why) return { ok: false, why, words: this.words(why, { price }) };
     const pr = this.t.profile, e = this.entry(ep);
@@ -348,10 +364,24 @@ export class Permits {
     if (this.t.trip && typeof this.t.trip.log === 'function') this.t.trip.log('permit', { id: permit.id, kind: permit.kind, ep, abs, price, bought: true });
     this.emit('bought', permit);
     const later = abs > this.today, turn = dateOfAbs(abs).year > dateOfAbs(this.today).year;
-    const at0 = at != null ? this.entry(at) : null, L = (this.t.outfitter && this.t.outfitter.at) || at0 || e;
+    const L = this.wakeAt(at, ep) || e;
     // next year's permit ends this open-water season: the winter, then that day (season-turn.js); else the bunkhouse
-    const skip = turn && this.turn ? this.turn.turnTo(abs, { landing: L, permit }) : later ? this.skipTo(abs, { landing: L }) : null;
+    let skip = turn && this.turn ? this.turn.turnTo(abs, { landing: L, permit }) : later ? this.skipTo(abs, { landing: L }) : null;
+    // (r4 loopfix, D1: should time not move after all, the sale is undone: the permit off the held list, the money back)
+    if (skip && typeof skip.then === 'function') skip = skip.then((moved) => { if (!moved) this.refund(permit, pr); return moved; });
     return { ok: true, permit, skip, turn, words: `${KINDS[permit.kind]} permit${permit.why === 'self' ? ' (self-issued)' : ''}, entry point ${ep} (${e ? e.place || e.name : ''}), ${dateWords(abs)}${turn ? `, ${dateOfAbs(abs).year}` : ''}.` };
+  }
+  // a sale undone (the skip or the turn it was bought for did not happen): off the held list, its price back
+  refund(permit, pr = this.t.profile) {
+    const i = this.s.held.findIndex((p) => p.id === (permit && permit.id));
+    if (i < 0) return false;
+    this.s.held.splice(i, 1);
+    if (permit.price && pr && typeof pr.earn === 'function') pr.earn(permit.price, `a permit refunded, entry point ${permit.ep}`);
+    this.write();
+    if (this.t.trip && typeof this.t.trip.log === 'function') this.t.trip.log('permit', { id: permit.id, refunded: true });
+    this.emit('refunded', permit);
+    if (this.t.outfitter && typeof this.t.outfitter.save === 'function') this.t.outfitter.save();
+    return true;
   }
   grant({ ep, abs = this.today, kind = 'overnight', pma = null, from = null, why = null } = {}) {
     // r2 tickets: a keeper's gift is not a sale, so it is not gated; the free first permit is, should a ticket somehow be
