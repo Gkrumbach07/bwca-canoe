@@ -171,13 +171,13 @@ try {
     let off = 0.3; if (lat(y0 + off) < 0) off = -off;
     for (let i = 0; i < 120; i++) { face(y0 + off); g.step(1 / 30, 1); }
     const side0 = ch.otsSide, ots0 = ch.ots;
-    let jump = 0, last = g.camera.position.clone(), at = null; const tr = [];
-    for (let i = 1; i <= 150; i++) { const k = Math.min(1, i / 30); face(y0 + off + (-off * 3.3 - off) * k); g.step(1 / 30, 1); const c = g.camera.position, d = c.distanceTo(last); if (i % 5 === 0 || d > 0.3) tr.push(`${i} s${ch.otsSide.toFixed(2)} d${d.toFixed(2)} p${Number.isFinite(ch.pull) ? ch.pull.toFixed(2) : 'inf'} w${(ch.sight && ch.sight.what) || '-'}`); if (d > jump) { jump = d; at = i; } last = c.clone(); }
-    return { bad, side0: +side0.toFixed(2), ots0: +ots0.toFixed(2), side1: +ch.otsSide.toFixed(2), ots1: +ch.ots.toFixed(2), latEnd: +lat(y0 - off * 3.3).toFixed(2), jump: +jump.toFixed(3), at, tr: tr.slice(0, 40) };
+    let jump = 0, hold = 0, last = g.camera.position.clone(), at = null; const tr = [];
+    for (let i = 1; i <= 150; i++) { const k = Math.min(1, i / 30); face(y0 + off + (-off * 3.3 - off) * k); g.step(1 / 30, 1); const c = g.camera.position, d = c.distanceTo(last); if (i % 5 === 0 || d > 0.3) tr.push(`${i} s${ch.otsSide.toFixed(2)} d${d.toFixed(2)} p${Number.isFinite(ch.pull) ? ch.pull.toFixed(2) : 'inf'} w${(ch.sight && ch.sight.what) || '-'}`); if (d > jump) { jump = d; at = i; } if (i > 30) hold = Math.max(hold, d); last = c.clone(); }
+    return { bad, side0: +side0.toFixed(2), ots0: +ots0.toFixed(2), side1: +ch.otsSide.toFixed(2), ots1: +ch.ots.toFixed(2), latEnd: +lat(y0 - off * 3.3).toFixed(2), jump: +jump.toFixed(3), at, hold: +hold.toFixed(3), tr: tr.slice(0, 40) };
   });
   await ev(() => { const H = window.__p, s = H.staffer(); if (s && !s.undrawn) { const t = H.top(s.b); H.look(H.yawTo({ x: t.x, z: t.z }), 0); } H.step(20); });
   result('3b a fast turn by her: her gem never in the top bar, any frame', !turn.none && turn.bad.length === 0, turn);
-  result('3c the shoulder swaps sides, eased, once she is well over to his other side', !turn.none && turn.ots0 > 0.5 && turn.ots1 > 0.5 && Math.sign(turn.side1) === -Math.sign(turn.side0) && Math.abs(turn.side1) > 0.8 && turn.jump < 0.3, turn);
+  result('3c the shoulder swaps sides, eased, once she is well over to his other side', !turn.none && turn.ots0 > 0.5 && turn.ots1 > 0.5 && Math.sign(turn.side1) === -Math.sign(turn.side0) && Math.abs(turn.side1) > 0.8 && turn.hold < 0.15, turn); // (hold: each frame's move once the rig's own turn is over)
 
   // --- 3 the talk by keys -------------------------------------------------------------------------------------------------
   await page.keyboard.press('KeyE'); await ev(() => window.__p.step(6));
@@ -302,15 +302,16 @@ try {
     for (const { party, k } of P.legsOn(T)) { const pl = P.legPlan(party, k); if (!pl || pl.to.kind !== 'site' || pl.arrive < 10 || pl.arrive > 16.5 || party.tents < 1) continue; o.push({ id: party.id, key: pl.to.key, arrive: pl.arrive, to: { x: pl.to.x, z: pl.to.z }, tents: party.tents }); }
     o.sort((a, b) => b.tents - a.tents || a.arrive - b.arrive); return o.slice(0, 4);
   });
-  let tent = { none: 'no landing party today' };
+  let tent = { none: 'no landing party today' }; const tries = [];
   for (const c of picks) {
     await ev((c) => { const g = window.__game; g.day.setClock(g.day.year, g.day.doy, c.arrive - 0.02); window.__tpDone = false; g.player.teleport(c.to.x, c.to.z).finally(() => { window.__tpDone = true; }); }, c);
     for (let k = 0; k < 600 && !(await ev(() => window.__tpDone)); k++) await ev(() => window.__game.step(1 / 30, 3));
-    tent = await ev((c) => {
+    tent = await ev(async (c) => {
       const g = window.__game, H = window.__p, C = g.partyCamps, p = g.player;
       const camp = () => { const D = C.drawn.get(c.key); return D && D.party.id === c.id ? D : null; };
-      for (let k = 0; k < 60 && !camp(); k++) H.step(15);
-      const D = camp(); if (!D) return { none: 'not drawn' };
+      await H.settle();
+      for (let k = 0; k < 120 && !camp(); k++) { H.step(15); await H.wait(40); }
+      const D = camp(); if (!D) return { none: 'not drawn', key: c.key, tp: p.teleporting, d: Math.hypot(p.x - c.to.x, p.z - c.to.z) };
       H.step(10); if (D.pitchAt == null) return { none: 'no pitch' };
       const tn = D.tentList[0], g0 = D.pitchGap ?? 0.08;
       g.day.setClock(g.day.year, g.day.doy, D.pitchAt - 0.01);
@@ -329,7 +330,9 @@ try {
       return { key: c.key, tents: D.tentList.length, held, firstUp, up: !D.tentObjs || (D.tentU && D.tentU[0] >= 1), moved: +moved.toFixed(2), us: us.slice(0, 24), a: +a.toFixed(2), gap: g0 };
     }, c);
     if (tent && !tent.none) break;
+    tries.push(tent);
   }
+  if (tent.none) tent.tries = tries;
   result('13b a party\'s tent waits while you stand on its spot (no shove), then rises from flat once you step off', !tent.none && tent.held.u === 0 && tent.held.objs && tent.held.shove < 0.15 && tent.up && tent.firstUp != null && tent.firstUp < 0.6 && tent.moved < 0.15, tent);
   result('13 no page errors', errors.length === 0, { errors: errors.slice(0, 6) });
 
