@@ -1,6 +1,6 @@
 // Story K1b (docs/build/campaign-design.md Part 4 Round 0): the feed and the seams in the real game, headless Chromium
 // against a running Vite, each check printed PASS or FAIL:
-//   1 flag off (no ?story): the seams hang on the story (story.allows yes, story.ui.pickLake null) but the feed never
+//   1 flag off (no ?story): exactly main: no seams (story-seams.js never loaded, no story.allows or story.ui), the feed never
 //     starts: no story-feed.js loaded, no listener on the outfitter's door, the trip's own listeners as before
 //   2 flag on (?story=1): the feed starts with the trip and outfitter adapters
 //   3 the store's door: stepping in gives store:enter { ep }, stepping out walkout { ep } (the real updateVisit)
@@ -45,7 +45,7 @@ const HELPERS = () => {
 const browser = await chromium.launch({ executablePath: findChrome(), args: ['--use-angle=metal', '--ignore-gpu-blocklist'] });
 const errors = [];
 const boot = async (page) => {
-  await page.waitForFunction(() => window.__game && window.__game.title && window.__game.storySeams && typeof window.__game.step === 'function' && window.__game.title.state === 'title', null, { timeout: 300000, polling: 500 });
+  await page.waitForFunction(() => window.__game && window.__game.title && (!/story=1/.test(location.search) || window.__game.storySeams) && typeof window.__game.step === 'function' && window.__game.title.state === 'title', null, { timeout: 300000, polling: 500 });
   await page.evaluate(HELPERS);
 };
 const newSeason = async (page, home = HOME) => {
@@ -74,10 +74,10 @@ try {
     const g = window.__game, H = window.__k1b, S = g.storySeams, o = g.outfitter, L = o.layout(g.profile.home);
     // through the door both ways, with nothing listening
     H.standAt(L.centre.x, L.centre.z); H.step(20); H.standAt((L.stepsFoot || L.door).x, (L.stepsFoot || L.door).z); H.step(20);
-    const loaded = performance.getEntriesByType('resource').map((r) => r.name).filter((n) => /story-feed|feed-trip|feed-outfitter/.test(n));
-    return { on: S.on, feed: S.feed, loaded, doorListeners: H.listeners(o), allows: g.story.allows('pitch'), pick: await g.story.ui.pickLake({ who: 'x' }), stub: S.pencil.stub && S.layer.stub };
+    const loaded = performance.getEntriesByType('resource').map((r) => r.name).filter((n) => /story-feed|feed-trip|feed-outfitter|story-seams|story-ui|story-allows|pencil|story-layer/.test(n));
+    return { seams: S ?? null, loaded, doorListeners: H.listeners(o), allows: typeof g.story.allows, ui: typeof g.story.ui };
   });
-  result('1 flag off: the seams hang on (allows yes, pickLake null), the feed never starts, nothing listens at the door', one.on === false && one.feed === null && one.loaded.length === 0 && one.doorListeners === 0 && one.allows === true && one.pick === null && one.stub, one);
+  result('1 flag off: no seams (none of their modules loaded, no story.allows/ui), the feed never starts, nothing listens at the door', one.seams === null && one.loaded.length === 0 && one.doorListeners === 0 && one.allows === 'undefined' && one.ui === 'undefined', one);
   await off.context().close();
 
   // 2 flag on

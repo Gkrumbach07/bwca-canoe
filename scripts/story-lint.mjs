@@ -240,6 +240,50 @@ export function clauseHolds(clause) {
   return false;
 }
 
+// --- the ids a condition or an action may name (the R0 fix): the people (facts.js PEOPLE), the notebook's entries and
+// photos (text/nb.json: ids and their N keys), the Walt page's lines (story-data/walt-lines.js, and any extracted text
+// entry that is a Walt-page line). A set that is not there (a fixture tree) is not checked.
+export const IDS = { people: null, nb: null, photo: null, walt: null };
+{
+  const tryImport = async (f) => { try { return existsSync(f) ? await import(pathToFileURL(f).href) : null; } catch { return null; } };
+  const fm = await tryImport(path.join(DATA, 'facts.js'));
+  if (fm && Array.isArray(fm.PEOPLE)) IDS.people = new Set(fm.PEOPLE);
+  const nbF = path.join(DATA, 'text', 'nb.json');
+  if (existsSync(nbF)) {
+    try {
+      const t = JSON.parse(readFileSync(nbF, 'utf8')).text || {};
+      IDS.nb = new Set(); IDS.photo = new Set();
+      for (const [id, e] of Object.entries(t)) { if (e && e.k === 'photo') IDS.photo.add(id); else { IDS.nb.add(id); if (e && e.key) IDS.nb.add(e.key); } }
+    } catch { IDS.nb = null; IDS.photo = null; }
+  }
+  const wm = await tryImport(path.join(DATA, 'walt-lines.js'));
+  if (wm && Array.isArray(wm.WALT_LINES)) {
+    IDS.walt = new Set(wm.WALT_LINES.map((w) => w && w.id).filter(Boolean));
+    const TEXT = path.join(DATA, 'text');
+    if (existsSync(TEXT)) for (const f of readdirSync(TEXT).filter((x) => x.endsWith('.json'))) {
+      try { for (const [id, e] of Object.entries(JSON.parse(readFileSync(path.join(TEXT, f), 'utf8')).text || {})) if (e && (e.k === 'page' || e.page)) IDS.walt.add(id); } catch { /* the text check reports it */ }
+    }
+  }
+}
+// an atom naming an id that does not exist → why, else null
+export function idCheck(a) {
+  let m;
+  if ((m = /^(read|here|und):([\w.-]+)$/.exec(a)) && IDS.nb && !IDS.nb.has(m[2])) return `no notebook entry '${m[2]}' (text/nb.json)`;
+  if ((m = /^nbphoto:([\w.-]+)$/.exec(a)) && IDS.photo && !IDS.photo.has(m[1])) return `no notebook photo '${m[1]}' (text/nb.json)`;
+  if ((m = /^(trust|met|visits|fear|cold|told):([a-z][\w-]*)/.exec(a)) && IDS.people && !IDS.people.has(m[2])) return `no person '${m[2]}' (facts.js PEOPLE)`;
+  return null;
+}
+// a rule's (or a verb's) action naming an id that does not exist → why, else null
+export function actionIdCheck(kind, arg) {
+  if (kind === 'walt' && IDS.walt && !IDS.walt.has(arg)) return `no Walt page line '${arg}' (story-data/walt-lines.js)`;
+  if (kind === 'und' && IDS.nb && !IDS.nb.has(arg)) return `no notebook entry '${arg}' (text/nb.json)`;
+  if (kind === 'ppl') { const who = String(arg).split(/[.+=-]/)[0]; if (IDS.people && !IDS.people.has(who)) return `no person '${who}' (facts.js PEOPLE)`; }
+  return null;
+}
+// the fact keys an atom reads: f:key, and days.since(key) / trips.since(key) (the lint's own atom strings, or the
+// compiler's index keys 'f:key')
+export const factReads = (atoms) => atoms.flatMap((a) => { let m; if ((m = /^f:([\w.-]+)/.exec(a))) return [m[1]]; if ((m = /^(?:days|trips)\.since\(([\w.-]+)\)/.exec(a))) return [m[1]]; return []; });
+
 // K1a's compiler, when it is there (the one parser): compile(expr) → { atoms } or { atoms: Set }
 let cond = null;
 if (existsSync(path.join(SRC, 'story-cond.js'))) { try { cond = await import(pathToFileURL(path.join(SRC, 'story-cond.js')).href); } catch (e) { console.log('note: story-cond.js did not load in Node:', e.message); } }
@@ -248,10 +292,10 @@ export function checkCond(expr, where) {
   let ast;
   try { ast = parse(expr); } catch (e) { return [`${where}: '${expr}': ${e.message}`]; }
   let atoms = atomsOfAst(ast);
-  if (cond && typeof cond.compile === 'function') {
-    try { const c = cond.compile(expr); const xs = c && (c.atoms instanceof Set ? [...c.atoms] : c.atoms); if (Array.isArray(xs)) atoms = xs.map((x) => (typeof x === 'string' ? x : x && (x.src || x.atom || x.key))).filter(Boolean); } catch (e) { errs.push(`${where}: '${expr}': story-cond: ${e.message}`); }
+  if (cond && typeof cond.compile === 'function') { // (an atom's `also`: a since()'s or an @here's own fact)
+    try { const c = cond.compile(expr); const xs = c && (c.atoms instanceof Set ? [...c.atoms] : c.atoms); if (Array.isArray(xs)) atoms = xs.flatMap((x) => (typeof x === 'string' ? [x] : x ? [x.src || x.atom || x.key, x.also] : [])).filter(Boolean); } catch (e) { errs.push(`${where}: '${expr}': story-cond: ${e.message}`); }
   }
-  for (const a of atomsOfAst(ast)) if (!atomKind(a)) errs.push(`${where}: '${expr}': unknown atom '${a}'`);
+  for (const a of atomsOfAst(ast)) { if (!atomKind(a)) errs.push(`${where}: '${expr}': unknown atom '${a}'`); else { const why = idCheck(a); if (why) errs.push(`${where}: '${expr}': ${why}`); } }
   dnf(ast).forEach((cl, n) => { if (!clauseHolds(cl)) errs.push(`${where}: '${expr}': clause ${n + 1} can never hold (sensors: ${cl.filter((f) => f.atom).map((f) => (f.neg ? '!' : '') + f.atom).join(' & ')})`); });
   return { errs, atoms };
 }
@@ -306,14 +350,16 @@ if (!dataFiles.length) {
         const m = String(a).match(/^([a-z]+):(.+)$/);
         if (!m || !ACTIONS.includes(m[1])) { errs.push(`${at}: unknown action '${a}'`); continue; }
         if (m[1] === 'f' && !declared(m[2].split('=')[0])) errs.push(`${at}: writes undeclared fact '${m[2]}'`);
+        const why = actionIdCheck(m[1], m[2]); if (why) errs.push(`${at}: ${why}`);
       }
-      if (r.when) { const c = checkCond(r.when, at); const e = Array.isArray(c) ? c : c.errs; condErrs.push(...e); if (!Array.isArray(c)) for (const a of c.atoms) { const m = a.match(/^f:([\w.-]+)/); if (m && !declared(m[1])) errs.push(`${at}: reads undeclared fact '${m[1]}'`); } }
+      if (r.when) { const c = checkCond(r.when, at); const e = Array.isArray(c) ? c : c.errs; condErrs.push(...e); if (!Array.isArray(c)) for (const k of new Set(factReads([...c.atoms, ...atomsOfAst(parse(r.when))]))) if (!declared(k)) errs.push(`${at}: reads undeclared fact '${k}'`); }
     }
   }
   // locks: { id, keys: [{ id, when }] }
   for (const n of dataFiles.filter((f) => /^locks/.test(f))) for (const L of arrays(mods[n])) for (const k of (L && L.keys) || []) {
     if (!k.when) { errs.push(`${n}:${L.id}.${k.id}: a key with no when`); continue; }
     const c = checkCond(k.when, `${n}:${L.id}.${k.id}`); condErrs.push(...(Array.isArray(c) ? c : c.errs));
+    if (!Array.isArray(c)) for (const f of new Set(factReads([...c.atoms, ...atomsOfAst(parse(k.when))]))) if (!declared(f)) errs.push(`${n}:${L.id}.${k.id}: reads undeclared fact '${f}'`);
   }
   // story-places.json: show / visible / dot when / verbs when / triggers when
   const placesF = path.join(SRC, 'story-places.json');
@@ -322,7 +368,7 @@ if (!dataFiles.length) {
     for (const pl of P) {
       const at = `story-places:${pl.id}`, cs = [];
       for (const pr of pl.props || []) { if (pr.show) cs.push(pr.show); if (pr.visible) cs.push(pr.visible); for (const d of pr.dot || []) if (d.when) cs.push(d.when); }
-      for (const v of pl.verbs || []) if (v.when) cs.push(v.when);
+      for (const v of pl.verbs || []) { if (v.when) cs.push(v.when); for (const a of v.then || []) { const m = String(a).match(/^([a-z]+):(.+)$/); const why = m && actionIdCheck(m[1], m[2]); if (why) errs.push(`${at}: ${why}`); } }
       for (const t of pl.triggers || []) if (t.when) cs.push(t.when);
       for (const c of cs) { const r = checkCond(c, at); condErrs.push(...(Array.isArray(r) ? r : r.errs)); }
     }
@@ -342,7 +388,7 @@ if (!dataFiles.length) {
   else {
     const errs = [];
     if (!process.env.STORY_LINT_SRC) {
-      try { const ex = await import(pathToFileURL(path.join(ROOT, 'scripts', 'story-extract.mjs')).href); for (const b of ex.staleStamps()) errs.push(`${b.file}: stale stamp (${b.doc}; run npm run story:extract)`); } catch (e) { errs.push(`story-extract.mjs: ${e.message}`); }
+      try { const ex = await import(pathToFileURL(path.join(ROOT, 'scripts', 'story-extract.mjs')).href); for (const b of ex.staleStamps()) errs.push(b.why === 'body' ? `${b.file}: its text was edited by hand (the body hash differs; edit ${b.doc} and run npm run story:extract)` : `${b.file}: stale stamp (${b.doc}; run npm run story:extract)`); } catch (e) { errs.push(`story-extract.mjs: ${e.message}`); }
     }
     let factRow = null;
     try { factRow = (await import(pathToFileURL(path.join(DATA, 'facts.js')).href)).factRow; } catch { factRow = null; }
@@ -356,7 +402,7 @@ if (!dataFiles.length) {
         const c = checkCond(e.cond, `${f}:${id}`);
         if (Array.isArray(c)) { errs.push(...c); continue; }
         errs.push(...c.errs);
-        if (factRow) for (const a of c.atoms) { const m = String(a).match(/^f:([\w.-]+)/); if (m && !factRow(m[1]) && !factRow(m[1] + '.x')) errs.push(`${f}:${id}: reads undeclared fact '${m[1]}'`); }
+        if (factRow) for (const k of new Set(factReads([...c.atoms.map(String), ...atomsOfAst(parse(e.cond))]))) if (!factRow(k) && !factRow(k + '.x')) errs.push(`${f}:${id}: reads undeclared fact '${k}'`);
       }
     }
     result('text: the extract is fresh and its conditions hold', errs.length === 0, { files, conds: n, errs: errs.slice(0, 30) });

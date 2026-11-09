@@ -62,8 +62,8 @@ outfitter ──buy permit (picks the date)──▶ drive or walk to the entry 
 - **Co-op:** one permit covers the whole group, no size limit (owner, 2026-11-05). A friend who joins gets the basic
   starting kit a new player gets, whatever gear the host has by then.
 - **Primitive areas are the real ones** (the Forest Service's PMAs), not drawn from our data.
-- Real-world note: shoulder-season permits are self-issued and free in real life. We charge anyway (the owner's call)
-  but cheaper.
+- **The late season (owner's rule):** from 1 October permits are free and self-issued, as in real life: the desk sells
+  none, so the late season is free paddling until the ice (docs/story/00-owner-decisions.md; campaign-design.md).
 
 ### Getting around
 

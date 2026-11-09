@@ -52,6 +52,10 @@ grounded (section 1).
 | `month:` | Calendar month, for seasonal pools |
 | `once` | Said once a save, then never again |
 
+**A bare `S<n>` tag** (no backticks, as `S8` or `S12` in a rumour) is a side story's tag (60-side-stories.md: the
+numbered side stories), not a story stage: stages run only `S0`…`S7`, in backticks. This is how the story round 0 join
+read it (story-extract.mjs leaves such a line's condition as prose); **for a writer to confirm.**
+
 `{tokens}` follow the existing templates (`{lake}`, `{site}`, `{rods}`, `{k}`). New tokens from stream E's
 `parties.storyOf`: `{lastLake}` (last night's lake), `{tonight}` (tonight's lake), `{nextLake}`, `{windLake}` (a lake
 they were wind-bound on, only if `windDay` says so), `{catchSp}` and `{bestIn}` (their best fish, in inches, because

@@ -24,6 +24,8 @@
 // Words take {vars}: k (the keeper's first name), goal, goalWhere, site, rods, carry, deep, sp, cm, berry, loonLake,
 // landing, town, road, rel, relName, his, yy, college, subject, city, district.
 
+import { STORY_ON } from './story-flag.js'; // (Gus's story past, behind the flag)
+
 // --- the six written by hand ---------------------------------------------------------------------------------------
 export const HAND = {
   30: { // Ruth Aho, Lake One: warm, the lodge and the café; her brother carves the paddles
@@ -39,8 +41,11 @@ export const HAND = {
       { ask: 'What’s Oskar up to?', gap: 1, say: ['He came in this morning with this, wrapped in a dish towel. For whoever found his walleye, he said.', 'White cedar, painted by hand. Don’t lose it in a snag. Lose it in a big one.'], done: { give: 'lure:cedarminnow', or: 'lure:lazyike' } },
     ] },
   },
-  25: { // Gus Lindgren, Moose Lake: gruff, ran the tow boat on Saganaga thirty years, bought this store in 2021 (story 31 New details 15)
-    past: ['Ran the tow boat on Sag thirty years. American Point and back.', 'Hauled half of Iowa and every cooler they owned. Motors stop at the portage. Good.', 'My wife ran our old store. Now I run this one. Badly.'],
+  25: { // Gus Lindgren, Moose Lake: gruff, ran the tow boat thirty years; behind STORY_ON on Saganaga, and bought this store
+    // in 2021 (story 31 New details 15); with the flag off, main's lines
+    past: STORY_ON
+      ? ['Ran the tow boat on Sag thirty years. American Point and back.', 'Hauled half of Iowa and every cooler they owned. Motors stop at the portage. Good.', 'My wife ran our old store. Now I run this one. Badly.']
+      : ['Ran the tow boat thirty years. Moose, Newfound, Sucker, up to Prairie Portage and back.', 'Hauled half of Iowa and every cooler they owned. Motors stop at the portage. Good.', 'My wife ran the store. Now I do. Badly.'],
     topics: [
       { id: 'prairie', ask: 'Prairie Portage?', gate: { trips: 1 }, say: ['Canada’s the other side. Quetico. You want their permit and a reason.', 'Most turn round there. Fine by me.'] },
       { id: 'basswood', ask: 'Basswood?', gate: { visits: 3 }, say: ['Big. Islands everywhere and they all look the same.', 'Compass on the thwart. Check it every point.'] },

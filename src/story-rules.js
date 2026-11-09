@@ -41,6 +41,7 @@ export class Rules {
     this.waiting = new Set();   // push rules the director held back (re-asked on the tick)
     this.running = false; this.queue = [];
     this.errors = [];
+    this.warnings = [];         // conditions reading an undeclared fact or an unknown sensor (story-cond warnings): warned loudly
   }
   add(list) {
     for (const r0 of list || []) {
@@ -49,6 +50,7 @@ export class Rules {
       const r = { ...r0, then: Array.isArray(r0.then) ? r0.then : r0.then ? [r0.then] : [] };
       r.c = compile(r.when || '');
       if (!r.c.ok) this.errors.push(`${r.id}: ${r.c.errors.join('; ')}`);
+      if (r.c.warnings && r.c.warnings.length) { const w = `${r.id}: '${r.when}': ${r.c.warnings.join('; ')}`; this.warnings.push(w); console.warn(`story rule ${w} (it reads false; story-lint fails it)`); }
       this.rules.set(r.id, r);
       if (r.on) { if (!this.byEvent.has(r.on)) this.byEvent.set(r.on, new Set()); this.byEvent.get(r.on).add(r); continue; }
       // a when: rule: indexed by what it reads

@@ -12,7 +12,8 @@
     "rebake:v4": "node scripts/rebake-v4.mjs",
     "bake:detail": "node --max-old-space-size=3072 scripts/detail-bake.mjs",
     "data:sync": "node scripts/data-sync.mjs",
-    "story:extract": "node scripts/story-extract.mjs"
+    "story:extract": "node scripts/story-extract.mjs",
+    "story:lint": "node scripts/story-lint.mjs && node scripts/story-extract.mjs --check --quiet"
   },
   "dependencies": {
     "pngjs": "^7.0.0",

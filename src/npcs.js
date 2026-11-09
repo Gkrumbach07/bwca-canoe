@@ -77,6 +77,7 @@ import { Mesher, V3, ringPts, loft } from './loft.js';
 import { registerKind, KINDS } from './tasks.js';
 import { outfitterProfile, keeperLine, placeFacts, abundanceOf, KEEPER_FROM, OUTFITTER_EPS } from './outfitters.js';
 import { STAFF } from './onboarding.js'; // (the summer help's names: no one else is given one)
+import { STORY_ON } from './story-flag.js';
 // (the join: a hand-written keeper who moved to the host that serves their old landing keeps their talk, by keeperKey)
 const keeperKeyOf = (ep) => KEEPER_FROM[ep] ?? ep;
 const keeperMoved = (ep) => Object.values(KEEPER_FROM).includes(ep) && KEEPER_FROM[ep] == null;
@@ -254,7 +255,7 @@ const F_MORE = ['Annika', 'Brenda', 'Cheryl', 'Darla', 'Freya', 'Heidi', 'Janet'
 const M_MORE = ['Aaron', 'Bjorn', 'Curt', 'Doug', 'Erik', 'Fritz', 'Glen', 'Hank', 'Ivan', 'Jens', 'Karl', 'Lars', 'Mitch', 'Neil', 'Otis', 'Paul', 'Ray', 'Stan', 'Ted', 'Vic', 'Warren', 'Zach', 'Brad', 'Craig'];
 const OLD_MORE = ['Alvin', 'Bernie', 'Delmar', 'Eldon', 'Floyd', 'Arlo', 'Mabel', 'Opal', 'Verna', 'Thelma', 'Orville', 'Lyman'];
 const KID_MORE = ['Mia', 'Jack', 'Ella', 'Noah', 'Ivy', 'Sam', 'Zara', 'Eli', 'Hazel', 'Ben', 'Lucas', 'Grace'];
-for (const n of [...F_MORE, 'Mabel', 'Opal', 'Verna', 'Thelma', 'Josie']) FEMALE.add(n); // (Josie: the summer help, onboarding.js STAFF)
+for (const n of [...F_MORE, 'Mabel', 'Opal', 'Verna', 'Thelma', ...(STORY_ON ? ['Josie'] : [])]) FEMALE.add(n); // (Josie: the summer help under STORY_ON, onboarding.js STAFF)
 // the story's own people and the hand-written keepers: never a generated person's name (the keepers' are added from
 // outfitters.js, the summer help's from onboarding.js)
 const STORY_NAMES = ['Walt', 'Oskar']; // (the pools above hold no name of the story's cast: glf-f3 test 1a checks every list)

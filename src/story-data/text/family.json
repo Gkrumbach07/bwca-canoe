@@ -1,4 +1,4 @@
-{"$doc":"docs/story/33-family.md","$hash":"00c8289909bd","$v":1,"text":{"33:2.c1":{"k":"choice","text":"Anything of his."},
+{"$doc":"docs/story/33-family.md","$hash":"00c8289909bd","$body":"2c237af0a24d","$v":1,"text":{"33:2.c1":{"k":"choice","text":"Anything of his."},
 "33:5/ailis-door.1":{"k":"line","text":"Sit.","when":"Step: 1 · Sit"},
 "33:5/ailis-door.2":{"k":"line","text":"I'll tell you one thing and then you'll go.","when":"Step: 2 · The stone"},
 "33:5/ailis-door.3":{"k":"line","text":"Thank you","when":"Step: After the can"},

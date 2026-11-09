@@ -99,7 +99,15 @@ try {
   ok('stale: a doc edit without a re-extract fails --check', st.errors.some((e) => /opening\.json: stale/.test(e)) &&
     X.staleStamps({ root: tmp }).some((b) => b.file === 'opening.json'));
   X.run({ root: tmp });
-  ok('re-extract: the edit is fresh again', X.run({ root: tmp, check: true }).errors.length === 0);
+  ok('re-extract: the edit is fresh again', X.run({ root: tmp, check: true }).errors.length === 0 && X.staleStamps({ root: tmp }).length === 0);
+  // a hand edit to a text file's body (the doc untouched): the cheap stamp check catches it, not only --check
+  {
+    const tp = join(tmp, 'src/story-data/text/opening.json'), keep = readFileSync(tp, 'utf8'), j = JSON.parse(keep), id = Object.keys(j.text)[0];
+    j.text[id].text = (j.text[id].text || '') + ' (edited)';
+    writeFileSync(tp, JSON.stringify(j));
+    ok('body: a hand edit to a text JSON body is stale in staleStamps (the header hash still matches)', X.staleStamps({ root: tmp }).some((b) => b.file === 'opening.json' && b.why === 'body'));
+    writeFileSync(tp, keep);
+  }
   // a line removed: the ids after it shift; the last becomes an orphan
   writeFileSync(op, readFileSync(op, 'utf8').replace(/\*\*Tauno:\*\* "Leeches are slow this week\. A guy could try a jig and a minnow\."\n/, ''));
   const rr = X.run({ root: tmp });

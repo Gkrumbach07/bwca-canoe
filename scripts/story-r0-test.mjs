@@ -51,7 +51,7 @@ const plant = { fn: (doc) => { try { if (!sessionStorage.getItem('r0-planted')) 
 const loaded = (page, rx) => page.evaluate((rx) => performance.getEntriesByType('resource').map((e) => e.name).filter((n) => new RegExp(rx).test(n)), rx);
 
 try {
-  // 1 flag off: exactly main (the v1 story, the stubs hung on but inert, no feed, no story data loaded) ----------------
+  // 1 flag off: exactly main (the v1 story, no seams, no feed, no story data loaded) ----------------
   {
     const A = await openGame('off');
     await newSeason(A); await inGame(A);
@@ -59,10 +59,10 @@ try {
     const off = await A.evaluate(() => {
       const g = window.__game, s = g.story, se = g.storySeams;
       return { v: s.v ?? null, mode: s.mode ?? null, ingest: typeof s.ingest, story2: g.store.getItem('bwca-canoe:story2'), story1: !!g.store.getItem('bwca-canoe:story'),
-        seamsOn: se && se.on, feed: se && se.feed, allows: s.allows && s.allows('pitch'), ui: !!(s.ui && s.ui.pickLake) };
+        seams: se ?? null, allows: typeof s.allows, ui: typeof s.ui };
     });
-    off.mods = await loaded(A, 'story-(feed|rules|cond|data)|feed-(trip|outfitter)|/src/story\\.js');
-    result('1 flag off: the v1 story, no story2, no feed, no v2 module loaded; the stubs present and inert', off.v === null && off.mode === null && off.ingest === 'undefined' && off.story2 === null && off.story1 && off.seamsOn === false && off.feed === null && off.allows === true && off.ui && !off.mods.length, off);
+    off.mods = await loaded(A, 'story-(feed|rules|cond|data|seams|ui|allows|layer)|feed-(trip|outfitter)|/src/pencil\\.js|/src/story\\.js');
+    result('1 flag off: the v1 story, no story2, no seams, no feed, no v2 module loaded', off.v === null && off.mode === null && off.ingest === 'undefined' && off.story2 === null && off.story1 && off.seams === null && off.allows === 'undefined' && off.ui === 'undefined' && !off.mods.length, off);
     await A.context().browser().close();
   }
 

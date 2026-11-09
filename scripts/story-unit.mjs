@@ -265,14 +265,15 @@ test('save: v2 under story2, the v1 echo, a reload, a new season', () => {
   assert.equal(u.has('nb.found'), false);
   assert.equal(u.state.season, 'p-2');
 });
-test('migration v1 → v2: a v1 finder gets nb.found and the Walt lines; flags under legacy.*; read[] dropped', () => {
+test('migration v1 → v2: a v1 finder gets nb.found and the Walt lines; flags under legacy.*; read[] kept', () => {
   const v1 = { v: 1, season: 'p-1', legacy: true, notebook: { found: true, abs: 20500, key: 7, lake: 'Farm Lake' }, read: [0, 2], flags: { tried: 3 } };
   const store = io({ [NS1]: v1 });
   const s = new StoryV2({ io: store }); s.attach({ profile: profile('p-1') });
   assert.equal(s.has('nb.found'), true); assert.equal(s.fact('nb.found').abs, 20500);
   assert.deepEqual(s.walt(), ['w.found', 'w.cellar']);             // through the night1 when: rule, quietly
   assert.equal(s.legacy, true); assert.equal(s.get('legacy.tried'), 3); assert.equal(s.flag('tried'), 3);
-  assert.deepEqual(s.state.read, []);
+  assert.deepEqual(s.state.read, [0, 2]);
+  assert.deepEqual(store.read(NS1).read, [0, 2]);                 // (the echo gives the pages back to a v1 build)
   assert.equal(s.meta().nightOneSeen, false);
   assert.ok(store.read(NS2));
   // an old season with no document at all: legacy, blank
@@ -284,6 +285,34 @@ test('migration v1 → v2: a v1 finder gets nb.found and the Walt lines; flags u
   // a v1 document of another season (a slot out of step): not migrated
   const w = new StoryV2({ io: io({ [NS1]: v1 }) }); w.attach({ profile: profile('p-9') });
   assert.equal(w.has('nb.found'), false);
+});
+test('the flag off then on: what a v1 build added this season is merged, never overwritten by the echo', () => {
+  const store = io();
+  const s = new StoryV2({ io: store }); s.attach({ profile: profile('p-1') }); s.flag('kept', 1); s.read(0); s.flush();
+  // the flag off: the v1 build plays on (finds the notebook, reads page 1, sets a flag) on the same season's echo
+  const v1 = store.read(NS1);
+  v1.notebook = { found: true, abs: 20610, key: 3, lake: 'Lake One' }; v1.read.push(1); v1.flags.tried = 2;
+  store.write(NS1, v1);
+  // the flag on again
+  const t = new StoryV2({ io: store }); t.attach({ profile: profile('p-1') });
+  assert.equal(t.has('nb.found'), true); assert.equal(t.fact('nb.found').abs, 20610);
+  assert.equal(t.state.notebook.lake, 'Lake One');
+  assert.deepEqual(t.state.read, [0, 1]);
+  assert.equal(t.flag('tried'), 2); assert.equal(t.flag('kept'), 1); assert.equal(t.get('legacy.tried'), 2);
+  assert.deepEqual(t.walt(), ['w.found', 'w.cellar']);             // (the rules re-run quietly, as after a migration)
+  const e = store.read(NS1);
+  assert.equal(e.notebook.found, true); assert.deepEqual(e.read, [0, 1]); assert.equal(e.flags.tried, 2);
+  // nothing moved on: no merge, no re-run
+  const u = new StoryV2({ io: store }); u.attach({ profile: profile('p-1') });
+  assert.equal(u.state.log.filter((r) => r[3] === 'merge').length, 1);
+  // a season begun on the v1 build: that season's v1 document is migrated, not blanked
+  store.write(NS1, { v: 1, season: 'p-2', notebook: { found: true, abs: 20700, key: null, lake: null }, read: [2], flags: {} });
+  const w = new StoryV2({ io: store }); w.attach({ profile: profile('p-2') });
+  assert.equal(w.state.season, 'p-2'); assert.equal(w.has('nb.found'), true); assert.deepEqual(w.state.read, [2]);
+  // another season's v1 document never merges in
+  const x = new StoryV2({ io: io({ [NS2]: store.read(NS2), [NS1]: { v: 1, season: 'p-9', notebook: { found: false }, read: [0, 1, 2], flags: { z: 1 } } }) });
+  x.attach({ profile: profile('p-2') });
+  assert.deepEqual(x.state.read, [2]); assert.equal(x.flag('z'), undefined);
 });
 test('the data hash: other story data on load re-runs the rules quietly', () => {
   const store = io(), rules1 = [{ id: 'x', on: 'nothing', then: [] }];
@@ -331,6 +360,17 @@ test('mirror: a guest\'s own story never moves; only world facts come in; nothin
 test('the host side: world facts out', () => {
   const s = make(); s.set('nb.found'); s.set('tauno.porch.done'); s.set('tier.1');
   assert.deepEqual(Object.keys(s.worldFacts()).sort(), ['nb.found', 'tier.1']);
+});
+test('compile warns on a bare undeclared fact and an unknown sensor; the core rules and locks warn about nothing', () => {
+  assert.ok(compile('wibble').warnings.some((w) => /undeclared fact "wibble"/.test(w)));
+  assert.ok(compile('lead:nosuch').warnings.some((w) => /unknown sensor "lead:nosuch"/.test(w)));
+  assert.ok(compile('days.since(nosuch.fact)>=2').warnings.some((w) => /nosuch\.fact/.test(w)));
+  assert.deepEqual(compile('f:nb.found & days.since(tier.4)>=21 & any(key.L4*) & hour:7-10').warnings, []);
+  const s = make();
+  assert.deepEqual(s.debug.warnings(), []);
+  s.addRules([{ id: 'probe.wibble', when: 'wibble', then: ['f:tier.1'] }]);
+  assert.equal(s.debug.warnings().length, 1);
+  assert.equal(s.has('tier.1'), false);
 });
 test('why and can', () => {
   const s = make();

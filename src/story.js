@@ -22,12 +22,16 @@
 // migration. Its v1-shaped echo (notebook, pages read, flags) is kept written so a rollback to a v1 build finds its
 // own document, true to the season, and the gl rigs' raw-key checks hold. `bwca-canoe:story-meta` is the player's
 // (save.js GLOBAL_KEYS): { nightOneSeen, endings }.
-import { compile } from './story-cond.js';
+import { compile, setFactCheck } from './story-cond.js';
 import { Rules } from './story-rules.js';
 import { FACTS, factRow, checkValue, ARCS, DOORS } from './story-data/facts.js';
 import { LOCKS, lockById, lockRules } from './story-data/locks.js';
 import { RULES_CORE } from './story-data/rules-core.js';
 import { RETIRED } from './story-data/retired.js';
+
+// every condition's fact reads checked against facts.js: an undeclared one (a bare 'wibble') is a loud warning
+setFactCheck((k) => !!factRow(k));
+const warnedWhen = new Set();
 
 export const NS2 = 'story2', NS1 = 'story', META = 'story-meta';
 const LOG_MAX = 300;
@@ -68,6 +72,7 @@ function wholeDoc(d) {
   return out;
 }
 
+const pageList = (a) => (Array.isArray(a) ? [...new Set(a.filter((i) => Number.isInteger(i) && i >= 0))] : []);
 const memIO = () => { const m = new Map(); return { read: (ns, f = null) => (m.has(ns) ? JSON.parse(m.get(ns)) : f), write: (ns, v) => { m.set(ns, JSON.stringify(v)); return true; }, map: m }; };
 
 export class StoryV2 {
@@ -136,7 +141,11 @@ export class StoryV2 {
       if (v1 && v1.v === 1 && !(started && v1.season && id && v1.season !== id)) this.setDoc(this.migrate(v1, id));
       else { this.setDoc(blankDoc(id)); if (started) this.doc.legacy = true; }
     } else if (started && this.doc.season && id && this.doc.season !== id) {
-      this.setDoc(blankDoc(id)); // (another season's document: a slot's keys out of step)
+      // another season's document: a slot's keys out of step, or a season begun on a v1 build (the flag off) since
+      const v1 = this.io.read(NS1);
+      this.setDoc(v1 && v1.v === 1 && v1.season === id ? this.migrate(v1, id) : blankDoc(id));
+    } else {
+      this.mergeV1(); // (a v1 build ran this season since: the flag turned off and on again)
     }
     if (this.doc.season == null && id) this.doc.season = id;
     this.attached = true;
@@ -145,12 +154,14 @@ export class StoryV2 {
     if (profile && typeof profile.onChange === 'function') profile.onChange((what) => { if (what === 'season') this.newSeason(profile.seasonId); });
     return this;
   }
-  // v1 → v2 (§3.7): the notebook found becomes nb.found; v1's read[] (placeholder indices) is dropped; flags go under
-  // legacy.*; the rules then re-run quietly (data: null), so a v1 finder gets night one's Walt lines
+  // v1 → v2 (§3.7): the notebook found becomes nb.found; v1's read[] (page indices) is kept as nb.pages, so the echo
+  // gives it back to a v1 build and walt.js's Read moment sees it; flags go under legacy.*; the rules then re-run quietly
+  // (data: null), so a v1 finder gets night one's Walt lines
   migrate(v1, id = null) {
     const d = blankDoc(v1.season ?? id);
     this.setDoc(d);
     d.legacy = !!v1.legacy;
+    d.nb.pages = pageList(v1.read);
     d.flags = { ...(v1.flags || {}) };
     for (const [k, v] of Object.entries(v1.flags || {})) if (v !== undefined && v !== null) this.put(`legacy.${k}`, v, 'migrate:v1', { abs: null });
     const nb = v1.notebook || {};
@@ -161,6 +172,33 @@ export class StoryV2 {
     d.data = null;
     this.log('migrate', { from: 1, found: !!nb.found, flags: Object.keys(v1.flags || {}).length });
     return d;
+  }
+  // the v1 document moved on since this document's last echo (a v1 build, the flag off, played this season): what it
+  // added is merged in before the echo overwrites it. Found, pages read and flags only ever grow or change on v1, so a
+  // difference from the echo is the v1 build's own progress. → true when anything was merged
+  mergeV1() {
+    const d = this.doc;
+    if (!d || this.mode === 'mirror') return false;
+    const v1 = this.io.read(NS1);
+    if (!v1 || v1.v !== 1 || (v1.season != null && d.season != null && v1.season !== d.season)) return false;
+    let n = 0;
+    const nb = v1.notebook || {};
+    if (nb.found && !this.has('nb.found')) {
+      d.nb.at = { abs: nb.abs ?? null, key: nb.key ?? null, lake: nb.lake ?? null };
+      this.put('nb.found', true, 'merge:v1', { abs: nb.abs ?? null });
+      n++;
+    }
+    for (const p of pageList(v1.read)) if (!d.nb.pages.includes(p)) { d.nb.pages.push(p); n++; }
+    for (const [k, v] of Object.entries(v1.flags || {})) {
+      if (v === undefined || JSON.stringify(d.flags[k]) === JSON.stringify(v)) continue;
+      d.flags[k] = v;
+      if (v !== null) this.put(`legacy.${k}`, v, 'merge:v1', { abs: null });
+      n++;
+    }
+    if (!n) return false;
+    d.data = null; // (the rules re-run quietly in checkData, as after the migration)
+    this.log('merge', { from: 1, n });
+    return true;
   }
   // a save made with other story data: retired ids mapped or dropped, then every when: rule once, quietly
   checkData() {
@@ -456,7 +494,12 @@ export class StoryV2 {
     }
     return undefined;
   }
-  when(expr, args) { return compile(expr).test(this.env, args); }
+  when(expr, args) {
+    const c = compile(expr);
+    if (c.warnings.length && !warnedWhen.has(c.src)) { warnedWhen.add(c.src); console.warn(`story.when '${c.src}': ${c.warnings.join('; ')} (it reads false; story-lint fails it)`); }
+    if (!c.ok && !warnedWhen.has(c.src)) { warnedWhen.add(c.src); console.warn(`story.when '${c.src}': ${c.errors.join('; ')}`); }
+    return c.test(this.env, args);
+  }
 
   // --- the bus -----------------------------------------------------------------------------------------------------------
   on(evt, fn) {
@@ -572,6 +615,7 @@ export class StoryV2 {
       fixture(name) { const fn = fixtures.get(name); if (!fn) throw new Error(`story.debug.fixture: no fixture ${name}`); return fn(self); },
       doc() { return JSON.parse(JSON.stringify(self.doc)); },
       errors() { return self.rules.errors.slice(); },
+      warnings() { return self.rules.warnings.slice(); },
     };
   }
 }

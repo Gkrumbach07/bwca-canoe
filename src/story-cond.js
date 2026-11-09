@@ -2,8 +2,12 @@
 // lint and the solver. The same bracket language as docs/story/70-world-texture.md §0, so writers' conditions copy
 // straight in. Pure: no imports, runs the same in the browser and in Node (scripts/story-unit.mjs).
 //
-//   compile(src) → { src, ok, errors, test(env, args?) → bool, atoms: [node], keys: [index key], sensors: bool }
+//   compile(src) → { src, ok, errors, warnings, test(env, args?) → bool, atoms: [node], keys: [index key], sensors: bool }
 //   (memoised by string; a compile error gives a test that is always false, and the error in `errors`)
+//   setFactCheck(fn) fn(key) → declared? (story.js hands in facts.js factRow). Then `warnings` names every fact a
+//   condition reads that no row declares (a bare 'wibble' compiles as a fact) and every unknown sensor ('lead:nosuch'
+//   without its =state): the condition still compiles (it reads false), and the caller warns loudly (story-rules.js,
+//   story.when). The lint (story-lint.mjs) fails them outright.
 //
 //   expr := term ('|' term)*    term := factor ('&' factor)*    factor := '!' factor | '(' expr ')' | atom
 //
@@ -229,20 +233,34 @@ function collect(node, out) {
 }
 
 const memo = new Map();
+let factCheck = null;
+export function setFactCheck(fn) { factCheck = typeof fn === 'function' ? fn : null; memo.clear(); }
+// what a compiled condition reads that does not exist → [why]
+function warningsOf(atoms) {
+  const out = [];
+  for (const a of atoms) {
+    if (a.unknown) out.push(`unknown sensor "${a.name}${a.arg != null ? ':' + a.arg : ''}"`);
+    if (!factCheck) continue;
+    const keys = a.k === 'fact' || a.k === 'since' ? [a.fact] : a.k === 'any' || a.k === 'count' ? [] : a.also ? [a.also.slice(2)] : [];
+    for (const k of keys) if (!factCheck(k)) out.push(`undeclared fact "${k}"`);
+    if ((a.k === 'any' || a.k === 'count') && !factCheck(a.prefix) && !factCheck(a.prefix + 'x')) out.push(`undeclared fact family "${a.prefix}*"`);
+  }
+  return out;
+}
 export function compile(src) {
   const key = String(src == null ? '' : src);
   if (memo.has(key)) return memo.get(key);
   let out;
   try {
-    if (!key.trim()) out = { src: key, ok: true, errors: [], test: () => true, atoms: [], keys: [], sensors: false, unknown: [], tree: null };
+    if (!key.trim()) out = { src: key, ok: true, errors: [], warnings: [], test: () => true, atoms: [], keys: [], sensors: false, unknown: [], tree: null };
     else {
       const tree = parse(tokenize(key)), atoms = collect(tree, []);
       const keys = [...new Set(atoms.flatMap((a) => (a.also ? [a.key, a.also] : [a.key])))];
-      out = { src: key, ok: true, errors: [], tree, atoms, keys, sensors: keys.includes('s'), unknown: atoms.filter((a) => a.unknown).map((a) => a.name),
+      out = { src: key, ok: true, errors: [], warnings: warningsOf(atoms), tree, atoms, keys, sensors: keys.includes('s'), unknown: atoms.filter((a) => a.unknown).map((a) => a.name),
         test: (env, args) => { try { return evaluate(tree, env, args); } catch (e) { console.warn('story-cond', key, e); return false; } } };
     }
   } catch (e) {
-    out = { src: key, ok: false, errors: [String(e.message || e)], test: () => false, atoms: [], keys: [], sensors: false, unknown: [], tree: null };
+    out = { src: key, ok: false, errors: [String(e.message || e)], warnings: [], test: () => false, atoms: [], keys: [], sensors: false, unknown: [], tree: null };
   }
   memo.set(key, out);
   return out;

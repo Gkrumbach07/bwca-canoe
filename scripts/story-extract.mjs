@@ -61,6 +61,7 @@ const NOT_SPEAKERS = new Set(['Gives', 'Walt page', "Walt's entry", 'Rumour', 'R
   'Ollie says', 'First stamped', 'Walt asked Hap about the plane']);
 
 export const hashText = (s) => createHash('sha256').update(s).digest('hex').slice(0, 12);
+export const bodyHash = (text) => hashText(JSON.stringify(text));
 const h8 = (s) => createHash('sha256').update(s).digest('hex').slice(0, 8);
 const slug = (s) => s.toLowerCase().replace(/[*_`"'’()[\]{}]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
   .split('-').slice(0, 4).join('-');
@@ -765,7 +766,8 @@ export function extractAll({ root = ROOT } = {}) {
       if (e.k === 'line' && len > LIMITS.longSpeech) long++;
     }
     if (ARC_DOCS.has(key) && long > LIMITS.longPerArc) report.limits.push({ id: `${key}:*`, kind: 'long speech', count: long, max: LIMITS.longPerArc });
-    const doc = { $doc: `docs/story/${file}`, $hash: hashText(src), $v: EXTRACT_V, text };
+    // $hash: the source doc's; $body: the text's own (a hand edit to the JSON body is caught by the cheap stamp check too)
+    const doc = { $doc: `docs/story/${file}`, $hash: hashText(src), $body: bodyHash(text), $v: EXTRACT_V, text };
     files[outName] = JSON.stringify(doc, null, 0).replace(/,"(?=[^"]+":\{"k")/g, ',\n"') + '\n';
     report.counts[key] = Object.keys(text).length;
     report.bytes[outName] = Buffer.byteLength(files[outName]);
@@ -877,15 +879,19 @@ export function run({ root = ROOT, check = false, today = new Date().toISOString
   return { errors, report, shifted, lock, files };
 }
 
-// The stamps alone (cheap; for the lint): every text file's $hash against its doc's hash now.
+// The stamps alone (cheap; for the lint): every text file's $hash against its doc's hash now, and its $body against
+// the hash of the text it holds (a hand edit to the JSON body, the doc untouched). → [{ file, doc, why, got, want }]
 export function staleStamps({ root = ROOT } = {}) {
   const bad = [];
   for (const [, [file, outName]] of Object.entries(DOC_FILES)) {
     const p = join(root, 'src/story-data/text', outName);
     const want = hashText(readFileSync(join(root, 'docs/story', file), 'utf8'));
-    let got = null;
-    try { got = JSON.parse(readFileSync(p, 'utf8')).$hash; } catch { /* missing */ }
-    if (got !== want) bad.push({ file: outName, doc: file, got, want });
+    let j = null;
+    try { j = JSON.parse(readFileSync(p, 'utf8')); } catch { /* missing */ }
+    const got = j ? j.$hash : null;
+    if (got !== want) { bad.push({ file: outName, doc: file, why: 'doc', got, want }); continue; }
+    const body = j && j.text && typeof j.text === 'object' ? bodyHash(j.text) : null;
+    if (!j.$body || body !== j.$body) bad.push({ file: outName, doc: file, why: 'body', got: body, want: j.$body ?? null });
   }
   return bad;
 }

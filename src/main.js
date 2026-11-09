@@ -114,7 +114,6 @@ import { Permits } from './permits.js'; // gl-a: permits
 import { PermitDesk } from './permit-desk.js'; // gl-a: the permit desk
 import { story } from './story-hooks.js'; // gl-c: the story's event bus and saved state
 import { STORY_ON } from './story-flag.js'; // st-k1b: the story's dev flag (?story=1 in dev)
-import { installSeams, startFeed } from './story-seams.js'; // st-k1b: the stub interfaces and the feed's start
 import { onboarding } from './onboarding.js'; // gl-c: the home counter's first visit, the old gear
 import { starter } from './starter.js'; // the start round: each outfitter's first night out, the season's sky and its kind first days
 import { walt } from './walt.js'; // gl-c: the notebook in the old tent
@@ -1164,18 +1163,20 @@ async function main() {
       outfitter.update = (dt) => { updS(dt); story.update(); };
     }
   }
-  // st-k1b: the story's seams and feed (docs/build/campaign-design.md Part 4 Round 0, K1b). The stub interfaces
-  // (story.ui.pickLake, story.allows, pencil, layer) are hung on always and do nothing yet; the feed (story-feed.js, the
-  // only place the story listens to the game) starts only under STORY_ON (?story=1 in dev), so with the flag off no
-  // listener is added anywhere
-  {
-    const seams = installSeams(story);
-    window.__game.storySeams = { ...seams, on: STORY_ON, feed: null };
-    if (STORY_ON) {
+  // st-k1b: the story's seams and feed (docs/build/campaign-design.md Part 4 Round 0, K1b), only under STORY_ON
+  // (?story=1 in dev): story-seams.js (and through it story-ui, story-allows, pencil, story-layer) is loaded here, so with
+  // the flag off not one of them is fetched, nothing is hung on the story and no listener is added anywhere (the game
+  // equals main). The stub interfaces (story.ui.pickLake, story.allows, pencil, layer) do nothing yet; the feed
+  // (story-feed.js) is the only place the story listens to the game
+  if (STORY_ON) {
+    try {
+      const { installSeams, startFeed } = await import('./story-seams.js');
+      const seams = installSeams(story);
+      window.__game.storySeams = { ...seams, on: true, feed: null };
       startFeed({ story, mods: { trip, outfitter, world }, guest: () => !!(window.__game.coop && window.__game.coop.guest) })
         .then((feed) => { window.__game.storySeams.feed = feed; console.log(`story K1b: the feed started (${feed.names().join(', ')})`); })
         .catch((e) => console.warn('story K1b: the feed', e));
-    }
+    } catch (e) { console.warn('story K1b: the seams', e); }
   }
   // gl-d: the trip-end tally and the board (the game-loop round, stream D; docs/build/game-loop-brief.md). Pay lands on
   // the trip's card as it counts up (record.js ended → tasks.settle), never at the board; no cap on notices held
