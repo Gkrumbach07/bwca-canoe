@@ -112,7 +112,9 @@ import { loadBurns, setBurnDate, burnStats, burnLook, eventsAt } from './burns.j
 import { BurnNotes } from './burn-notes.js'; // the real burns
 import { Permits } from './permits.js'; // gl-a: permits
 import { PermitDesk } from './permit-desk.js'; // gl-a: the permit desk
-import { story, STORY_ON } from './story-hooks.js'; // gl-c: the story's event bus and saved state
+import { story } from './story-hooks.js'; // gl-c: the story's event bus and saved state
+import { STORY_ON } from './story-flag.js'; // st-k1b: the story's dev flag (?story=1 in dev)
+import { installSeams, startFeed } from './story-seams.js'; // st-k1b: the stub interfaces and the feed's start
 import { onboarding } from './onboarding.js'; // gl-c: the home counter's first visit, the old gear
 import { starter } from './starter.js'; // the start round: each outfitter's first night out, the season's sky and its kind first days
 import { walt } from './walt.js'; // gl-c: the notebook in the old tent
@@ -1160,6 +1162,19 @@ async function main() {
       Object.assign(story.ctx, { day, trip });
       const updS = outfitter.update.bind(outfitter);
       outfitter.update = (dt) => { updS(dt); story.update(); };
+    }
+  }
+  // st-k1b: the story's seams and feed (docs/build/campaign-design.md Part 4 Round 0, K1b). The stub interfaces
+  // (story.ui.pickLake, story.allows, pencil, layer) are hung on always and do nothing yet; the feed (story-feed.js, the
+  // only place the story listens to the game) starts only under STORY_ON (?story=1 in dev), so with the flag off no
+  // listener is added anywhere
+  {
+    const seams = installSeams(story);
+    window.__game.storySeams = { ...seams, on: STORY_ON, feed: null };
+    if (STORY_ON) {
+      startFeed({ story, mods: { trip, outfitter, world }, guest: () => !!(window.__game.coop && window.__game.coop.guest) })
+        .then((feed) => { window.__game.storySeams.feed = feed; console.log(`story K1b: the feed started (${feed.names().join(', ')})`); })
+        .catch((e) => console.warn('story K1b: the feed', e));
     }
   }
   // gl-d: the trip-end tally and the board (the game-loop round, stream D; docs/build/game-loop-brief.md). Pay lands on
