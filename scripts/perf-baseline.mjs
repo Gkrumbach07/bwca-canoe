@@ -54,6 +54,8 @@ const HELPERS = () => {
     p.foot = { y: p.groundAt(x, z), vy: 0, air: false, t: 0, land: 0, near: null };
     p.placeOnGround(); H.look(heading);
   };
+  // a teleport stepped along (the tiles stream in on the game's own frames: an await on it alone waits for ever far off)
+  H.go = async (x, z) => { const t = g.player.teleport(x, z); for (let i = 0; i < 3000 && g.player.teleporting; i++) { H.step(4); await H.wait(20); } return t; };
   H.yawTo = (q) => { const p = g.player; return Math.atan2(-(q.z - p.z), q.x - p.x); };
   H.reset = () => {
     const p = g.player; if (H.hold) p.input.down.delete(H.hold); H.hold = null; H.tick = null;
@@ -65,7 +67,7 @@ const HELPERS = () => {
     if (g.wind) { g.wind.override = 2; g.wind.speed = 2; }
   };
   H.busiest = () => { const N = g.npcs, P = g.parties; let best = 8.4, n = -1; for (let h = 7.5; h <= 11.5; h += 0.05) { const k = N.storeParties(HOME, P.today, h).filter((e) => e.dir === 'in').reduce((a, e) => a + Math.min(3, e.party.size), 0); if (k > n) { n = k; best = h; } } return { h: best, n }; };
-  H.home = async () => { const l = g.outfitter.landing(HOME); if (Math.hypot(g.player.x - l.x, g.player.z - l.z) > 150) { await g.player.teleport(l.x, l.z); await H.settle(); } for (let k = 0; k < 80 && !g.outfitter.layout(HOME); k++) { H.step(10); await H.wait(50); } return g.outfitter.layout(HOME); };
+  H.home = async () => { const l = g.outfitter.landing(HOME); if (Math.hypot(g.player.x - l.x, g.player.z - l.z) > 150) { H.go(l.x, l.z); await H.settle(); } for (let k = 0; k < 80 && !g.outfitter.layout(HOME); k++) { H.step(10); await H.wait(50); } return g.outfitter.layout(HOME); };
   const HOME = 25;
   H.scenes = {
     async store() {
@@ -86,7 +88,7 @@ const HELPERS = () => {
       const w = g.world, named = w.lakes.filter((l) => l && l.name === 'Lake Insula').sort((a, b) => b.cells - a.cells)[0];
       const lake = named || w.lakes.filter((l) => l && l.name).sort((a, b) => b.cells - a.cells)[0], id = w.lakes.indexOf(lake) + 1;
       g.day.setClock(g.day.year, g.day.doy, 14);
-      await g.player.teleport(lake.cx, lake.cz); await H.settle();
+      H.go(lake.cx, lake.cz); await H.settle();
       for (let k = 0; k < 60; k++) { H.step(10); await H.wait(30); }
       const p = g.player, water = (x, z) => w.isReady(x, z) && w.shoreAt(x, z) < -20;
       let best = 0, run = 0;
@@ -102,7 +104,7 @@ const HELPERS = () => {
       const ps = w.portages.map((q, i) => ({ q, i, d: q && q.pts ? Math.hypot(q.pts[0][0] - l.x, q.pts[0][1] - l.z) : Infinity })).filter((e) => e.q && e.q.lengthM > 250 && e.q.lengthM < 1500).sort((a, b) => a.d - b.d);
       const P = ps[0].q, pts = P.pts, a = pts[Math.min(2, pts.length - 1)], b = pts[Math.min(5, pts.length - 1)];
       g.day.setClock(g.day.year, g.day.doy, 15);
-      await g.player.teleport(a[0], a[1]); await H.settle();
+      H.go(a[0], a[1]); await H.settle();
       for (let k = 0; k < 60; k++) { H.step(10); await H.wait(30); }
       const hd = Math.atan2(-(b[1] - a[1]), b[0] - a[0]);
       L.place(g, { mode: 'walk', canoe: 'carry', x: a[0], z: a[1], heading: hd });
@@ -122,7 +124,7 @@ const HELPERS = () => {
       let best = null, bd = Infinity;
       for (const c of g.parties.live.values()) { const st = c && c.site; if (st && Number.isFinite(st.x)) { const d = Math.hypot(st.x - l.x, st.z - l.z); if (d < bd && d > 300) { bd = d; best = st; } } }
       if (!best) return { none: true };
-      await g.player.teleport(best.x, best.z); await H.settle();
+      H.go(best.x, best.z); await H.settle();
       for (let k = 0; k < 60 && !(best.layout); k++) { H.step(10); await H.wait(50); }
       const fire = best.layout && best.layout.fire ? best.layout.fire : best;
       let at = null; for (const r of [12, 9, 15]) { for (let i = 0; i < 16 && !at; i++) { const a = (i / 16) * Math.PI * 2, x = fire.x + Math.cos(a) * r, z = fire.z + Math.sin(a) * r; if (g.world.shoreAt(x, z) > 1.5 && Math.abs(g.player.groundAt(x, z) - g.player.groundAt(fire.x, fire.z)) < 2.5) at = { x, z }; } if (at) break; }
@@ -206,7 +208,7 @@ try {
     for (const sc of SCENES) {
       try {
         await page.evaluate(() => window.__pb.reset());
-        const setup = await page.evaluate((sc) => window.__pb.scenes[sc](), sc);
+        const setup = await page.evaluate((sc) => Promise.race([window.__pb.scenes[sc](), new Promise((_, no) => setTimeout(() => no(new Error(`${sc}: set-up over 240 s`)), 240000))]), sc);
         if (setup && setup.none) { run.scenes[sc] = { skipped: setup }; log(sc, 'skipped', JSON.stringify(setup)); continue; }
         await page.evaluate((n) => window.__pb.step(n), 20);
         await throttle(true);
