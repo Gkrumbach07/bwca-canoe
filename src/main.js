@@ -1145,7 +1145,7 @@ async function main() {
     hints.due = (id, rec) => (glbDue.has(id) ? glbDue.get(id)() : dueB(id, rec));
     window.__game.outfitters = { OUTFITTER_EPS: OF.OUTFITTER_EPS, OUTFITTERS: OF.OUTFITTERS, isOutfitter: OF.isOutfitter, hostOf: (ep) => OF.hostOf(ep, world), reachOf: (ep) => OF.reachOf(ep, world),
       countryOf: (ep) => OF.countryOf(ep, world), roadKm: (a, b) => OF.roadKm(a, b, world), roadWay: (a, b) => OF.roadWay(a, b, world), premiumOf: OF.premiumOf, specialtyOf: OF.specialtyOf,
-      outfitterHomes: () => OF.outfitterHomes(world), placeOf: (ep) => OF.placeOf(ep, world), homeTurf: (ep) => OF.homeTurf(ep, world) };
+      outfitterHomes: () => OF.outfitterHomes(world), placeOf: (ep) => OF.placeOf(ep, world), homeTurf: (ep) => OF.homeTurf(ep, world), fromMovedStore: (t) => OF.fromMovedStore(world, t) };
     window.__game.trailhead = { trailheadLayout: TH.trailheadLayout, trailheadLayouts: TH.trailheadLayouts, trailheadAt: TH.trailheadAt, onTrailhead: TH.onTrailhead };
   }
   // gl-c: a new save and its first day (docs/build/game-loop-brief.md, stream C). The title's first step is a map of the
