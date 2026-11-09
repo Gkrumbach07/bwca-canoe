@@ -10,6 +10,7 @@ import { names } from './names.js'; // d1 names: the bays, points, islands, narr
 import { KIND, FOREST, REGIME, WCLASS, HGM, nwiCode, wetRegime, wetBeaver, wetHgm, wclass1 } from './land.js'; // 2026-10-31: the land under you, in the developer rows
 import { GROUND } from './terrain-build.js';
 import { paintGround, paintBurns, burnsInView, burnWords, paintBoundary, loadBoundary, BOUNDARY, paintPmas, paintPmaNames, paintEntries, tileGeo, tileCache, INK, lakeAt, lodOf, SMALL_LAKE, paintCreeks } from './map-render.js'; // the map as vectors (the wetlands round: paintCreeks)
+import { paintEdge, paintRoads, paintMapNotice, EDGE, ROADS } from './edge.js'; // the edge round: the paper past the edge washed, the roads and towns, the notice
 import './hud.css';
 const KIND_NAMES = Object.keys(KIND); // ground kind value -> its key (land.js KIND runs 0..13 in order)
 
@@ -1597,7 +1598,7 @@ export class Hud {
     const M = BASE_MARGIN, sh = this.sheetsOn, lay = this.layers, c = this.ctx || {};
     const ts = c.tasks, told = this.marks();
     const key = [W, H, v.span.toFixed(2), sh ? `${sh.view()}${sh.version}${sh.ownedSheets().length}` : 'open', Object.values(lay).join(''), explored.version, explored.lakeV,
-      ts && ts.active ? ts.active.map((t) => `${t.id}${t.status}`).join() : '', told.sig, this.table ? `${this.table.selected}${this.table.hover}` : '', this.mode, BOUNDARY.ready, this.focus ? this.focus.t : '', this.pmaFocus || ''].join('|');
+      ts && ts.active ? ts.active.map((t) => `${t.id}${t.status}`).join() : '', told.sig, this.table ? `${this.table.selected}${this.table.hover}` : '', this.mode, BOUNDARY.ready, EDGE.ready, ROADS.ready, this.focus ? this.focus.t : '', this.pmaFocus || ''].join('|');
     let b = this.base;
     if (!b || b.W !== W + 2 * M || b.H !== H + 2 * M) {
       const cv = document.createElement('canvas'); cv.width = W + 2 * M; cv.height = H + 2 * M;
@@ -1691,7 +1692,9 @@ export class Hud {
       }
       if (w.tiles) ready = paintGround(ctx, w, v, W, H, { k, budget: { build: 2 }, depths: lay.depths, ink: explored.world ? explored.lakes : null, inkV: explored.lakeV, detail: clipped ? onMine : null, labels: depthLabels });
       paintCreeks(ctx, w, v, W, H, { k, onMine: clipped ? onMine : null, hits }); // the wetlands round: the brooks, the beaver dams
+      paintRoads(ctx, v, W, H, { k, towns: false }); // the edge round: the roads, faint (OpenStreetMap)
       // the burns by the season's date, and the wilderness's own edge
+      if (lay.boundary) paintEdge(ctx, v, k, { box: [w.minX, w.minZ, w.maxX, w.maxZ] }); // the edge round: past the band a little faded, the edge in pencil, Quetico's line (under the wilderness's own ink and the primitive areas')
       if (lay.burns) paintBurns(ctx, v, burnsInView(v, W, H), k);
       if (lay.boundary) { if (BOUNDARY.path) paintBoundary(ctx, v, k); else loadBoundary(); }
       if (lay.pmas) paintPmas(ctx, v, W, H, { k, focus: this.pmaFocus || null }); // r2: the primitive areas, public as the boundary is
@@ -1741,6 +1744,7 @@ export class Hud {
         const r = (close ? 4.2 : 2.6) * k;
         for (let ci = 0; ci < w.campsites.length; ci++) {
           const c = w.campsites[ci], s = c.fire || c; // round 2 markers: at its fire ring as built (world.js campSpot)
+          if (c.past) continue; // (the edge round: the sites past the band are off the maps)
           if (!inView(s.x, s.z, s.x, s.z) || !onMine(s.x, s.z, s.x, s.z)) continue;
           const [a, b] = toPx(s.x, s.z);
           ctx.beginPath(); ctx.arc(a, b, r, 0, 6.28); ctx.fillStyle = '#c0392b'; ctx.fill();
@@ -1773,6 +1777,7 @@ export class Hud {
       }
       // r2: the primitive areas' names, small italics, off the lake names already lettered
       if (lay.pmas) paintPmaNames(ctx, w, v, W, H, { k, lettered, onMine: clipped ? (x, z) => onMine(x, z, x, z) : null, focus: this.pmaFocus || null, paper: PAPER });
+      paintRoads(ctx, v, W, H, { k, lettered, lines: false }); // the edge round: the towns, and where the roads leave for town
       // burn names, in the burn's own brown, once the view is close enough to letter them
       if (lay.burns && mPerPx < 45) {
         ctx.font = `italic 600 ${11.5 * k}px ${SERIF}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineWidth = 3 * k; ctx.strokeStyle = 'rgba(236, 228, 207, 0.9)';
@@ -1892,6 +1897,8 @@ export class Hud {
       ctx.font = `600 ${24 * k}px ${PENCIL}`; ctx.fillStyle = 'rgba(74, 64, 54, 0.62)'; ctx.textAlign = 'center';
       ctx.fillText(none ? 'No sheets yet. The map tables at the outfitters sell them.' : 'None of your sheets covers this.', W / 2, H * 0.74);
     }
+    // the edge round: out of the Boundary Waters (or in Quetico without its permit), the map says so too, for as long
+    if (!this.table) { let st = null; try { st = typeof this.edgeState === 'function' ? this.edgeState() : null; } catch { st = null; } if (st && st !== 'in') paintMapNotice(ctx, W, H, k, st); }
     // a place found in the book's search (map-book.js): a ring that draws itself round it for a few seconds
     const f = this.focus;
     if (f && sheet) {

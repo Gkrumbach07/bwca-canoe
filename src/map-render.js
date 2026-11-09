@@ -19,6 +19,7 @@
 import { BURNS, burnDate } from './burns.js';
 import { OUTFITTER_EPS, placeOf } from './outfitters.js'; // round 2 markers: an outfitter at its store, an entry point at its put-in
 import { markOf } from './ep-start.js'; // round 2, entry points true to life: an entry point marked at its start
+import { paintEdge, paintRoads } from './edge.js'; // the edge round: past the band a little faded, the roads and the towns
 import { PMAS, inPoly } from './pma.js'; // r2: the primitive areas' outlines on every map
 
 export const FT = 0.3048;
@@ -767,6 +768,7 @@ export function lakeBox(world, ids, cx, cz, reach) {
 //   opts: { markers: [{ x, z, kind: 'dock' | 'store' | 'ep' | 'dot' | 'you' | 'ring' | 'flag' | 'star', label, color, r, ep }],
 //           route: [[x, z], …] (a pencil line), names: true (lake names), docks: true (the entry points, numbered, and
 //           the outfitters' stores where they stand: paintEntries),
+//           roads: true and edge: true (the edge round: the roads and towns; past the band washed, the edge pencilled),
 //           boundary: true, pmas: true (the primitive areas; pmaFocus: one picked out; pmaWash: all washed, solid lines), burns: false, detail: (x0, z0, x1, z1) => bool (what may be shown; default everything),
 //           k (line scale), fine: true (the 10 m tiles at any zoom), soundAll: true (every sounding at any zoom) }
 // Water and names come from the far field (80 m) when the view is wide, from the fine tiles when it is close; tiles not
@@ -783,11 +785,14 @@ export function drawRegion(canvas, world, view, opts = {}) {
   ctx.save();
   ctx.fillStyle = INK.paper; ctx.fillRect(0, 0, W, H);
   const ready = paintGround(ctx, world, v, W, H, { k, budget: { build: opts.build ?? 3 }, depths: opts.soundAll || mPerPx < 6, ink: opts.ink || null, inkV: opts.inkV || 0, detail, far: opts.fine ? false : null, all: !!opts.soundAll });
+  if (opts.roads !== false) paintRoads(ctx, v, W, H, { k, towns: false }); // (the edge round)
+  if (opts.boundary !== false && opts.edge !== false) paintEdge(ctx, v, k, { box: [world.minX, world.minZ, world.maxX, world.maxZ] }); // (the edge round)
   if (opts.burns) paintBurns(ctx, v, burnsInView(v, W, H), k);
   if (opts.boundary !== false) { if (BOUNDARY.ready) paintBoundary(ctx, v, k); else loadBoundary(); }
   if (opts.pmas !== false) paintPmas(ctx, v, W, H, { k, focus: opts.pmaFocus || null, wash: !!opts.pmaWash });
   const lettered = opts.names !== false ? paintLakeNames(ctx, world, v, W, H, { k, detail }) : [];
   if (opts.pmas !== false) paintPmaNames(ctx, world, v, W, H, { k, lettered, focus: opts.pmaFocus || null, onMine: detail ? (x, z) => detail(x, z, x, z) : null });
+  if (opts.roads !== false && opts.names !== false) paintRoads(ctx, v, W, H, { k, lettered, lines: false }); // (the edge round: the towns, off the lake names)
   if (opts.docks !== false) paintEntries(ctx, world, toPx, W, H, k, { names: mPerPx < 60 });
   if (opts.route && opts.route.length > 1) {
     ctx.beginPath(); opts.route.forEach(([x, z], i) => { const [a, b] = toPx(x, z); if (i) ctx.lineTo(a, b); else ctx.moveTo(a, b); });

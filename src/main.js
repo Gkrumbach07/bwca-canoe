@@ -111,6 +111,7 @@ import { bonk } from './audio-voices.js'; // d1 rapids
 import { loadBurns, setBurnDate, burnStats, burnLook, eventsAt } from './burns.js'; // the real burns
 import { BurnNotes } from './burn-notes.js'; // the real burns
 import { Permits } from './permits.js'; // gl-a: permits
+import { EdgeWatch } from './edge.js'; // the edge round: the notice while you are out of the Boundary Waters
 import { PermitDesk } from './permit-desk.js'; // gl-a: the permit desk
 import { story } from './story-hooks.js'; // gl-c: the story's event bus and saved state
 import { onboarding } from './onboarding.js'; // gl-c: the home counter's first visit, the old gear
@@ -1066,6 +1067,16 @@ async function main() {
     // stream B's counter sections (the join: the claims-hook fallback dropped, B's addDesk is there)
     outfitter.addDesk('permits', { order: 10, html: (l) => permitDesk.section(l.ep), act: (a, id, ev) => permitDesk.act(a, id, ev) });
     { const tu = trip.update.bind(trip); trip.update = (dt) => { tu(dt); try { permits.update(dt); } catch (e) { if (!permits.warned) { permits.warned = true; console.warn('permits', e); } } }; }
+    // the edge round (docs/build/edge-and-roads.md, the owner 2026-11-08): no wall and no turn-back; out of the Boundary
+    // Waters a notice stays up until you are back (edge.js), and the map says it too (hud.edgeState); in Quetico
+    // without its permit the same, in its own words. Per player: a co-op friend reads their own spot, no relay message.
+    {
+      const edgeWatch = new EdgeWatch({ permits, trip, hud });
+      window.__game.edge = edgeWatch;
+      hud.edgeState = () => edgeWatch.state;
+      const tu = trip.update.bind(trip);
+      trip.update = (dt) => { tu(dt); try { edgeWatch.update(dt, player); } catch (e) { if (!edgeWatch.warned) { edgeWatch.warned = true; console.warn('edge', e); } } };
+    }
     // the push-off's title over the water says a day trip is one (outfitter.start shows it just after trip.start)
     {
       const startA = outfitter.start.bind(outfitter);

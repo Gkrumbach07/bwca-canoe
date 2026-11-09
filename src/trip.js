@@ -187,7 +187,7 @@ export class Trip {
   start(f) {
     const s = this.state, d = this.day;
     s.id = `${f.ep}-${absDay(d.year, d.doy)}-${Math.floor(Math.random() * 1e5).toString(36)}`;
-    s.active = true; s.outcome = null; s.camp = null; s.offsite = 0; s.log = []; s.grandfathered = false; s.fined = false;
+    s.active = true; s.outcome = null; s.camp = null; s.offsite = 0; s.log = []; s.grandfathered = false; s.fined = false; s.finedQuetico = false;
     s.since = { year: d.year, doy: d.doy, hours: +d.hours.toFixed(2) }; s.from = f.ep;
     s.packs = { count: 1, canoe: CANOES.includes(f.canoe) ? f.canoe : 'aluminium', foodDays: f.foodDays ?? 0 };
     this.syncKit();
