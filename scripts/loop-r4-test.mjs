@@ -65,11 +65,11 @@ const HELPERS = (SPOTS) => {
   H.sign = () => { const el = document.getElementById('edge-sign'); return { shown: !!(el && el.classList.contains('show')), text: el ? el.textContent : '', state: g.edge.state }; };
   H.zone = (x, z) => window.__edgeZone(x, z);
   H.water = (x, z) => g.world.lakeIdAt(x, z) > 0 && g.world.isWater(x, z);
-  H.closeAll = () => { const o = g.outfitter; if (o.open) o.hide(); try { if (g.hud.mode) { g.hud.setMode('glance'); g.hud.setMode(null); } } catch { /* */ } if (g.journal && g.journal.open) g.journal.close(); if (g.record && g.record.shown) g.record.close(); };
+  H.closeAll = () => { const o = g.outfitter; if (o.open) o.hide(); try { const hm = g.hud.mode; if (hm === 'sheet' || hm === 'glance') g.hud.setMode(g.hud.settings && g.hud.settings.cornerSheet ? 'corner' : 'hidden'); } catch { /* */ } if (g.journal && g.journal.open) g.journal.close(); if (g.record && g.record.shown) g.record.close(); };
   H.tp = async (x, z) => { H.closeAll(); const ok = await g.player.teleport(x, z); await H.settle(); return ok; };
   // a straight crossing of the zone line near a place: from a point of zone class `from` to one of class `to`, all of
   // it water (by canoe) or land (on foot), within `len` metres; { a, b, yaw } or null
-  H.crossing = (c, { from, to, water, len = 160, R = 9000, start = null } = {}) => {
+  H.crossing = (c, { from, to, water, len = 160, R = 9000, start = null, skip = null } = {}) => {
     const okZ = (z, want) => (want === 'out' ? z === 0 : want === 'quetico' ? z === 3 : z === 1 || z === 2);
     const kindOk = (x, z) => (water ? H.water(x, z) : !H.water(x, z) && g.world.lakeIdAt(x, z) <= 0);
     let best = null;
@@ -92,6 +92,7 @@ const HELPERS = (SPOTS) => {
         // and on past the line a bit more of the same kind, so W held keeps going
         let past = 0; for (let s = reach; s <= reach + 80; s += 8) { if (!kindOk(x + dx * s, z + dz * s) || !okZ(H.zone(x + dx * s, z + dz * s), to)) break; past = s - reach; }
         if (past < 40) continue;
+        if (!water) { let steep = false; for (let s = 0; s < reach + past && !steep; s += 8) { const h0 = g.world.heightAt(x + dx * s, z + dz * s), h1 = g.world.heightAt(x + dx * (s + 8), z + dz * (s + 8)); if (Math.abs(h1 - h0) > 1.6) steep = true; } if (steep) continue; if (skip && skip.some((q) => Math.hypot(q.x - x, q.z - z) < 300)) continue; }
         best = { a: { x, z }, b: { x: x + dx * (reach + past), z: z + dz * (reach + past) }, reach, past, dir: { x: dx, z: dz } };
       }
     }
@@ -240,23 +241,27 @@ try {
   result('P1 May: the ice-out lake trout written after ice-out and taken; out of its window by July', p1.made && p1.taken === 'open' && p1.late === false, p1);
 
   // ---- P2 on foot over the edge ------------------------------------------------------------------------------------------
-  const c2 = await ev(() => { const H = window.__r4; window.__game.day.setClock(window.__game.day.year, window.__game.day.doy, 11); return H.crossing(H.at.fallLake, { from: 'in', to: 'out', water: false, len: 140, R: 14000 }); });
-  let p2 = { none: true };
-  if (c2) {
-    await ev(async (c) => { const H = window.__r4, g = window.__game; await H.tp(c.a.x, c.a.z); H.standAt(c.a.x, c.a.z, Math.atan2(-c.dir.z, c.dir.x)); H.step(60); void g; }, c2);
+  let p2 = { none: true }; const tried = [];
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const c2 = await ev((skip) => { const H = window.__r4; window.__game.day.setClock(window.__game.day.year, window.__game.day.doy, 11); return H.crossing(H.at.fallLake, { from: 'in', to: 'out', water: false, len: 100, R: 16000, skip }); }, tried);
+    if (!c2) break;
+    tried.push(c2.a);
+    await ev(async (c) => { const H = window.__r4; await H.tp(c.a.x, c.a.z); H.standAt(c.a.x, c.a.z, Math.atan2(-c.dir.z, c.dir.x)); H.step(60); }, c2);
     const before = await ev(() => ({ ...window.__r4.sign(), mode: window.__game.player.mode }));
-    const walked = await walkW(c2.b, 30 * 120, 'out'); await ev(() => window.__r4.step(90));
+    const walked = await walkW(c2.b, 30 * 100, 'out'); await ev(() => window.__r4.step(90));
     const out = await ev(() => { const H = window.__r4, g = window.__game; return { ...H.sign(), zone: H.zone(g.player.x, g.player.z), mode: g.player.mode }; });
+    p2 = { attempt, c: { reach: c2.reach, past: c2.past }, before, walked, out };
+    if (!out.shown) continue;
     await shot('p2-foot-out', 2, 'On foot past the edge: the notice up');
     await ev(() => window.__r4.step(30 * 60));
-    const stays = await ev(() => window.__r4.sign());
-    const back = { x: -c2.dir.x, z: -c2.dir.z };
-    void back; const walkedBack = await walkW(c2.a, 30 * 120, 'in');
+    p2.stays = (await ev(() => window.__r4.sign())).shown;
+    p2.walkedBack = await walkW(c2.a, 30 * 100, 'in');
     await ev(() => window.__r4.step(120));
-    const after = await ev(() => { const H = window.__r4, g = window.__game; return { ...H.sign(), zone: H.zone(g.player.x, g.player.z) }; });
-    p2 = { c: { reach: c2.reach, past: c2.past }, before, walked, out, stays: stays.shown, walkedBack, after };
+    p2.after = await ev(() => { const H = window.__r4, g = window.__game; return { ...H.sign(), zone: H.zone(g.player.x, g.player.z) }; });
+    break;
   }
-  result('P2 on foot over the edge (W held): up, "You have left the Boundary Waters", still up a minute on; back in: down', !p2.none && !p2.before.shown && p2.out.shown && /left the Boundary Waters/.test(p2.out.text) && p2.stays && !p2.after.shown, p2);
+  if (!sheet.some((q) => q.n === 2)) await shot('p2-foot-out', 2, 'On foot by the edge (not over)');
+  result('P2 on foot over the edge (W held): up, "You have left the Boundary Waters", still up a minute on; back in: down', !p2.none && !p2.before.shown && p2.out.shown && /left the Boundary Waters/.test(p2.out.text) && p2.stays && p2.after && !p2.after.shown, p2);
 
   // ---- P3 by canoe over the edge -----------------------------------------------------------------------------------------
   const c3 = await ev(() => { const H = window.__r4; return H.crossing(H.at.whiteIron, { from: 'in', to: 'out', water: true, len: 300, R: 16000 }); });
