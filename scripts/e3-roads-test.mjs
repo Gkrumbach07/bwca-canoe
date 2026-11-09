@@ -203,8 +203,9 @@ try {
     if (!L) return null;
     const e = T.mesh.matrix.elements, fx = e[8], fz = e[10], f = Math.hypot(fx, fz) || 1; // (stand on the road ahead of it, looking back)
     H.closeAll(); H.look(T.x + (fx / f) * 13 + (fz / f) * 2, T.z + (fz / f) * 13 - (fx / f) * 2, T.x, T.z); for (let i = 0; i < 10; i++) { H.step(6); await H.wait(40); }
-    const m = T.mesh, c = g.camera.position;
-    return { vis: m.visible, job: T.job && T.job.kind, truck: [Math.round(T.x), Math.round(T.z), +m.matrixWorld.elements[13].toFixed(1)], world: [Math.round(m.matrixWorld.elements[12]), Math.round(m.matrixWorld.elements[14])], player: [Math.round(g.player.x), Math.round(g.player.z)], cam: [Math.round(c.x), Math.round(c.z)] };
+    const m = T.mesh, c = g.camera.position, d0 = T.drawn; H.step(3); const Th = g.THREE;
+    const fr = new Th.Frustum().setFromProjectionMatrix(new Th.Matrix4().multiplyMatrices(g.camera.projectionMatrix, g.camera.matrixWorldInverse));
+    return { drawnNow: T.drawn - d0, inFrustum: fr.intersectsObject(m), verts: m.geometry.getAttribute('position').count, bs: m.geometry.boundingSphere && [+m.geometry.boundingSphere.center.y.toFixed(2), +m.geometry.boundingSphere.radius.toFixed(2)], parent: m.parent && m.parent.type, layers: m.layers.mask, py: +g.player.y?.toFixed?.(1), vis: m.visible, job: T.job && T.job.kind, truck: [Math.round(T.x), Math.round(T.z), +m.matrixWorld.elements[13].toFixed(1)], world: [Math.round(m.matrixWorld.elements[12]), Math.round(m.matrixWorld.elements[14])], player: [Math.round(g.player.x), Math.round(g.player.z)], cam: [Math.round(c.x), Math.round(c.z)] };
   }, LOT);
   log('truck look', JSON.stringify(lookT));
   await shot(page, 'e3-5-truck-lot');
