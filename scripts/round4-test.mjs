@@ -212,10 +212,11 @@ try {
   result('8 on the dock in his shirt; in the canoe the life jacket on', !ashore.pfd && v5.mode === 'paddle' && v5.pfd, { ashore: ashore.pfd, v5 });
 
   // --- 6 under way: the pencilled way ------------------------------------------------------------------------------------
-  await realFor(3000);
-  const st = await ev(() => { const g = window.__game; return { hint: g.hints.cur && g.hints.cur.m.id, text: document.getElementById('hint').textContent, tracker: g.tracker.state().text }; });
+  // (the line waits its turn behind another: up to 12 s more)
+  let st = null;
+  for (let i = 0; i < 24; i++) { await realFor(500); st = await ev(() => { const g = window.__game; return { hint: g.hints.cur && g.hints.cur.m.id, text: document.getElementById('hint').textContent, tracker: g.tracker.state().text, start: window.__p.hints.find((h) => h.id === 'start') || null }; }); if (st.hint === 'start') break; }
   await shot('underway', 6, `Under way: ${st.hint || 'the tracker'}`);
-  result('9 under way: a line or the card says the way', /pencilled|map/i.test(st.text || '') || !!st.tracker, st);
+  result('9 under way: the first line says the pencilled way', !!(st.start && /pencilled/.test(st.start.text)), st);
 
   // --- 7 the site at dusk: on foot, the jacket off ------------------------------------------------------------------------
   const site = await ev(async () => {

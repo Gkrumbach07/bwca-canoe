@@ -200,6 +200,9 @@ export class Locator {
       }
       y = Math.min(y, p.roof - 0.38 * h); // indoors its top under the beams
       if (!s.person && cam && this.bar > 0) y = this.underBar(cam, p, y, h);
+      // (round 4 join: a person's gem can't sink into the head, so against the top bar (walking in close by the staffer,
+      // the chase easing over his shoulder) it shrinks and stills, its point kept over the head, until its top is clear)
+      else if (s.person && cam && this.bar > 0) { const r = this.personUnderBar(cam, p, y, h); y = r.y; h = r.h; }
       const op = (s.fade ?? 1) * k;
       s.spin += dt * LOCATOR.spin;
       me.position.set(p.x, y, p.z);
@@ -224,6 +227,21 @@ export class Locator {
     let a = lo, b = y; // a clear, b not
     for (let k = 0; k < 10; k++) { const m = (a + b) / 2, t = topPx(m); if (t != null && t >= want) a = m; else b = m; }
     return a;
+  }
+  // round 4 join: a person's gem against the top bar: the size (down to minPerson, the bob off) whose top clears the bar,
+  // its point over the head as ever; { y, h } as it is when it is clear already
+  personUnderBar(cam, p, y, h, H = window.innerHeight) {
+    const v = this._bv || (this._bv = new THREE.Vector3());
+    const want = this.bar + LOCATOR.barGap;
+    const topPx = (cy, ch) => { v.set(p.x, cy + 0.38 * ch, p.z).project(cam); return v.z > 1 || v.z < -1 || v.x < -1.1 || v.x > 1.1 ? null : ((1 - v.y) / 2) * H; };
+    const t0 = topPx(y, h);
+    if (t0 == null || t0 >= want || h <= LOCATOR.minPerson) return { y, h };
+    const at = (ch) => ({ y: Math.min(p.y + LOCATOR.gapPerson + LOCATOR.low * ch, p.roof - 0.38 * ch), h: ch });
+    const lo = at(LOCATOR.minPerson), tl = topPx(lo.y, lo.h);
+    if (tl == null || tl < want) return lo; // (as small as it goes)
+    let a = LOCATOR.minPerson, b = h; // a clear, b not
+    for (let k = 0; k < 8; k++) { const m = (a + b) / 2, q = at(m), t = topPx(q.y, q.h); if (t != null && t >= want) a = m; else b = m; }
+    return at(a);
   }
   // each gem shown, as a box on the screen in px ({ x, y, w, h }, a little padded), for the barks to keep clear of
   screenRects(cam = this.t.camera, W = window.innerWidth, H = window.innerHeight) {
