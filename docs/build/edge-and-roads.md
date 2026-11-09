@@ -424,8 +424,8 @@ ungraded with trunks on them (D5), South Lake, Homer and Magnetic with no doorst
 map's south edge and a "turn back" at it (D6), and no lot or store moved to its road end (the join's E3 leftover).
 
 - **The stores at their road ends** (owner call 6). `scripts/ep-fixes.mjs` SPEC `store`: Moose River North's (16) store now
-  stands on the Moose River where it runs under Forest Road 206, outside the line (the river north of the road is the
-  wilderness); Bog Lake's (67), whose real road end is 1.2 km off the map, stands by its lot near the south edge with its
+  stands on the Moose River's low east bank by Forest Road 206, just outside the line (landings.json `from`: the west bank
+  and the reach south of the road stood its floor 8.5 m over the water, 31 steps of 0.22 m), a 96 m drive off the road; Bog Lake's (67), whose real road end is 1.2 km off the map, stands by its lot near the south edge with its
   dock on Bush Creek, 155 m in. Each row keeps `storeMoved` (the old spot); a trip saved there carries on at the new
   store's door or dock (`outfitters.js fromMovedStore`, main.js). Slim Lake's (6) store already stood 3 m from North Arm
   Road: its road now starts at the store, not at the release's put-in 1.3 km off (the cause of its "421 m"). Their yards,
@@ -442,7 +442,12 @@ map's south edge and a "turn back" at it (D6), and no lot or store moved to its 
   can be driven (`drive`; all 51 can; South Lake has no road within 1.2 km and no ride by road). The heights by the water
   are the ground's own as `detail-build.js` grades it (no grade within 4 m of the shore, never under the lake's level by
   the shore): the 0.6–1.15 m steps at Thimbleberry's store and North Arm Road.
-- **The truck** drives every route marked `drive`, a store's from its stand (`truck.js spot`).
+- **The truck** drives every route marked `drive`, a store's from its stand, a lot's from inside it clear of its sign and
+  box (`truck.js spot`). Where a route crosses water off the drawn bridges (at a junction or a chain's end), `roads.json`
+  carries a bridge of its own. Where roads meet, each is eased to one height over its last 24 m. A trailhead's sign and
+  permit box and a portage's sign never stand on a road (props.js); a store standing on an OSM way (Thimbleberry on North
+  Arm Road) lets that piece of way go, the road ending at its yard. The trailheads' lots as props.js plans them are in
+  `outfitter-places.json` (`lots`), so each lot's road starts in it.
 - **The doorstep** (`scripts/edge.mjs`). A way in by water is now the shortest path on the release's 10 m water and the
   portages' lines only (never other dry land, never Quetico) from each put-in, dock and outfitter's head put-in to the
   wilderness's own water, stamped 250 m wide plus every water cell within 700 m of it; every road of `roads.json` is
