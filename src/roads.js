@@ -68,6 +68,12 @@ export function readRoads(table, baked) {
       i = j + 1;
     }
   }
+  // round 4: the routes' own crossings (scripts/roads.mjs: water at a junction or a chain's end), where none is drawn
+  for (const b of table.bridges || []) {
+    const mx = (b.ax + b.bx) / 2, mz = (b.az + b.bz) / 2;
+    if (bridges.some((q) => { const ex = q.bx - q.ax, ez = q.bz - q.az, L2 = ex * ex + ez * ez, t = L2 ? Math.max(0, Math.min(1, ((mx - q.ax) * ex + (mz - q.az) * ez) / L2)) : 0; return Math.hypot(mx - q.ax - ex * t, mz - q.az - ez * t) < 4; })) continue;
+    bridges.push({ ax: b.ax, az: b.az, ah: b.ah, bx: b.bx, bz: b.bz, bh: b.bh, hw: b.hw, k: b.k || 1, name: '' });
+  }
   const km = list.reduce((t, r) => { for (let i = 1; i < r.n; i++) t += Math.hypot(r.p[i * 4] - r.p[i * 4 - 4], r.p[i * 4 + 1] - r.p[i * 4 - 3]); return t; }, 0) / 1000;
   return { list, routes, bridges, km };
 }

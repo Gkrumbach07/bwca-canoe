@@ -59,6 +59,7 @@ const HELPERS = () => {
     for (let w = 0; w < 80 && !(g.tiles.detail && g.tiles.detail.at(x, z)); w++) { H.step(4); await H.wait(50); }
     H.step(10);
   };
+  H.deckTop = (x, z) => { const R = g.world.roads; let top = -Infinity; if (R) for (const B of R.bridges) { const ex = B.bx - B.ax, ez = B.bz - B.az, L2 = ex * ex + ez * ez, t = L2 > 1e-9 ? ((x - B.ax) * ex + (z - B.az) * ez) / L2 : 0; if (t < -0.05 || t > 1.05) continue; const tc = Math.max(0, Math.min(1, t)); if (Math.hypot(x - B.ax - ex * tc, z - B.az - ez * tc) <= B.hw + 0.3) top = Math.max(top, B.ah + (B.bh - B.ah) * tc + 0.06); } return top; };
   H.deck = (x, z) => { const R = g.world.roads; if (!R || !R.bridges.length) return -Infinity; for (const B of R.bridges) { const ex = B.bx - B.ax, ez = B.bz - B.az, L2 = ex * ex + ez * ez, t = L2 > 1e-9 ? ((x - B.ax) * ex + (z - B.az) * ez) / L2 : 0; if (t < -0.05 || t > 1.05) continue; const tc = Math.max(0, Math.min(1, t)); if (Math.hypot(x - B.ax - ex * tc, z - B.az - ez * tc) <= B.hw + 0.3) return 1; } return -Infinity; };
 };
 
@@ -119,7 +120,7 @@ try {
           const b = R.bbox; if (x < b[0] - 120 || x > b[2] + 120 || z < b[1] - 120 || z > b[3] + 120) continue;
           for (let i = 0; i < R.n; i++) {
             const px = R.p[i * 4], pz = R.p[i * 4 + 1], ph = R.p[i * 4 + 2]; if (R.p[i * 4 + 3] < 0 || Math.hypot(px - x, pz - z) > 120) continue;
-            if (w.shoreAt(px, pz) < 4.5 || !(g.tiles.detail && g.tiles.detail.at(px, pz))) continue;
+            if (w.shoreAt(px, pz) < 4.5 || ((g.tiles.detail && g.tiles.detail.at(px, pz)) || {}).r !== 2) continue; // (the 2 m detail by the player: the 5 m parent's 5 m lattice cannot hold a 6 m core flat)
             out.graded.pts++;
             const d = g.tiles.groundAt(px, pz) - ph; if (Math.abs(d) > 0.3) out.graded.off.push([Math.round(px), Math.round(pz), +d.toFixed(2), R.name || R.k]);
             const tr = g.tiles.treesNear(px, pz, R.hw + 1).filter((t) => !t.rock && Math.hypot(t.x - px, t.z - pz) < R.hw);
@@ -128,7 +129,7 @@ try {
         }
       };
       // 2: the way, every STEP m (the start's own few metres in a lot or a yard too)
-      for (let s = 0; s <= S.path.len; s += STEP) {
+      for (let s = Math.max(0, S.s0 - 2.7); s <= S.path.len; s += STEP) { // (from the truck's tail where it stands)
         const [x, z] = at(s);
         if (!here || Math.hypot(x - here[0], z - here[1]) > 140) await stop(x, z);
         out.samples++;
@@ -140,12 +141,13 @@ try {
           if (d < 1.1 + r + 0.15) out.trunks.push([Math.round(x), Math.round(z), +d.toFixed(2), +r.toFixed(2)]);
         }
         const yl = g.tiles.groundAt(x + nx * 0.85, z + nz * 0.85), yr = g.tiles.groundAt(x - nx * 0.85, z - nz * 0.85);
-        if (Math.abs(yl - yr) > 0.35 && H.deck(x, z) < 0) out.tilt.push([Math.round(x), Math.round(z), +(yl - yr).toFixed(2)]);
+        const fine = ((g.tiles.detail && g.tiles.detail.at(x, z)) || {}).r === 2;
+        if (fine && w.shoreAt(x, z) >= 4 && Math.abs(yl - yr) > 0.35 && H.deck(x, z) < 0) out.tilt.push([Math.round(x), Math.round(z), +(yl - yr).toFixed(2)]);
       }
       // the truck itself let go from its start, its own frames for the first 150 m: on its wheels
       await H.goNear(S.x, S.z); H.standAt(S.x + 6, S.z + 6);
       T.hide(); T.leave(key); let worst = 0, frames = 0;
-      for (let f = 0; f < 900 && T.job && T.job.kind === 'leave' && T.job.s < S.s0 + 150; f++) { H.step(1); frames++; if (T.mesh && T.mesh.visible) worst = Math.max(worst, Math.abs(T.mesh.matrix.elements[13] + 0.02 - Math.max(g.tiles.groundAt(T.x, T.z), -1e9))); }
+      for (let f = 0; f < 900 && T.job && T.job.kind === 'leave' && T.job.s < S.s0 + 150; f++) { H.step(1); frames++; if (T.mesh && T.mesh.visible) worst = Math.max(worst, Math.abs(T.mesh.matrix.elements[13] + 0.02 - Math.max(g.tiles.groundAt(T.x, T.z), H.deckTop(T.x, T.z)))); }
       out.wheels = { frames, worst: +worst.toFixed(2) };
       T.hide();
       return out;

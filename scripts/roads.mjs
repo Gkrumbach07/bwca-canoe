@@ -549,13 +549,30 @@ for (const c of chains) {
   const rows = pts.map(([x, z], i) => [x, z, h[i], water[i] ? -w[i] : w[i]]);
   roads.push({ k: c.k, hw: c.hw, line: c.line ? 1 : 0, name: c.name, p: enc(rows, [10, 10, 100, 10]) });
 }
+// round 4: where a route crosses water off the drawn bridges (a road's water at a junction or a chain's end, which the
+// game's mid-chain bridges miss: Mudro's North Grassy Road, Tomahawk Road at the Island River), a bridge of its own from
+// bank to bank, level with the ground at the banks (roads.js adds them to the drawn ones; the truck drives the deck)
+const routeBridges = [];
+if (ground) for (const r of routes) {
+  const pts = resample(r.pts, 2), wet = pts.map(([x, z]) => ground.at(x, z).sd < 0.5);
+  for (let i = 1; i < pts.length - 1;) {
+    if (!wet[i]) { i++; continue; }
+    let j = i; while (j < pts.length && wet[j]) j++;
+    if (j < pts.length && (j - i) * 2 <= 80) {
+      const A = pts[i - 1], B = pts[j], ha = ground.at(A[0], A[1]).h, hb = ground.at(B[0], B[1]).h, mx = (A[0] + B[0]) / 2, mz = (A[1] + B[1]) / 2;
+      if (!routeBridges.some((q) => Math.hypot((q.ax + q.bx) / 2 - mx, (q.az + q.bz) / 2 - mz) < 6)) routeBridges.push({ ax: +A[0].toFixed(1), az: +A[1].toFixed(1), ah: +ha.toFixed(2), bx: +B[0].toFixed(1), bz: +B[1].toFixed(1), bh: +hb.toFixed(2), hw: 2.6, k: 1, key: r.key });
+    }
+    i = j + 1;
+  }
+}
+console.log(`roads: ${routeBridges.length} bridges where the routes cross water: ${routeBridges.map((b) => b.key).join(', ')}`);
 if (ground) await ground.close();
 cuts.sort((a, b) => a - b);
 const routeRows = routes.map((r) => ({ key: r.key, ep: r.ep, at: r.at, snap: r.snap, ...(r.stand ? { stand: 1 } : {}), drive: r.drive ? 1 : 0, ...(r.edge ? { edge: 1 } : {}), p: enc(resample(r.pts, 10).map(([x, z]) => [x, z]), [10, 10]) }));
 const table = {
   for: index.source && index.source.baked,
   about: `The last stretch of the real roads into each lot (scripts/roads.mjs, OpenStreetMap via Geofabrik ${new Date().toISOString().slice(0, 10)}; stream E3). ${roads.length} roads, ${(total / 1000).toFixed(1)} km, ${ground ? 'graded on the release ground' : 'flat (no heights)'}.`,
-  roads, routes: routeRows,
+  roads, routes: routeRows, bridges: routeBridges,
 };
 fs.writeFileSync(outFile, JSON.stringify(table));
 console.log(`roads: ${outFile} ${(fs.statSync(outFile).size / 1024).toFixed(0)} KB; ${ground ? `over water ${wet} samples (${(wet * STEP / 1000).toFixed(2)} km), cut/fill median ${cuts[cuts.length >> 1]?.toFixed(2)} m, p95 ${cuts[Math.floor(cuts.length * 0.95)]?.toFixed(2)} m, max ${cuts[cuts.length - 1]?.toFixed(2)} m` : 'no heights'}`);
