@@ -49,9 +49,10 @@ export const SPEC = {
   9: { name: 'Little Indian Sioux River South', start: 'river' },
   12: { name: 'Little Vermilion Lake', start: 'lake' },
   14: { name: 'Little Indian Sioux River North', start: 'portage', lot: [48.14645, -92.21108], open: { i: 851, mode: 'new', to: 1117, posted: 40, name: 'Little Indian Sioux River North Portage' } },
-  // round 4: the store at the road end, on the Moose River where it runs under Forest Road 206 (outside the line; the
-  // river north of the road is the wilderness), the head's lot and carry as before
-  16: { name: 'Moose/Portage River North', start: 'portage', store: { put: [48.12304, -92.10062], lake: 25661 }, head: { lot: [48.12378, -92.09857], open: { i: 1266, lake: 1, mode: 'join', posted: 160, name: 'Moose River North Portage' } } },
+  // round 4: the store at the road end, on the Moose River's low east bank by Forest Road 206 (outside the line, 25 m
+  // short of it; the river north of it is the wilderness: the west bank and the reach south of the road stand 7-9 m
+  // over the water), the head's lot and carry as before
+  16: { name: 'Moose/Portage River North', start: 'portage', store: { put: [48.12404, -92.10093], lake: 25661 }, head: { lot: [48.12378, -92.09857], open: { i: 1266, lake: 1, mode: 'join', posted: 160, name: 'Moose River North Portage' } } },
   19: { name: 'Stuart River', start: 'portage', lot: [48.09618, -91.98897], open: { i: 1241, lake: 0, mode: 'join', posted: 480 } },
   20: { name: 'Angleworm Lake', start: 'portage', lot: [48.0631, -91.92923], open: { i: 1244, lake: 0, mode: 'join', posted: 640 } },
   22: { name: 'Mudro Lake – Restricted', start: 'portage', lot: [48.03203, -91.83457], open: { i: 714, lake: 1, mode: 'join', posted: 24, name: 'Mudro Lake Portage' } },
