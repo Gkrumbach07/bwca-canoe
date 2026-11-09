@@ -2153,10 +2153,12 @@ unmatched, the people, the years, the things that don't add up, the far end, and
 each arc). Draft wording; each is one short line.
 
 From night one:
+<!-- list: walt.nb.night1 page -->
 - "A guide's notebook, found in the old tent. W.H. 2010–."
 - "He left in a hurry. Something called the cellar. He was scared."
 
 From reading (once each, when the page is first read):
+<!-- list: walt.nb.read page -->
 - "He calls places by his own names." (the first nickname read)
 - "V. — someone he lost. 'They said he drowned.'" (NB35)
 - "Two cups. One for June." (NB04 with NB06 or NB24)
@@ -2164,6 +2166,7 @@ From reading (once each, when the page is first read):
 - "Someone went through his pack. Folded it neater." (NB81)
 
 From understanding (see 11.2), in place of a margin note's longer form, for example:
+<!-- list: walt.nb.und page -->
 - "Walt." (the heading changes from W.H. when Tauno names him)
 - "He went in at Little Gabbro every 12 October."
 - "Sparky is Denny. Whiskey is Frank. Not the way round you'd think."

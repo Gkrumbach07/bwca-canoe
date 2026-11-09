@@ -555,6 +555,7 @@ station.
 **Leo's lid.** At the pad's edge, in the collapse of a second, older core-box rack, one box end still has its lid. The
 dot reads "Box lid". *Take* gives **Leo's lid**, a rotten slat of a lid with a punched stamp on its end:
 
+<!-- id: item.leolid.stamp -->
 ```
 L.P.  3-76   KP-4   120–135
 ```

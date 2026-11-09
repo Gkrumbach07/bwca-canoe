@@ -76,6 +76,7 @@ next step. Show only what's missing: a page with a gap reads like a page with a 
 
 Example, S1, after the third meeting:
 
+<!-- not-text: an example page -->
 ```
 The man on the Stuart.
 Ollie. Walks the portage Tuesdays and Thursdays, in the evening. Says "Evening."
@@ -322,6 +323,7 @@ Close: OLLIE: "Evening." *[He walks back toward the road.]*
 
 ### Ollie's search log (book page; finished text, his block capitals and pencil)
 
+<!-- id: S1.log -->
 ```
 SEARCH — BALD EAGLE L. — HAAPALA, E., 28, Ely
 
@@ -427,6 +429,7 @@ about one thing: the Big Moose ridge has a story every few summers. He believes,
 
 - **The notice** (Moose River North board, 1 June – 30 September):
 
+  <!-- id: S2.notice -->
   ```
   THE TWIN PORTS TATTLER
   pays CASH for photographs of
@@ -628,6 +631,7 @@ printout).
 
 - **The notice** (Slim 6 board, 25 August – 31 October):
 
+  <!-- id: S3.notice -->
   ```
   LIGHTS OVER FOURTOWN?
   Seen something? Write it in the sky book at the counter.
@@ -650,6 +654,7 @@ printout).
 
 ### The sky book (book page; Elaine gives a copy of her sheet)
 
+<!-- id: S3.skybook -->
 ```
 FOURTOWN — SEPT / OCT — what to look for. (E.S.)
 
@@ -663,6 +668,7 @@ Anything else: write it down anyway.
 
 Sample pages, already in the binder (finished text; campers' hands, then Elaine's red brackets):
 
+<!-- id: S3.binder -->
 ```
 Sept 3. Fourtown N end, 11:10 pm. "Blue lights moving across the sky in a line!!!" — Hendersons, Ames IA
    [Satellites. A train of them, launched this spring. Pass times are on the sheet. E.S.]
@@ -764,6 +770,7 @@ ELAINE: "You've got a face on. Tell me."
 ELAINE: "Two. You're keeping at it." *[She flips back through the binder for a line she half remembers.]* "Here.
 September of 2012." *[A line in a square, careful hand, finished text:]*
 
+<!-- id: S3.walt.square -->
 ```
 Sept 29. Four Towns, night of the 28th, from the S site, the long rock. N bay,
 low, steady, then gone. Kept the red on. The low one stayed till I showed white. W.
@@ -889,6 +896,7 @@ and three days of food, and his "way back" is eighty metres.
 
 - **The notice** (Moose River North board, 1 June – 15 October):
 
+  <!-- id: S4.notice -->
   ```
   VOLUNTEER WANTED — WOLF SURVEY
   Nina Moose to Agnes. Night work. Some mud.
@@ -1008,6 +1016,7 @@ Kari asks for nothing to be told. Two people ask for a place.
 
 ### Kari's report (book page; left at Leon's counter in October)
 
+<!-- id: S4.kari -->
 ```
 Agnes pack, summer 2026. Adults: 4–5. Pups: 5 (counted 14 Aug).
 Range: roughly 120 km², centred west of Agnes. Den and rendezvous: not given.
@@ -1358,6 +1367,7 @@ From then on the dot names an old pit anywhere: *"A square slump. Somebody dug h
 
 ### The 1928 ledger (book page; finished text, a pocket book in indelible pencil)
 
+<!-- id: S6.ledger -->
 ```
 1928
 May 30   over the slide           14 cs     pd. men  $9.00
@@ -1543,6 +1553,7 @@ notice (31 GY-T6). *Voice:* the retired local of 02b 6.5: history dropped as dat
 
 - **The notice** (31 GY-T6, on Gus's board, Moose Lake 25, about 25 May – 25 June; finished text):
 
+  <!-- id: S7.notice -->
   ```
   PHOTO WANTED: LILACS in bloom at the old places on Basswood,
   for the church calendar. June only. $25 for a good one.

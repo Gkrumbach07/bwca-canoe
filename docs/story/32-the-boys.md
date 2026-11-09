@@ -206,6 +206,7 @@ and well, and never appears. **Frank's daughter** is the 1993 wedding and is nev
 
 ## 4. How the arc runs
 
+<!-- not-text: arc map -->
 ```
  Tauno 1.3 ─ rings Sawbill┐            Denny: card, rings, Sparky (meeting 2), the permit; tell 1 when asked;
  any keeper on "the boys"─┼─▶ Carol ─▶ favour: Gene's paddle at Frost ─▶ the slides (Sept 98) ── key 3B

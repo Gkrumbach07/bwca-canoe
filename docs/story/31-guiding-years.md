@@ -614,6 +614,7 @@ night he went. His canoe was on Birch's south shore." Nothing on the page says w
 
 **Sheila's report** (book page; two typed pages, a Lake County incident form, copy):
 
+<!-- id: sheila.report -->
 > **Page one.** *Incident: overdue/missing person, Moose Lake chain / Birch Lake. Reported: 19 Oct 2019, 16:20, by a
 > party of two exiting via Moose Lake, who observed an aluminium canoe swamped against the south shore of Birch Lake
 > near the alders east of the bypass. No paddle in or near craft. Craft identified by Moose Lake outfitter staff as
@@ -759,12 +760,14 @@ Also in the loft, each a small finding:
 entries in Marlys's hand all year: parties, bunks 1–6, nights, "pd" and amounts in quarters. In October:
 
 > *Oct 14 — W.H. — bunk 3 — Oct 14–*
+<!-- id: register.helstrom -->
 > *Oct 15 — W. HELSTROM — day use — parked* [in tidy capitals that aren't Marlys's]
 
 Inside the back cover, folded once:
 - **The message**, a sheet off a phone pad in Marlys's hand: *6:05 — your friend called, call back*, and a Duluth number.
 - **The 2019 clipping**, from the Ely weekly, cut out by Marlys:
 
+<!-- id: clipping.2019 -->
 > **Search suspended for missing Ely canoeist.** The search for an Ely man missing on Birch Lake was suspended Monday.
 > Walter Haapala, 73, a retired guide, was last seen Oct. 17 at a Moose Lake bunkhouse. His canoe was found swamped,
 > with no paddle, against the lake's south shore on Oct. 19. The Lake County Sheriff's Office said no foul play is
@@ -1007,12 +1010,14 @@ arc adds:
 Both pass the rule of innocent reading (`02a-voice-journal.md`, Part 3) and keep to the stretches' shapes.
 
 **GY-N1** (quiet years, August 2012, under that trip's header):
+<!-- not-text: a request to 10-notebook (GY-N1) -->
 ```
 Inlet Bay. Lunch on the rock where H. and I fed the tow clients. Pine's gone, blowdown. Our fire ring's still under
 the moss. 1 WE off the reef, S 10, jig, let it drift. Same as '86. Kept him. Ate him on the rock.
 ```
 
 **GY-N2** (quiet years, a one-line page among the 2013 entries):
+<!-- not-text: a request to 10-notebook (GY-N2) -->
 ```
 Coffee with H. at the home. Prairie landing on the wrong side again. Let him have it.
 ```
