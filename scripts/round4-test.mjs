@@ -225,6 +225,8 @@ try {
     for (let k = 0; k < 80 && !s.layout; k++) { H.step(10); await H.wait(80); }
     H.step(120);
     const top = A && A.top ? { x: A.top[0], z: A.top[1] } : A && A.landing ? { x: A.landing[0], z: A.landing[1] } : { x: s.x + 6, z: s.z };
+    // (the canoe left at the landing, where it came ashore, not under him at the top of the way up)
+    if (A && A.landing) { const p = g.player; p.carry = { trail: null, drop: { x: A.landing[0], z: A.landing[1], heading: p.heading }, hitCooldown: 0, from: null, choice: false }; }
     H.standAt(top.x, top.z, H.yawTo(s)); H.step(20);
     const f = s.layout && s.layout.fire ? s.layout.fire : s;
     return { ring: { x: f.x, z: f.z } };
@@ -272,9 +274,9 @@ try {
 
   // --- the contact sheet: 9 shots, 3 across ------------------------------------------------------------------------------
   const list = sheet.sort((a, b) => a.n - b.n);
-  const sp = await (await browser.newContext({ viewport: { width: 1920, height: 3 * 440 } })).newPage();
+  const sp = await (await browser.newContext({ viewport: { width: 1920, height: 3 * 400 } })).newPage();
   const cells = list.map((s) => `<figure><img src="data:image/png;base64,${readFileSync(s.file).toString('base64')}"><figcaption>${s.n}. ${s.cap || ''}</figcaption></figure>`).join('');
-  await sp.setContent(`<!doctype html><style>body{margin:0;background:#181816;display:grid;grid-template-columns:repeat(3,640px);font:15px Arial,sans-serif;color:#f0e8d2}figure{margin:0;width:640px;height:440px;position:relative}img{width:640px;height:400px;display:block;object-fit:cover}figcaption{height:40px;line-height:40px;padding:0 10px;white-space:nowrap;overflow:hidden}</style>${cells}`);
+  await sp.setContent(`<!doctype html><style>body{margin:0;background:#181816;display:grid;grid-template-columns:repeat(3,640px);font:15px Arial,sans-serif;color:#f0e8d2}figure{margin:0;width:640px;height:400px;position:relative}img{width:640px;height:360px;display:block}figcaption{height:40px;line-height:40px;padding:0 10px;white-space:nowrap;overflow:hidden}</style>${cells}`);
   await sp.waitForTimeout(500);
   await sp.screenshot({ path: SHEET, fullPage: true });
   log('sheet', SHEET);
