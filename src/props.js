@@ -18,18 +18,20 @@ import { roadExclusions, DECK } from './roads.js'; // stream E3: the roads in 3D
 import { nearRoad } from './road-grade.js'; // round 4: a portage's sign kept off the roads (the truck's way)
 // round 4: whether (x, z) stands on a road (its half width and pad m, the water's pieces too: the graded table has only
 // the land's)
-const onRoad = (world, x, z, pad = 0.6) => {
-  if (nearRoad(x, z, pad)) return true;
-  const R = world && world.roads; if (!R) return false;
-  for (const r of R.list) { // (each segment of its line, not only its points: they stand 6 m apart)
-    const b = r.bbox, m = r.hw + pad; if (x < b[0] - m || x > b[2] + m || z < b[1] - m || z > b[3] + m) continue;
+// (roadGap: how far (x, z) stands off the nearest road's edge, by each segment of its line, not only its points: they
+// stand 6 m apart; Infinity past 12 m)
+const roadGap = (world, x, z) => {
+  const R = world && world.roads; let gap = Infinity; if (!R) return gap;
+  for (const r of R.list) {
+    const b = r.bbox, m = r.hw + 12; if (x < b[0] - m || x > b[2] + m || z < b[1] - m || z > b[3] + m) continue;
     for (let i = 0; i + 1 < r.n; i++) {
       const ax = r.p[i * 4], az = r.p[i * 4 + 1], ex = r.p[i * 4 + 4] - ax, ez = r.p[i * 4 + 5] - az, L2 = ex * ex + ez * ez, t = L2 ? Math.max(0, Math.min(1, ((x - ax) * ex + (z - az) * ez) / L2)) : 0;
-      if (Math.hypot(x - ax - ex * t, z - az - ez * t) < m) return true;
+      gap = Math.min(gap, Math.hypot(x - ax - ex * t, z - az - ez * t) - r.hw);
     }
   }
-  return false;
+  return gap;
 };
+const onRoad = (world, x, z, pad = 0.6) => nearRoad(x, z, pad) || roadGap(world, x, z) < pad;
 
 // The built things: portage trails and their signs, campsites, and at every entry point an outfitter's dock,
 // shack and canoe rack, plus the lost-and-found items of the task board. Simple shapes put together the way
@@ -525,8 +527,12 @@ function portageSign(ctx, pts, end, seed, p = null) {
   const [x, z] = pts[idx(k)], [xn, zn] = pts[idx(k + 1)];
   let fx = x - xn, fz = z - zn; const L = Math.hypot(fx, fz) || 1; fx /= L; fz /= L; // facing out along the path, to the water
   // (round 4: never on a road, where a trail starts at a road's end or a lot: the other side, else further off the path)
-  let side = rng() < 0.5 ? 1 : -1, off = 1.15;
-  for (const [sd, o] of [[side, 1.15], [-side, 1.15], [side, 2.6], [-side, 2.6], [side, 4], [-side, 4], [side, 6], [-side, 6], [side, 8], [-side, 8]]) if (!onRoad(ctx.world, x + fz * sd * o, z - fx * sd * o, 0.4)) { side = sd; off = o; break; }
+  let side = rng() < 0.5 ? 1 : -1, off = 1.15, gapBest = -Infinity, pick = null;
+  for (const [sd, o] of [[side, 1.15], [-side, 1.15], [side, 2.6], [-side, 2.6], [side, 4], [-side, 4], [side, 6], [-side, 6], [side, 8], [-side, 8]]) {
+    if (!onRoad(ctx.world, x + fz * sd * o, z - fx * sd * o, 0.4)) { pick = [sd, o]; break; }
+    const gp = roadGap(ctx.world, x + fz * sd * o, z - fx * sd * o); if (gp > gapBest) { gapBest = gp; pick = [sd, o]; } // (none clear: the one furthest off)
+  }
+  if (pick) { side = pick[0]; off = pick[1]; }
   const px = x + fz * side * off, pz = z - fx * side * off;
   const F = frame(ctx, px, pz, { x: fx, z: fz }), g = F.G(0, 0), b = new PropBuilder();
   ctx.obstacles.push({ x: px, z: pz, r: 0.15, low: true }); // (low: a canoe carried overhead rides over the post, player.js)
