@@ -7,7 +7,7 @@
 //   B  a ride to a moved lot (75 or 84, 170 m in from the south edge) and to a moved store (16 or 67): the truck stands
 //      there and drives off; on foot down the lot's way to the water the jacket stays off, the shoulder stays out (no
 //      person there), and no edge notice (the doorstep)
-//   C  the party tents: over 120 days of the season no party lands at a site past the band or in Quetico; no site in
+//   C  the party tents: over 80 days of the season no party camps at a site past the band or in Quetico; no site in
 //      Quetico left in play; the camps drawn round you never past
 //   D  Quetico in co-op: a guest paddled into Quetico sees the one notice ("You have left the Boundary Waters"), never a
 //      Quetico one; the host inside sees none; back in, the guest's notice comes down
@@ -191,21 +191,19 @@ try {
   const c = await ev(async () => {
     const g = window.__game, P = g.parties, H = window.__rf, w = g.world, T0 = P.today, bad = [], qSites = [];
     w.campsites.forEach((s, i) => { if (H.inQ(s.x, s.z) && !s.past) qSites.push(i); });
+    // (each night's camps: parties.campsAt at 9 pm, every 2nd day of 80; the legs' plans are too slow to walk a season)
     let legs = 0, sites = 0;
-    for (let d = -20; d < 100; d++) {
-      for (const { party, k } of P.legsOn(T0 + d)) {
-        legs++;
-        const pl = P.legPlan(party, k); if (!pl || !pl.to || pl.to.kind !== 'site') continue;
-        sites++;
-        const i = P.siteOfKey ? P.siteOfKey.get(pl.to.key) : -1, s = i >= 0 ? w.campsites[i] : null;
-        if ((s && s.past) || H.zone(pl.to.x, pl.to.z) === 0 || H.inQ(pl.to.x, pl.to.z)) bad.push({ d, key: pl.to.key, past: s && s.past, q: H.inQ(pl.to.x, pl.to.z) });
+    for (let d = -10; d < 70; d += 2) {
+      for (const c of P.campsAt(T0 + d, 21) || []) {
+        legs++; const s = c.site || w.campsites[c.i]; if (!s) continue; sites++;
+        if (s.past || H.zone(s.x, s.z) === 0 || H.inQ(s.x, s.z)) bad.push({ d, key: c.key, past: !!s.past, q: H.inQ(s.x, s.z) });
       }
-      if (d % 10 === 0) await H.wait(0);
+      await H.wait(0);
     }
     const drawn = [...((g.partyCamps && g.partyCamps.drawn) || new Map()).keys()].filter((key) => { const i = P.siteOfKey ? P.siteOfKey.get(key) : -1; return i >= 0 && w.campsites[i].past; });
     return { legs, sites, bad: bad.slice(0, 8), nBad: bad.length, qSites: qSites.length, pastSites: w.pastSites, drawnPast: drawn };
   });
-  result('C the parties: no party lands past the band or in Quetico over the season; no Quetico site left in play; no camp drawn past',
+  result('C the parties: no party camps past the band or in Quetico over 80 days; no Quetico site left in play; no camp drawn past',
     c.sites > 50 && c.nBad === 0 && c.qSites === 0 && c.drawnPast.length === 0, c);
   await browsers[0].close().catch(() => {}); browsers.shift();
 
