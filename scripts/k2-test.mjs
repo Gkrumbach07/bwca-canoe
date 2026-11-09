@@ -70,7 +70,7 @@ const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
   ok('side: ▸ choices nest (S1.A.c9 answers S1.A.c8)', side['S1.A.c9']?.after === 'S1.A.c8');
   ok('world: keepers by section (70.8.1.* Ruth Aho), a rumour pool, a bark pool', Object.entries(w).some(([k, e]) => k.startsWith('70.8.1.') && e.who === 'Ruth Aho') &&
     Object.values(w).some((e) => e.pool === 'rumour') && Object.values(w).some((e) => e.pool === 'bark'));
-  ok('world: conditions translated (S7 J/JN → (end:J|end:JN), carrying, month)', Object.values(w).some((e) => e.cond === '(end:J|end:JN)') &&
+  ok('world: conditions translated (S7 J/JN → end:J|JN, a bare S8 a side story, carrying, month)', Object.values(w).some((e) => e.cond === 'end:J|JN') && Object.values(w).some((e) => e.side === 'S8' && !/S8/.test(e.cond || '')) &&
     Object.values(w).some((e) => /carrying:waltpack/.test(e.cond || '')) && Object.values(w).some((e) => /month:\d+-\d+/.test(e.cond || '')));
   ok('anchors: Eino\'s note, the scanner, Sheila\'s report, the Walt page drafts', fin['note.eino']?.text === 'W. — Saturday.\nBring the good coffee.\nEino.' &&
     fin['scanner.quiet.1']?.who === 'One' && fin['scanner.quiet.1'].repeat && fin['scanner.dawn.2']?.then?.[0]?.who === 'Base' &&

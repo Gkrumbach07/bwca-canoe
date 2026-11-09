@@ -244,7 +244,7 @@ export function knownSpeakers(srcs) {
 // or `note` and is listed in the report.
 
 export function translate70(raw) {
-  const res = { when: [], once: false, rare: false, ground: [], prose: [] };
+  const res = { when: [], once: false, rare: false, ground: [], prose: [], side: [] };
   if (!raw) return res;
   let s = raw;
   const ticks = [];
@@ -260,6 +260,9 @@ export function translate70(raw) {
   for (let part of s.split(/[,;]/)) {
     part = part.replace(/\u0001/g, '').trim();
     if (!part) continue;
+    // a bare S<n> (no backticks) is a side story's tag (60-side-stories.md: §6.1's rumours, "S8" the sled), not a
+    // stage: the doc writes every stage condition in backticks
+    if (/^S\d+$/.test(part)) { res.side.push(part); continue; }
     const t = atom70(part);
     if (t.when) res.when.push(t.when);
     else if (t.once) res.once = true;
@@ -275,7 +278,7 @@ function atom70(a, b, c) {
   a = a.trim();
   let m;
   if (b && /^S\d$/.test(a) && /^S\d$/.test(b)) return { when: `${a}-${b}` };
-  if ((m = a.match(/^S7\s+(J|JN|M)$/))) return { when: c ? `(end:${m[1]}|end:${c})` : `end:${m[1]}` };
+  if ((m = a.match(/^S7\s+(J|JN|M)$/))) return { when: c ? `end:${m[1]}|${c}` : `end:${m[1]}` }; // Appendix B's value list
   if (/^S\d$/.test(a)) return { when: `stage>=${a}` };
   if ((m = a.match(/^(S\d)\s*[–-]\s*(S\d)$/))) return { when: `${m[1]}-${m[2]}` };
   if (/^t[1-4]$/.test(a)) return { when: a };
@@ -620,6 +623,7 @@ export function extractDoc(key, src, known) {
         if (tr.once) e.once = true;
         if (tr.rare) e.rare = true;
         if (tr.ground.length) e.ground = tr.ground;
+        if (tr.side.length) e.side = tr.side.join(',');
         if (tr.prose.length) {
           if (!spk && cond70 && cond70.includes(tr.prose[0]) && WHO70.test(tr.prose[0])) e.who = tr.prose.shift();
           const qi = tr.prose.findIndex((x) => /\?$/.test(x));

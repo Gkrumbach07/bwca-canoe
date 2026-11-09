@@ -181,7 +181,7 @@ const FORMS = [
   [new RegExp(`^bigCount${CMP}\\d+$`), 'derived'], [/^(north|home|coop|host|ice|iceseason|lowwater|fog|daylight|dark|run\.active|site\.island|in:store)$/, 'word'],
   [/^end(?::(J|JN|M)(\|(J|JN|M))*)?$/, 'end'], [/^lock:[1-9]$/, 'lock'], [/^key\.L[1-9][A-Z]$/, 'fact'],
   [/^any\([\w.*]+(=[\w-]+)?\)$/, 'glob'], [new RegExp(`^count\\([\\w.*]+\\)${CMP}\\d+$`), 'glob'],
-  [new RegExp(`^(read|here|und):NB\\d{2,3}$`), 'nb'], [/^nbphoto:P\d+$/, 'nb'], [/^bc\.[\w-]+$/, 'fact'],
+  [new RegExp(`^(read|here|und):NB\\d{2,3}$`), 'nb'], [/^und:N[A-Z]?\d+$/, 'nb'], [/^nbphoto:P\d+$/, 'nb'], [/^bc\.[\w-]+$/, 'fact'],
   [new RegExp(`^(ink|knows|lie|case|ev|asked|said|choice|door|tier|world|year\\.turned|nb|ep)\\.[\\w.@-]+(=[\\w-]+)?$`), 'fact'],
   [new RegExp(`^(knows|ev):[\\w.@-]+$`), 'fact'],
   [new RegExp(`^(trust|met|visits):${WHO}${CMP}\\d+$`), 'ppl'], [new RegExp(`^(fear|cold|told):${WHO}$`), 'ppl'],
@@ -329,6 +329,38 @@ if (!dataFiles.length) {
   }
   result('schema: src/story-data rules, facts and locks', errs.length === 0 && loadErrs.length === 0, { files: dataFiles, errs: errs.slice(0, 30), loadErrs, facts: rows.length });
   result('conditions: every condition parses and can hold', condErrs.length === 0, { errs: condErrs.slice(0, 30) });
+}
+
+// --- 4 text (the R0 join: K2's extract against K1a's facts and K1b's grammar) -------------------------------------------
+// src/story-data/text/*.json (scripts/story-extract.mjs): every stamp matches its doc (staleStamps), and every machine
+// condition, the `cond` field (doc 70's brackets translated to Appendix B), parses, can hold and reads only declared
+// facts. The `when` field of docs 20–60 is the writers' prose variant label ("Nickname: Deacon"), not a condition, and
+// is not checked: a wiring stream turns it into a `cond` (or a rule) when it wires that line.
+{
+  const TEXT = path.join(DATA, 'text');
+  if (!existsSync(TEXT)) result('text: the extract is fresh and its conditions hold', null, { why: 'no src/story-data/text' });
+  else {
+    const errs = [];
+    if (!process.env.STORY_LINT_SRC) {
+      try { const ex = await import(pathToFileURL(path.join(ROOT, 'scripts', 'story-extract.mjs')).href); for (const b of ex.staleStamps()) errs.push(`${b.file}: stale stamp (${b.doc}; run npm run story:extract)`); } catch (e) { errs.push(`story-extract.mjs: ${e.message}`); }
+    }
+    let factRow = null;
+    try { factRow = (await import(pathToFileURL(path.join(DATA, 'facts.js')).href)).factRow; } catch { factRow = null; }
+    let n = 0, files = 0;
+    for (const f of readdirSync(TEXT).filter((x) => x.endsWith('.json'))) {
+      let j; try { j = JSON.parse(readFileSync(path.join(TEXT, f), 'utf8')); } catch (e) { errs.push(`${f}: ${e.message}`); continue; }
+      files++;
+      for (const [id, e] of Object.entries((j && j.text) || {})) {
+        if (typeof e.cond !== 'string') continue;
+        n++;
+        const c = checkCond(e.cond, `${f}:${id}`);
+        if (Array.isArray(c)) { errs.push(...c); continue; }
+        errs.push(...c.errs);
+        if (factRow) for (const a of c.atoms) { const m = String(a).match(/^f:([\w.-]+)/); if (m && !factRow(m[1]) && !factRow(m[1] + '.x')) errs.push(`${f}:${id}: reads undeclared fact '${m[1]}'`); }
+      }
+    }
+    result('text: the extract is fresh and its conditions hold', errs.length === 0, { files, conds: n, errs: errs.slice(0, 30) });
+  }
 }
 
 const fails = Object.values(report.checks).filter((c) => c.pass === false).length;

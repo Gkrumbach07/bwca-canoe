@@ -470,6 +470,13 @@ export class StoryV2 {
     if (evt !== 'fact' && evt !== 'clock') this.rules.fire(evt, data); // (every event is also an event in; mirror: off)
     else if (evt === 'clock') this.rules.fire('clock', data);
   }
+  // the feed's way in (story-feed.js, K1b; the R0 join's call): an event from the game. On a co-op guest (mirror) it is
+  // dropped here too, so nothing the guest's game does reaches the rules even if a feed is started by hand
+  ingest(evt, data = {}) {
+    if (this.mode === 'mirror' || !evt) return false;
+    this.emit(evt, data);
+    return true;
+  }
   log(t, data) {
     if (!this.doc) return;
     const tm = this.time();
