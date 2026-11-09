@@ -1,4 +1,5 @@
-// Story Round 0, stream H (hygiene, docs/story/90-game-needs.md section 12), headless. No STORY_ON: these ship to main.
+// Story Round 0, stream H (hygiene, docs/story/90-game-needs.md section 12), headless. Josie and Gus's new lines are
+// behind STORY_ON (the R0 fix: the flag-off game equals main), so 1 and 4 run with ?story=1, and 5 checks the flag off.
 //   npx vite --port 5405 --strictPort &   then   APP=http://localhost:5405 node scripts/hyg-test.mjs
 // 1  The summer help is Josie at every home (onboarding.staffName), her name reserved (no one else is given it), drawn
 //    as a woman (npcs FEMALE), and the onboarding's staffer stands as Josie at a home on a new season.
@@ -8,6 +9,7 @@
 //    Ostrom; Leif, Eino, Perko, Zupancic and Dale Ostrom gone from src/.
 // 4  Gus (Moose Lake 25): "Ran the tow boat on Sag thirty years. American Point and back." and "My wife ran our old
 //    store. Now I run this one. Badly."; the old lines gone; his Prairie topic stays; both lines pass the grounding.
+// 5  The flag off: main's summer help (a name per home, never Josie) and Gus's old lines.
 import { launch, openGame, seasonAt, log, APP } from './gl-e-lib.mjs';
 
 const results = [];
@@ -22,8 +24,8 @@ const GUS_OLD = ['Ran the tow boat thirty years. Moose, Newfound, Sucker, up to 
 
 const browser = await launch();
 try {
-  const page = await openGame(browser);
-  log('game loaded at', APP);
+  const page = await openGame(browser, { query: '?story=1' });
+  log('game loaded at', APP, '(?story=1)');
 
   const r = await page.evaluate(async ({ NF, NL, SRC, GONE, GUS_NEW, GUS_OLD }) => {
     const g = window.__game, N = g.npcs, ob = g.onboarding;
@@ -84,6 +86,16 @@ try {
   });
   check('1c the staffer the onboarding stands at a home speaks as Josie', s.staffName === 'Josie' && (!s.stood || s.name === 'Josie'), s);
   check('1d Josie is drawn as a woman (no beard, a woman\'s height)', s.female, s);
+  await page.context().close();
+
+  // 5 the flag off: main's names and lines
+  const off = await openGame(browser);
+  const o = await off.evaluate(async () => {
+    const g = window.__game, O = await import('/src/onboarding.js'), K = await import('/src/talk-keepers.js');
+    return { staff: [...new Set(g.world.entryPoints.map((e) => g.onboarding.staffName(e.ep)))], staffList: O.STAFF, past: (K.HAND[25] || {}).past || [] };
+  });
+  check('5a flag off: main\'s summer help (a name per home, none Josie)', o.staffList.length === 12 && !o.staff.includes('Josie') && o.staff.length > 1, o);
+  check('5b flag off: Gus\'s old lines, none of the new', GUS_OLD.every((t) => o.past.includes(t)) && !GUS_NEW.some((t) => o.past.includes(t)), { past: o.past });
 } finally {
   await browser.close();
 }
