@@ -395,7 +395,7 @@ export class PartyCamps {
   tentBusy(D, i) {
     if (i == null || i >= D.tentList.length) return false;
     const h = this.day.hours, g = D.pitchGap ?? PITCH.gap;
-    const t0 = D.pitchAt != null ? D.pitchAt + i * g : D.strikeAt != null ? D.strikeAt + i * g : null;
+    const t0 = D.pitchAt != null ? D.pitchAt + i * g + ((D.tentLate && D.tentLate[i]) || 0) : D.strikeAt != null ? D.strikeAt + i * g : null;
     return t0 != null && h > t0 - 0.03 && h < t0 + PITCH.dur;
   }
   // the frame: while any tent is not fully up, each is drawn on its own (the camp's mesh drawn without them): a packed
@@ -404,7 +404,17 @@ export class PartyCamps {
     const n = D.tentList.length; if (!n || !D.mesh) return;
     const us = D.tentU || (D.tentU = new Array(n).fill(1));
     let moving = false;
-    for (let i = 0; i < n; i++) { us[i] = this.tentU(D, i); if (us[i] < 1) moving = true; }
+    // (round 4 fix: a tent about to rise where you stand waits till you step off its spot, then goes up from flat: its
+    // collision box used to switch on under you and shove you 1.22 m aside in one tick. `late` is how long it waited, h)
+    const late = D.tentLate || (D.tentLate = new Array(n).fill(0)), pl = this.player, g = D.pitchGap ?? PITCH.gap;
+    for (let i = 0; i < n; i++) {
+      us[i] = this.tentU(D, i);
+      if (D.pitchAt != null && late[i] > 0) us[i] = clamp((this.day.hours - (D.pitchAt + i * g) - late[i]) / PITCH.dur, 0, 1);
+      if (D.pitchAt != null && us[i] > 0 && us[i] < 1 && !(D.tentObjs && D.tentObjs[i].u > 0) && pl && this.onSpot(D.tentList[i].obstacle, pl.x, pl.z)) {
+        late[i] = Math.max(late[i], this.day.hours - (D.pitchAt + i * g)); us[i] = 0;
+      }
+      if (us[i] < 1) moving = true;
+    }
     if (!moving) { if (D.tentObjs) this.tentsAway(D); return; }
     if (!D.tentObjs) {
       const mat = D.mesh.material;
@@ -427,6 +437,13 @@ export class PartyCamps {
       o.u = u;
       this.tentObstacle(D, o, tn, u > 0);
     }
+  }
+  // standing on (or against) a tent's footprint: its box or circle, a body's half-width wider
+  onSpot(o, x, z, pad = 0.45) {
+    if (!o) return false;
+    const dx = x - o.x, dz = z - o.z;
+    if (o.box) return Math.abs(dx * o.ux + dz * o.uz) <= o.hx + pad && Math.abs(-dx * o.uz + dz * o.ux) <= o.hz + pad;
+    return Math.hypot(dx, dz) <= (o.r || 0) + pad;
   }
   tentObstacle(D, o, tn, on) {
     if (o.obs === on) return;
