@@ -16,6 +16,7 @@ import { SIGN_HEAD_UV, SIGN_GLYPH_ASPECT, signGlyphUv } from './prop-kit.js'; //
 import { tileCreeks, BROOK } from './creeks.js'; // the wetlands round: brooks, beaver dams and lodges
 import { roadExclusions, DECK } from './roads.js'; // stream E3: the roads in 3D
 import { nearRoad } from './road-grade.js'; // round 4: a portage's sign kept off the roads (the truck's way)
+import { cabinExclusions, tileCabins } from './cabins.js'; // round 4 C: a few cabins at the edge
 // round 4: whether (x, z) stands on a road (its half width and pad m, the water's pieces too: the graded table has only
 // the land's)
 // (roadGap: how far (x, z) stands off the nearest road's edge, by each segment of its line, not only its points: they
@@ -98,6 +99,7 @@ export function exclusionsFor(world) {
   if (world.creeks) for (const b of world.creeks.brooks) { const pts = rounded(b.pts); for (let i = 1; i < pts.length; i++) if (pts[i - 1][0] !== pts[i][0] || pts[i - 1][1] !== pts[i][1]) segs.push([pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1], BROOK.clear]); } // (never a point: site.js reads those as campsites)
   // stream E3: each road's cut through the forest (roads.js ROAD_CLEAR past its half width), a lawn: the grass through
   for (const s of roadExclusions(world)) segs.push(s);
+  for (const s of cabinExclusions(world)) segs.push(s); // round 4 C: the cabins at the edge and their docks, lawns
   return segs;
 }
 
@@ -212,6 +214,7 @@ export function* tilePropsSteps(tg, world, tx, ty) {
   for (const c of world.campsites) if (inside(c.x, c.z)) { buildCampsite(ctx, c, pieces, ledges); yield; }
 
   yield* tileCreeks(ctx, group, pieces, rounded); // the brooks' beds, the beaver dams and lodges (creeks.js)
+  yield* tileCabins(ctx, pieces); // round 4 C: the cabins past the edge, in this same mesh (cabins.js)
 
   const built = propMesh(pieces);
   if (built) group.add(built);
