@@ -6,7 +6,7 @@
 //      but where the table says so (none expected); every lot and store in the box at least 150 m from its edge
 //   2 every route driven, frame by frame: the truck's way out from each start sampled every TRUCK_STEP m (a frame at
 //      its top speed is 0.3 m) with the tiles in round it: no sample over water off a bridge's deck, no trunk within
-//      the truck's half width (+ the trunk's own radius and a hand) of its line, its wheels within 0.35 m of level
+//      the truck's half width (1.05 m, its wheels' hubs; + the trunk's own radius and 0.1 m) of its line, its wheels within 0.35 m of level
 //      across; and the truck itself let go down the first 150 m (leave, its own frames) on its wheels
 //   3 the roads graded: every road point within 120 m of each stop, on land past the water's edge, the drawn ground
 //      (the 2 m or 5 m detail) within 0.3 m of the road's own height; and no trunk on any road's core there
@@ -140,7 +140,7 @@ try {
         for (const t of g.tiles.treesNear(x, z, 4)) {
           if (t.rock) continue;
           const d = Math.hypot(t.x - x, t.z - z), r = t.r || 0.25;
-          if (d < 1.1 + r + 0.15) out.trunks.push([Math.round(x), Math.round(z), +d.toFixed(2), +r.toFixed(2)]);
+          if (d < 1.05 + r + 0.1) out.trunks.push([Math.round(x), Math.round(z), +d.toFixed(2), +r.toFixed(2)]);
         }
         const yl = g.tiles.groundAt(x + nx * 0.85, z + nz * 0.85), yr = g.tiles.groundAt(x - nx * 0.85, z - nz * 0.85);
         const fine = ((g.tiles.detail && g.tiles.detail.at(x, z)) || {}).r === 2;
