@@ -434,6 +434,10 @@ export function buildCanoeRig({ water = null } = {}) {
     if (kind !== 'vault' && kind !== 'climbUp') moves.done();
     blendPose(kind, dt);
     seatPacks(mode);
+    // r4 body: the life jacket is worn on the water (in the hull, in it swimming) and off ashore: in camp, in the store,
+    // walking about and over a portage (clipped to the pack: every trip over a carry looks the same, the canoe's and the
+    // packs'). wearPfd null leaves it to the mode; true / false holds it, for a test or a scene
+    fig.setPfd(api.wearPfd != null ? api.wearPfd : mode === 'paddle' || mode === 'swim');
     contact.userData.update(dt, mode === 'paddle' ? state.speed : 0);
     bilge.userData.update(dt, state.climb > 0 || hullPivot.parent !== rig ? 0 : state.bilge); // cons B (none while it is righted, or set down)
     // the head, neck and hat collapse out of the way from the paddler's eyes, and only while the camera is at them
@@ -451,6 +455,7 @@ export function buildCanoeRig({ water = null } = {}) {
     material: mat, lid, gait, stroke,
     ground: null, // set by player.js: the ground height at a world (x, z), for the feet
     terrain: null, // fb2 E: set by player.js: the drawn terrain alone (no rock, step or deck), for the hill's steepness
+    wearPfd: null, // r4 body: null the life jacket by the mode (pose), else true / false held
     moveOf: null, // set by main.js: () => player.move, the move the walker is making (vault, climb, sit, wade ...)
     viewer: null, // fb4 A, set by main.js: the camera; first person hides the head only while it is at the eye (pose)
     update(dt) {

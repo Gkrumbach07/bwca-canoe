@@ -437,6 +437,7 @@ export class Body {
   pose(f, dt, G) {
     const R = this.rig || this.makeRig(), st = this.state, spec = f.spec || { pose: 'stand' }, sc = (f.look && f.look.wear && f.look.wear.scale) || 1;
     const pid = f.key || f;
+    this.fig.setPfd(false); // r4 body: ashore no one wears the life jacket (a keeper never: the actors' layer puts it on in a boat)
     if (this.pid !== pid) { // (a new person in this body: their own seed, the feet planted afresh)
       this.pid = pid; this.gait.heal(); this.fade = null; this.kind = null; this.armW = 0; this.hd = f.heading + this.s.turn; this.px = NaN; this.py = NaN;
       this.pb.life = makeLife(hashSeed(String(pid))); this.pb.idle.watch = null;

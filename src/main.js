@@ -261,6 +261,14 @@ async function main() {
   player.fishing = fishing;
   fishing.rod.traverse((o) => o.layers.enable(REFLECT_LAYER));
   // the trip: outfitters at the landings, the food and the energy, the task board
+  // r4 body: the speaker point of the guide's current step when it is a person within a few metres (the chase eases over
+  // the shoulder: camera.js OTS), else null
+  const storyNear = () => {
+    try {
+      const e = guide.current(); if (!e || !e.target || e.target.kind !== 'person') return null;
+      const r = guide.reach(e); return r && r.d < 6 ? r.pos : null;
+    } catch { return null; }
+  };
   const teleport = async (x, z) => { const ok = await player.teleport(x, z); if (ok) chase.snap(); return ok; };
   const energy = new Energy(player, day);
   player.energy = energy; // 2026-10-31: winded, Shift does nothing (player.hustleKey)
@@ -1373,6 +1381,7 @@ async function main() {
     player.afterRig(); // fb C: a swim from shore leaves the beached hull where it lies (canoe.js's swim pose turns it over)
     p2b.afterPlayer(dt); // p2 B: the lid off on the carry, the hull pitched with the water's slope
     chase.allowLock = !shell && !input.paused && !hud.big && !hud.pin; // the mouse is yours while a card, a panel or the map is up
+    chase.story = storyNear(); // r4 body: the guide's step's person close by (camera.js OTS)
     if (shell) title.update(dt); else chase.update(dt, player, player.mode === 'carry');
     guardView(shell);
     { const e = camera.matrixWorld.elements; actors.update(dt, camera.position.x, camera.position.z, -e[8], -e[10]); } // p2 A: the people on the water and the trails, after the camera
