@@ -9,7 +9,8 @@
 // the props as the LiDAR chunks come and go), its piers reaching down to the ground at each one.
 //   cabinExclusions(world) → [x1, z1, x2, z2, -r] lawns (props.js exclusionsFor): no tree or rock in a cabin or on its dock
 //   tileCabins(ctx, pieces) → builds those whose spot is in the tile (ctx as props.js's), pushes the walker's boxes
-//   world.cabins            { list (the table), built: Map index → layout } for the rigs (scripts/r4-cabins-test.mjs)
+//   world.cabins            { list (the table), built: Map index → layout, skipped: Map index → why } for the rigs
+//                           (scripts/r4-cabins-test.mjs); `?cabins=off` leaves them all out
 import * as THREE from 'three';
 import { mulberry32 } from './rng.js';
 import { PropBuilder, TILE, occlude, obb } from './prop-kit.js';
@@ -17,7 +18,9 @@ import { zoneAt, ZONE, EDGE } from './edge.js';
 import { nearestRoad } from './roads.js';
 import TABLE from './cabins.json';
 
-export const CABINS = TABLE.cabins || [];
+// `?cabins=off` leaves them out (the rig's A/B)
+const OFF = typeof location !== 'undefined' && /[?&]cabins=off\b/.test(location.search);
+export const CABINS = OFF ? [] : TABLE.cabins || [];
 // a cabin: walls' height to the eave, the roof's pitch (rise per run), its overhang, the front deck's depth; the floor's
 // least height over the highest ground under it; the steepest ground a cabin is built on (m of fall across it)
 export const CABIN = { eave: 2.45, pitch: 0.62, over: 0.45, deck: 1.9, lift: 0.3, steep: 2.6 };
