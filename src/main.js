@@ -210,6 +210,7 @@ async function main() {
   const fauna = new Fauna(world, water, scene, { loons }); // beaver, moose, eagles, fish, insects, gulls, raven
 
   const canoe = buildCanoeRig({ water }); // the hull's water line rides the water's own swell
+  canoe.noPfd = () => onboarding.noCanoe; // round 4 join: the loaned life jacket comes at the staff talk
   canoe.rig.traverse((o) => o.layers.enable(REFLECT_LAYER));
   canoe.rig.userData.foam.layers.disable(REFLECT_LAYER); // the line on the water is not mirrored in it
   scene.add(canoe.rig);

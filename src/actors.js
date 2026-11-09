@@ -947,7 +947,7 @@ export class Actors {
       b.wake(dt, this.ripples, b.dist < WAKE_R && !!b.near);
     }
     // r4 body: the life jacket worn in a boat and swimming (as the player's: canoe.js), off ashore and over a portage
-    for (const p of this.people) if (p.bind) p.bind.body.fig.setPfd(p.mode === 'crew' || p.mode === 'swim');
+    for (const p of this.people) if (p.bind) p.bind.body.fig.setPfd(!p.noPfd && (p.mode === 'crew' || p.mode === 'swim')); // (round 4 join: noPfd, a co-op friend before their loan: coop.js)
     for (const p of this.people) {
       if (!p.bind) continue; // (a carrier's hull joins the graph on its shoulders, in the carry pose)
       if (p.bind.kind === 'foot' && !!p.bind.packMesh !== !!p.pack) this.packOn(p, p.pack); // (p2 C: a pack taken up or set down)
