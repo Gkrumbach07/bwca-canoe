@@ -526,7 +526,7 @@ function portageSign(ctx, pts, end, seed, p = null) {
   let fx = x - xn, fz = z - zn; const L = Math.hypot(fx, fz) || 1; fx /= L; fz /= L; // facing out along the path, to the water
   // (round 4: never on a road, where a trail starts at a road's end or a lot: the other side, else further off the path)
   let side = rng() < 0.5 ? 1 : -1, off = 1.15;
-  for (const [sd, o] of [[side, 1.15], [-side, 1.15], [side, 2.6], [-side, 2.6], [side, 4], [-side, 4]]) if (!onRoad(ctx.world, x + fz * sd * o, z - fx * sd * o, 0.4)) { side = sd; off = o; break; }
+  for (const [sd, o] of [[side, 1.15], [-side, 1.15], [side, 2.6], [-side, 2.6], [side, 4], [-side, 4], [side, 6], [-side, 6], [side, 8], [-side, 8]]) if (!onRoad(ctx.world, x + fz * sd * o, z - fx * sd * o, 0.4)) { side = sd; off = o; break; }
   const px = x + fz * side * off, pz = z - fx * side * off;
   const F = frame(ctx, px, pz, { x: fx, z: fz }), g = F.G(0, 0), b = new PropBuilder();
   ctx.obstacles.push({ x: px, z: pz, r: 0.15, low: true }); // (low: a canoe carried overhead rides over the post, player.js)
@@ -2502,7 +2502,7 @@ export function trailheadPlan(ctx, ep) { // (exported, round 4: scripts/r2-outfi
 function signSpots(world, lx, lz, ux, uz, X) {
   const at = (side, back) => { const ax = ux * (LOT_R + 0.9) + X.x * 2.6 * side, az = uz * (LOT_R + 0.9) + X.z * 2.6 * side, c = Math.cos(back * side), sn = Math.sin(back * side);
     const sx = lx + ax * c - az * sn, sz = lz + ax * sn + az * c, bx = sx + X.x * 1.5 * side, bz = sz + X.z * 1.5 * side; return [sx, sz, bx, bz]; };
-  for (const [side, back] of [[1, 0], [-1, 0], [1, 0.6], [-1, 0.6], [1, 1.2], [-1, 1.2]]) {
+  for (const [side, back] of [0, 0.6, 1.2, 1.8, 2.4, 3.0].flatMap((b) => [[1, b], [-1, b]])) { // (round the lot from the trail's side to the far one)
     const q = at(side, back);
     if (!world || !world.roads || (!onRoad(world, q[0], q[1], 1.4) && !onRoad(world, q[2], q[3], 1.4))) return q;
   }
