@@ -1,0 +1,95 @@
+// The story's fact namespaces (docs/build/campaign-design.md §3.1). A fact is a key with a first-set stamp and an
+// optional value; once set it is never unset or changed. story.set() refuses a key no row here declares, a value
+// outside its kind, and a second, different write of an exclusive key (a climax or ending choice).
+//
+// A row is { key, kind, doc, world?, terminal?, exclusive? }:
+//   key   an exact key ('end'), or a prefix ending in '.' ('door.'); the most specific row wins (exact, then longest)
+//   kind  'bool' (true only) · 'any' · 'str' · 'num' · 'num>=k' · 'enum:a|b|c'
+//   doc   where it is written (the story doc and section), for the lint and why()
+//   world mirrored to co-op guests (coop-story.js, Round 3)       terminal  read by nothing on purpose (the lint skips it)
+//   exclusive  one write only: a second write with another value is refused (choice.*, end)
+//
+// A stream adds its rows here in its own marked block. Ids are never reused (story-data/retired.js).
+
+// the named people (bible §4): each is its own namespace, `<person>.` (what happened with them), and has a people state
+export const PEOPLE = ['tauno', 'hap', 'len', 'ruth', 'aili', 'jon', 'liisa', 'bob', 'frank', 'denny', 'carol', 'gene', 'mary', 'marlys',
+  'sheila', 'rene', 'ollie', 'gord', 'danielle', 'tom', 'maggie', 'dan', 'tasha', 'wade', 'brekke', 'josie', 'eino', 'walt', 'june', 'birch', 'pietro'];
+
+const person = (who) => ({ key: `${who}.`, kind: 'any', doc: 'bible §4; the person\'s arc doc' });
+
+export const FACTS = [
+  // the notebook and the core (90 §1)
+  { key: 'nb.', kind: 'any', doc: '§3.1 the notebook object (nb.found, nb.torn)', world: true },
+  { key: 'nb.found', kind: 'bool', doc: '§3.7 night one (walt.js → notebook:found)', world: true },
+  { key: 'legacy.', kind: 'any', doc: '§3.7 a v1 document\'s flags, migrated', terminal: true },
+  { key: 'door.', kind: 'bool', doc: '§3.1 arc doors: door.<arc>.named|ringed|open|yield|climax|done|declined|taken' },
+  { key: 'key.', kind: 'bool', doc: '§3.6 lock keys gained (story-data/locks.js)' },
+  { key: 'ink.', kind: 'any', doc: '§4.1 a nickname inked (pencil.js)', world: true },
+  { key: 'knows.', kind: 'bool', doc: '§3.1 a fact the Walt page can state' },
+  { key: 'said.', kind: 'any', doc: '§3.1 a lie heard' },
+  { key: 'lie.', kind: 'any', doc: '§3.1 a lie\'s truth known' },
+  { key: 'cal.', kind: 'any', doc: '§3.1 a calendar truth (a lie checked)' },
+  { key: 'case.', kind: 'enum:soft|hard', doc: '§3.1 informant pieces' },
+  { key: 'choice.', kind: 'str', doc: '§3.1 climax and ending choices', exclusive: true },
+  { key: 'ev.', kind: 'any', doc: '§3.1 world events that happened to the player (value: where)', world: true },
+  { key: 'ep.', kind: 'any', doc: '§10 an episode\'s own steps (ep.<id>.<step>)' },
+  { key: 'tier.', kind: 'bool', doc: '§3.3 a watchers\' tier reached (bible 6.2)', world: true },
+  { key: 'end', kind: 'enum:J|JN|M', doc: '§9 the ending', exclusive: true, world: true },
+  { key: 'world.', kind: 'any', doc: '§9 epilogue world state', world: true },
+  { key: 'year.turned.', kind: 'bool', doc: '§3.9 a winter turn into that year (season-turn.js)' },
+  { key: 'asked.', kind: 'bool', doc: '§3.1 counters that only rise, as thresholds (asked.boreal.2)' },
+  { key: 'bc.', kind: 'bool', doc: 'bible 5.2 the back cover\'s rod numbers marked (bc.64, bc.205-50)' },
+  { key: 'midpoint', kind: 'bool', doc: 'bible 6.4 the midpoint' },
+  { key: 'run.', kind: 'any', doc: '§8.3 the run' },
+  { key: 'mg.', kind: 'any', doc: '§10 minigame outcomes' },
+  { key: 'lead.', kind: 'any', doc: '§4 leads (leads.js)' },
+  { key: 'walt.', kind: 'any', doc: '§6.3 the Walt page' },
+  // places and finds named in the design (§3.5 examples, bible 5.2)
+  { key: 'crews.', kind: 'any', doc: 'the crews\' landing (Act I lead)' },
+  { key: 'westpads.', kind: 'any', doc: 'the west pads' },
+  { key: 'drift.', kind: 'any', doc: '§8.2 the drift test' },
+  { key: 'cards.', kind: 'any', doc: 'Liisa\'s cards' },
+  { key: 'sign.', kind: 'any', doc: 'Walt\'s sign on a lake' },
+  { key: 'gull.', kind: 'any', doc: 'bible 5.2 the far end: Gull\'s places (gull.stump.lowwater)' },
+  { key: 'echo.', kind: 'any', doc: 'bible 5.5 the echo' },
+  { key: 'mini.', kind: 'any', doc: '§10.3 mini-campaigns' },
+  { key: 'side.', kind: 'any', doc: '§10 side stories' },
+  { key: 'secret.', kind: 'any', doc: 'Part 3 call 5: the journalist path\'s secret missions' },
+  { key: 'owner.', kind: 'any', doc: 'Part 3 call 6: each owner\'s prices softened (owner.<ep>.softened)' },
+  // ---- the named people
+  ...PEOPLE.map(person),
+  // ---- K1a: the derived-state shortcuts that are real facts
+  { key: 'tauno.porch.declined1', kind: 'bool', doc: '20 R3 the porch, declined once' },
+  { key: 'tauno.porch.declined2', kind: 'bool', doc: '20 R3 the porch, declined twice' },
+  { key: 'tauno.porch.done', kind: 'bool', doc: '20 R3 the porch, walked with him' },
+  { key: 'tauno.turn', kind: 'bool', doc: '20 the turn: Eino named' },
+  { key: 'tauno.call', kind: 'bool', doc: 'bible 6.4 Tauno\'s call' },
+];
+
+// the arcs whose yields are the big findings (§3.3 story.big), and the doors the player can be offered
+export const ARCS = ['mining', 'guiding', 'boys', 'family'];
+export const DOORS = ['crews', 'mining', 'guiding', 'boys', 'family', 'company'];
+
+// --- lookups -------------------------------------------------------------------------------------------------------
+const EXACT = new Map(), PREFIXES = [];
+for (const r of FACTS) { if (r.key.endsWith('.')) PREFIXES.push(r); else EXACT.set(r.key, r); }
+PREFIXES.sort((a, b) => b.key.length - a.key.length);
+
+// the row that declares a key, or null
+export function factRow(key) {
+  if (typeof key !== 'string' || !key) return null;
+  if (EXACT.has(key)) return EXACT.get(key);
+  for (const r of PREFIXES) if (key.startsWith(r.key) && key.length > r.key.length) return r;
+  return null;
+}
+// is v a value this row allows? → null when fine, else why not
+export function checkValue(row, v) {
+  const k = row.kind;
+  if (k === 'any') return v === undefined ? 'no value' : null;
+  if (k === 'bool') return v === true ? null : 'a bool fact is only ever true';
+  if (k === 'str') return typeof v === 'string' && v ? null : 'not a string';
+  if (k === 'num') return Number.isFinite(v) ? null : 'not a number';
+  if (k.startsWith('num>=')) return Number.isFinite(v) && v >= +k.slice(5) ? null : `not a number ${k.slice(3)}`;
+  if (k.startsWith('enum:')) return k.slice(5).split('|').includes(String(v)) ? null : `not one of ${k.slice(5)}`;
+  return null;
+}

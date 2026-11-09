@@ -25,7 +25,7 @@
 //          (pace.js CLOCK) and nothing a player does skips it: a guest's Sandbox clock keys are locked, and in a room
 //          the pause card no longer stops the clock (title.js open).
 //
-//   const coop = new Coop({ player, canoe, actors, day, title, trip, outfitter, profile, packs, hud, camera, world })
+//   const coop = new Coop({ player, canoe, actors, day, title, trip, outfitter, profile, packs, hud, camera, world, story })
 //   coop.update(dt)   every frame, before the actors' own update (main.js wraps actors.update)
 //   coop.invite({ name, shirt }) → Promise<code> · coop.join(code, { name, shirt }) → Promise · coop.leave()
 //   coop.role ('host' | 'guest' | null) · coop.code · coop.live · coop.stats() (for the console and the tests)
@@ -359,6 +359,7 @@ export class Coop {
   async enterAsGuest(w) {
     const g = this.g, { title, trip, outfitter, player, day } = g;
     kv.freeze((k) => k !== VISITOR_KEY);
+    if (g.story && typeof g.story.setMode === 'function') g.story.setMode('mirror'); // k1a: a guest's own story never moves (Part 3 call 7; v2 only)
     const host = (w.peers || []).find((p) => p.host);
     this.hostName = host ? host.name : 'your friend';
     this.visitor.visit = { code: this.code, host: host ? clean(host.name) : '', at: Date.now() }; writeVisitor(this.visitor); // (phase 3: Rejoin)

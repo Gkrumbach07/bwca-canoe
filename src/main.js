@@ -112,7 +112,7 @@ import { loadBurns, setBurnDate, burnStats, burnLook, eventsAt } from './burns.j
 import { BurnNotes } from './burn-notes.js'; // the real burns
 import { Permits } from './permits.js'; // gl-a: permits
 import { PermitDesk } from './permit-desk.js'; // gl-a: the permit desk
-import { story } from './story-hooks.js'; // gl-c: the story's event bus and saved state
+import { story, STORY_ON } from './story-hooks.js'; // gl-c: the story's event bus and saved state
 import { onboarding } from './onboarding.js'; // gl-c: the home counter's first visit, the old gear
 import { starter } from './starter.js'; // the start round: each outfitter's first night out, the season's sky and its kind first days
 import { walt } from './walt.js'; // gl-c: the notebook in the old tent
@@ -928,7 +928,7 @@ async function main() {
   // co-op phase 1 (coop.js, docs/plans/coop.md): friends in their own browsers on one lake in Sandbox, drawn with the
   // actor layer, the host's clock everyone's. Their poses are set just before the actors' own update (after the camera),
   // their names placed after it. Invite friends on the pause card, Join a trip on the title (or a ?join=CODE link).
-  const coop = new Coop({ player, canoe, actors, day, title, trip, outfitter, profile, packs, hud, camera, world, saver });
+  const coop = new Coop({ player, canoe, actors, day, title, trip, outfitter, profile, packs, hud, camera, world, saver, story }); // (k1a: story, for the guest's mirror mode)
   { const upd = actors.update.bind(actors); actors.update = (dt, ...a) => { try { coop.update(dt); } catch (e) { if (!coop.warned) { coop.warned = true; console.warn('coop', e); } } upd(dt, ...a); try { coop.labels(); } catch { /* the names only */ } }; }
   coop.fromUrl();
   window.__game.coop = coop;
@@ -1136,7 +1136,7 @@ async function main() {
   // then the keeper's first permit (stream A's permits.grant, when there) and the counter. The first night in the old
   // tent finds the notebook (walt.js, story-hooks.js); its Read is a paper of the story's pages. Old seasons are legacy.
   {
-    story.attach({ profile });
+    story.attach({ profile, day, trip }); // (k1a: the v2 story stamps facts by the clock and the trip; v1 reads only profile)
     onboarding.attach({ outfitter, profile, inventory, talk, hud, day, story, npcs, sheets, player, permits: () => (window.__game && window.__game.permits) || null });
     walt.attach({ trip, camp, inventory, hud, veil, day, story, world, player });
     const showC = outfitter.show.bind(outfitter);
@@ -1155,6 +1155,12 @@ async function main() {
     const dueC = hints.due.bind(hints);
     hints.due = (id, rec) => (waltM.has(id) ? waltM.get(id).due(rec) : dueC(id, rec)); // "The notebook: I, right-click it, Read."
     Object.assign(window.__game, { story, onboarding, walt });
+    // st-k1a: the v2 story (STORY_ON only): the clock and the trip for its stamps, the tick each game quarter-hour
+    if (STORY_ON && story.v === 2) {
+      Object.assign(story.ctx, { day, trip });
+      const updS = outfitter.update.bind(outfitter);
+      outfitter.update = (dt) => { updS(dt); story.update(); };
+    }
   }
   // gl-d: the trip-end tally and the board (the game-loop round, stream D; docs/build/game-loop-brief.md). Pay lands on
   // the trip's card as it counts up (record.js ended → tasks.settle), never at the board; no cap on notices held

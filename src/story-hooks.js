@@ -13,7 +13,13 @@
 // Saved per season (save.js `bwca-canoe:story`): { v: 1, season, legacy?, notebook: { found, abs, key, lake }, read: [],
 // flags: {} }. A new season starts it blank. A season from before this round (its profile started, no story document)
 // is marked legacy: it never saw the counter scene, and the campaign decides how it meets the notebook.
+//
+// K1a (docs/build/campaign-design.md §3.7): with STORY_ON (story-flag.js, `?story=1` on a dev server) `story` is the v2
+// state of story.js instead, with the same surface (state.notebook, state.read, state.legacy, pages(), on/emit, found,
+// read, flag), saved under `bwca-canoe:story2`. With the flag off this file is exactly what it was.
 import { save } from './save.js';
+import { STORY_ON } from './story-flag.js';
+import { StoryV2 } from './story.js';
 
 const NS = 'story';
 export const blankStory = (season = null) => ({ v: 1, season, notebook: { found: false, abs: null, key: null, lake: null }, read: [], flags: {} });
@@ -88,4 +94,5 @@ export class Story {
   }
 }
 
-export const story = new Story();
+export const story = STORY_ON ? new StoryV2({ io: save }) : new Story();
+export { STORY_ON };
