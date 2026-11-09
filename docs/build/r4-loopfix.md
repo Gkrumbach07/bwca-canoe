@@ -19,8 +19,10 @@ other out of bounds areas."
 - The map washes Quetico as it washes the rest past the edge (`EDGE.qWash`, row runs of the cells that became out); its
   dashed outline stays as geography. `inQuetico(x, z)` answers "inside the park's outline" for the rigs.
 - No campsite, party camp or board notice in it: campsites there are `past` like any other, and no notice is written
-  whose spot, ring or area is past the edge (`tasks.pastNotice`, in the board's own picking, `makeKind` and a visitor's
-  lost-item and photo asks; an offered one written before comes down with the day's change).
+  whose exact place (a spot, a dam, a station, a tight ring) is past the edge, or whose area (a lake's hint, a loose
+  ring) is wholly past it (`tasks.pastNotice`, in the board's own picking, `makeKind` and a visitor's lost-item and
+  photo asks; an offered one written before comes down with the day's change). A lake the edge cuts stays fair game:
+  Snowbank's south shore is private land, its lakers are still asked for.
 
 ## D1 next year's permit: charged, the season never turned
 
