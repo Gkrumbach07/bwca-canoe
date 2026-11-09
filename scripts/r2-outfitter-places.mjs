@@ -134,6 +134,24 @@ for (const c0 of index.campsites) {
   nFire++;
   if (dx || dz) { fires[key] = [dx, dz]; if (Math.hypot(dx, dz) > 30) far++; }
 }
+// round 4: each trailhead's lot as props.js plans it (trailheadPlan: its lot, its sign, its permit box), by its key (the
+// entry point, 'h<ep>' an outfitter's own start), for scripts/roads.mjs: the truck's road starts in the lot and keeps
+// clear of the sign and the box
+const lots = {};
+{
+  const ES = await vite.ssrLoadModule('/src/ep-start.js').catch(() => null);
+  const fx = (e) => { const r = epFix && epFix.entryPoints.find((q) => q.ep === e.ep); if (!r) return { ...e }; const o = fixedEp(e); for (const k of ['lot', 'open', 'shares', 'head', 'drop', 'clipped']) if (r[k] != null) o[k] = r[k]; return o; };
+  const fworld = Object.create(world); fworld.entryPoints = index.entryPoints.map(fx);
+  for (const rec of ES ? ES.headRecs(fworld, OF.isOutfitter) : []) {
+    const a = rec.lot ? rec.lot : rec, tx = Math.floor((a.x - g.originX) / (g.tile * g.cell)), ty = Math.floor((a.z - g.originZ) / (g.tile * g.cell));
+    const [ox, oz] = world.tileOrigin(tx, ty);
+    try {
+      const P = props.trailheadPlan({ tg: tileGrid(tx, ty), world: fworld, H: H10, Hsite: H10, ox, oz, obstacles: [] }, rec);
+      lots[rec.key || rec.ep] = { lot: [r1(P.lot.x), r1(P.lot.z)], sign: P.sign ? [r1(P.sign.x), r1(P.sign.z)] : null, box: P.box ? [r1(P.box.x), r1(P.box.z)] : null };
+    } catch (e) { rows.push(`trailhead ${rec.key || rec.ep}: no plan (${e.message})`); }
+  }
+  rows.push(`trailheads: ${Object.keys(lots).length} lots planned`);
+}
 rows.push(`campsites: ${nFire} rings placed, ${moved} on their flats, ${Object.keys(fires).length} rings off the site's point (${far} more than 3 m)`);
 await vite.close();
 const fireTable = {
@@ -145,6 +163,7 @@ const table = {
   about: 'Where each outfitter stands, laid out as the game lays it out (props.js buildOutfitterNow on the 10 m ground; the site is chosen there and kept), by entry point number: store (its middle), door ([x, z, heading], on the porch, facing out), steps (the foot of the porch steps), dockLand (the dock\'s land end), deck (on the dock by the first berth), dock (the water beside the dock where a canoe is tied: the spot a season, a ride or a pickup arrives at), dockHeading, floorY, fromEp (m from the entry point\'s own spot), doorShore/dockShore (the release\'s shore distance there). Written by scripts/r2-outfitter-places.mjs for the release `for` (index.json source.baked); read by outfitters.js placeOf; scripts/r2-markers-test.mjs holds it to the live build.',
   for: index.source && index.source.baked,
   places,
+  lots, // (round 4: each trailhead's lot, sign and permit box as props.js trailheadPlan lays them; scripts/roads.mjs)
 };
 for (const r of rows) console.log(r);
 if (check) {

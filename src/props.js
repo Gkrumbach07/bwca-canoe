@@ -2448,7 +2448,7 @@ function kindSign(ctx, plan, dock, ep, rng) {
 // the permit box on its post beside it, a few logs round the lot. All of it goes into the tile's own meshes (the decal
 // and the props' merged mesh), so a trailhead costs no draw call. Its layout goes to trailhead.js.
 const headPlans = new Map(); // ep → the plan, kept for the session (as siteKept: the site is chosen once)
-function trailheadPlan(ctx, ep) {
+export function trailheadPlan(ctx, ep) { // (exported, round 4: scripts/r2-outfitter-places.mjs writes each lot for scripts/roads.mjs)
   const key = ep.key || ep.ep;
   let P = headPlans.get(key);
   if (P) return P;

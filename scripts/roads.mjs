@@ -83,6 +83,7 @@ const fixOf = new Map(((fixes && fixes.entryPoints) || []).map((f) => [f.ep, f])
 const eps = index.entryPoints.map((e) => ({ ...e, ...(fixOf.get(e.ep) || {}) }));
 const places = fs.existsSync(placesFile) ? JSON.parse(fs.readFileSync(placesFile, 'utf8')) : null;
 const placeOf = (n) => (places && places.for === (index.source && index.source.baked) ? places.places[String(n)] : null);
+const lotOf = (key) => (places && places.lots && places.for === (index.source && index.source.baked) ? places.lots[String(key)] || null : null);
 const starts = [];
 for (const e of eps) {
   if (NO_ROAD.has(e.ep) || e.shares) continue;
@@ -92,11 +93,12 @@ for (const e of eps) {
       const bx = pl.door[0] - pl.store[0], bz = pl.door[1] - pl.store[1], bl = Math.hypot(bx, bz) || 1;
       starts.push({ key: String(e.ep), ep: e.ep, name: e.name, at: 'store', stand: true, x: pl.store[0] - (bx / bl) * STAND_BACK, z: pl.store[1] - (bz / bl) * STAND_BACK, store: pl.store, dock: pl.dock });
     } else starts.push({ key: String(e.ep), ep: e.ep, name: e.name, at: 'store', x: e.x, z: e.z });
-    if (e.head && e.head.lot) starts.push({ key: `h${e.ep}`, ep: e.ep, name: e.name, at: 'lot', x: e.head.lot.x, z: e.head.lot.z });
+    if (e.head && e.head.lot) { const T = lotOf(`h${e.ep}`); starts.push({ key: `h${e.ep}`, ep: e.ep, name: e.name, at: 'lot', x: T ? T.lot[0] : e.head.lot.x, z: T ? T.lot[1] : e.head.lot.z, keep: T }); }
   } else {
     if (e.drop === 'boat') continue;
-    const L = e.lot || null;
-    starts.push({ key: String(e.ep), ep: e.ep, name: e.name, at: L ? 'lot' : 'landing', x: L ? L.x : e.x, z: L ? L.z : e.z });
+    const L = e.lot || null, T = lotOf(e.ep); // (round 4: the lot as the game plans it, a landing's too)
+    if (T) starts.push({ key: String(e.ep), ep: e.ep, name: e.name, at: 'lot', x: T.lot[0], z: T.lot[1], keep: T });
+    else starts.push({ key: String(e.ep), ep: e.ep, name: e.name, at: L ? 'lot' : 'landing', x: L ? L.x : e.x, z: L ? L.z : e.z });
   }
 }
 const towns = TOWNS.map(([n, lat, lon]) => { const [x, z] = toXZ(lon, lat); return { n, x, z }; });
@@ -355,8 +357,8 @@ for (const S of starts) {
   if (S.stand && sn.d <= 12 && sn.d > 1) { // (a store's stand by its road: a few metres of track onto it, so the route begins at the stand)
     track = { pts: [[S.x, S.z], [nodes[sn.i].x, nodes[sn.i].z]], to: sn.i, wet: 0, m: sn.d };
     s0 = layTrack(track.pts, sn.i);
-  } else if (!(sn.d <= 12) && ground) {
-    track = madeTrack(S, avoidAll);
+  } else if ((!(sn.d <= 12) || (S.keep && sn.d > 3)) && ground) { // (a lot: always its own way out past its sign and box)
+    track = madeTrack(S, S.keep ? avoidAll.concat([S.keep.sign, S.keep.box].filter(Boolean).map((q) => [q[0], q[1], 2.6])) : avoidAll);
     if (track) { s0 = layTrack(track.pts, track.to); drive = true; }
   } else if (!(sn.d <= 12) && sn.i >= 0 && sn.d <= 300) { // (no ground: the straight two-track of old, flat)
     track = { pts: [[S.x, S.z], [nodes[sn.i].x, nodes[sn.i].z]], to: sn.i, wet: 0, m: sn.d };

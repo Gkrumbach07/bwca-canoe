@@ -132,7 +132,7 @@ export class Truck {
     if (!P) P = way[0];
     // stand a few metres into the way, facing out (in a lot: inside its ring, its tail past the lot's middle)
     const path = pathOf(smooth(way));
-    const s0 = Math.min(path.len * 0.5, inLot ? LOT_R - 2.6 : P === way[0] ? 1 : 3);
+    const s0 = Math.min(path.len * 0.5, inLot ? LOT_R - 1.5 : P === way[0] ? 1 : 3);
     const [x, z] = at(path, s0), [x1, z1] = at(path, s0 + 2);
     return { x, z, heading: Math.atan2(x1 - x, z1 - z), path, s0 };
   }
