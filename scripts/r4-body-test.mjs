@@ -145,7 +145,10 @@ try {
     await page.evaluate(({ x, z }) => { const g = window.__game; window.__tpDone = false; g.player.teleport(x, z).finally(() => { window.__tpDone = true; }); }, lake);
     for (let k = 0; k < 600 && !(await page.evaluate(() => window.__tpDone)); k++) await page.evaluate(() => window.__game.step(1 / 30, 3));
     const water = await page.evaluate(async () => {
-      const g = window.__game, H = window.__r4; H.step(60);
+      const g = window.__game, H = window.__r4;
+      // (round 4 join: the life jacket is the staff talk's loan; this paddle stands for one after it: the loan's check held off)
+      H.noPfd = g.canoe.noPfd; g.canoe.noPfd = () => false;
+      H.step(60);
       const fig = g.canoe.figure, out = { mode: g.player.mode, pfd: fig.pfd, range: fig.mesh.geometry.drawRange.count, pB: H.programs() };
       // the actors' demo: two canoes crossing and a party on a portage
       out.demo = !!g.actors.demo(); H.step(10);
@@ -176,7 +179,7 @@ try {
       return out;
     }));
     await shot('1b-canoe-pfd');
-    await page.evaluate(() => window.__r4.unframe());
+    await page.evaluate(() => { const H = window.__r4; H.unframe(); if (H.noPfd) window.__game.canoe.noPfd = H.noPfd; });
     check(1, 'in the canoe on the water: the life jacket on (the whole figure drawn)', water.mode === 'paddle' && water.pfd === true && water.range === Infinity, water);
     check(1, 'the actors: crews in their canoes wear one, those on a portage do not', water.crew.length > 0 && water.crew.every(Boolean) && water.carry.length > 0 && water.carry.every((v) => !v), { crew: water.crew, carry: water.carry, portage: water.portage });
     check(1, 'worn or not adds no shader program', water.pB <= store.pA && water.pC <= store.pA, { store: store.pA, canoe: water.pB, actors: water.pC, title: p0 });
