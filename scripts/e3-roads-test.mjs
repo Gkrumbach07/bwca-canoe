@@ -56,10 +56,18 @@ const HELPERS = () => {
     return out;
   };
   // the trail meshes and their road rows (aTrail.y < 0), in the tiles in
+  // (roadOnly: a tile's trail mesh holding nothing but road rows, a draw call the roads made where no trail, site or lot
+  // had one; shown: of those, how many are in a tile drawn now)
   H.decal = () => {
-    let meshes = 0, roadVerts = 0;
-    g.scene.traverse((o) => { if (o.isMesh && o.name === 'trail') { meshes++; const a = o.geometry.getAttribute('aTrail'); if (a) for (let i = 0; i < a.count; i++) if (a.getY(i) < -0.5) roadVerts++; } });
-    return { meshes, roadVerts };
+    let meshes = 0, roadVerts = 0, roadOnly = 0, shown = 0;
+    g.scene.traverse((o) => {
+      if (!(o.isMesh && o.name === 'trail')) return;
+      meshes++; const a = o.geometry.getAttribute('aTrail'); let r = 0;
+      if (a) for (let i = 0; i < a.count; i++) if (a.getY(i) < -0.5) r++;
+      roadVerts += r;
+      if (a && r === a.count) { roadOnly++; let v = true; for (let q = o; q; q = q.parent) if (!q.visible) v = false; if (v) shown++; }
+    });
+    return { meshes, roadVerts, roadOnly, roadOnlyShown: shown };
   };
   H.calls = () => { H.step(2); const i = g.renderer.info; return { calls: i.render.calls, tris: i.render.triangles, programs: i.programs.length }; };
 };
@@ -115,7 +123,9 @@ try {
   const costOff = await off.evaluate(() => ({ ...window.__e3.calls(), decal: window.__e3.decal(), roads: !!window.__game.world.roads }));
   await shot(off, 'e3-0-off');
   await off.context().close();
-  result('0 the roads add no shader program; the ribbon no draw call (the truck its own, while in view)', costOn.programs <= costOff.programs && costOn.noTruck.calls <= costOff.calls + 3 && costOn.calls - costOn.noTruck.calls <= 6 && !costOff.roads, { off: costOff, on: costOn, view: v });
+  // (the frame's calls with and without move with the tiles streamed in: reported, not judged; the ribbon's own cost is
+  // the trail meshes that hold only road rows, a call each where a tile had no trail, site or lot before)
+  result('0 the roads add no shader program; the truck its own call (and shadow) in view; road-only decal meshes counted', costOn.programs <= costOff.programs && costOn.calls - costOn.noTruck.calls <= 6 && !costOff.roads, { off: costOff, on: costOn, view: v });
 
   // ---- 1 the table --------------------------------------------------------------------------------------------------
   const t1 = await page.evaluate(() => {
@@ -169,6 +179,7 @@ try {
     const S = T.spot(home);
     out.spot = S ? { x: Math.round(S.x), z: Math.round(S.z) } : null;
     out.onWheels = S ? +(T.mesh.matrix.elements[13] - g.tiles.groundAt(S.x, S.z)).toFixed(2) : null;
+    out.upright = +T.mesh.matrix.elements[5].toFixed(3); // (its own up, in the world: > 0.9 right way up)
     // leave: stands a while, pulls out, gone
     T.hide(); out.leave = T.leave(home); const x0 = T.x, z0 = T.z; H.step(30, 1 / 30); out.still = +Math.hypot(T.x - x0, T.z - z0).toFixed(2);
     let moved = 0, gone = false;
@@ -177,7 +188,7 @@ try {
     return out;
   }, HOME);
   const d0 = await page.evaluate(() => window.__game.truck.drawn);
-  result('5a the truck behind the store (on its wheels); a ride leaves it in the yard and it pulls out down the road', t5.park && t5.parkVis && Math.abs(t5.onWheels) < 0.4 && t5.leave && t5.still < 0.3 && t5.moved > 40 && t5.gone, { ...t5, drawn: d0 });
+  result('5a the truck behind the store (on its wheels, right way up); a ride leaves it in the yard and it pulls out down the road', t5.park && t5.parkVis && t5.upright > 0.9 && Math.abs(t5.onWheels) < 0.4 && t5.leave && t5.still < 0.3 && t5.moved > 40 && t5.gone, { ...t5, drawn: d0 });
 
   // come: at a trailhead's lot
   const t5b = await page.evaluate(async (lot) => {

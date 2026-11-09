@@ -135,7 +135,7 @@ export class Truck {
     const yl = G(cx - rx * w, cz - rz * w), yr = G(cx + rx * w, cz + rz * w);
     const y = Math.max((yf + yb) / 2, (yl + yr) / 2);
     const fwd = V(dx, (yf - yb) / TRUCK.wheelbase, dz).normalize(), right = V(rx, (yr - yl) / TRUCK.track, rz).normalize();
-    const up = right.clone().cross(fwd).normalize(); // (right × forward is up, for x right, z forward)
+    const up = fwd.clone().cross(right).normalize(); // (forward × right is up: right here is +x of a truck facing +z)
     const Xa = up.clone().cross(fwd).normalize();
     m.matrix.makeBasis(Xa, up, fwd).setPosition(cx, (Number.isFinite(y) ? y : 0) - 0.02, cz);
     m.matrixWorldNeedsUpdate = true;
