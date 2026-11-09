@@ -16,7 +16,7 @@
 // set-up and streaming run unthrottled, so a run takes minutes, not an hour). Qualities: auto (the pick recorded), low.
 //
 //   APP=http://localhost:5505 node scripts/perf-baseline.mjs [--profiles desktop,modest] [--qualities auto,low]
-//        [--scenes store,dock,paddle,portage,night,map] [--frames 240] [--warm 60] [--out perf-baseline.json] [--label <text>]
+//        [--scenes store,dock,map,portage,night,paddle] [--frames 240] [--warm 60] [--out perf-baseline.json] [--label <text>]
 // For an A/B later: run it on the same host against both builds in turn (or two Vite ports), same arguments, and compare
 // the JSON; numbers from different hosts or a loaded host are not comparable (check `uptime` first).
 import { createRequire } from 'node:module';
@@ -28,7 +28,7 @@ const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i > 0 ?
 const APP = process.env.APP || 'http://localhost:5505';
 const PROFILES = arg('profiles', 'desktop,modest').split(',');
 const QUALITIES = arg('qualities', 'auto,low').split(',');
-const SCENES = arg('scenes', 'store,dock,paddle,portage,night,map').split(',');
+const SCENES = arg('scenes', 'store,dock,map,portage,night,paddle').split(','); // (the far lake last: the way back to Moose Lake at Ultra took over 4 minutes)
 const FRAMES = Number(arg('frames', 240)), WARM = Number(arg('warm', 60));
 const OUT = path.resolve(arg('out', 'perf-baseline.json'));
 const LABEL = arg('label', '');
@@ -208,7 +208,7 @@ try {
     for (const sc of SCENES) {
       try {
         await page.evaluate(() => window.__pb.reset());
-        const setup = await page.evaluate((sc) => Promise.race([window.__pb.scenes[sc](), new Promise((_, no) => setTimeout(() => no(new Error(`${sc}: set-up over 240 s`)), 240000))]), sc);
+        const setup = await page.evaluate((sc) => Promise.race([window.__pb.scenes[sc](), new Promise((_, no) => setTimeout(() => no(new Error(`${sc}: set-up over 420 s`)), 420000))]), sc);
         if (setup && setup.none) { run.scenes[sc] = { skipped: setup }; log(sc, 'skipped', JSON.stringify(setup)); continue; }
         await page.evaluate((n) => window.__pb.step(n), 20);
         await throttle(true);
