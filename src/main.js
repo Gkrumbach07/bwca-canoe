@@ -1218,17 +1218,18 @@ async function main() {
     } catch (e) { console.warn('story K1b: the seams', e); }
   }
   // st-t: Talk & cast (docs/build/campaign-design.md Part 4 Round 1, stream T), only under STORY_ON: the words by id
-  // (topics.js texts, from story-data/text), story topics on the keepers under "Ask about…" (npcs.addTalkSource) and
+  // (topics.js texts, the extract's words: story-data/words.js), story topics on the keepers under "Ask about…" (npcs.addTalkSource) and
   // the return's one in gold (extraChoices), the cast by their schedules (cast.js: Tauno at the porch foot on a walkout,
   // his Farm seat, Josie at the home counter), P1 at the counter (onboarding.p1), the push budget (beats.js), the
   // ambient pools (ambient.js: one story line in four at most), the drive card's road line, the lake picker for a
   // choice (dialogue.js pick), and the feed's talk adapter. With the flag off none of it is loaded.
   if (STORY_ON && story.v === 2) {
     try {
-      const [{ topics, texts }, { cast }, { beats }, { ambient }, A1, { RULES_TALK }, { connect }, opening, w70] = await Promise.all([
+      const [{ topics, texts }, { cast }, { beats }, { ambient }, A1, { RULES_TALK }, { connect }, { loadWords }] = await Promise.all([
         import('./topics.js'), import('./cast.js'), import('./beats.js'), import('./ambient.js'), import('./story-data/topics-act1.js'),
-        import('./story-data/rules-talk.js'), import('./feed-talk.js'), import('./story-data/text/opening.json'), import('./story-data/text/world.json')]);
-      texts.add(opening.default); texts.add(w70.default);
+        import('./story-data/rules-talk.js'), import('./feed-talk.js'), import('./story-data/words.js')]);
+      const W = await loadWords(['opening', 'world']), w70 = { default: W.world };
+      texts.add(W.opening); texts.add(W.world);
       const seams = window.__game.storySeams || {};
       beats.attach(story);
       story.addRules(RULES_TALK);

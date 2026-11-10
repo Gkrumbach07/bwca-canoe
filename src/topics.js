@@ -2,7 +2,7 @@
 // and the scenes people play with you (Tauno's porch, the turn, Josie's counter). Loaded only under STORY_ON (main.js's
 // st-t block imports it), so with the flag off none of this exists.
 //
-// The words are the docs' (src/story-data/text/*.json, extracted by scripts/story-extract.mjs): a line is named by its
+// The words are the docs' (the extract's JSON, scripts/story-extract.mjs, loaded by story-data/words.js): a line is named by its
 // id, never written here. An id may name one quote of an anchored table row: '20:9.2#R3.0' is the first quote in the
 // Lines cell of row R3 of the table anchored 20:9.2 (the re-hooks).
 //
