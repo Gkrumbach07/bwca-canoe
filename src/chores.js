@@ -1305,7 +1305,7 @@ registerKind('berries', {
   progress(t) { const n = t.need || 1, g = t.got || 0, tin = current ? Math.min(current.s.pints, n - g) : 0; return g ? `${word(g)} of ${word(n)} ${plural(n, 'pint')} handed over${tin ? `, ${word(tin)} in the tin` : ''}` : tin ? `${word(tin)} of ${word(n)} in the tin` : `${word(n)} ${plural(n, 'pint')} to pick, in season`; },
 });
 registerKind('firewood', {
-  label: 'Wood for the stove', weight: { local: 0.8, medium: 0.25, far: 0 },
+  label: 'Firewood wanted', weight: { local: 0.8, medium: 0.25, far: 0 },
   make(T, c) {
     if (c.board.some((t) => t && t.kind === 'firewood')) return null;
     const W = pickR(c.rng, WOOD_WORDS);

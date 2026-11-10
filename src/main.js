@@ -47,6 +47,7 @@ import { Headlamp } from './headlamp.js'; // trip core C
 import { Profile } from './profile.js'; // hubs 1A
 import { storeLayout, onStore, storeLayouts, setStoreNotices, storeStats } from './props.js'; // hubs 2A
 import { outfitterProfile, boardLean, fromMovedStore } from './outfitters.js'; // hubs 2C (round 4: fromMovedStore)
+import { trailheadLayouts } from './trailhead.js';
 import { Rides } from './rides.js'; // hubs 2C
 import { Truck } from './truck.js'; // stream E3: the truck on the roads
 import { sheets, sheetAt } from './sheets.js'; // hubs 2D (tuning: sheetAt, Arvid's map)
@@ -401,8 +402,17 @@ async function main() {
   // a trip saved on a trail or in the water comes back afloat at the nearest open water
   // (on foot with the canoe set down somewhere, at a camp say, you come back on foot beside it)
   // camp 1: one saved in the middle of a carry comes back on the trail, the canoe overhead and the carry on you (packs.js)
+  // (chk-r4b: an older build's save on foot where a lot used to be, as the 75 lot 59 m from the map's south end, can't
+  // stand there and had come back afloat in the river on a trip: on foot in the lot nearest instead, the canoe beside you)
+  const standInLot = (s) => {
+    let L = null, bd = 800;
+    for (const q of trailheadLayouts()) { const d = q.lot ? Math.hypot(q.lot.x - s.x, q.lot.z - s.z) : Infinity; if (d < bd) { bd = d; L = q; } }
+    if (!L) return false;
+    const h = Math.atan2(-(L.landing.z - L.lot.z), L.landing.x - L.lot.x), fx = Math.cos(h), fz = -Math.sin(h);
+    return player.standAt({ x: L.lot.x - fz * 1.6, z: L.lot.z + fx * 1.6, heading: h, drop: { x: L.lot.x + fz * 1.6, z: L.lot.z - fx * 1.6, heading: h } });
+  };
   if (saved && saved.mode === 'carry' && packs.resumeCarry(saved)) chase.snap();
-  else if (saved && saved.mode === 'walk' && player.standAt(saved)) chase.snap();
+  else if (saved && saved.mode === 'walk' && (player.standAt(saved) || standInLot(saved))) chase.snap();
   else if (saved && (saved.mode !== 'paddle' || world.shoreAt(saved.x, saved.z) > -2)) player.teleport(saved.x, saved.z);
   title.open('title');
   // Compile every material the scene holds now, hidden ones too (the rise rings, the rain, the cloud deck and the

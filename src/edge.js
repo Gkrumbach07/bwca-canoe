@@ -125,7 +125,10 @@ export function inQuetico(x, z) {
 const SETTLE = 2.2; // seconds
 const TOLD_KEY = 'bwca-canoe:edge-told';
 export const WORDS = {
-  out: { title: 'You have left the Boundary Waters', first: 'Private land, cabins and the roads to town from here on. Go where you like; the wilderness is behind you.' },
+  out: { title: 'You have left the Boundary Waters', first: 'Private land, cabins and the roads to town from here on. Go where you like; the wilderness is behind you.',
+    // (the same notice in Quetico, out of bounds like the rest, without the line that is untrue there: no private land,
+    // cabins or roads; playtest r4-final)
+    bare: 'Go where you like; the wilderness is behind you.' },
 };
 export const MAP_WORDS = { out: 'You are outside the Boundary Waters' };
 
@@ -151,13 +154,13 @@ export class EdgeWatch {
   set(state) {
     const was = this.state; this.state = state;
     this.first = null;
-    if (state !== 'in' && !this.told[state]) { this.first = state; this.told[state] = 1; try { localStorage.setItem(TOLD_KEY, JSON.stringify(this.told)); } catch { /* private window */ } }
+    if (state !== 'in' && !this.told[state]) { this.first = state; this.bare = this.lastX != null && inQuetico(this.lastX, this.lastZ); this.told[state] = 1; try { localStorage.setItem(TOLD_KEY, JSON.stringify(this.told)); } catch { /* private window */ } }
     const tr = this.t.trip; if (tr && typeof tr.log === 'function' && tr.active) tr.log('edge', { from: was, to: state });
     if (typeof this.onChange === 'function') try { this.onChange(state, was); } catch (e) { console.warn('edge', e); }
   }
   paint() {
     if (typeof document === 'undefined') return;
-    const st = this.state, sig = `${st}:${this.first === st ? 1 : 0}`;
+    const st = this.state, sig = `${st}:${this.first === st ? (this.bare ? 2 : 1) : 0}`;
     if (sig === this.shown) return;
     this.shown = sig;
     if (!this.el) {
@@ -168,7 +171,7 @@ export class EdgeWatch {
     const w = WORDS[st];
     if (!w) { this.el.classList.remove('show'); return; }
     this.el.className = `show ${st}`;
-    this.el.innerHTML = `<b>${w.title}</b>${this.first === st ? `<span>${w.first}</span>` : ''}`;
+    this.el.innerHTML = `<b>${w.title}</b>${this.first === st ? `<span>${this.bare && w.bare ? w.bare : w.first}</span>` : ''}`;
   }
   // for the console and the rigs
   stats() { return { state: this.state, raw: this.raw, want: this.want, shown: !!(this.el && this.el.classList.contains('show')), text: this.el ? this.el.textContent : '' }; }

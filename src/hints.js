@@ -566,7 +566,8 @@ export class Hints {
       const ok = this.clear(this.cur.m, this.cur.card);
       this.place(!!(ok && this.paperNow()));
       if ((this.dodgeT -= dt) <= 0) this.dodge();
-      if (this.cur.t >= SHOW || !ok) this.hide();
+      let done = false; if (this.cur.m.until) { try { done = !!this.cur.m.until(); } catch (e) { done = true; } }
+      if (this.cur.t >= SHOW || !ok || done) this.hide();
       return;
     }
     if (this.gapT > 0) this.gapT -= dt;
@@ -695,7 +696,9 @@ export class Hints {
   }
   // a greyed verb's next step, the first time it is asked for (pointer.js on E or Q, a card, the book): shown now as a
   // teaching line, over the card or the book that asked; true when shown (the caller then says only its why, or nothing)
-  next(id, text, { card = false } = {}) {
+  // (until: the step's need gone, as the canoe's "Unload it" once it is empty or shouldered, the line comes down with it:
+  // playtest r4-final, a stale line up over the shouldered canoe)
+  next(id, text, { card = false, until = null } = {}) {
     if (!id || !text || !this.store) return false;
     const key = `next:${String(id).toLowerCase().replace(/\s+/g, '-')}`;
     const rec = this.rec(key);
@@ -704,7 +707,7 @@ export class Hints {
     if (this.cur && this.cur.m.prio > TEACH) return false;
     if (!this.clear({ prio: TEACH }, card ? 'paper' : null)) return false;
     const words = String(text).replace(/\s*\.\s*$/, '');
-    this.show({ id: key, prio: TEACH, recur: 'once' }, `${words[0].toUpperCase()}${words.slice(1)}.`, 'full', rec, 1, card ? 'paper' : null);
+    this.show({ id: key, prio: TEACH, recur: 'once', until: typeof until === 'function' ? until : null }, `${words[0].toUpperCase()}${words.slice(1)}.`, 'full', rec, 1, card ? 'paper' : null);
     return true;
   }
   // a moment shown now, whatever its trigger says (the console and the tests)

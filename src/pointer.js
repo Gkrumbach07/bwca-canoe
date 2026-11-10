@@ -311,7 +311,7 @@ class Pointer {
         const why = String(a.why).replace(/^./, (c) => c.toUpperCase()); // (fb4 join: the label's lower-case why starts a sentence here)
         // (a verb whose key opens a paper, the canoe's "Unload it first" opening the book at the canoe, keeps its line
         // over the paper it opens)
-        const taught = a.next && typeof this.teach === 'function' ? this.teach(`${t.kind}:${a.verb || a.why}`, a.next, { card: typeof a.help === 'function' }) : false;
+        const taught = a.next && typeof this.teach === 'function' ? this.teach(`${t.kind}:${a.verb || a.why}`, a.next, { card: typeof a.help === 'function', until: a.until || null }) : false;
         if (!taught && this.hud) this.hud.note(`${why.replace(/[.:]\s*$/, '')}.`, 3);
         if (typeof a.help === 'function') { try { a.help({ key, from: 'dot' }); } catch (err) { console.warn('pointer help', err); } }
         return;

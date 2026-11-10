@@ -51,6 +51,9 @@ function truckGeometry() {
   hull.translate(0, 1.95 + 0.43, -0.9);
   const out = mergeGeometries([g, hull]);
   out.computeBoundingSphere();
+  // (the rack's canoe is the tail of the draw: drawn only while the truck has none of yours to bring or has just left
+  // yours in the lot, where it lies: setRack)
+  out.userData.bare = g.index ? g.index.count : g.attributes.position.count;
   return out;
 }
 
@@ -154,11 +157,16 @@ export class Truck {
     this.x = cx; this.z = cz;
   }
   hide() { if (this.mesh) this.mesh.visible = false; this.job = null; this.parkedAt = null; }
+  // the canoe on the rack: a parked truck behind a store has one of its own; one that has just left yours (in the lot,
+  // at the dock) or comes to fetch you and yours drives with the rack bare (playtest r4-final: "the canoe off the
+  // roof" while one still rode on it)
+  setRack(on) { const m = this.ensure(); m.geometry.setDrawRange(0, on ? Infinity : m.geometry.userData.bare); this.rack = !!on; }
   park(key) {
     const S = this.spot(key);
     if (!S) return false;
     this.job = { kind: 'park', key: String(key), path: S.path, s: S.s0, v: 0 };
     this.parkedAt = String(key);
+    this.setRack(true);
     this.pose(S.path, S.s0);
     return true;
   }
@@ -167,6 +175,7 @@ export class Truck {
     if (!S) return false;
     this.job = { kind: 'leave', key: String(key), path: S.path, s: S.s0, v: 0, wait: TRUCK.wait };
     this.parkedAt = null; this.gone = String(key);
+    this.setRack(false);
     this.pose(S.path, S.s0);
     return true;
   }
@@ -177,6 +186,7 @@ export class Truck {
       const from = Math.min(S.path.len, S.s0 + TRUCK.come);
       this.job = { kind: 'come', key: String(key), path: S.path, s: from, v: TRUCK.speed * 0.8, stop: S.s0, done, t: 0 };
       this.parkedAt = null;
+      this.setRack(false);
       this.pose(S.path, from);
     });
   }
@@ -201,7 +211,7 @@ export class Truck {
       if (J.s <= J.stop + 0.05 || J.t > TRUCK.comeMax) {
         this.pose(J.path, J.stop);
         this.job = { kind: 'park', key: J.key, path: J.path, s: J.stop, v: 0 };
-        this.parkedAt = J.key;
+        this.parkedAt = J.key; // (the rack stays bare: it has come for yours)
         J.done(true);
       }
     }

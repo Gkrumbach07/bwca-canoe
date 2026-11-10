@@ -115,16 +115,20 @@ export function roadExclusions(world) {
 
 // the top of a bridge's deck at (x, z), or -Infinity off every bridge (truck.js: it drives over, not through the creek)
 export const DECK = 0.06; // the deck's top over the road's own height at the banks
+const RAMP = 6, RAMP_GRADE = 0.22; // m past each end, and its fall a metre
 export function deckAt(world, x, z) {
   const R = world && world.roads;
   if (!R || !R.bridges.length) return -Infinity;
   for (const b of R.bridges) {
     const ex = b.bx - b.ax, ez = b.bz - b.az, L2 = ex * ex + ez * ez;
     const t = L2 > 1e-9 ? ((x - b.ax) * ex + (z - b.az) * ez) / L2 : 0, L = Math.sqrt(L2);
-    if (t < -2 / L || t > 1 + 2 / L) continue;
+    if (t < -RAMP / L || t > 1 + RAMP / L) continue;
     const tc = Math.max(0, Math.min(1, t));
     if (Math.hypot(x - b.ax - ex * tc, z - b.az - ez * tc) > b.hw + 0.3) continue;
-    return b.ah + (b.bh - b.ah) * tc + DECK;
+    // past a deck's end a ramp down to the bank (the ground at a bank is the shore's, the road's grade faded out there):
+    // a truck rolls off the deck instead of tipping nose-down off its edge (chk-r4b: EP 40's Brule Lake Road, 1 m)
+    const past = Math.max(0, (t < 0 ? -t : t - 1) * L - 0.5);
+    return b.ah + (b.bh - b.ah) * tc + DECK - past * RAMP_GRADE;
   }
   return -Infinity;
 }

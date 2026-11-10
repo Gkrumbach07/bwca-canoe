@@ -1721,7 +1721,10 @@ export class Player {
     let trailText = null;
     if (onTrail) {
       const p = this.trailPoint(trail.trail, trail.along);
-      const remaining = p.tx * f.x + p.tz * f.z >= 0 ? trail.trail.length - trail.along : trail.along;
+      let remaining = p.tx * f.x + p.tz * f.z >= 0 ? trail.trail.length - trail.along : trail.along;
+      // (at an end, facing out of the trail: what lies ahead is the whole carry, not "0 rods to go": playtest r4-final,
+      // the 75 lot's arrival)
+      if (remaining < RODS * 0.5) remaining = trail.trail.length - remaining;
       const rods = Math.round(remaining / RODS);
       trailText = `${trail.def.name} · ${rods} ${rods === 1 ? 'rod' : 'rods'} to go`;
     }

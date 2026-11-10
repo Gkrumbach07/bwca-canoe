@@ -751,7 +751,7 @@ const HAND = {
       hello: ['Bonjour. Come in.', 'Back. Good. The border’s still there.'],
       stranger: ['Little Vermilion. Canada’s up the river. Food’s there, board’s there.'],
       goodbye: ['Loon River’s easy. Loon Lake’s not. Watch the wind.'],
-      chat: ['Beatty Portage has a little railway car. You put the boat on it and push. Best carry in the country.', 'Quetico’s the other side. Their permit, their rules. I don’t sell it.', 'Lac La Croix. Sand beaches, painted rocks. Long way. Worth it.'],
+      chat: ['Beatty Portage has a little railway car. You put the boat on it and push. Best carry in the country.', 'Quetico’s the other side. Your permit stops at the line, and so do my maps.', 'Lac La Croix. Sand beaches, painted rocks. Long way. Worth it.'],
     } },
   36: { kind: 'river post', keeper: 'Myrna Sether', manner: 'dry', priceMul: 1.05,
     sig: { family: 'kneelers', name: 'Hog Creek kneeling pads', price: 16, words: 'Sheepskin over felt. I cut them on the kitchen table. Your knees will forgive you by Thursday.' },

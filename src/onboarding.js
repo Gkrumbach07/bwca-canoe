@@ -50,6 +50,7 @@ const STAFF_LOOK = { age: 'young', shirt: 0x5f7f45, hat: null }; // (E's figure 
 // r3 replay: the gear taken and the talk left before the keeper's word, then paddled this far from the landing: the
 // keeper's part is done for you (the first permit, the home sheet), so leaving early never costs a ticket
 const LEAVE_R = 80;
+const AWAY_R = 600;     // m: the canoe and you this far from the home landing (a ride away) and the loaned canoe is taken
 
 // r3 (2026-11-05): path, the main path's steps after the talk (food, leeches, the canoe pushed off), each latched true
 // once seen and saved, so a reload brings the same step back; loan, the outfitter's canoe at the dock (none before the
@@ -270,8 +271,20 @@ export class Onboarding {
     if (!pa.leeches && this.hasLeeches()) { pa.leeches = true; ch = true; }
     const p = this.t.player;
     if (!pa.canoe && s.loan && p && p.mode === 'paddle' && !p.teleporting) { pa.canoe = true; ch = true; }
+    // (playtest r4-final: a ride from the counter to a trailhead before the canoe was used left "Your canoe is at the
+    // dock" up while it lay in the lot: the canoe gone from the home dock by the truck counts as taken)
+    const away = s.loan && p && !p.teleporting && this.canoeAway(p);
+    if (!pa.canoe && away) { pa.canoe = true; ch = true; }
     if (ch) this.write();
     if (s.step === 'gear' && !s.done && s.loan && p && p.mode === 'paddle' && !p.teleporting) this.leaving(p);
+  }
+  // the canoe (lying, or with you) far from the home store's landing: taken away by a ride
+  canoeAway(p) {
+    if ((this.awayT = (this.awayT || 0) + 1) % 20) return false; // (a few times a second is plenty)
+    const ep = this.home, o = this.t.outfitter, L = ep != null && o && typeof o.landing === 'function' ? o.landing(ep) : null;
+    if (!L) return false;
+    const d = p.carry && p.carry.drop ? p.carry.drop : p;
+    return Math.hypot(d.x - L.x, d.z - L.z) > AWAY_R && Math.hypot(p.x - L.x, p.z - L.z) > AWAY_R;
   }
   // r3 replay: the talk left after the gear (an Esc at the canoe line) and paddled away: the keeper waves you off with the
   // first permit, as the talk's end would have given it (the starter route can still be asked for at the counter)
