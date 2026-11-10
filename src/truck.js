@@ -19,7 +19,7 @@ import { isOutfitter, OUTFITTER_EPS } from './outfitters.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const C = (hex) => new THREE.Color(hex);
-export const TRUCK = { speed: 9, accel: 1.6, wheelbase: 3.35, track: 1.86, axles: [1.72, -1.63], squash: 0.1, wait: 2.5, come: 80, see: 260, parkNear: 320, comeMax: 12, maxSnap: 320 };
+export const TRUCK = { speed: 9, accel: 1.6, wheelbase: 3.35, track: 1.86, axles: [1.72, -1.63], squash: 0.12, wait: 2.5, come: 80, see: 260, parkNear: 320, comeMax: 12, maxSnap: 320 };
 // (round 5: track the tyres' own middles, 0.93 m either side; axles where the wheels are built, along the body)
 
 // the pickup, in its own frame: +z forward, y up from the ground under its wheels
@@ -74,7 +74,7 @@ function at(path, s) {
   return [pts[lo][0] + (pts[hi][0] - pts[lo][0]) * t, pts[lo][1] + (pts[hi][1] - pts[lo][1]) * t];
 }
 // corners rounded (a fillet up to r m along each leg), as a truck turns
-function smooth(pts, r = 6) {
+function smooth(pts, r = 4) { // (round 5: 4 m, not 6: a 6 m fillet took a turn at a junction 2.5 m off the line, the outer tyres down the shoulder)
   if (pts.length < 3) return pts;
   const out = [pts[0]];
   for (let i = 1; i < pts.length - 1; i++) {
