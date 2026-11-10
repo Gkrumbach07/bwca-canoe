@@ -100,7 +100,10 @@ export class Story {
 // v1 story at load with the flag off, exactly as main; under STORY_ON null until main() awaits loadStory() first thing)
 export let story = STORY_ON ? null : new Story();
 export async function loadStory() {
-  if (STORY_ON && !story) { const { StoryV2 } = await import('./story.js'); story = new StoryV2({ io: save }); }
+  if (STORY_ON && !story) {
+    const [{ StoryV2 }, { RULES_CORE }, { RULES_BOOK }] = await Promise.all([import('./story.js'), import('./story-data/rules-core.js'), import('./story-data/rules-book.js')]); // st-b: the book's rules known from the start, so the data stamp is the same every boot
+    story = new StoryV2({ io: save, rules: [...RULES_CORE, ...RULES_BOOK] });
+  }
   return story;
 }
 export { STORY_ON };

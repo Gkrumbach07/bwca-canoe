@@ -637,7 +637,7 @@ export const WALT_IDS = ['waltpack', 'walttent', 'waltstove', 'waltnotebook'];
 
 // st-b: the story's item flags (docs/build/campaign-design.md §6.1). Inert data unless the story is on: only story
 // code and inventory.js's guards under STORY_ON read them, so with the flag off every item behaves as on main.
-//   bound       the notebook (later the cans, Eino's note, the postcard): never sold, given, offered, stashed, set down
+//   bound       the notebook (later the cans, the brother's note, the postcard): never sold, given, offered, stashed, set down
 //               or lost; it lives in your pockets ("Not leaving those.")
 //   unsellable  the bundle (pack and tent) until night one (boundFound()): can't be sold or traded in, and that is all
 //   kept        a story page or print a person gave (not a loan): never sold, given, offered or lost; it can be stashed

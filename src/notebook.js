@@ -356,7 +356,7 @@ export async function installBook(t = {}) {
   const { story, journal } = t;
   const book = new Book(t);
   boundFound.fn = () => !!(story && story.has('nb.found'));
-  if (story && typeof story.addRules === 'function') story.addRules(RULES_BOOK);
+  if (story && typeof story.addRules === 'function' && !(story.rules && story.rules.rules && story.rules.rules.has(RULES_BOOK[0].id))) story.addRules(RULES_BOOK); // (story-hooks.js gives them at construction)
   if (story && typeof story.setPages === 'function') story.setPages(() => book.data.leaves.filter((l) => l.kind === 'nb' && l.part !== 2).map((l) => ({ title: l.title || l.nb, text: l.text })));
   if (journal && typeof journal.addSide === 'function') {
     const el = document.createElement('div');
