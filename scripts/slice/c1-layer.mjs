@@ -89,8 +89,8 @@ export const section = {
         await press(page, 'e'); // (E on a thing with no verb does nothing)
         const noLook = await page.evaluate(() => window.__game.story.has('stone.c837'));
         result('slice 3 (L): before night one the stone on C837\'s stump reads "Stump", no verb, E does nothing', before.t && before.t.label === 'Stump' && !before.t.verb && !before.found && !noLook && before.built.includes('ws.c837.stone'), before);
-        // night one (B's cutscene finds it; the rig stands in for it through walt.find, as chk-coop does)
-        await page.evaluate(async () => { const g = window.__game; g.walt.find({ key: 2, lake: 'Lake One' }); await window.__L.wait(200); window.__L.step(6); });
+        // night one (B's cutscene finds it; the rig stands in for it with story.found, the call walt.find makes)
+        await page.evaluate(async () => { const g = window.__game; g.story.found({ abs: 20640, key: 2, lake: 'Lake One' }); await window.__L.wait(100); window.__L.step(6); }); // (story.found is what walt.js's find calls; its card is B's)
         const after = await page.evaluate(() => window.__L.faceTo('ws.c837.stump', 2.5, 0.4));
         await press(page, 'e');
         const looked = await page.evaluate(() => { const s = window.__game.story; return { stone: s.has('stone.c837'), walt: s.walt().includes('20:2.4.w2') }; });

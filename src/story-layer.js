@@ -257,11 +257,15 @@ class StoryLayer {
       const inR = (r) => d <= r;
       const was = this.inside.get(pl.id);
       if (inR(pl.r)) {
-        if (!was) {
-          this.inside.set(pl.id, { since: now, stood: new Set() });
-          for (const tr of pl.triggers || []) if (tr.on === 'enter' && inR(tr.r || pl.r) && this.when(tr.when)) { this.apply(pl, 'enter', tr.then); fire('enter', { place: pl.id, r: tr.r || pl.r }); }
-        } else {
-          for (const tr of pl.triggers || []) if (tr.on === 'stand' && !was.stood.has(tr) && inR(tr.r || pl.r) && now - was.since >= (tr.s || 20) && this.when(tr.when)) { was.stood.add(tr); this.apply(pl, 'stand', tr.then); fire('stand', { place: pl.id, r: tr.r || pl.r }); }
+        const v = was || { since: now, done: new Set() };
+        if (!was) this.inside.set(pl.id, v);
+        // each trigger once a visit, the first poll its own radius holds (a trigger's radius may be inside the place's)
+        for (const tr of pl.triggers || []) {
+          if (v.done.has(tr) || !inR(tr.r || pl.r)) continue;
+          if (tr.on === 'enter' || (tr.on === 'stand' && now - v.since >= (tr.s || 20))) {
+            if (!this.when(tr.when)) continue;
+            v.done.add(tr); this.apply(pl, tr.on, tr.then); fire(tr.on, { place: pl.id, r: tr.r || pl.r });
+          }
         }
       } else if (was && d > pl.r + 10) this.inside.delete(pl.id);
     }
