@@ -49,7 +49,7 @@ export const steps = [
     const held = await W(h.page, () => { const g = window.__game, c = g.walt.cut; return { active: c.active, beat: c.beat, page: (document.querySelector('#nightone .no-page') || {}).textContent || '', hours: g.day.hours }; });
     const order = seen.map((b) => b.beat);
     h.result('B2b the beats in the doc\'s order, a lit line on a real page, the last page held whole until a key', order.join() === 'cut.1,cut.2,cut.3,cut.4,cut.5,cut.6,cut.7,cut.8,cut.9,cut.10,cut.11' && held.active && held.beat === 'cut.11' && /If you are reading this/.test(held.page) && /Pack stays\. Tent stays\./.test(held.page)
-      && seen.find((b) => b.beat === 'cut.4').lit.startsWith('Up 4:50') && seen.find((b) => b.beat === 'cut.4').soft.length > 10 && held.hours < 22, { order, held: { ...held, page: held.page.slice(0, 80) } });
+      && seen.find((b) => b.beat === 'cut.4').lit.startsWith('Up 4:50') && seen.find((b) => b.beat === 'cut.4').soft.length > 10 && held.hours < 22, { order, seen: seen.map((b) => [b.beat, b.lit.slice(0, 30), b.soft.length]), held: { ...held, page: held.page.slice(-120) } });
     // Esc does not skip a first viewing; any key goes on
     await W(h.page, () => { window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape', key: 'Escape', bubbles: true })); });
     await h.step(2);

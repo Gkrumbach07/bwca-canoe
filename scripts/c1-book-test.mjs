@@ -125,6 +125,7 @@ try {
   // E2 205/50 ------------------------------------------------------------------------------------------------------------
   const e2 = await A.evaluate(() => {
     const g = window.__game, tr = g.trip, [a, b] = g.book.debug.resolved()['205/50'], P = g.world.portages;
+    if (!(a >= 0 && b >= 0)) return { a, b, resolved: g.book.debug.resolved(), p659: P[659] && { name: P[659].name, rods: P[659].rods }, p660: P[660] && { name: P[660].name, rods: P[660].rods } };
     tr.log('portage', { i: b, name: P[b].name, rods: P[b].rods }); tr.log('portage', { i: a, name: P[a].name, rods: P[a].rods }); // (either order)
     const s = g.story;
     return { a, b, bc: s.has('bc.205-50'), key: s.has('key.L2B'), und53: s.nbHas('und', 'NB53'), recent: g.storySeams.feed.recent.slice(-4).map((r) => r.evt) };

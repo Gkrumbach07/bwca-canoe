@@ -118,7 +118,12 @@ export class Walt {
       const s = this.t.story, meta = s && typeof s.meta === 'function' ? s.meta() : {};
       this.cut = new this.NightOne({ text: this.nbText(), seen: !!meta.nightOneSeen });
       this.cutNight = { at: performance.now() };
+      // a paper while it plays, so Esc is the cutscene's (title.js pauses on an Esc only with no paper up)
+      const hud = this.t.hud;
+      if (hud && typeof hud.registerPaper === 'function' && !this.cutPaper) { hud.registerPaper('nightone', () => {}); this.cutPaper = true; }
+      if (hud && typeof hud.openPaper === 'function') hud.openPaper('nightone');
       return this.cut.play().then((r) => {
+        if (hud && typeof hud.closePaper === 'function') hud.closePaper('nightone');
         if (s && typeof s.setMeta === 'function') s.setMeta({ nightOneSeen: true });
         this.cutNight.done = r; return r;
       });
