@@ -28,41 +28,47 @@ export const POCKET_PHOTOS = ['P1', 'P7', 'P8', 'P10'];
 export const PHOTO_AT = { P1: 'NB35', P2: 'NB24', P3: 'NB01', P4: 'NB28', P5: 'NB49', P6: 'NB42', P7: 'NB06', P8: 'NB16', P9: 'NB29', P10: 'NB26', P11: 'NB37', P12: 'NB44' };
 
 // --- the back cover (10 §1; campaign-design §6.2) --------------------------------------------------------------------------
-// Each number, the carry or carries it is (v3 portage ids from the doc; v9 indices from src/migrate's v3 table, checked
-// against the v9 index on ben 2026-11-10: names and ends match), the entry a first-trip crossing gives "he was here",
-// and the lake pair the player pencils beside it once understood. `pair`: both carries back to back on one trip, either
-// order (205/50: lock 2 key B). `line`: the Walt page line the crossing adds (20 §2.4, only 64's is written).
+// Each number, the carry or carries it is (v3 portage ids from the doc; v9 indices from src/migrate's v3 table; `ends`
+// the trail's two ends in metres, the same in every release), the entry a first-trip crossing gives "he was here", and
+// the lake pair the player pencils beside it once understood. `pair`: both carries back to back on one trip, either
+// order (205/50: lock 2 key B). `line`: the Walt page line the crossing adds (20 §2.4, only 64's is written). `rods` and
+// `name` are the data's (index.json): the running world renames trails (names.js) and recounts some rods (P255 runs
+// 188 r in the game, P645 148 r), so a carry is found by its ends, never by its name or rods.
 export const BACK_COVER = [
-  { n: '64', ink: 'blue', carries: [{ v3: 289, v9: 691, rods: 64, name: 'Little Trout Lake – Rum Lake' }], nb: 'NB15', pairWords: 'Little Trout to Rum', line: '20:2.4.w1' },
-  { n: '140', ink: 'blue', carries: [{ v3: 645, v9: 1000, rods: 140, name: 'Disappointment Lake – Snowbank Lake' }], nb: 'NB04', pairWords: 'Snowbank to Disappointment' },
-  { n: '186', ink: 'blue', carries: [{ v3: 188, v9: 595, rods: 185, name: 'Grandpa Lake – Sea Gull Lake' }], nb: 'NB18', pairWords: 'Grandpa to Sea Gull' },
-  { n: '205/50', ink: 'blue2', pair: true, carries: [{ v3: 255, v9: 659, rods: 205, name: 'Bald Eagle Lake – Gull Lake' }, { v3: 256, v9: 660, rods: 50, name: 'Gull Lake – Gull Lake' }], fact: 'bc.205-50', pairWords: 'Bald Eagle to Gull' },
-  { n: '50', ink: 'hard', carries: [{ v3: 530, v9: 895, rods: 50, name: 'Pietro Lake – Gull Lake' }], pairWords: 'Pietro to Gull' },
-  { n: '63', ink: 'hard', carries: [{ v3: 27, v9: 447, rods: 63, name: 'Pietro Lake – Camdre Lake' }], pairWords: 'Pietro to Camdre' },
-  { n: '121', ink: 'hard', carries: [{ v3: 24, v9: 444, rods: 121, name: 'Camdre Lake – Clearwater Lake' }], pairWords: 'Camdre to Clearwater' },
-  { n: '214', ink: 'hard', carries: [{ v3: 26, v9: 446, rods: 217, name: 'Clearwater Lake – Rock Island Lake' }], pairWords: 'Clearwater to Rock Island' },
-  { n: '45', ink: 'soft', carries: [{ v3: 47, v9: 76, rods: 45, name: 'Carp Portage' }], pairWords: 'Carp' },
-  { n: '15', ink: 'soft', carries: [{ v3: 46, v9: 461, rods: 15, name: 'Sucker Lake – Birch Lake' }], pairWords: 'Sucker to Birch' },
+  { n: '64', ink: 'blue', carries: [{ v3: 289, v9: 691, rods: 64, name: 'Little Trout Lake – Rum Lake', ends: [[54979.5, 13905.3], [55228, 14068.4]] }], nb: 'NB15', pairWords: 'Little Trout to Rum', line: '20:2.4.w1' },
+  { n: '140', ink: 'blue', carries: [{ v3: 645, v9: 1000, rods: 140, name: 'Disappointment Lake – Snowbank Lake', ends: [[-12410.5, 13101.5], [-12821, 12596.7]] }], nb: 'NB04', pairWords: 'Snowbank to Disappointment' },
+  { n: '186', ink: 'blue', carries: [{ v3: 188, v9: 595, rods: 185, name: 'Grandpa Lake – Sea Gull Lake', ends: [[21630.2, -8096.1], [22256.3, -7410.5]] }], nb: 'NB18', pairWords: 'Grandpa to Sea Gull' },
+  { n: '205/50', ink: 'blue2', pair: true, carries: [{ v3: 255, v9: 659, rods: 205, name: 'Bald Eagle Lake – Gull Lake', ends: [[-24416.9, 28709], [-23545.1, 28693.6]] }, { v3: 256, v9: 660, rods: 50, name: 'Gull Lake – Gull Lake', ends: [[-23350.7, 28207.1], [-23227.5, 28009.4]] }], fact: 'bc.205-50', pairWords: 'Bald Eagle to Gull' },
+  { n: '50', ink: 'hard', carries: [{ v3: 530, v9: 895, rods: 50, name: 'Pietro Lake – Gull Lake', ends: [[-22708.3, 26891.1], [-22741.3, 27130.8]] }], pairWords: 'Pietro to Gull' },
+  { n: '63', ink: 'hard', carries: [{ v3: 27, v9: 447, rods: 63, name: 'Pietro Lake – Camdre Lake', ends: [[-22211.6, 25435.8], [-22195.4, 25118.5]] }], pairWords: 'Pietro to Camdre' },
+  { n: '121', ink: 'hard', carries: [{ v3: 24, v9: 444, rods: 121, name: 'Camdre Lake – Clearwater Lake', ends: [[-22270.1, 24725.8], [-21983.6, 24209.5]] }], pairWords: 'Camdre to Clearwater' },
+  { n: '214', ink: 'hard', carries: [{ v3: 26, v9: 446, rods: 214, name: 'Clearwater Lake – Rock Island Lake', ends: [[-21181.8, 23400.2], [-20492.5, 22628.3]] }], pairWords: 'Clearwater to Rock Island' },
+  { n: '45', ink: 'soft', carries: [{ v3: 47, v9: 76, rods: 45, name: 'Carp Portage', ends: [[-10265.9, 2118.1], [-10054.4, 2048.7]] }], pairWords: 'Carp' },
+  { n: '15', ink: 'soft', carries: [{ v3: 46, v9: 461, rods: 15, name: 'Sucker Lake – Birch Lake', ends: [[-14528.9, 4783], [-14460, 4750.9]] }], pairWords: 'Sucker to Birch' },
 ];
 export const bcFact = (row) => row.fact || `bc.${row.n}`;
-// a world's portage index for each back-cover carry: the v9 index when its name and rods still agree, else the portage
-// with that name and rods (a later bake renumbered), else none. portages: world.portages (an indexed read, no iteration
-// of the list outside this one lookup: the hidden carry is never on the back cover)
+// a world's portage index for each back-cover carry: the v9 index when its ends are still there, else the portage with
+// those ends (a later bake renumbered), else none. portages: world.portages (a hidden carry is never on the back cover)
 export function resolveBackCover(portages) {
   const out = {};
-  const ok = (p, c) => !!p && !p.hidden && Math.abs((p.rods || 0) - c.rods) <= 4 && (!c.name || !p.name || norm(p.name) === norm(c.name));
-  let byName = null;
+  const ok = (p, c) => !!p && !p.hidden && endsMatch(p, c.ends);
   for (const row of BACK_COVER) {
     out[row.n] = row.carries.map((c) => {
-      if (Array.isArray(portages) && ok(portages[c.v9], c)) return c.v9;
-      if (!byName && Array.isArray(portages)) { byName = new Map(); for (let i = 0; i < portages.length; i++) { const p = portages[i]; if (p && p.name && !p.hidden) { const k = norm(p.name); if (!byName.has(k)) byName.set(k, []); byName.get(k).push(i); } } }
-      const cand = byName ? (byName.get(norm(c.name)) || []).filter((i) => ok(portages[i], c)) : [];
-      return cand.length === 1 ? cand[0] : -1;
+      if (!Array.isArray(portages)) return -1;
+      if (ok(portages[c.v9], c)) return c.v9;
+      for (let i = 0; i < portages.length; i++) if (ok(portages[i], c)) return i; // (a later bake renumbered: found by its ends)
+      return -1;
     });
   }
   return out;
 }
-const norm = (s) => String(s || '').toLowerCase().replace(/[–—-]/g, '-').replace(/\s+/g, ' ').trim();
+export const ENDS_M = 30; // m: a trail's ends this near the stored ones are that carry (either way round)
+function endsMatch(p, ends) {
+  const pts = p && p.pts;
+  if (!Array.isArray(ends) || !Array.isArray(pts) || pts.length < 2) return false;
+  const a = pts[0], b = pts[pts.length - 1], d = (q, e) => Math.hypot(q[0] - e[0], q[1] - e[1]);
+  return (d(a, ends[0]) <= ENDS_M && d(b, ends[1]) <= ENDS_M) || (d(a, ends[1]) <= ENDS_M && d(b, ends[0]) <= ENDS_M);
+}
 // the rows a carry (a world portage index) belongs to → [{ row, k }] (k: which of the row's carries)
 export function bcFor(i, resolved) {
   const out = [];

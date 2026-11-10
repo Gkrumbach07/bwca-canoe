@@ -49,14 +49,14 @@ const book = B.buildBook(nb);
 // --- 2 the back cover ----------------------------------------------------------------------------------------------------
 {
   // v9 as it is: the stored indices hold (names and rods as on ben's v9 index, 2026-11-10)
-  const v9 = []; for (const r of B.BACK_COVER) for (const c of r.carries) v9[c.v9] = { name: c.name, rods: c.rods };
+  const v9 = []; for (const r of B.BACK_COVER) for (const c of r.carries) v9[c.v9] = { name: `renamed ${c.v9}`, rods: c.rods + 9, pts: [c.ends[0], [0, 0], c.ends[1]] }; // (the running world renames and recounts)
   const res = B.resolveBackCover(v9);
-  result('2a v9: every back-cover carry resolves to its stored index', B.BACK_COVER.every((r) => r.carries.every((c, k) => res[r.n][k] === c.v9)), { res });
+  result('2a v9 (names and rods as the running world has them): every carry resolves to its stored index by its ends', B.BACK_COVER.every((r) => r.carries.every((c, k) => res[r.n][k] === c.v9)), { res });
   // a later bake that renumbered: found again by name and rods
-  const moved = []; for (const r of B.BACK_COVER) for (const c of r.carries) moved[c.v9 + 7] = { name: c.name, rods: c.rods + 1 };
+  const moved = []; for (const r of B.BACK_COVER) for (const c of r.carries) moved[c.v9 + 7] = { name: c.name, pts: [c.ends[1], c.ends[0]] }; // (reversed, too)
   const res2 = B.resolveBackCover(moved);
-  result('2b renumbered: found again by name and rods', B.BACK_COVER.every((r) => r.carries.every((c, k) => res2[r.n][k] === c.v9 + 7)), { res2 });
-  const hidden = []; hidden[691] = { name: 'Little Trout Lake – Rum Lake', rods: 64, hidden: true };
+  result('2b renumbered (and walked the other way): found again by its ends', B.BACK_COVER.every((r) => r.carries.every((c, k) => res2[r.n][k] === c.v9 + 7)), { res2 });
+  const hidden = []; hidden[691] = { name: 'Little Trout Lake – Rum Lake', rods: 64, hidden: true, pts: B.BACK_COVER[0].carries[0].ends };
   result('2c a hidden carry is never on the back cover', B.resolveBackCover(hidden)['64'][0] === -1, {});
   result('2d bcFor: P289\'s v9 index → the 64; 659 → 205/50 (the pair\'s first)', B.bcFor(691, res).map((h) => h.row.n).join() === '64' && B.bcFor(659, res).map((h) => h.row.n + ':' + h.k).join() === '205/50:0' && B.bcFor(-1, res).length === 0, {});
 }

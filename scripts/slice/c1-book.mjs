@@ -41,7 +41,7 @@ export const steps = [
     const seen = [];
     for (let k = 0; k < 400; k++) {
       await h.step(6);
-      const b = await W(h.page, () => { const c = window.__game.walt.cut; return c && c.active ? { beat: c.beat, t: c.t, lit: (document.querySelector('#nightone .lit') || {}).textContent || '', soft: (document.querySelector('#nightone .soft') || {}).textContent || '' } : null; });
+      const b = await W(h.page, () => { const c = window.__game.walt.cut; return c && c.active ? { beat: c.beat, t: c.t, lit: (document.querySelector('#nightone .lit') || {}).textContent || '', soft: [...document.querySelectorAll('#nightone .soft')].map((n) => n.textContent).join('') } : null; });
       if (!b) break;
       if (!seen.length || seen[seen.length - 1].beat !== b.beat) { seen.push(b); if (b.beat === 'cut.3' || b.beat === 'cut.11') await h.shot(`b-cut-${b.beat}`); }
       if (b.beat === 'cut.11' && b.t > 12) break; // held: the last page waits for a key
