@@ -187,7 +187,8 @@ try {
       const c = g.chase; if (c && 'pitch' in c) c.pitch = 0.12;
       for (let q = 0; q < 20; q++) { H.step(3); await H.wait(30); }
       out.cost = H.calls();
-      { const ms = [...g.tiles.tiles.values()].flatMap((e) => e.installMs || []).sort((a, b) => b - a); out.cost.installMax = ms[0] || 0; out.cost.install95 = ms[Math.floor(ms.length * 0.05)] || 0; } // (the install's steps, ms: tiles.js INSTALL_BUDGET)
+      { const ms = [...g.tiles.tiles.values()].flatMap((e) => e.installMs || []).sort((a, b) => b - a); out.cost.installMax = ms[0] || 0; out.cost.install95 = ms[Math.floor(ms.length * 0.05)] || 0;
+        let wv = 0; for (const e of g.tiles.tiles.values()) (e.installMs || []).forEach((v, i) => { if (v > wv) { wv = v; out.cost.installWorst = [e.key, i, v, e.installMs.length]; } }); } // (the install's steps, ms: tiles.js INSTALL_BUDGET)
       return out;
     }, [lat, lon]);
     looks[name] = await look(page);
