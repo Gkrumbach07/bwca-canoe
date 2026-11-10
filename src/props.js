@@ -544,7 +544,7 @@ function portageSign(ctx, pts, end, seed, p = null) {
   let fx = x - xn, fz = z - zn; const L = Math.hypot(fx, fz) || 1; fx /= L; fz /= L; // facing out along the path, to the water
   // (round 4: never on a road, where a trail starts at a road's end or a lot: the other side, else further off the path)
   let side = rng() < 0.5 ? 1 : -1, off = 1.15, gapBest = -Infinity, pick = null;
-  for (const [sd, o] of [[side, 1.15], [-side, 1.15], [side, 2.6], [-side, 2.6], [side, 4], [-side, 4], [side, 6], [-side, 6], [side, 8], [-side, 8]]) {
+  for (const [sd, o] of [[side, 1.15], [-side, 1.15], [side, 2.6], [-side, 2.6], [side, 4], [-side, 4], [side, 6], [-side, 6], [side, 8], [-side, 8], [side, 10], [-side, 10], [side, 12], [-side, 12]]) { // (round 5: out to 12 m: the Moose Lake Boat Access's trail runs down its road, both sides of it road within 8 m)
     if (!onRoad(ctx.world, x + fz * sd * o, z - fx * sd * o, 0.4)) { pick = [sd, o]; break; }
     const gp = roadGap(ctx.world, x + fz * sd * o, z - fx * sd * o); if (gp > gapBest) { gapBest = gp; pick = [sd, o]; } // (none clear: the one furthest off)
   }
