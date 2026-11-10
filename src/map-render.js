@@ -19,7 +19,7 @@
 import { BURNS, burnDate } from './burns.js';
 import { OUTFITTER_EPS, placeOf } from './outfitters.js'; // round 2 markers: an outfitter at its store, an entry point at its put-in
 import { markOf } from './ep-start.js'; // round 2, entry points true to life: an entry point marked at its start
-import { paintEdge, paintRoads } from './edge.js'; // the edge round: past the band a little faded, the roads and the towns
+import { paintEdge, paintRoads, setBound } from './edge.js'; // the edge round: past the band a little faded, the roads and the towns
 import { PMAS, inPoly } from './pma.js'; // r2: the primitive areas' outlines on every map
 
 export const FT = 0.3048;
@@ -542,7 +542,7 @@ export function loadBoundary(url = new URL('./boundary.bin', import.meta.url)) {
       path.closePath();
       BOUNDARY.rings.push({ hole, pts });
     }
-    BOUNDARY.path = path; BOUNDARY.box = box; BOUNDARY.ready = true;
+    BOUNDARY.path = path; BOUNDARY.box = box; BOUNDARY.ready = true; setBound(path); // (r5: the edge's map wash is outside it)
     return BOUNDARY;
   })().catch((e) => { console.warn('map: the wilderness boundary did not load', e); BOUNDARY.ready = true; return BOUNDARY; });
   return bLoading;
@@ -784,9 +784,11 @@ export function drawRegion(canvas, world, view, opts = {}) {
   tileCache.tick++;
   ctx.save();
   ctx.fillStyle = INK.paper; ctx.fillRect(0, 0, W, H);
-  const ready = paintGround(ctx, world, v, W, H, { k, budget: { build: opts.build ?? 3 }, depths: opts.soundAll || mPerPx < 6, ink: opts.ink || null, inkV: opts.inkV || 0, detail, far: opts.fine ? false : null, all: !!opts.soundAll });
+  if (opts.boundary !== false && !BOUNDARY.ready) loadBoundary(); // (r5: the wash outside the line needs it: not ready until it is in)
+  const ground = paintGround(ctx, world, v, W, H, { k, budget: { build: opts.build ?? 3 }, depths: opts.soundAll || mPerPx < 6, ink: opts.ink || null, inkV: opts.inkV || 0, detail, far: opts.fine ? false : null, all: !!opts.soundAll });
+  const ready = ground && (opts.boundary === false || BOUNDARY.ready);
   if (opts.roads !== false) paintRoads(ctx, v, W, H, { k, towns: false }); // (the edge round)
-  if (opts.boundary !== false && opts.edge !== false) paintEdge(ctx, v, k, { box: [world.minX, world.minZ, world.maxX, world.maxZ] }); // (the edge round)
+  if (opts.boundary !== false && opts.edge !== false) paintEdge(ctx, v, k, { box: [world.minX, world.minZ, world.maxX, world.maxZ], bound: BOUNDARY.path }); // (r5: outside the real boundary washed, no bubble)
   if (opts.burns) paintBurns(ctx, v, burnsInView(v, W, H), k);
   if (opts.boundary !== false) { if (BOUNDARY.ready) paintBoundary(ctx, v, k); else loadBoundary(); }
   if (opts.pmas !== false) paintPmas(ctx, v, W, H, { k, focus: opts.pmaFocus || null, wash: !!opts.pmaWash });
