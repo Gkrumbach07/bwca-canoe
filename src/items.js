@@ -177,7 +177,7 @@ export function takesLine(lure) {
 // a lure's or the bait's On-you line: the words, and the list the tooltip draws as pips
 export const takesOn = (lure) => ({ label: '', value: takesLine(lure), takes: takesList(lure) });
 
-const KINDS = new Set(['food', 'snack', 'meal', 'fish', 'bait', 'lure', 'tool', 'gear', 'map', 'container', 'long', 'firewood', 'forage', 'water']);
+const KINDS = new Set(['food', 'snack', 'meal', 'fish', 'bait', 'lure', 'tool', 'gear', 'map', 'container', 'long', 'firewood', 'forage', 'water', 'page']); // (st-b: 'page', a story page given by a person: none is defined unless the story is on)
 export const FOOD_KINDS = ['food', 'snack', 'meal', 'fish', 'forage'];
 
 // the right-click verbs: what each is (the labels are the menu's; the words are for the console, never shown)
@@ -627,10 +627,36 @@ export const ARTIFACT_IDS = ['axehead', 'tradesilver']; // found and left where 
 // it; the dented stove lights under a pot like the canister stove (its own `stove` verb, cook.js). The notebook turns
 // up in the old tent the first night you sleep in it (walt.js), and reads as a paper (its Read, walt.js readVerb).
 VERBS.read = { label: 'Read', words: 'Its pages, by the light you have.' };
-defineItem({ id: 'waltpack', name: 'Old canvas Duluth pack', short: 'Old pack', kind: 'container', w: 4, h: 5, kg: 2.7, price: 0, wear: ['back', 'chest'], mesh: 'food', container: { cols: 6, rows: 8 }, icon: 'pack', identity: 'Canvas, patched at the corners · room 6 × 8' });
-defineItem({ id: 'walttent', name: 'Old canvas tent', short: 'Canvas tent', kind: 'gear', w: 2, h: 4, kg: 4.6, price: 0, slot: 'tent', tentKind: 'aframe', icon: 'tent', model: 'tentbag', tint: 0x8d8462, identity: 'Heavy canvas, a ridge pole, two A-poles', onYou: [EF('rest', AFRAME_SLEEP, 'a night')] });
+defineItem({ id: 'waltpack', name: 'Old canvas Duluth pack', short: 'Old pack', kind: 'container', w: 4, h: 5, kg: 2.7, price: 0, wear: ['back', 'chest'], mesh: 'food', container: { cols: 6, rows: 8 }, icon: 'pack', identity: 'Canvas, patched at the corners · room 6 × 8', unsellable: true });
+defineItem({ id: 'walttent', name: 'Old canvas tent', short: 'Canvas tent', kind: 'gear', w: 2, h: 4, kg: 4.6, price: 0, slot: 'tent', tentKind: 'aframe', icon: 'tent', model: 'tentbag', tint: 0x8d8462, identity: 'Heavy canvas, a ridge pole, two A-poles', onYou: [EF('rest', AFRAME_SLEEP, 'a night')], unsellable: true });
 defineItem({ id: 'waltstove', name: 'Dented brass stove', short: 'Old stove', kind: 'tool', kg: 0.6, price: 0, icon: 'stove', model: 'stove', tint: 0xb8923a, identity: 'Brass burner, a dent in its side',
   verbs: [{ id: 'stove', label: 'Light it under the pot' }, { id: 'hand', label: 'Put in hand' }] });
 defineItem({ id: 'waltnotebook', name: 'Small notebook', short: 'Notebook', kind: 'tool', kg: 0.15, price: 0, unique: true, icon: 'waltnotebook', model: 'book', identity: 'Pencil, in an old hand · the pages swollen',
-  verbs: [{ id: 'read', label: 'Read' }, { id: 'hand', label: 'Put in hand' }] });
+  verbs: [{ id: 'read', label: 'Read' }, { id: 'hand', label: 'Put in hand' }], bound: true });
 export const WALT_IDS = ['waltpack', 'walttent', 'waltstove', 'waltnotebook'];
+
+// st-b: the story's item flags (docs/build/campaign-design.md §6.1). Inert data unless the story is on: only story
+// code and inventory.js's guards under STORY_ON read them, so with the flag off every item behaves as on main.
+//   bound       the notebook (later the cans, Eino's note, the postcard): never sold, given, offered, stashed, set down
+//               or lost; it lives in your pockets ("Not leaving those.")
+//   unsellable  the bundle (pack and tent) until night one (boundFound()): can't be sold or traded in, and that is all
+//   kept        a story page or print a person gave (not a loan): never sold, given, offered or lost; it can be stashed
+// bound(id, { verb }) → the reason a verb may not take it ('bound' | 'kept' | 'unsellable') or null. verb: 'sell' |
+// 'trade' | 'give' | 'offer' | 'stash' | 'drop' | 'lose' | 'any'. boundFound: the story's night one (notebook.js sets it).
+export const boundFound = { fn: () => false };
+export function bound(id, { verb = 'any' } = {}) {
+  const d = ITEMS[id];
+  if (!d) return null;
+  if (d.bound) return 'bound';
+  if (d.kept && verb !== 'stash' && verb !== 'drop') return 'kept';
+  if (d.unsellable && (verb === 'sell' || verb === 'trade') && !boundFound.fn()) return 'unsellable';
+  return null;
+}
+// a story page (kind 'page', §6.2): a person's paper, kept (a loan: { back: who }, not kept). Its words are a text id
+// (`ref`, the extracted words, by id); journal and the Walt side draw it as the paper it is. → the def
+export function definePage({ id, title, ref = null, by = null, loan = null, key = null }) {
+  if (!id) throw new Error('definePage: an id');
+  return defineItem({ id: `page:${id}`, name: title || 'A page', short: 'Page', kind: 'page', w: 1, h: 1, kg: 0.01, price: 0, unique: true,
+    icon: 'page', model: 'map', identity: by ? `From ${by}` : 'A page', ref, by, key, loan, kept: !loan, verbs: [{ id: 'read', label: 'Read' }] });
+}
+// /st-b
