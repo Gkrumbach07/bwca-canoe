@@ -15,6 +15,7 @@ export const HELPERS_T = () => {
   T.settle = async (ms = 40000) => { const t0 = performance.now(); while (g.player.teleporting && performance.now() - t0 < ms) { T.step(10); await T.wait(30); } T.step(20); };
   T.standAt = (x, z, heading = 0) => {
     const p = g.player;
+    if (!p.carry || !p.carry.drop) p.carry = { trail: null, drop: { x: p.x, z: p.z, heading: p.heading }, hitCooldown: 0, from: null, choice: false }; // (off the water: the canoe set down)
     p.landing = null; p.ashore = null; p.swim = null; p.speed = 0; p.yawRate = 0; p.mode = 'walk';
     p.x = x; p.z = z; p.heading = heading;
     p.foot = { y: p.groundAt(x, z), vy: 0, air: false, t: 0, land: 0, near: null };
@@ -224,13 +225,14 @@ export const declines = { id: 'declines', step: 4, title: 'the declines and the 
   // a later trip: R3
   await page.evaluate(() => { const s = window.__game.story; const n = s.tripN(); s.ctx.tripN = () => n + 1; });
   await page.evaluate((e) => { window.__t.walkIn(e); window.__t.walkOut(e); window.__t.step(20); }, ep);
+  const why3 = await page.evaluate((e) => window.__game.storyTalk.cast.debug.why(e), ep);
   const t3 = await page.evaluate(() => window.__t.tauno());
   if (t3) { await page.evaluate((k) => window.__t.talkTo(k), `cast:tauno:${t3.ep}`); await page.waitForTimeout(100); }
   const r3 = await page.evaluate(() => window.__t.convo());
   const nt = await choose(page, 'Not today.');
   await hear(page, 3);
   const d2 = await facts(page, ['tauno.porch.declined2', 'rehook.R3']);
-  result('4e a later trip\'s walkout: R3 "You again." → "Not today." (declined2, once ever)', t3 && t3.slot === 'R3' && r3 && r3.say === 'You again.' && nt.ok && d2['tauno.porch.declined2'], { t3, r3, d2 });
+  result('4e a later trip\'s walkout: R3 "You again." → "Not today." (declined2, once ever)', t3 && t3.slot === 'R3' && r3 && r3.say === 'You again.' && nt.ok && d2['tauno.porch.declined2'], { t3, r3, d2, why3 });
   // Farm's porch of a morning
   const farm = await page.evaluate(async () => {
     const g = window.__game, T = window.__t;

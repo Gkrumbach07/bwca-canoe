@@ -341,12 +341,14 @@ export class Cast {
     return true;
   }
 
-  staged() { return [...this.live.values()].map((st) => ({ who: st.who, ep: st.ep, slot: st.slot ? st.slot.id : null, at: st.at, x: +st.x.toFixed(1), z: +st.z.toFixed(1), talked: st.talked, barked: st.barked, done: st.done, node: st.run ? st.run.at : null, truck: st.truck })); }
+  staged() { return [...this.live.values()].map((st) => ({ who: st.who, ep: st.ep, slot: st.slot ? st.slot.id : null, at: st.at, x: +st.x.toFixed(1), z: +st.z.toFixed(1), talked: st.talked, barked: st.barked, done: st.done, node: st.run ? st.run.at : null, truck: st.truck, past: st.past })); }
   makeDebug() {
     const self = this;
     return {
       stage(who, ep, id = null, kind = 'foot') { const R = CAST[who]; const slot = R && (R.where.find((w) => w.id === id) || R.where[0]); return self.stage(who, Number(ep), slot, { kind }) ? self.staged() : null; },
       clear() { self.clear(); },
+      // why a walkout here would stage whom (each walkout slot: its condition, the budget's answer)
+      why(ep) { const a = self.args(ep), B = self.c.beats; return Object.entries(CAST).flatMap(([who, R]) => R.where.filter((w) => w.at === 'walkout').map((w) => ({ who, id: w.id, when: self.when(w.when, a), push: w.push ? (B ? B.check(w.push) : null) : null }))).concat([{ live: self.staged(), trip: self.story && self.story.tripN() }]); },
       entry(who) { const st = [...self.live.values()].find((x) => x.who === who); return st ? self.entry(who, st) : null; },
     };
   }
