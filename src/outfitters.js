@@ -134,6 +134,25 @@ export function placeOf(ep, world) {
   const at = { x: e.x, z: e.z };
   return { ep: n, name: outfitterName(n), store: at, door: { ...at, heading: 0 }, steps: at, dock: at, deck: at, dockHeading: 0, nearEp, source: 'entry' };
 }
+// Round 4 (the owner 2026-11-08: "Bog Lake and Moose River North stores move to their road ends"): a trip saved standing
+// at a store's old spot (ep.storeMoved, src/ep-fixes.json) carries on at the store where it stands now, on foot at its
+// door, afloat by its dock, the canoe set down by the dock's land end. fromMovedStore(world, saved) → the saved trip moved
+// (a copy), or null when it was not at an old store.
+export const MOVED_REACH = 120;
+export function fromMovedStore(world, t) {
+  if (!t || !world || !world.entryPoints) return null;
+  for (const e of world.entryPoints) {
+    const o = e.storeMoved;
+    if (!o || Math.hypot(t.x - o.x, t.z - o.z) > MOVED_REACH) continue;
+    const pl = placeOf(e.ep, world);
+    if (!pl || !pl.door || !pl.dock) continue;
+    const walk = t.mode === 'walk', at = walk ? pl.door : pl.dock;
+    const out = { ...t, x: at.x, z: at.z, heading: walk ? pl.door.heading : (pl.dockHeading ?? t.heading), movedFrom: { ep: e.ep, x: t.x, z: t.z } };
+    if (t.drop && Math.hypot(t.drop.x - o.x, t.drop.z - o.z) <= MOVED_REACH) { const dl = PLACES.places[e.ep] && PLACES.places[e.ep].dockLand; out.drop = { ...t.drop, x: dl ? dl[0] : pl.steps.x, z: dl ? dl[1] : pl.steps.z }; }
+    return out;
+  }
+  return null;
+}
 // the outfitter's words for where it is: "near entry point 6, Slim Lake" (never a bare number for its name)
 export function nearWords(ep, world) { const p = placeOf(ep, world); return p && p.nearEp ? `near entry point ${p.nearEp.ep}${p.nearEp.name ? `, ${p.nearEp.name}` : ''}` : ''; }
 
@@ -732,7 +751,7 @@ const HAND = {
       hello: ['Bonjour. Come in.', 'Back. Good. The border’s still there.'],
       stranger: ['Little Vermilion. Canada’s up the river. Food’s there, board’s there.'],
       goodbye: ['Loon River’s easy. Loon Lake’s not. Watch the wind.'],
-      chat: ['Beatty Portage has a little railway car. You put the boat on it and push. Best carry in the country.', 'Quetico’s the other side. Their permit, their rules. I don’t sell it.', 'Lac La Croix. Sand beaches, painted rocks. Long way. Worth it.'],
+      chat: ['Beatty Portage has a little railway car. You put the boat on it and push. Best carry in the country.', 'Quetico’s the other side. Your permit stops at the line, and so do my maps.', 'Lac La Croix. Sand beaches, painted rocks. Long way. Worth it.'],
     } },
   36: { kind: 'river post', keeper: 'Myrna Sether', manner: 'dry', priceMul: 1.05,
     sig: { family: 'kneelers', name: 'Hog Creek kneeling pads', price: 16, words: 'Sheepskin over felt. I cut them on the kitchen table. Your knees will forgive you by Thursday.' },

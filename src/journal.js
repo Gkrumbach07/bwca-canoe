@@ -75,6 +75,7 @@ export class Journal {
       if (this.tab === 'fish' && this.pam && e.target.closest('.pp-page.left') && !e.target.closest('.pam')) { this.pam = null; this.render(true); return; }
       // a pick on the right page: its page on the left, scrolled to the top
       const pay = e.target.closest('[data-pay-ticket]'); if (pay) { this.payTicket(pay.dataset.payTicket); return; }
+      const ga = e.target.closest('[data-guide-act]'); if (ga) { if (this.guide && typeof this.guide.act === 'function') this.guide.act(ga.dataset.guideAct); this.render(true); return; } // (loop tasks: an entry's one button)
       const pick = e.target.closest('[data-task], [data-trip], [data-print]');
       if (pick) {
         if (pick.dataset.task) this.taskSel = pick.dataset.task; else if (pick.dataset.trip) this.tripSel = pick.dataset.trip; else this.printSel = Number(pick.dataset.print);
@@ -179,7 +180,7 @@ export class Journal {
     const at = (ep) => { const l = ts && ts.landing ? ts.landing(ep) : null; return l ? l.name : 'the outfitter'; };
     void at;
     // gl-d: pay lands at the trip's end (tasks.js settle), wherever you come in
-    if (t.status === 'done') return { cls: 'done', words: 'paid when you come in' };
+    if (t.status === 'done') return { cls: 'done', words: t.cut ? 'no longer posted, still paid when you come in' : 'paid when you come in' }; // (r4 loopfix: a cut kind's done notice keeps its pay)
     // how far along: the kind's own fraction, else what is in the cooler or handed over against what is wanted
     let f = 0;
     if (k && typeof k.fraction === 'function') { const v = k.fraction(t); if (Number.isFinite(v)) f = v; }
@@ -260,7 +261,7 @@ export class Journal {
   // follow in a teal ink with an open four-point star, then the tickets, the notices and the starter job as they were.
   // Every open line carries the guide's one plain "what next" under it (.nx).
   guideList() { const G = this.guide; try { return G && typeof G.list === 'function' ? G.list() : []; } catch { return []; } }
-  guideSig() { return this.guideList().map((e) => `${e.id}:${e.next}:${e.done ? 1 : 0}`).join(','); }
+  guideSig() { return this.guideList().map((e) => `${e.id}:${e.next}:${e.done ? 1 : 0}:${e.action ? e.action.short || e.action.label : ''}`).join(','); }
   // the paper's key for a guide entry: a notice's own id, a ticket's 'ticket:<id>', anything else its guide id
   static paperKey(id) { const s = String(id); return s.startsWith('task:') ? s.slice(5) : s; }
   // the book open at the journal's Tasks, at one entry (the tracker's I)
@@ -354,11 +355,12 @@ export class Journal {
       this.shownFlyer = p.key;
       const label = k === 'story' ? 'The season’s story' : k === 'side' ? 'A side story' : k === 'starter' ? 'The first job' : 'A task';
       // (r3 replay: the place line only when the next line does not already name it: "Buy food at the provisions shelf.")
+      const ac = !e.done && e.action, act = !ac ? '' : ac.short ? `<p class="pp-hand pp-margin pp-tkshort">${esc(ac.short)}</p>` : `<p class="pp-tkpay"><button type="button" class="stamp" data-guide-act="${esc(e.id)}">${esc(ac.label)}</button></p>`;
       const where = e.target && e.target.label && !e.done && !String(e.next || '').toLowerCase().includes(String(e.target.label).toLowerCase().replace(/^the /, '')) ? `<p class="pp-qwhere"><i aria-hidden="true">${GLYPH.where}</i> ${esc(up(e.target.label))}</p>` : '';
       left = `<div class="pp-scroll pp-quest k-${k}${fresh ? ' fresh' : ''}">
         <p class="pp-qkind">${k === 'story' || k === 'side' ? gemIcon(k) : ''}${label}</p>
         <h3 class="pp-qtitle">${esc(e.title || 'A task')}</h3>
-        ${e.done ? '<p class="pp-hand pp-qnext">Done.</p>' : e.next ? `<p class="pp-hand pp-qnext">${esc(e.next)}</p>` : ''}${where}</div>`;
+        ${e.done ? '<p class="pp-hand pp-qnext">Done.</p>' : e.next ? `<p class="pp-hand pp-qnext">${esc(e.next)}</p>` : ''}${where}${act}</div>`;
       return { left, right, leftLabel: label, rightCls: 'tasks' };
     }
     if (p && p.t.ticket) {

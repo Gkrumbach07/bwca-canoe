@@ -437,6 +437,7 @@ export class Body {
   pose(f, dt, G) {
     const R = this.rig || this.makeRig(), st = this.state, spec = f.spec || { pose: 'stand' }, sc = (f.look && f.look.wear && f.look.wear.scale) || 1;
     const pid = f.key || f;
+    this.fig.setPfd(false); // r4 body: ashore no one wears the life jacket (a keeper never: the actors' layer puts it on in a boat)
     if (this.pid !== pid) { // (a new person in this body: their own seed, the feet planted afresh)
       this.pid = pid; this.gait.heal(); this.fade = null; this.kind = null; this.armW = 0; this.hd = f.heading + this.s.turn; this.px = NaN; this.py = NaN;
       this.pb.life = makeLife(hashSeed(String(pid))); this.pb.idle.watch = null;
@@ -638,7 +639,7 @@ class HintWriter {
     const w = this.world, L = this.P.landingOf(this.ep), sites = [];
     // the sites near by and the water each is on (the record's name where it has one, else the nearest lake's)
     const T = this.P.tasks, near = [], on = new Map();
-    for (const c of w.campsites) { const d = Math.hypot(c.x - L.x, c.z - L.z); if (d <= 9000 && d >= minD) near.push({ c, d }); }
+    for (const c of w.campsites) { if (c.past) continue; const d = Math.hypot(c.x - L.x, c.z - L.z); if (d <= 9000 && d >= minD) near.push({ c, d }); } // (the edge round: not past the band)
     near.sort((a, b) => a.d - b.d);
     for (const { c, d } of near.slice(0, 80)) {
       let lake = siteLake(c), l = lake ? this.f.lakes.find((x) => x.name === lake) : null;
@@ -705,6 +706,7 @@ class HintWriter {
     const w = this.world, L = this.landing, out = [];
     if (!L) return (this._sites = out);
     for (const c of w.campsites) {
+      if (c.past) continue; // (the edge round)
       const d = Math.hypot(c.x - L.x, c.z - L.z); if (d > maxD || d < 250) continue;
       const lake = this.P.lakeAt(c.x, c.z, this.f, c); if (!lake) continue;
       const l = this.f.lakes.find((x) => x.name === lake); if (!l) continue;
@@ -1015,7 +1017,7 @@ const ASKS = {
   async lost(P, v, c) {
     const k = KINDS.item; if (!k || !k.make) return null;
     let f = null;
-    for (const band of v.arch === 'birder' ? ['local', 'medium'] : ['medium', 'local', 'far']) { f = await k.make(P.tasks, { ...c, band, board: [] }); if (f) break; }
+    for (const band of v.arch === 'birder' ? ['local', 'medium'] : ['medium', 'local', 'far']) { f = await k.make(P.tasks, { ...c, band, board: [] }); if (f && P.tasks.pastNotice && P.tasks.pastNotice({ kind: 'item', ...f }, k)) f = null; if (f) break; } // (r4 loopfix: none past the edge)
     if (!f) return siteErrand(P, v, c, 'lost');
     const what = { locket: 'Grandma’s locket', 'dry bag': 'the blue dry bag', paddle: 'the spare paddle' }[f.label] || `the ${f.label}`, rest = String(f.text || '').replace(/^[^.]*\.\s*/, '');
     const lead = { family: `Our youngest left ${what} at a campsite, and there were tears all the way back.`, trippers: `We left ${what} behind at our last site. Rookie move.`, birder: `I set ${what} down at a campsite and paddled off without it.` }[v.arch] || `We left ${what} behind.`;
@@ -1028,7 +1030,7 @@ const ASKS = {
     if (k && typeof k.make === 'function') {
       try {
         const f = await k.make(P.tasks, { ...c, band: 'medium', board: [] });
-        if (f) return { kind: 'photo', fields: { ...f, sign: v.name }, ask: `I’m short one picture for the magazine: ${String(f.title || 'a photo').toLowerCase()}. ${f.text || ''} Would you take it for me?` };
+        if (f && !(P.tasks.pastNotice && P.tasks.pastNotice({ kind: 'photo', ...f }, k))) return { kind: 'photo', fields: { ...f, sign: v.name }, ask: `I’m short one picture for the magazine: ${String(f.title || 'a photo').toLowerCase()}. ${f.text || ''} Would you take it for me?` };
       } catch (e) { console.warn('people: the photo notice', e); }
     }
     return ASKS.fetch(P, v, c); // no camera in the build yet: the film from another outfitter

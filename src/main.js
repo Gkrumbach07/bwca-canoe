@@ -46,8 +46,10 @@ import { Fires } from './fire.js'; // trip core C
 import { Headlamp } from './headlamp.js'; // trip core C
 import { Profile } from './profile.js'; // hubs 1A
 import { storeLayout, onStore, storeLayouts, setStoreNotices, storeStats } from './props.js'; // hubs 2A
-import { outfitterProfile, boardLean } from './outfitters.js'; // hubs 2C
+import { outfitterProfile, boardLean, fromMovedStore } from './outfitters.js'; // hubs 2C (round 4: fromMovedStore)
+import { trailheadLayouts } from './trailhead.js';
 import { Rides } from './rides.js'; // hubs 2C
+import { Truck } from './truck.js'; // stream E3: the truck on the roads
 import { sheets, sheetAt } from './sheets.js'; // hubs 2D (tuning: sheetAt, Arvid's map)
 import { explored } from './explored.js'; // round A-B: the map filling in
 import { MapTable } from './maptable.js'; // fb2 D
@@ -111,6 +113,7 @@ import { bonk } from './audio-voices.js'; // d1 rapids
 import { loadBurns, setBurnDate, burnStats, burnLook, eventsAt } from './burns.js'; // the real burns
 import { BurnNotes } from './burn-notes.js'; // the real burns
 import { Permits } from './permits.js'; // gl-a: permits
+import { EdgeWatch } from './edge.js'; // the edge round: the notice while you are out of the Boundary Waters
 import { PermitDesk } from './permit-desk.js'; // gl-a: the permit desk
 import { story } from './story-hooks.js'; // gl-c: the story's event bus and saved state
 import { onboarding } from './onboarding.js'; // gl-c: the home counter's first visit, the old gear
@@ -185,7 +188,7 @@ async function main() {
   scene.add(water.group);
   const tiles = new TileManager(world, scene, { terrainMaterial: makeTerrainMaterial(), water, vegetation: makeVegetationKit(3), aquatic: makeAquaticKit(water, 9), seed: 3 });
   world.tiles = tiles;
-  const saved = TripSaver.read(); // the spot saved at the last stop: the title shows it, and Paddle in continues there
+  const saved0 = TripSaver.read(), saved = (saved0 && fromMovedStore(world, saved0)) || saved0; // the spot saved at the last stop: the title shows it, and Paddle in continues there (round 4: at a store that moved, the store where it stands now)
   const start = saved ? { x: saved.x, z: saved.z } : world.meta.start;
   // the real burns (burns.js): a tile shows the burns begun by the season's date, so the date is set before the first tile
   // is asked for: the saved trip's, else today's (a new season starts today, title.js); the frame keeps it to the clock.
@@ -210,6 +213,7 @@ async function main() {
   const fauna = new Fauna(world, water, scene, { loons }); // beaver, moose, eagles, fish, insects, gulls, raven
 
   const canoe = buildCanoeRig({ water }); // the hull's water line rides the water's own swell
+  canoe.noPfd = () => onboarding.noCanoe; // round 4 join: the loaned life jacket comes at the staff talk
   canoe.rig.traverse((o) => o.layers.enable(REFLECT_LAYER));
   canoe.rig.userData.foam.layers.disable(REFLECT_LAYER); // the line on the water is not mirrored in it
   scene.add(canoe.rig);
@@ -261,6 +265,14 @@ async function main() {
   player.fishing = fishing;
   fishing.rod.traverse((o) => o.layers.enable(REFLECT_LAYER));
   // the trip: outfitters at the landings, the food and the energy, the task board
+  // r4 body: the speaker point of the guide's current step when it is a person within a few metres (the chase eases over
+  // the shoulder: camera.js OTS), else null
+  const storyNear = () => {
+    try {
+      const e = guide.current(); if (!e || !e.target || e.target.kind !== 'person') return null;
+      const r = guide.reach(e); return r && r.d < 6 ? r.pos : null;
+    } catch { return null; }
+  };
   const teleport = async (x, z) => { const ok = await player.teleport(x, z); if (ok) chase.snap(); return ok; };
   const energy = new Energy(player, day);
   player.energy = energy; // 2026-10-31: winded, Shift does nothing (player.hustleKey)
@@ -335,6 +347,10 @@ async function main() {
   // column, and the keeper's voice in its header, until the shop's counter speaks for itself (outfitter.keeperVoice).
   const rides = new Rides({ world, outfitter, day, veil, hud, energy, tasks, teleport });
   outfitter.rides = rides;
+  // stream E3: the truck on the roads (truck.js): left in the lot by a ride and off down the road, up the road for a
+  // pickup, behind the store you are at; one mesh of the props' material, drawn while in view
+  const truck = new Truck({ world, scene, groundAt: (x, z) => tiles.groundAt(x, z), player });
+  outfitter.truck = truck; rides.truck = truck;
   tasks.leanOf = (ep) => boardLean(ep, world);
   outfitter.keeperVoice = true; // the shop's counter (2B) renders the keeper, the signature and the rides itself, so 2C's stand-ins stay off
   // hubs 3B: the camera and the photo notices (photo.js). C raises it (the $25 35 mm, or the disposable the first photo
@@ -386,8 +402,17 @@ async function main() {
   // a trip saved on a trail or in the water comes back afloat at the nearest open water
   // (on foot with the canoe set down somewhere, at a camp say, you come back on foot beside it)
   // camp 1: one saved in the middle of a carry comes back on the trail, the canoe overhead and the carry on you (packs.js)
+  // (chk-r4b: an older build's save on foot where a lot used to be, as the 75 lot 59 m from the map's south end, can't
+  // stand there and had come back afloat in the river on a trip: on foot in the lot nearest instead, the canoe beside you)
+  const standInLot = (s) => {
+    let L = null, bd = 800;
+    for (const q of trailheadLayouts()) { const d = q.lot ? Math.hypot(q.lot.x - s.x, q.lot.z - s.z) : Infinity; if (d < bd) { bd = d; L = q; } }
+    if (!L) return false;
+    const h = Math.atan2(-(L.landing.z - L.lot.z), L.landing.x - L.lot.x), fx = Math.cos(h), fz = -Math.sin(h);
+    return player.standAt({ x: L.lot.x - fz * 1.6, z: L.lot.z + fx * 1.6, heading: h, drop: { x: L.lot.x + fz * 1.6, z: L.lot.z - fx * 1.6, heading: h } });
+  };
   if (saved && saved.mode === 'carry' && packs.resumeCarry(saved)) chase.snap();
-  else if (saved && saved.mode === 'walk' && player.standAt(saved)) chase.snap();
+  else if (saved && saved.mode === 'walk' && (player.standAt(saved) || standInLot(saved))) chase.snap();
   else if (saved && (saved.mode !== 'paddle' || world.shoreAt(saved.x, saved.z) > -2)) player.teleport(saved.x, saved.z);
   title.open('title');
   // Compile every material the scene holds now, hidden ones too (the rise rings, the rain, the cloud deck and the
@@ -420,6 +445,8 @@ async function main() {
   // latrine, blueberries in season, the wake-time card; its berries and firewood notices read the board's notices
   camp.chores.tasks = tasks; window.__game.chores = camp.chores;
   Object.assign(window.__game, { rides, outfitterProfile: (ep) => outfitterProfile(ep, world) }); // hubs 2C
+  window.__game.truck = truck; // stream E3
+  { const upd = actors.update.bind(actors); actors.update = (dt, ...a) => { try { truck.update(dt); } catch (e) { if (!truck.warned) { truck.warned = true; console.warn('truck', e); } } upd(dt, ...a); }; } // (stream E3: the truck's frame, with the people's)
   window.__game.npcs = npcs; // hubs 3C
   window.__game.actors = actors; // p2 A
   // fb A: one physical inventory (items.js, inventory.js): everything you own is an item in a container (the packs,
@@ -1063,9 +1090,20 @@ async function main() {
     trip.permits = permits;
     journal.permits = permits; // r2: the tickets on the Tasks page
     const permitDesk = new PermitDesk({ permits, outfitter, world, day, profile });
+    window.__game.permitDesk = permitDesk; // (the rigs: its note and its next-year view)
     // stream B's counter sections (the join: the claims-hook fallback dropped, B's addDesk is there)
     outfitter.addDesk('permits', { order: 10, html: (l) => permitDesk.section(l.ep), act: (a, id, ev) => permitDesk.act(a, id, ev) });
     { const tu = trip.update.bind(trip); trip.update = (dt) => { tu(dt); try { permits.update(dt); } catch (e) { if (!permits.warned) { permits.warned = true; console.warn('permits', e); } } }; }
+    // the edge round (docs/build/edge-and-roads.md, the owner 2026-11-08): no wall and no turn-back; out of the Boundary
+    // Waters a notice stays up until you are back (edge.js), and the map says it too (hud.edgeState); Quetico is
+    // out like the rest (the owner: "DLC for now"). Per player: a co-op friend reads their own spot, no relay message.
+    {
+      const edgeWatch = new EdgeWatch({ permits, trip, hud });
+      window.__game.edge = edgeWatch;
+      hud.edgeState = () => edgeWatch.state;
+      const tu = trip.update.bind(trip);
+      trip.update = (dt) => { tu(dt); try { edgeWatch.update(dt, player); } catch (e) { if (!edgeWatch.warned) { edgeWatch.warned = true; console.warn('edge', e); } } };
+    }
     // the push-off's title over the water says a day trip is one (outfitter.start shows it just after trip.start)
     {
       const startA = outfitter.start.bind(outfitter);
@@ -1127,7 +1165,7 @@ async function main() {
     hints.due = (id, rec) => (glbDue.has(id) ? glbDue.get(id)() : dueB(id, rec));
     window.__game.outfitters = { OUTFITTER_EPS: OF.OUTFITTER_EPS, OUTFITTERS: OF.OUTFITTERS, isOutfitter: OF.isOutfitter, hostOf: (ep) => OF.hostOf(ep, world), reachOf: (ep) => OF.reachOf(ep, world),
       countryOf: (ep) => OF.countryOf(ep, world), roadKm: (a, b) => OF.roadKm(a, b, world), roadWay: (a, b) => OF.roadWay(a, b, world), premiumOf: OF.premiumOf, specialtyOf: OF.specialtyOf,
-      outfitterHomes: () => OF.outfitterHomes(world), placeOf: (ep) => OF.placeOf(ep, world), homeTurf: (ep) => OF.homeTurf(ep, world) };
+      outfitterHomes: () => OF.outfitterHomes(world), placeOf: (ep) => OF.placeOf(ep, world), homeTurf: (ep) => OF.homeTurf(ep, world), fromMovedStore: (t) => OF.fromMovedStore(world, t) };
     window.__game.trailhead = { trailheadLayout: TH.trailheadLayout, trailheadLayouts: TH.trailheadLayouts, trailheadAt: TH.trailheadAt, onTrailhead: TH.onTrailhead };
   }
   // gl-c: a new save and its first day (docs/build/game-loop-brief.md, stream C). The title's first step is a map of the
@@ -1186,7 +1224,8 @@ async function main() {
     // the moments: the first notice done on a trip ("it pays when you come in"), and the first tally (E finishes it)
     let doneAt = -1e9;
     tasks.on('done', () => { if (trip.active) doneAt = performance.now() / 1000; });
-    const glD = [{ id: 'paylater', prio: 1, recur: 'once', text: 'Done. Notices pay when you come in.', due: () => trip.active && performance.now() / 1000 - doneAt < 30 }, ...record.tallyMoments()];
+    // (r4: with the tracker's pop-ups on, its own Done card says "Paid when you come in": the moment only without them)
+    const glD = [{ id: 'paylater', prio: 1, recur: 'once', text: 'Done. Notices pay when you come in.', due: () => trip.active && performance.now() / 1000 - doneAt < 30 && settings.get('tracker') === false }, ...record.tallyMoments()];
     for (const m of glD) if (!MOMENTS.some((q) => q.id === m.id)) { const { due, ...rest } = m; void due; MOMENTS.push(rest); }
     const glDM = new Map(glD.map((m) => [m.id, m]));
     const dueD = hints.due.bind(hints);
@@ -1247,6 +1286,11 @@ async function main() {
       if (id === sAsk.id) { const v = outfitter.visit; return !!(v && v.inside && Number(v.ep) !== starter.home && starter.available(v.ep) && !talk.talking && !outfitter.open); }
       const r = dueS(id, rec);
       if (id === 'start' && r) { let n = []; try { n = starter.notes(); } catch { n = []; } if (n.length) return { lv: 1, text: 'Your first night’s way is pencilled on your map: {M}.' }; }
+      // (r4: the evening names the site pencilled for you, not the nearest free one: the keeper held it, the job is there)
+      if (id === 'evening' && r) {
+        let q = null; try { q = starter.notes().filter((x) => x.site).map((x) => ({ x, d: Math.hypot(x.site.x - player.x, x.site.z - player.z) })).sort((a, b) => a.d - b.d)[0] || null; } catch { q = null; }
+        if (q && q.d < 6000 && q.d > 60) { const w = hints.placeWords(q.x.site.x, q.x.site.z); return { lv: 1, text: `Before dark: your site is pencilled on your map, ${w}. {M}`, short: `Before dark: your site, ${w} {M}` }; }
+      }
       return r;
     };
     window.__game.starter = starter;
@@ -1272,7 +1316,7 @@ async function main() {
   {
     journal.guide = guide;
     tracker.attach({ guide, settings, journal, hud, title, talk });
-    journal.taskPeek = () => tracker.peek();
+    journal.taskPeek = () => (hints.wantsKey('I') ? null : tracker.peek()); // (r4: a line up saying {I} opens what it says)
     const updT = tasks.update.bind(tasks);
     tasks.update = (dt) => { updT(dt); try { tracker.update(dt); } catch (e) { if (!tracker.warnedU) { tracker.warnedU = true; console.warn('tracker', e); } } };
     window.__game.tracker = tracker;
@@ -1288,6 +1332,18 @@ async function main() {
     const updL = pointer.update.bind(pointer);
     pointer.update = (dt, shell) => { updL(dt, shell); try { locator.update(dt, shell); } catch (e) { if (!locator.warnedU) { locator.warnedU = true; console.warn('locator', e); } } };
     window.__game.locator = locator;
+  }
+
+  // ==== loop tasks (2026-11-08): the late season ====
+  // season-turn.js (campaign-design.md Part 3, owner call 3): ice catching a trip (walk out, or a paid rescue from the
+  // journal), and the winter turn behind the desk's "Look at next year's permits" (permits.buy → turnTo). Its events
+  // ('iced', 'rescue', 'season:close', 'year:open') are the seam the story's winter hooks will take.
+  {
+    const { seasonTurn } = await import('./season-turn.js');
+    seasonTurn.attach({ permits: window.__game.permits || null, trip, day, energy, outfitter, veil, hud, player, profile, guide, tasks, world });
+    const tu = trip.update.bind(trip);
+    trip.update = (dt) => { tu(dt); try { seasonTurn.update(dt); } catch (e) { if (!seasonTurn.warnedU) { seasonTurn.warnedU = true; console.warn('seasonTurn', e); } } };
+    window.__game.seasonTurn = seasonTurn;
   }
 
   window.__game.siteFeature = siteFeature; // (scripts/r2-starter-routes.mjs: a site's kind of shore)
@@ -1373,6 +1429,7 @@ async function main() {
     player.afterRig(); // fb C: a swim from shore leaves the beached hull where it lies (canoe.js's swim pose turns it over)
     p2b.afterPlayer(dt); // p2 B: the lid off on the carry, the hull pitched with the water's slope
     chase.allowLock = !shell && !input.paused && !hud.big && !hud.pin; // the mouse is yours while a card, a panel or the map is up
+    chase.story = storyNear(); // r4 body: the guide's step's person close by (camera.js OTS)
     if (shell) title.update(dt); else chase.update(dt, player, player.mode === 'carry');
     guardView(shell);
     { const e = camera.matrixWorld.elements; actors.update(dt, camera.position.x, camera.position.z, -e[8], -e[10]); } // p2 A: the people on the water and the trails, after the camera

@@ -2314,8 +2314,7 @@ function setOutAll() {
     for (const l of [...inv.long]) if (l.where === 'canoe' && !l.inUse) { const s = spot(n); if (inv.setDown(l.uid, { x: s.x, z: s.z, heading: p.heading }, { force: true }).ok) n++; }
     r = { n, words: n ? `${n === 1 ? 'One thing' : `${n} things`} set out beside the canoe.` : 'Nothing in the canoe to set out.' };
   }
-  if (r && r.words) note(r.words, 3.5);
-  refresh();
+  refresh(); // (its words are said once, by runNear: playtest r4-final, "…set out beside the canoe." twice)
   return r;
 }
 // the held load: packs.loadAll (stream A), else the hold job over packs.loadAllOpts

@@ -313,6 +313,8 @@ registerKind('deadfall', {
     if (T.known(a.x, a.z)) return { x: a.x, z: a.z, r: TIGHT, label: 'the blowdown', tight: true };
     return T.hintFor(t.lakeId, a, `the portage to ${t.to}`);
   },
+  // (loop tasks: the gem over the blowdown itself as you come up the named portage, map or no map)
+  guideTarget(T, t, G) { const a = t.at; if (!a || !Number.isFinite(a.x)) return null; return { kind: 'thing', key: `deadfall:${t.id}`, label: 'the blowdown', near: 40, pos: () => ({ x: a.x, y: G.groundY(a.x, a.z) + 1.0, z: a.z }) }; },
   progress(t) { return t.cuts ? `${word(t.cuts)} of three done at the blowdown` : `the blowdown is across the ${t.rods}-rod portage`; },
   fraction(t) { return (t.cuts || 0) / SAW.length; },
   doneWords() { return 'the trail is clear'; },

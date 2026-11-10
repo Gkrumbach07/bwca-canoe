@@ -230,6 +230,7 @@ class Remote {
     this.last = { t: now, x: s.x, z: s.z, m: s.m, vx: L && dt > 0 && dt < 1 ? (s.x - L.x) / dt : 0, vz: L && dt > 0 && dt < 1 ? (s.z - L.z) / dt : 0 };
     s.x += this.corr.x; s.z += this.corr.z;
     const P = this.person, B = this.boat;
+    P.noPfd = !!s.np; // round 4 join: no life jacket lent yet (actors.js)
     const hull = typeof s.hull === 'string' && HULL_PALETTES[s.hull] ? s.hull : 'green';
     if (B.hullColour !== hull && HULL_PALETTES[hull]) { B.hullColour = hull; if (B.near) B.near.dress(this.coop.g.actors, hull, B.near.packsShown, false); }
     B.packs = Number.isInteger(s.pk) ? Math.max(0, Math.min(2, s.pk)) : 1;
@@ -572,6 +573,7 @@ export class Coop {
     if (d) m.d = d; // (none: no canoe set down; a friend's screen hides it)
     // r3 replay: before the staff talk lends one there is no canoe: the berth is sent (nc), held for it, and nothing drawn
     if (d && onboarding.noCanoe && !cap) m.nc = 1;
+    if (onboarding.noCanoe) m.np = 1; // round 4 join: no life jacket yet either (a friend's screen draws none on them swimming)
     // round 2: the height the body stands on, as this screen has it (the owner, 2026-11-01: "standing on top of a rock …
     // to them it just looks like I'm standing inside the rock"): on foot the feet's (the rig is 0.1 over them: a rock's top,
     // a deck, a stair, in a hop the height in the air); afloat and swimming the water's level under you

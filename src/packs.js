@@ -96,10 +96,17 @@ const SHORT = { pile: 'things on the ground' };
 // (a holder's thing, or a pile's one thing: fb4 join, "no room for the A-frame tent", not "the things on the ground")
 const short = (u) => { const g = u.obj.grid, e = (u.def.one || (u.id === 'pile' && g && g.length === 1)) && g && g[0], d = e && itemDef(e.id); return d ? lower(d.name) : SHORT[u.id] || lower(u.def.name); };
 const the = (u) => `the ${short(u)}`;
+// (the owner, 2026-10-31: say what each thing is: a pile of several is named by what is in it, not "the things on the ground")
+const nameList = (us) => us.flatMap((u) => (u.id === 'pile' && u.obj.grid && u.obj.grid.length > 1 ? u.obj.grid.filter((e) => itemDef(e.id)).map((e) => `the ${lower(itemDef(e.id).name)}`) : [the(u)]));
 function names(us) {
-  // (the owner, 2026-10-31: say what each thing is: a pile of several is named by what is in it, not "the things on the ground")
-  const n = us.flatMap((u) => (u.id === 'pile' && u.obj.grid && u.obj.grid.length > 1 ? u.obj.grid.filter((e) => itemDef(e.id)).map((e) => `the ${lower(itemDef(e.id).name)}`) : [the(u)]));
+  const n = nameList(us);
   return n.length <= 1 ? n[0] || '' : n.length === 2 ? `${n[0]} and ${n[1]}` : `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}`;
+}
+// the same on a prompt's one line: two named, then how many more (playtest r4-final: four names ran the far end's
+// "Set the canoe down · walk back for …" off the screen's edge, its Q cut)
+function namesBrief(us) {
+  const n = nameList(us);
+  return n.length <= 2 ? names(us) : `${n[0]} and ${n.length - 1} more things`;
 }
 
 export class Packs {
@@ -421,13 +428,13 @@ export class Packs {
       // "back at the trail head", was left behind without a word as E launched: twice, the leech bucket)
       const here = !left.length && L ? ground.filter((u) => u.obj.at.trail && u.obj.at.trail.i === this.world.portages.indexOf(trail && trail.def) && Math.hypot(u.obj.at.x - p.x, u.obj.at.z - p.z) <= LOAD_REACH) : [];
       if (here.length) {
-        p.say(note || trailText, ['E', `Set the canoe down · ${names(here)} ${here.length > 1 ? 'are' : 'is'} here`], ['Q', 'Launch and leave it']);
+        p.say(note || trailText, ['E', `Set the canoe down · ${namesBrief(here)} ${here.length > 1 ? 'are' : 'is'} here`], ['Q', 'Launch and leave it']);
         if (inp.pressed('KeyE')) p.dropHull(true);
         else if (inp.pressed('KeyQ')) { this.leaveOk = true; for (const u of here) u.obj.at.noted = false; p.launch(L); }
         return true;
       }
       if (left.length && L) {
-        p.say(note || trailText, ['E', `Set the canoe down · walk back for ${names(left)}`], ['Q', 'Launch and leave it']);
+        p.say(note || trailText, ['E', `Set the canoe down · walk back for ${namesBrief(left)}`], ['Q', 'Launch and leave it']);
         if (inp.pressed('KeyE')) p.dropHull(true);
         else if (inp.pressed('KeyQ')) { this.leaveOk = true; p.launch(L); }
         return true;
@@ -481,7 +488,7 @@ export class Packs {
     if (onboarding.noCanoe) return null; // r3: a new season's dock is empty until the staff talk lends a canoe (onboarding.js)
     if (this.push) return { e: { verb: 'Push it off', held: true, run: () => {} }, q: null, label: 'the canoe' };
     const can = this.canShoulder();
-    const shoulder = { verb: 'Shoulder it', held: false, why: can.ok ? null : can.why, needs: can.needs, next: can.next, run: () => { if (this.canShoulder().ok) p.pickUpHull(); }, help: () => this.openBookAtCanoe() };
+    const shoulder = { verb: 'Shoulder it', held: false, why: can.ok ? null : can.why, needs: can.needs, next: can.next, until: () => !p.carry || !p.carry.drop || this.canShoulder().ok, run: () => { if (this.canShoulder().ok) p.pickUpHull(); }, help: () => this.openBookAtCanoe() };
     const L = this.dropLaunch(d), lake = L ? this.world.lakeName(L.lake) || 'the water' : null;
     if (this.atDock(d)) return { e: this.getInVerb(d, L), q: can.ok ? shoulder : null, label: 'the canoe, at the dock' }; // (fb5 join: no greyed "Q Shoulder it · unload it first" at a dock, where nobody shoulders a loaded canoe)
     const frozen = !!(this.day && this.day.season && this.day.season.ice > 0.5);
@@ -644,7 +651,7 @@ export class Packs {
     const h = this.inv.hands, g = this.player.gear;
     if (!list.length && h[0] && h[1] && !(g && g.yokeFree)) return { ok: false, why: 'A hand for the gunwale', needs: [{ label: 'One hand free to steady the canoe', done: false }], next: `Put down or away one of ${this.inv.handsWords() || 'what you hold'}. A contoured yoke from an outfitter lets you carry the canoe hands-free.` };
     if (!list.length) return { ok: true, why: null };
-    return { ok: false, why: 'Unload it first', needs: list.map((u) => ({ label: `${cap(the(u))} out of it`, done: false })), next: 'Unload it: Set everything out, or drag each thing onto The ground.' }; // (fb5 join: said as the book opens, so not "Q opens the book")
+    return { ok: false, why: 'Unload it first', needs: list.map((u) => ({ label: `${cap(the(u))} out of it`, done: false })), next: 'Unload it: Set everything out, or drag each thing onto the ground.' }; // (fb5 join: said as the book opens, so not "Q opens the book")
   }
   // wc A, the book's Canoe tab (stream B): everything in the canoe beside you (but the lashed things) set out on the
   // ground about the hull, at camp when at one. { n, words }

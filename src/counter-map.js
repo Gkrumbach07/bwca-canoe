@@ -19,6 +19,7 @@
 
 import { sketchPmas } from './map-render.js';
 import { pmaById } from './pma.js';
+import { paintRoads, ROADS, loadMapRoads } from './edge.js'; // the edge round: the real roads under the truck's pencil
 
 const MI = 1609.344;          // metres in a mile
 const PAD = 0.14;             // the margin round the outfitters, as a share of the span
@@ -137,6 +138,8 @@ export function drawCounterMap(canvas, { world, here, rows = [], hot = null, san
   }
 
   // the roads as the truck goes: a faint pencil line out to each one (the hovered one firm)
+  // the edge round: the real roads, faint, and the towns, under the pencil lines (OpenStreetMap; edge.js)
+  if (ROADS.ready) { ctx.save(); paintRoads(ctx, { x0: cx - cw / 2 / s, z0: cz - ch / 2 / s, mPerPx: 1 / s }, cw, ch, { k: 0.7, lettered: [{ x0: hx - R - 3, x1: hx + R + 130, y0: hy - R - 3, y1: hy + R + 3 }] }); ctx.restore(); } else loadMapRoads().then(() => { if (typeof onReady === 'function') onReady(); });
   ctx.lineCap = 'round';
   for (const r of rows) {
     const on = r.ep === hot, q = at.get(r.ep);

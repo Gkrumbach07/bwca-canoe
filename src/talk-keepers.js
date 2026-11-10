@@ -42,7 +42,7 @@ export const HAND = {
   25: { // Gus Lindgren, Moose Lake: gruff, ran the tow boat thirty years
     past: ['Ran the tow boat thirty years. Moose, Newfound, Sucker, up to Prairie Portage and back.', 'Hauled half of Iowa and every cooler they owned. Motors stop at the portage. Good.', 'My wife ran the store. Now I do. Badly.'],
     topics: [
-      { id: 'prairie', ask: 'Prairie Portage?', gate: { trips: 1 }, say: ['Canada’s the other side. Quetico. You want their permit and a reason.', 'Most turn round there. Fine by me.'] },
+      { id: 'prairie', ask: 'Prairie Portage?', gate: { trips: 1 }, say: ['Canada’s the other side. Quetico. Your permit stops at the line.', 'Most turn round there. Fine by me.'] },
       { id: 'basswood', ask: 'Basswood?', gate: { visits: 3 }, say: ['Big. Islands everywhere and they all look the same.', 'Compass on the thwart. Check it every point.'] },
     ],
     arc: { id: 'jackpine', places: { site: { site: { lake: 'Wind Lake', side: 'north' } } }, beats: [
@@ -81,7 +81,7 @@ export const HAND = {
   55: { // Lise Thibodeau, Saganaga: a keen summer hire from UMD, counts loons
     past: ['I’m at UMD the rest of the year. Biology. This is my second summer up here.', 'My grandpa ran a fish camp on Sag in the fifties. I wanted to see it before I decide what to be.', 'I’m doing the loon count for the DNR this summer. Volunteers count every big lake.'],
     topics: [
-      { id: 'canada', ask: 'Canada?', gate: { trips: 1 }, say: ['Half of Sag is Canada. Past the border it’s Quetico: their permit, and a stop at Cache Bay first.', 'Don’t wander over by accident. People do. Every week.'] },
+      { id: 'canada', ask: 'Canada?', gate: { trips: 1 }, say: ['Half of Sag is Canada. Past the border it’s Quetico, and your permit stops at the line.', 'Don’t wander over by accident. People do. Every week.'] },
       { id: 'loons', ask: 'Loons?', say: ['Their legs are so far back they can’t walk on land. They nest right at the water’s edge.', 'So in June, give the little islands room. Please.'] },
     ],
     arc: { id: 'looncount', places: {}, beats: [
