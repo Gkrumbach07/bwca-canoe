@@ -165,7 +165,8 @@ try {
         const pts = [];
         for (const c of H.chains(x, z)) for (let i = 0; i < c.n; i++) { const d = Math.hypot(c.p[i * 4] - x, c.p[i * 4 + 1] - z); if (d < 14) pts.push({ id: c.id, k: c.k, hw: c.hw, d: +d.toFixed(1), h: +c.p[i * 4 + 2].toFixed(2), w: c.p[i * 4 + 3], ground: +g.tiles.groundAt(c.p[i * 4], c.p[i * 4 + 1]).toFixed(2), mesh: +g.tiles.meshGroundAt(c.p[i * 4], c.p[i * 4 + 1]).toFixed(2), sd: +w.shoreAt(c.p[i * 4], c.p[i * 4 + 1]).toFixed(1) }); }
         pts.sort((a, b) => a.d - b.d);
-        return { at: [x, z], ground: g.tiles.groundAt(x, z), deck: H.deck(x, z), detail: ((g.tiles.detail && g.tiles.detail.at(x, z)) || {}).r, sd: w.shoreAt(x, z), pts: pts.slice(0, 16) };
+        const grid = []; for (let dz = -4; dz <= 4; dz += 2) { const row = []; for (let dx = -4; dx <= 4; dx += 2) row.push(+(g.tiles.groundAt(x + dx, z + dz) - g.tiles.groundAt(x, z)).toFixed(2)); grid.push(row.join(' ')); }
+        return { at: [x, z], ground: g.tiles.groundAt(x, z), deck: H.deck(x, z), detail: ((g.tiles.detail && g.tiles.detail.at(x, z)) || {}).r, sd: w.shoreAt(x, z), lv3: w.levelAt ? w.levelAt(x, z, 3) : null, lv4: w.levelAt ? w.levelAt(x, z, 4) : null, around: grid, pts: pts.slice(0, 8) };
       }, [px, pz]);
       log('probe', JSON.stringify(r));
       await page.evaluate(([x, z]) => { const H = window.__r5r; H.look(x + 9, z + 7, x, z); H.step(5); }, [px, pz]);
