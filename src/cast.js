@@ -292,7 +292,7 @@ export class Cast {
     const sp = st.h.speaker;
     const word = () => {
       const pick = amb && typeof amb.pick === 'function' ? amb.pick('josie', { ep: st.ep }) : null;
-      const say = pick ? pick.text : (T('20:5.2.14') || '…');
+      const say = pick ? pick.text : '…'; // (her own lines by stage, 70 §4.4; none that holds: a look up from the counter)
       if (n && n.mark) n.mark(say);
       const ch = [];
       if (s.has('bundle.shelf') && !s.has('bundle.later') && s.has('rehook.R1b')) { const q = T('20:9.2#R1b.1'); if (q) ch.push({ text: q, go: () => run.node('still') }); }

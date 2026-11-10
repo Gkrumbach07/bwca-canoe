@@ -15,6 +15,7 @@
 //   topics.attach({ story, npcs, talk, pencil, outfitter, world, day, profile, hud, beats, ambient })
 //   topics.items(v) → [{ id, text, pri, tag, go }]     npcs.addTalkSource: a keeper's story topics, under "Ask about…"
 //   topics.top(v) → choice | null                      npcs.extraChoices: the one gold topic at the top (20 §5.2)
+//   topics.add(list) → off                             another stream's keeper topics (the same shape as topics-act1.js)
 //   topics.scene(def, start, ctx) → node                a scene of story-data (the porch, the turn, Josie) as dialogue
 //   topics.run(actions, args)                          f: walt: ppl: lead: und: (story-rules.js apply), as a topic's Gives
 //   topics.ring(target, { by, lead, label })           a ring a person draws (pencil.ring; second voice; ≤ 2 a talk)
@@ -222,6 +223,13 @@ export class Topics {
   attach(c = {}) { Object.assign(this.c, c); return this; }
   get story() { return this.c.story || null; }
   use({ keeper = [], floor = null } = {}) { this.data.keeper = keeper; this.data.floor = floor; return this; }
+  // another stream's keeper topics (P's "Where would I find {name}?" for a person lead, an arc's own), in this shape;
+  // an id already there is replaced. → off
+  add(list) {
+    const L = (Array.isArray(list) ? list : [list]).filter((t) => t && t.id);
+    this.data.keeper = [...this.data.keeper.filter((t) => !L.some((x) => x.id === t.id)), ...L];
+    return () => { this.data.keeper = this.data.keeper.filter((t) => !L.includes(t)); };
+  }
   on(evt, fn) { if (!this.handlers.has(evt)) this.handlers.set(evt, new Set()); this.handlers.get(evt).add(fn); return () => this.handlers.get(evt).delete(fn); }
   emit(evt, data) { for (const fn of this.handlers.get(evt) || []) { try { fn(data); } catch (e) { console.warn('topics.on', evt, e); } } }
 
