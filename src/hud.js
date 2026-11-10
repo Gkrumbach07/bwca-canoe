@@ -1938,7 +1938,7 @@ export class Hud {
         ctx.textAlign = 'center';
         if (q.inked) { ctx.font = `italic 700 ${15 * k}px Alegreya, Georgia, serif`; ctx.fillStyle = 'rgba(28, 36, 52, 0.92)'; }
         else { ctx.font = `600 ${16 * k}px ${PENCIL}`; ctx.fillStyle = G(0.72); }
-        const y = place(q.label, a, b, 'center', 18 * k);
+        const y = place(q.label, a, b + (q.inked ? 20 : 14) * k, 'center', 18 * k); // (under the point: the printed name sits on it)
         ctx.fillText(q.label, a, y);
         hits.push({ kind: 'pname', name: q, x: q.x, z: q.z, px: 12 });
       } else if (q.kind === 'tick') {
