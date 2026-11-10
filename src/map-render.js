@@ -784,9 +784,11 @@ export function drawRegion(canvas, world, view, opts = {}) {
   tileCache.tick++;
   ctx.save();
   ctx.fillStyle = INK.paper; ctx.fillRect(0, 0, W, H);
-  const ready = paintGround(ctx, world, v, W, H, { k, budget: { build: opts.build ?? 3 }, depths: opts.soundAll || mPerPx < 6, ink: opts.ink || null, inkV: opts.inkV || 0, detail, far: opts.fine ? false : null, all: !!opts.soundAll });
+  if (opts.boundary !== false && !BOUNDARY.ready) loadBoundary(); // (r5: the wash outside the line needs it: not ready until it is in)
+  const ground = paintGround(ctx, world, v, W, H, { k, budget: { build: opts.build ?? 3 }, depths: opts.soundAll || mPerPx < 6, ink: opts.ink || null, inkV: opts.inkV || 0, detail, far: opts.fine ? false : null, all: !!opts.soundAll });
+  const ready = ground && (opts.boundary === false || BOUNDARY.ready);
   if (opts.roads !== false) paintRoads(ctx, v, W, H, { k, towns: false }); // (the edge round)
-  if (opts.boundary !== false && opts.edge !== false) paintEdge(ctx, v, k, { box: [world.minX, world.minZ, world.maxX, world.maxZ] }); // (the edge round)
+  if (opts.boundary !== false && opts.edge !== false) paintEdge(ctx, v, k, { box: [world.minX, world.minZ, world.maxX, world.maxZ], bound: BOUNDARY.path }); // (r5: outside the real boundary washed, no bubble)
   if (opts.burns) paintBurns(ctx, v, burnsInView(v, W, H), k);
   if (opts.boundary !== false) { if (BOUNDARY.ready) paintBoundary(ctx, v, k); else loadBoundary(); }
   if (opts.pmas !== false) paintPmas(ctx, v, W, H, { k, focus: opts.pmaFocus || null, wash: !!opts.pmaWash });
