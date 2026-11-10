@@ -88,6 +88,7 @@ export class MapBook {
     this.render(true);
   }
   hide() {
+    if (this.pencil) this.pencilOff(); // st-p: the pencil put away, a lake pick answered null
     if (!this.open) return;
     this.open = false;
     this.closeLake();
@@ -137,6 +138,7 @@ export class MapBook {
       const who = h.by || (o.shop && typeof o.shop.keeperName === 'function' ? o.shop.keeperName(h.ep) : null) || 'the keeper';
       out.notes.push({ ...h, label: HINT_WORD[h.kind] || h.label || 'a word', who: `${String(who).split(' ')[0]}${L ? `, ${L.place || L.name}` : ''}`, whoFull: who, where: L ? L.name : '' });
     }
+    if (this.pencil) out.story = this.storyMarks(); // st-p: the story's pencil (pencil.js: rings with their voices, nicknames, ticks), never into toldHints
     return out;
   }
   markClick(hit) {
@@ -156,6 +158,8 @@ export class MapBook {
     if (hit) {
       if (hit.kind === 'task') { const t = hit.task; return { html: `<b>${esc(t.title)}</b><span>${esc(cap(t.label || 'about here'))}</span>`, ring: hit, click: true }; }
       if (hit.kind === 'claim') { const c = hit.claim; return { html: `<span class="seal">$</span><b>To claim at ${esc(c.where)}</b>${c.items.map((q) => `<span>${esc(q.title)} · $${q.pay}</span>`).join('')}`, ring: { ...hit, px: 14 }, click: true }; }
+      if (hit.kind === 'pring') { const g = hit.ring; return { html: `<b class="pencil">${esc(g.label || 'a ring')}</b>${g.who ? `<i>— ${esc(g.who)}</i>` : ''}`, ring: hit }; } // st-p
+      if (hit.kind === 'pname') { const n = hit.name; return { html: `<b class="pencil">${esc(n.label)}</b>`, ring: { ...hit, px: 10 } }; } // st-p
       if (hit.kind === 'note') { const h = hit.note; return { html: `<b class="pencil">${esc(h.label)}</b><span>“${esc(h.text || '')}”</span><i>— ${esc(h.whoFull || h.who)}${h.where ? `, ${esc(h.where)}` : ''}</i>`, ring: hit }; }
       if (hit.kind === 'store') { const pl = placeOf(hit.ep, w); return { html: `<b>${esc(pl ? pl.name : outfitterName(hit.ep))}</b><span>The outfitter's store, ${esc(nearWords(hit.ep, w))}</span>`, ring: hit }; } // round 2 markers
       if (hit.kind === 'ep') { const e = w.entryPoints.find((q) => q.ep === hit.ep), h = hostOf(hit.ep, w); return { html: `<b>Entry point ${hit.ep}${e && e.name ? ` · ${esc(e.name)}` : ''}</b><span>${isOutfitter(hit.ep) ? `${esc(outfitterName(hit.ep))} stands near by` : h != null ? `a trailhead; ${esc(outfitterName(h))} drives here` : 'a trailhead'}</span>`, ring: hit }; }
@@ -244,7 +248,7 @@ export class MapBook {
   // --- the index page ------------------------------------------------------------------------------------------------
   render(force) {
     const m = this.marks(), sh = sheets.profile ? sheets : null, look = sh ? sh.view() : 'open';
-    const sig = [this.tab, look, sh ? sh.version : 0, m.list.map((q) => `${q.id}${q.done}`).join(), m.notes.length, Object.values(this.hud.layers).join('')].join('|');
+    const sig = [this.tab, look, sh ? sh.version : 0, m.list.map((q) => `${q.id}${q.done}`).join(), m.notes.length, Object.values(this.hud.layers).join(''), m.story ? `${m.story.map((q) => `${q.id || q.nick}${q.who || ''}${q.followed ? 1 : 0}${q.closed ? 1 : 0}${q.inked ? 1 : 0}`).join()}${this.pencilMode()}` : ''].join('|'); // (st-p: m.story)
     if (!force && sig === this.sig) return;
     this.sig = sig;
     const tabs = [['marked', 'Marked'], ['find', 'Find'], ['key', 'Key']];
@@ -261,11 +265,12 @@ export class MapBook {
     const claim = m.claim.map((c) => `<button type="button" class="mb-row claim" ${go(c.x, c.z, 0, 4000)}><span class="seal">$</span><span><b>${esc(c.where)}</b><span class="soft">${c.items.map((q) => esc(q.title)).join(' · ')}</span></span><span class="pay">$${c.items.reduce((a, q) => a + q.pay, 0)}</span></button>`).join('');
     const open = m.list.filter((q) => !q.done).map((q) => `<button type="button" class="mb-row" ${q.x != null ? go(q.x, q.z, q.r, Math.max(3000, q.r * 6)) : ''} data-task="${q.id}"><span class="ring red"></span><span><b>${esc(q.title)}</b><span class="soft">${q.x != null ? esc(cap(q.label || 'about here')) : 'off your map'}${q.lake && !(q.label || '').includes(q.lake) ? `, ${esc(q.lake)}` : ''} · ${q.by ? `for ${esc(q.by.split(' ')[0])}` : `from ${esc(q.where)}`}</span></span></button>`).join('');
     const notes = m.notes.map((h) => `<button type="button" class="mb-row note" ${go(h.x, h.z, h.r, Math.max(4000, h.r * 5))}><span class="ring"></span><span><b class="pencil">${esc(h.label)}</b><span class="soft">${esc(h.lake || '')}${h.lake ? ' · ' : ''}${esc(h.whoFull || h.who)}${h.where ? `, ${esc(h.where)}` : ''}</span></span></button>`).join('');
+    const story = m.story ? this.storyRows(m.story, go) : ''; // st-p: the story's rings, under who gave them
     // (the owner, 2026-10-31: no "nothing yet" lines: a heading shows only over something under it)
-    return `<div class="scroll mb-marked">
+    return `<div class="scroll mb-marked">${m.story ? this.pencilBanner() : ''}
       ${claim ? `<div class="lab">To claim</div>${claim}` : ''}
       ${open ? `<div class="lab">On the go</div>${open}` : ''}
-      ${notes ? `<div class="lab">Pencilled in</div>${notes}` : ''}
+      ${notes || story ? `<div class="lab">Pencilled in</div>${notes}${story}` : ''}
     </div>`;
   }
   findPage(look) {
@@ -319,6 +324,75 @@ export class MapBook {
       this.hud.lookAt(x, z, span || null, r);
     }
   }
+
+  // st-p ---------------------------------------------------------------------------------------------------------------
+  // The story's pencil on the map (story Round 1, stream P; campaign-design §4.1). Only under STORY_ON: main.js calls
+  // attachPencil, and until then this.pencil is unset and nothing below runs (the map is main's).
+  //   attachPencil({ pencil, leads, story, layer, player })   the pencil wired to this world and the HUD's sheet
+  //   pickLake({ who, prompt }) → Promise<{ lake, name } | null>  story.ui.pickLake (T's canary trap): the map open in
+  //       lake-pick mode; a click on a lake answers it, Esc or the book shut answers null
+  //   pencil mode: a nickname picked on the Walt page (pencil.pick) or dragged onto the sheet; a click on a lake pencils
+  //       it there, with no feedback; right-click rubs a pencilled name out; Esc puts the pencil away
+  attachPencil({ pencil, leads = null, story = null, layer = null, player = null } = {}) {
+    this.pencil = pencil; this.leads = leads; this.pick = null;
+    pencil.attach({ story, world: this.w, lakeAt, storeOf: (ep) => { const pl = placeOf(ep, this.w); return pl ? pl.store : null; }, layer, player: player || this.hud.player });
+    const h = this.hud;
+    h.storyClick = (x, z) => this.pencilClick(x, z);
+    h.storyRub = (x, z, rm) => !!(this.pencil && this.pencil.rubAt(x, z, rm));
+    h.storyEsc = () => this.pencilOff();
+    h.storyDrop = (nick, x, z) => { if (!this.pencil) return false; this.pencil.pencilAt(nick, x, z); this.pencil.cancel(); this.render(true); return true; };
+    h.storyCursor = () => (this.pick || (this.pencil && this.pencil.picking) ? 'crosshair' : '');
+    pencil.on('mode', () => { if (this.open) this.render(true); });
+    return this;
+  }
+  storyMarks() { try { return this.pencil.marks() || []; } catch (e) { console.warn('map: the pencil', e); return []; } }
+  pencilMode() { return this.pick ? 'pick' : this.pencil && this.pencil.picking ? `pencil:${this.pencil.picking}` : ''; }
+  // the map's click while a pencil or a pick is out (hud.js storyClick): true when it took the click
+  pencilClick(x, z) {
+    const P = this.pencil; if (!P) return false;
+    if (this.pick) {
+      const id = lakeAt(this.w, x, z), L = id > 0 ? this.w.lakes[id - 1] : null;
+      if (!L || !this.hud.lakeShown(x, z)) return true; // (only a lake you can see answers: the click is still the pick's)
+      const done = this.pick; this.pick = null; done({ lake: id, name: L.name || '' });
+      this.render(true);
+      return true;
+    }
+    if (!P.picking) return false;
+    P.pencilAt(P.picking, x, z); // (no feedback: a lake under the point or nothing, and the pencil is put away)
+    P.cancel();
+    this.render(true);
+    return true;
+  }
+  pencilOff() {
+    let any = false;
+    if (this.pick) { const done = this.pick; this.pick = null; done(null); any = true; }
+    if (this.pencil && this.pencil.cancel()) any = true;
+    if (any && this.open) this.render(true);
+    return any;
+  }
+  pickLake({ prompt = '' } = {}) {
+    if (!this.pencil) return Promise.resolve(null);
+    if (this.pick) this.pencilOff();
+    this.pickPrompt = prompt || '';
+    return new Promise((resolve) => { this.pick = resolve; this.journal.showMap(); this.render(true); });
+  }
+  // the index's one line while a pencil or a pick is out (show only what's missing: no instructions here, the hint teaches)
+  pencilBanner() {
+    if (this.pick) return `<div class="mb-row note pencil-out"><span class="ring"></span><span><b class="pencil">${esc(this.pickPrompt || 'Which lake?')}</b></span></div>`;
+    const P = this.pencil, row = P && P.picking ? P.row(P.picking) : null;
+    return row ? `<div class="mb-row note pencil-out"><span class="ring"></span><span><b class="pencil">${esc(row.label)}</b></span></div>` : '';
+  }
+  // the Marked rows for the story's rings: the label in pencil, who gave it ("Ruth; Hap"), faint once closed; a ring on a
+  // sheet you don't have says so (§4.1)
+  storyRows(list, go) {
+    const sh = sheets.profile ? sheets : null, owned = sh && sh.view() === 'owned';
+    return list.filter((q) => q.kind === 'ring').map((q) => {
+      const off = owned && !sh.showsDetail(q.x, q.z);
+      const sub = [q.who || '', off ? 'on a sheet you don’t have' : ''].filter(Boolean).join(' · ');
+      return `<button type="button" class="mb-row note${q.closed ? ' closed' : ''}" ${go(q.x, q.z, q.r, Math.max(4000, q.r * 5))}${q.closed ? ' style="opacity:.55"' : ''}><span class="ring"></span><span><b class="pencil">${q.closed ? '<s>' : ''}${esc(q.label || 'a ring')}${q.closed ? '</s>' : ''}</b>${sub ? `<span class="soft">${esc(sub)}</span>` : ''}</span></button>`;
+    }).join('');
+  }
+  // /st-p
 
   // --- a lake's page -------------------------------------------------------------------------------------------------
   // the lake's water (every piece the bake cut it in: the same name within reach), and the box round it
