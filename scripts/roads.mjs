@@ -162,6 +162,7 @@ for (const file of ensureOsm()) {
     const base = String(t.highway || '').replace(/_link$/, ''), rank = RANK[base];
     if (!rank || !c || c.length < 2) continue;
     if (t.area === 'yes') continue;
+    if (t.ice_road === 'yes' || t.winter_road === 'yes' || t.seasonal === 'winter') continue; // (round 5: the lakes' ice roads, Vermilion's, are winter's)
     // (round 5: a gated way, access=no, is drawn all the same, it is there; the truck's way out keeps off it)
     const xz = c.map(([lon, lat]) => toXZ(lon, lat));
     if (xz.every(([x, z]) => edgeDist(x, z) < EDGE_CUT)) continue;
@@ -626,14 +627,15 @@ for (const B of built) { B.fadeA = fadeOf(B.pts[0]); B.fadeB = fadeOf(B.pts[B.n 
 // ---- the bridges: every run of a road over water between two banks (a dry point, or a junction's end), level from
 // bank to bank (props.js roadBridges draws the deck, truck.js drives on it). A run ending at a dead end in the water is a
 // boat landing's ramp: none.
-const bridges = [];
+const bridges = [], BRIDGE_MAX = 220; // (a longer run over water: a road the map has on the water, drawn on neither)
 if (ground) for (const B of built) {
   const { c, pts, n, h, water } = B;
   for (let i = 0; i < n;) {
     if (!water[i]) { i++; continue; }
     let j = i; while (j < n && water[j]) j++;
     const a = i > 0 ? i - 1 : junction(pts[0]) ? 0 : -1, b = j < n ? j : junction(pts[n - 1]) ? n - 1 : -1;
-    if (a >= 0 && b > a) bridges.push({ ax: +pts[a][0].toFixed(1), az: +pts[a][1].toFixed(1), ah: +h[a].toFixed(2), bx: +pts[b][0].toFixed(1), bz: +pts[b][1].toFixed(1), bh: +h[b].toFixed(2), hw: Math.max(1.7, c.hw), k: c.k });
+    const span = a >= 0 && b > a ? Math.hypot(pts[b][0] - pts[a][0], pts[b][1] - pts[a][1]) : 0;
+    if (a >= 0 && b > a && span <= BRIDGE_MAX) bridges.push({ ax: +pts[a][0].toFixed(1), az: +pts[a][1].toFixed(1), ah: +h[a].toFixed(2), bx: +pts[b][0].toFixed(1), bz: +pts[b][1].toFixed(1), bh: +h[b].toFixed(2), hw: Math.max(1.7, c.hw), k: c.k });
     i = j;
   }
 }

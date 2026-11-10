@@ -14,7 +14,7 @@ import LANDINGS_DATA from './landings.json';
 import { TILE, PropBuilder, propMaterial, trailMaterial, occlude, obb, bakeSelf, MeshGround, buildHull, hullProfile, chunkStone, HULL_LENGTH } from './prop-kit.js';
 import { SIGN_HEAD_UV, SIGN_GLYPH_ASPECT, signGlyphUv } from './prop-kit.js'; // d1 names: the trail sign's words
 import { tileCreeks, BROOK } from './creeks.js'; // the wetlands round: brooks, beaver dams and lodges
-import { roadExclusions, DECK } from './roads.js'; // stream E3: the roads in 3D
+import { roadExclusions, DECK, tileChains, chainsNear } from './roads.js'; // stream E3: the roads in 3D (round 5: every road, by tile)
 import { nearRoad } from './road-grade.js'; // round 4: a portage's sign kept off the roads (the truck's way)
 import { cabinExclusions, tileCabins } from './cabins.js'; // round 4 C: a few cabins at the edge
 // round 4: whether (x, z) stands on a road (its half width and pad m, the water's pieces too: the graded table has only
@@ -23,7 +23,7 @@ import { cabinExclusions, tileCabins } from './cabins.js'; // round 4 C: a few c
 // stand 6 m apart; Infinity past 12 m)
 const roadGap = (world, x, z) => {
   const R = world && world.roads; let gap = Infinity; if (!R) return gap;
-  for (const r of R.list) {
+  for (const r of chainsNear(world, x, z)) {
     const b = r.bbox, m = r.hw + 12; if (x < b[0] - m || x > b[2] + m || z < b[1] - m || z > b[3] + m) continue;
     for (let i = 0; i + 1 < r.n; i++) {
       const ax = r.p[i * 4], az = r.p[i * 4 + 1], ex = r.p[i * 4 + 4] - ax, ez = r.p[i * 4 + 5] - az, L2 = ex * ex + ez * ez, t = L2 ? Math.max(0, Math.min(1, ((x - ax) * ex + (z - az) * ez) / L2)) : 0;
@@ -205,7 +205,7 @@ export function* tilePropsSteps(tg, world, tx, ty) {
   }
   for (const ep of heads) { const a = anchorOf(ep); if (inside(a.x, a.z)) { yield; buildTrailhead({ ...ctx, H: Hdrawn }, ep, pieces, group); yield; } } // (merged into this tile's props: no draw call of its own)
   // stream E3: the roads, in the same decal (after the stores, so a road stops at the yard it comes to)
-  if (world.roads) { roadRows(ctx, decal, lots); roadBridges(ctx, pieces); yield; }
+  if (world.roads) { yield* roadRows(ctx, decal, lots, tileChains(world, tx, ty)); roadBridges(ctx, pieces); yield; }
   decal.lift(ctx);
   const trail = decal.mesh();
   if (trail) group.add(trail);
@@ -378,7 +378,7 @@ function campPath(ctx, raw, decal, o, seed) {
 export const ROAD_ROW = 2.5;
 function roadSamples(r) {
   const p = r.p, out = [];
-  let s = 0;
+  let s = r.s0 || 0; // (round 5: a tile's piece of a road begins s0 m along it)
   for (let i = 0; i + 1 < r.n; i++) {
     const x0 = p[i * 4], z0 = p[i * 4 + 1], x1 = p[i * 4 + 4], z1 = p[i * 4 + 5], L = Math.hypot(x1 - x0, z1 - z0), n = Math.max(1, Math.round(L / ROAD_ROW));
     const wet = p[i * 4 + 3] < 0 || p[i * 4 + 7] < 0;
@@ -388,12 +388,15 @@ function roadSamples(r) {
   out.push({ x: p[(r.n - 1) * 4], z: p[(r.n - 1) * 4 + 1], s, wet: p[(r.n - 1) * 4 + 3] < 0 });
   return out;
 }
-function roadRows(ctx, decal, lots) {
-  const { world, ox, oz, inside, tg } = ctx, size = world.tileMetres;
-  for (const r of world.roads.list) {
+function* roadRows(ctx, decal, lots, chains) {
+  const { ox, oz, inside, tg } = ctx, size = ctx.world.tileMetres;
+  let rows = 0;
+  for (const r of chains) {
     const b = r.bbox;
     if (b[2] < ox - 8 || b[0] > ox + size + 8 || b[3] < oz - 8 || b[1] > oz + size + 8) continue;
-    const pts = r.rows || (r.rows = roadSamples(r)), m = pts.length, total = pts[m - 1].s;
+    if (rows > 600) { rows = 0; yield; } // (round 5: a tile of town streets is thousands of rows: a few hundred a step)
+    const pts = r.rows || (r.rows = roadSamples(r)), m = pts.length, total = r.total != null ? r.total : pts[m - 1].s;
+    rows += m;
     const want = new Uint8Array(m), rowOf = new Int32Array(m).fill(-1);
     for (let i = 0; i < m - 1; i++) if (inside(pts[i].x, pts[i].z)) { want[i] = 1; want[i + 1] = 1; }
     for (let i = 0; i < m; i++) {
