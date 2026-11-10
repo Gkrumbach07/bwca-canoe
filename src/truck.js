@@ -19,7 +19,7 @@ import { isOutfitter, OUTFITTER_EPS } from './outfitters.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const C = (hex) => new THREE.Color(hex);
-export const TRUCK = { speed: 9, accel: 1.6, wheelbase: 3.35, track: 1.86, axles: [1.72, -1.63], squash: 0.04, wait: 2.5, come: 80, see: 260, parkNear: 320, comeMax: 12, maxSnap: 320 };
+export const TRUCK = { speed: 9, accel: 1.6, wheelbase: 3.35, track: 1.86, axles: [1.72, -1.63], squash: 0.1, wait: 2.5, come: 80, see: 260, parkNear: 320, comeMax: 12, maxSnap: 320 };
 // (round 5: track the tyres' own middles, 0.93 m either side; axles where the wheels are built, along the body)
 
 // the pickup, in its own frame: +z forward, y up from the ground under its wheels
@@ -143,7 +143,7 @@ export class Truck {
   // the pose at s along a path, its wheels on the ground (round 5, the owner: "The trucks float in the air"): each of the
   // four wheels read on the ground as drawn under its own tyre (tiles.groundAt, or a bridge's deck: deckAt), the body
   // pitched by the axles' heights and rolled by the sides', set on the plane through them; where the four are not on one
-  // plane (a twist), raised until no tyre is pressed in past SQUASH, so one floats at most by the twist (this.gap: the
+  // plane (a twist), raised only once a tyre would be pressed in past SQUASH (a tyre a little into the ground reads as its weight on it; one off it as a float), so two float and two press in by the twist alike (this.gap: the
   // worst wheel's gap, the rigs)
   pose(path, s) {
     const m = this.ensure(), half = TRUCK.wheelbase / 2, A = TRUCK.axles;
