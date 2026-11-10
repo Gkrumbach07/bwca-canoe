@@ -4,7 +4,7 @@
 //   0 the cost: the bytes before the title (src/roads.bin's index only), and at each look the draw calls, triangles and
 //     shader programs with the roads and (a second page) with ?roads=off
 //   1 the roads are everywhere OSM has them: at each look (Ely, Winton, the Echo Trail, the Fernberg, the Gunflint Trail,
-//     Highway 1 at Isabella, the Crane Lake Road, the Sawbill Trail) the tile's roads installed, a blacktop or gravel road
+//     the Grade, the Crane Lake Road, the Sawbill Trail, the Arrowhead Trail, the Kawishiwi Trail) the tile's roads installed, a blacktop or gravel road
 //     within 60 m of the place, and every road point round the look (on land past the water's edge, the 2 m detail)
 //     graded: the drawn ground within 0.3 m of the road's height; no trunk on a road's core; a shot along the road
 //   2 the truck on its wheels, frame by frame: every route posed every 0.3 m (a frame at its top speed), each of the four
@@ -83,9 +83,10 @@ async function open(home = 38) {
 const shot = async (page, name) => { const f = path.join(SHOTS, `${name}.png`); await page.screenshot({ path: f }); log('shot', f); };
 
 // the looks (lat, lon): a place on or by a road outside the wilderness
-const PLACES = {
-  ely: [47.9033, -91.8668], winton: [47.9318, -91.8007], echo: [47.9840, -91.9500], fernberg: [47.9440, -91.6010],
-  gunflint: [47.9900, -90.5500], isabella: [47.6190, -91.3560], cranelake: [48.2350, -92.4500], sawbill: [47.8250, -90.8850],
+const PLACES = { // (the middles of the OSM ways, data-cache/edge/roads.json)
+  ely: [47.9033, -91.8668], winton: [47.9318, -91.8007], echo: [48.1432, -92.3638], fernberg: [47.9569, -91.6336],
+  gunflint: [48.0636, -90.5387], grade: [47.8384, -90.7670], cranelake: [48.0564, -92.4799], sawbill: [47.8291, -90.8893],
+  arrowhead: [47.9424, -89.9881], kawishiwi: [47.8850, -91.7292],
 };
 const RIG = () => {
   const g = window.__game, H = window.__r5r, w = g.world;
@@ -186,6 +187,7 @@ try {
       const c = g.chase; if (c && 'pitch' in c) c.pitch = 0.12;
       for (let q = 0; q < 20; q++) { H.step(3); await H.wait(30); }
       out.cost = H.calls();
+      { const ms = [...g.tiles.tiles.values()].flatMap((e) => e.installMs || []).sort((a, b) => b - a); out.cost.installMax = ms[0] || 0; out.cost.install95 = ms[Math.floor(ms.length * 0.05)] || 0; } // (the install's steps, ms: tiles.js INSTALL_BUDGET)
       return out;
     }, [lat, lon]);
     looks[name] = await look(page);

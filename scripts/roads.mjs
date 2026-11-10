@@ -165,7 +165,6 @@ for (const file of ensureOsm()) {
     if (t.ice_road === 'yes' || t.winter_road === 'yes' || t.seasonal === 'winter') continue; // (round 5: the lakes' ice roads, Vermilion's, are winter's)
     // (round 5: a gated way, access=no, is drawn all the same, it is there; the truck's way out keeps off it)
     const xz = c.map(([lon, lat]) => toXZ(lon, lat));
-    if (xz.every(([x, z]) => edgeDist(x, z) < EDGE_CUT)) continue;
     ways++;
     const svc = base === 'service' && SVC.has(t.service || '');
     const k = kindOf(t, rank), hw = halfWidth(k, rank, svc), priv = t.access === 'no' ? 6 : t.access === 'private' ? 2 : 1;
