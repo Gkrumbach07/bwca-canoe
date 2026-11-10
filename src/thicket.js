@@ -1,3 +1,4 @@
+import { roadClearGap } from './road-grade.js'; // round 5: every road's clearing, by tile
 import * as THREE from 'three';
 import { hash2, fbm, smoothstep } from './rng.js';
 import { KIND, WCLASS, FOREST, CLIFF, cliffClass, wclass1, wclass2, emergentGrow } from './land.js';
@@ -275,6 +276,7 @@ export class Thicket {
   // inside a trail's, a site's or a yard's clearing, grown by pad?
   blocked(x, z, pad) {
     if (this.yards && this.yards(x, z, pad)) return true;
+    if (roadClearGap(x, z) < pad) return true; // (round 5: the roads come by tile, road-grade.js)
     const a = this.ex.get(Math.floor(x / 64) * 100003 + Math.floor(z / 64));
     if (!a) return false;
     for (const s of a) {

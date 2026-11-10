@@ -15,6 +15,7 @@
 //   mireK(grid, x, z)       0..1, how much relief the ground has there (0 off the wetlands)
 //   mireAttr(grid, x, z, sd, out, fine)  the terrain's per-vertex aRelief (terrain.js): the shape as drawn, the pools, the
 //                           swamp's floor
+import { roadClearGap } from './road-grade.js'; // round 5: every road's clearing, by tile
 import { noise2, smoothstep, clamp } from './rng.js';
 import { landOf, KIND, wclass1, wetRegime, wetBeaver, standingWater, RG } from './land.js';
 import { brookDist, CUT } from './brook-cut.js';
@@ -69,10 +70,11 @@ export function setMireExclusions(e) {
 }
 // metres from (x, z) to the edge of the nearest trail, site or yard (Infinity past its fade)
 export function clearGap(x, z) {
-  if (!bins) return Infinity;
+  const rg = roadClearGap(x, z); // (round 5: the roads come by tile: road-grade.js)
+  if (!bins) return rg;
   const a = bins.get(bkey(Math.floor(x / BIN), Math.floor(z / BIN)));
-  if (!a) return Infinity;
-  let g = Infinity;
+  if (!a) return rg;
+  let g = rg;
   for (const k of a) {
     const ax = ex[k], az = ex[k + 1], dx = ex[k + 2] - ax, dz = ex[k + 3] - az, L2 = dx * dx + dz * dz || 1;
     const t = clamp(((x - ax) * dx + (z - az) * dz) / L2, 0, 1);
@@ -82,10 +84,11 @@ export function clearGap(x, z) {
 }
 // 0 on a cleared line or site, 1 past its fade
 function clearFade(x, z) {
-  if (!bins) return 1;
+  const rg = roadClearGap(x, z), f0 = rg < FADE.clear[1] ? smoothstep(FADE.clear[0], FADE.clear[1], rg) : 1; // (round 5)
+  if (!bins || !f0) return f0;
   const a = bins.get(bkey(Math.floor(x / BIN), Math.floor(z / BIN)));
-  if (!a) return 1;
-  let f = 1;
+  if (!a) return f0;
+  let f = f0;
   for (const k of a) {
     const ax = ex[k], az = ex[k + 1], dx = ex[k + 2] - ax, dz = ex[k + 3] - az, L2 = dx * dx + dz * dz || 1;
     const t = clamp(((x - ax) * dx + (z - az) * dz) / L2, 0, 1), d = Math.hypot(ax + dx * t - x, az + dz * t - z) - Math.abs(ex[k + 4]);

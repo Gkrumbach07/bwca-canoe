@@ -10,6 +10,7 @@ import { Site, setCampLandings } from './site.js';
 import { setViews } from './views.js'; // round world
 import { setRamps } from './ramps.js'; // round ramps: the campsites' ways up graded into the ground
 import { setRoadGrade } from './road-grade.js'; // stream E3: the roads graded into the ground
+import { tileRoads } from './roads.js'; // round 5: every road, a piece per tile (its grade and the forest's clearing)
 import { gradeTile, gradeAhead } from './water-levels.js'; // p2 B: creek and river levels graded (water-levels.js; round A join: its pieces asked for with the tile)
 import { bowlTile } from './lake-facts.js'; // d1 lakes: the DNR's depth for the lakes with no contour map
 import { patchTile, lakeRockBins, clearPlants, useV4 as rapidsV4 } from './rapids.js'; // d1 rapids: the real falls and rapids, the rocks in the lakes
@@ -180,12 +181,19 @@ function partTerrain(t, size, cell = 0) {
 // d2 bake: a v4 release grades its rivers and makes its drops in the bake (no water-grade.bin pieces asked for)
 const v4 = () => !!(cfg && cfg.grid && cfg.grid.format >= 4);
 
+// round 5: the tile's roads (roads.js tileRoads), asked for with the tile; the placement's exclusions with its roads' clearing
+const roadsOf = (tx, ty) => (cfg.roads ? tileRoads(tx, ty, cfg.roadsBaked).catch(() => null) : Promise.resolve(null));
+const withRoads = (ex, R, key = 'ex') => { const a = R && R[key]; if (!a || !a.length) return ex; if (!ex || !ex.length) return a; const o = new Float32Array(ex.length + a.length); o.set(ex); o.set(a, ex.length); return o; };
 async function buildFine(m) {
   const g = cfg.grid;
   if (!v4()) gradeAhead('fine', m.tx, m.ty);
+  const rp = roadsOf(m.tx, m.ty);
   const buf = await fetchTile(m.url);
   if (!v4()) await gradeTile(buf, 'fine', m.tx, m.ty, cfg.grid); // p2 B
+  const R = await rp;
   await burns; burnDate(m);
+  setRoadGrade(R && R.segs); // (no await from here on: the grade is this tile's)
+  const exclusions = withRoads(cfg.exclusions, R);
   bowlTile(buf, 'fine', cfg.grid, cfg.bowlById); // d1 lakes
   const low = lowOf(m, buf, g.tile + 2 * g.halo, g.cell); // wetlands round 2 (before anything reads the shore distance)
   const grid = new TileGrid({ cell: g.cell, originX: g.originX, originZ: g.originZ, tile: g.tile, halo: g.halo, fields: g.fields }, m.tx, m.ty, buf, cfg.levelById, cfg.clarityById); // (d2 bake: fields, the v4 channels)
@@ -198,7 +206,7 @@ async function buildFine(m) {
   // what the ground is like at every cell (cliffs, scree, ridges, wet ground, soil): the paint, the forest, the
   // rocks and the cliffs all read it
   const site = new Site(grid, cfg.exclusions);
-  const veg = placeVegetation(grid, i0, j0, g.tile, { seed: cfg.seed, exclusions: cfg.exclusions, originX: ox, originZ: oz, site });
+  const veg = placeVegetation(grid, i0, j0, g.tile, { seed: cfg.seed, exclusions, originX: ox, originZ: oz, site });
   veg.bins.push(...lakeRockBins(grid, i0, j0, g.tile, ox, oz)); // d1 rapids: NHD's rocks above the water, as boulders
   // the season round: the pads and reeds on the water of the date (its drop, lowCreeks), not the spring's; the terrain
   // below still reads the baked level (its bank as it was shaped)
@@ -208,7 +216,7 @@ async function buildFine(m) {
   clearPlants(aquatic.bins, ox, oz); // d1 rapids: no pads or reeds where the water falls or boils
   // the cover map, its splat part filled by the terrain build: each cell the weights of its centre vertex, so the
   // grass blends what the ground there is drawn with (placement.js coverField, groundcover.js)
-  const cover = coverField(grid, i0, j0, g.tile, veg.shade, cfg.exclusions, site);
+  const cover = coverField(grid, i0, j0, g.tile, veg.shade, withRoads(cfg.exclusions, R, 'exGrass'), site); // (round 5: no tuft on a road's surface: roads.js GRASS_OFF)
   const cellSplat = cover.subarray(COVER_SPLAT_AT(grid.side));
   grid.low = low; // wetlands round 2: the water lower, the terrain's bank as it was (the season round: its bared bed marked)
   const terrain = partTerrain(buildTerrainChunk(grid, i0, j0, g.tile, { shade: veg.shade, fine: true, originX: ox, originZ: oz, site, cellSplat }), g.tile * g.cell, g.cell); // round A-C
@@ -225,7 +233,8 @@ async function buildFine(m) {
   const shade = veg.shade ? Float32Array.from(veg.shade) : null;
   if (shade) transfer.push(shade.buffer);
   if (low) transfer.push(low.buffer);
-  return { msg: { type: 'built', key: m.key, level: 'fine', tx: m.tx, ty: m.ty, data: buf, low, cover, terrain, water, veg: bins, aquatic: abins, collide, shade, trees: veg.total, plants: aquatic.total }, transfer };
+  const roads = R ? { chains: R.chains, segs: R.segs } : null; // (round 5: installed by the main thread with the tile: roads.js installTileRoads)
+  return { msg: { type: 'built', key: m.key, level: 'fine', tx: m.tx, ty: m.ty, data: buf, low, cover, terrain, water, veg: bins, aquatic: abins, collide, shade, trees: veg.total, plants: aquatic.total, roads }, transfer };
 }
 
 // A far tile covers 8 x 8 fine tiles; it is cut into chunks with the footprint of one fine tile each so a
@@ -236,6 +245,7 @@ async function buildFar(m) {
   const buf = await fetchTile(m.url);
   if (!v4()) await gradeTile(buf, 'far', m.fx, m.fy, cfg.grid); // p2 B
   await burns; burnDate(m);
+  setRoadGrade(null); // (round 5: the 80 m mesh draws no road)
   bowlTile(buf, 'far', cfg.grid, cfg.bowlById); // d1 lakes
   const low = lowOf(m, buf, f.tile + 2 * f.halo, g.cell * f.factor); // wetlands round 2
   const desc = { cell: g.cell * f.factor, originX: g.originX, originZ: g.originZ, tile: f.tile, halo: f.halo };
@@ -281,14 +291,17 @@ async function buildDetail(m) {
   const t0 = Date.now();
   const T = detailTile(m);
   if (T.cache.size > 400000) T.cache.clear();
+  const rp = roadsOf(m.tx, m.ty);
   const buf = await fetchTile(m.url);
+  const R = await rp;
   let P = null;
   if (m.parent) {
     P = detailParents.get(m.parent.url);
-    if (!P) P = chunkGround(T.grid, decodeChunk(await fetchTile(m.parent.url)), T.cache);
+    if (!P) { const pb = await fetchTile(m.parent.url); setRoadGrade(R && R.segs); P = chunkGround(T.grid, decodeChunk(pb), T.cache); }
     keep(detailParents, m.parent.url, P, PARENTS_KEPT);
   }
   await burns; burnDate(m);
+  setRoadGrade(R && R.segs); // (round 5: this chunk's tile's roads; no await from here on)
   const G = chunkGround(T.grid, decodeChunk(buf), T.cache);
   if (m.r === 5) keep(detailParents, m.url, G, PARENTS_KEPT); // the 2 m chunks under it will want it
   const c = buildChunk(T.grid, T.site, T.shade, G, P, m.cell0);
