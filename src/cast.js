@@ -138,7 +138,7 @@ export class Cast {
   walkout(ep) {
     if (!this.on || ep == null) return null;
     ep = Number(ep);
-    if ([...this.live.values()].some((st) => st.ep === ep && !st.done)) return null; // (already there)
+    if ([...this.live.values()].some((st) => st.ep === ep && st.at === 'foot' && !st.done)) return null; // (already there)
     const a = this.args(ep), B = this.c.beats;
     for (const [who, R] of Object.entries(CAST)) {
       for (const slot of R.where) {
