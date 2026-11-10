@@ -174,7 +174,20 @@ try {
   })()`);
   await shot('map-store', '#r5f-map');
   await ev(() => document.getElementById('r5f-map').remove());
-  result('5 the map round the store draws with the minor roads (a shot)', mapR.ready && mapR.minorCells > 50, mapR);
+  // and round Ely (the town's streets, the forest roads out of it), where the minor roads are many
+  const ely = await page.evaluate(`(async () => {
+    const g = window.__game, MR = await window.__r5f.mod('map-render'), P = g.world.meta.proj;
+    const x = (-91.8668 - P.lon0) * P.mPerDegLon, z = -(47.9033 - P.lat0) * P.mPerDegLat;
+    const cv = document.createElement('canvas'); cv.id = 'r5f-map'; cv.width = 1040; cv.height = 720; cv.style.cssText = 'position:fixed;left:120px;top:0;z-index:99999;width:1040px;height:720px';
+    document.body.appendChild(cv);
+    let r = null;
+    for (let i = 0; i < 400; i++) { r = MR.drawRegion(cv, g.world, { cx: x, cz: z, span: 9000 }, {}); if (r.ready) break; await new Promise((q) => setTimeout(q, 100)); }
+    const t1 = performance.now(); MR.drawRegion(cv, g.world, { cx: x, cz: z, span: 9000 }, {});
+    return { ready: !!(r && r.ready), redrawMs: +(performance.now() - t1).toFixed(1) };
+  })()`);
+  await shot('map-ely', '#r5f-map');
+  await ev(() => document.getElementById('r5f-map').remove());
+  result('5 the map round the store and round Ely draws with the minor roads (shots)', mapR.ready && ely.ready && mapR.minorCells > 50, { ...mapR, ely });
   // ---- 6 two cabins by their driveways, built ---------------------------------------------------------------------------
   const T = JSON.parse(readFileSync(path.join(root, 'src/cabins.json'), 'utf8')), cab = T.cabins || T;
   const picks = cab.map((c, i) => ({ ...c, i, g: R3.gap(c.x, c.z) })).sort((a, b) => a.g - b.g).slice(0, 2);
