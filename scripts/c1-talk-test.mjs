@@ -4,12 +4,13 @@
 //     no road line, the onboarding's own talk
 //   season A (home --home, default 25): 1 P1 taken · 4 the return and the porch (warm) · 5 the first rings · 6 the turn,
 //     a door rung
-//   season B (home --home-b, default 31): 1b P1 left on the shelf · 4d–4f the declines, R3, Farm's porch · 1c R1
+//   season B (home --home-b, default 31): P1 taken · 4d–4f the declines, R3, Farm's porch
+//   season C (home --home): 1b P1 left on the shelf · 1c R1 a trip later (one push a trip: R1 and R3 never on one trip)
 //   7 a co-op guest (mirror): a walkout stages nobody, no story topic on a keeper
 //   (and no page errors)
 //
 //   npx vite --port 5641 --strictPort &
-//   APP=http://localhost:5641 node scripts/c1-talk-test.mjs [--home 25] [--home-b 31] [--only A|B|off|guest]
+//   APP=http://localhost:5641 node scripts/c1-talk-test.mjs [--home 25] [--home-b 31] [--only A|B|C|off|guest]
 import { createRequire } from 'node:module';
 import { readdirSync, existsSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -74,8 +75,14 @@ try {
   if (!ONLY || ONLY === 'B') {
     const b = await open(`${APP}/?story=1`);
     await newSeason(b, HOME_B);
-    await run(b, [shelf, declines, r1], { home: HOME_B });
+    await run(b, [steps[0], declines], { home: HOME_B });
     await b.close();
+  }
+  if (!ONLY || ONLY === 'C') {
+    const c = await open(`${APP}/?story=1`);
+    await newSeason(c, HOME);
+    await run(c, [shelf, r1], { home: HOME });
+    await c.close();
   }
   if (!ONLY || ONLY === 'guest') {
     const c = await open(`${APP}/?story=1`);
