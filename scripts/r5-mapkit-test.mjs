@@ -144,8 +144,16 @@ try {
     return { noPfdWithoutLoan: noPfd, pfdOwned: g.inventory.count('pfd', { reachable: false }) };
   });
   result('10 the life jacket rule reads the jacket owned, not the loan flag', worn.noPfdWithoutLoan === false && worn.pfdOwned >= 1, worn);
-  // the dock with the canoe: a look
-  await ev(() => { const g = window.__game, p = g.player, h = g.player.canoe.hull, L = new g.THREE.Vector3(); h.getWorldPosition(L); if (g.chase) { const y = Math.atan2(-(L.z - p.z), L.x - p.x); g.chase.viewYaw = y; g.chase.forwardYaw = y; if (g.chase.snap) g.chase.snap(); } window.__p.step(10); return !!h.visible; });
+  // the dock with the canoe: a look from 9 m off it, on the shore side (the landing), and where it lies
+  const dock = await ev(() => {
+    const g = window.__game, p = g.player, h = p.canoe.hull, L = g.outfitter.landing(g.profile.home), c = new g.THREE.Vector3(); h.getWorldPosition(c);
+    const a = Math.atan2(L.z - c.z, L.x - c.x), sx = c.x + Math.cos(a) * 9, sz = c.z + Math.sin(a) * 9;
+    p.mode = 'walk'; p.landing = null; p.ashore = null; p.swim = null; p.speed = 0; p.x = sx; p.z = sz; p.foot = { y: p.groundAt(sx, sz), vy: 0, air: false, t: 0, land: 0, near: null }; p.placeOnGround();
+    const y = Math.atan2(-(c.z - sz), c.x - sx); p.heading = y; if (g.chase) { g.chase.viewYaw = y; g.chase.forwardYaw = y; g.chase.viewPitch = -0.15; if (g.chase.snap) g.chase.snap(); }
+    window.__p.step(20);
+    return { visible: !!h.visible, inScene: (() => { for (let o = h; o; o = o.parent) { if (!o.visible) return false; if (o === g.scene) return true; } return false; })(), fromLanding: Math.round(Math.hypot(c.x - L.x, c.z - L.z)) };
+  });
+  result('7b Sandbox: the canoe drawn at the home dock', dock.visible && dock.inScene && dock.fromLanding < 60, dock);
   await shot('sandbox-start');
   const sbCost = await ev(() => window.__p.cost());
 
