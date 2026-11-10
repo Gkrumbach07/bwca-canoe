@@ -76,12 +76,12 @@ export class Casebook {
     // the page in two halves: who he was on the left, what the player has on him on the right
     const leftKeys = ['walt', 'people', 'places', 'names'], rightKeys = ['years', 'odd', 'leads', 'farend'];
     const labelOf = new Map(WALT_SECTIONS);
-    const head = `<div class="cb-head mine">${esc(this.heading())}${this.named() ? ' <span class="cb-wh">(W.H.)</span>' : ''}</div>`;
+    const head = `<div class="cb-head nbw-mine">${esc(this.heading())}${this.named() ? ' <span class="cb-wh">(W.H.)</span>' : ''}</div>`;
     const left = `<div class="nbw-scroll cb-page">${head}${leftKeys.map((k) => sec(k, labelOf.get(k))).join('')}</div>`;
     const right = `<div class="nbw-scroll cb-page">${rightKeys.map((k) => sec(k, labelOf.get(k))).join('')}</div>`;
     const nicks = this.nicks();
     const strip = `<div class="nbw-sc">Nicknames</div>${nicks.length ? nicks.map((n) => n.matched
-      ? `<div class="cb-nick matched"><span class="w">${esc(n.word)}</span>${n.note ? ` <span class="mine">${esc(n.note)}</span>` : ''}</div>`
+      ? `<div class="cb-nick matched"><span class="w">${esc(n.word)}</span>${n.note ? ` <span class="nbw-mine">${esc(n.note)}</span>` : ''}</div>`
       : n.kind === 'place' ? `<button type="button" class="cb-nick chip" data-nbchip="${esc(n.nick)}">${esc(n.word)}</button>` : `<div class="cb-nick">${esc(n.word)}</div>`).join('') : ''}`;
     return { strip, stripLabel: 'Nicknames', left, right };
   }

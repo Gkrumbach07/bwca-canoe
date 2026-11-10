@@ -54,7 +54,7 @@ export class Book {
   // --- the side (journal.addSide) ------------------------------------------------------------------------------------
   makeSide(el) {
     this.el = el;
-    el.classList.add('nbw');
+    el.classList.add('nbw', 'pp'); // (pp: paper.css's page classes, the index tabs, take effect inside it)
     el.addEventListener('click', (e) => this.click(e));
     el.addEventListener('pointerdown', (e) => e.stopPropagation());
     window.addEventListener('keydown', (e) => this.key(e), true);
@@ -236,9 +236,10 @@ export class Book {
     if (this.view === 'walt') body = this.case.render();
     else if (this.view === 'pages') body = this.pagesView(pages);
     else body = this.spreadView();
+    const board = (k) => (body.board && body.board[k] ? ' board' : '');
     this.el.innerHTML = `<aside class="nbw-strip" aria-label="${esc(body.stripLabel || 'Contents')}">${body.strip}</aside>
-      <section class="pp-page left nbw-page" aria-label="The left page">${body.left}</section>
-      <section class="pp-page right nbw-page" aria-label="The right page">${nav}${body.right}</section>`;
+      <section class="pp-page left nbw-page${board(0)}" aria-label="The left page">${body.left}</section>
+      <section class="pp-page right nbw-page${board(1)}" aria-label="The right page">${nav}${body.right}</section>`;
     [...this.el.querySelectorAll('.nbw-strip, .nbw-scroll')].forEach((n, i) => { if (keep[i]) n.scrollTop = keep[i]; });
     if (force && this.view === 'nb') { const on = this.el.querySelector('.nbw-strip .on'); if (on && typeof on.scrollIntoView === 'function') { try { on.scrollIntoView({ block: 'nearest' }); } catch { /* old browsers */ } } }
   }
@@ -249,7 +250,8 @@ export class Book {
       <button type="button" class="nbw-c end" data-nbgo="${this.data.backSpread}"><span>The back pocket</span></button>`;
     const left = this.leafHtml(sp[0], 'left'), right = this.leafHtml(sp[1], 'right');
     const turn = (d, label) => `<button type="button" class="nbw-turn ${d < 0 ? 'prev' : 'next'}" data-nbturn="${d}" aria-label="${label}"${(d < 0 ? this.at <= 0 : this.at >= this.data.spreads.length - 1) ? ' disabled' : ''}>${d < 0 ? '‹' : '›'}</button>`;
-    return { strip, left: `${turn(-1, 'The page before')}${left}`, right: `${right}${turn(1, 'The page after')}${this.loose ? this.looseHtml(this.loose) : ''}` };
+    const brd = (l) => !!l && (l.kind === 'cover' || l.kind === 'back'); // (the inside covers: the brown board)
+    return { strip, board: [brd(sp[0]), brd(sp[1])], left: `${turn(-1, 'The page before')}${left}`, right: `${right}${turn(1, 'The page after')}${this.loose ? this.looseHtml(this.loose) : ''}` };
   }
   // a leaf as a page of the notebook
   leafHtml(leaf, side) {
@@ -276,10 +278,9 @@ export class Book {
     const here = s.nbHas('here', nb) && leaf.part !== 2;
     const photos = (leaf.photos || []).map((id) => `<button type="button" class="nbw-print${s.nbHas('nbphoto', id) ? '' : ' undot'}" data-nbloose="${id}" style="--tilt:${side === 'left' ? -3 : 2.5}deg" aria-label="A photograph">${s.nbHas('nbphoto', id) ? '' : '<i class="nbw-dot"></i>'}</button>`).join('');
     const fresh = this.here && this.here.nb === nb && performance.now() - this.here.t < 4000;
-    return `<div class="nbw-leaf nb ${n <= BLUE_UNTIL ? 'blue' : 'lead'}" data-nb="${nb}">
-      <div class="nbw-scroll"><div class="nbw-hand">${this.inkHtml(leaf.text, nb)}</div></div>
-      ${und && leaf.part !== 2 ? `<div class="nbw-margin mine">${esc(und.note)}</div>` : ''}
-      ${here ? `<div class="nbw-here mine${fresh ? ' fresh' : ''}">he was here</div>` : ''}
+    return `<div class="nbw-leaf nbw-e ${n <= BLUE_UNTIL ? 'blue' : 'lead'}" data-nb="${nb}">
+      <div class="nbw-scroll"><div class="nbw-hand">${this.inkHtml(leaf.text, nb)}</div>${und && leaf.part !== 2 ? `<div class="nbw-margin nbw-mine">${esc(und.note)}</div>` : ''}</div>
+      ${here ? `<div class="nbw-here nbw-mine${fresh ? ' fresh' : ''}">he was here</div>` : ''}
       ${photos ? `<div class="nbw-prints">${photos}</div>` : ''}</div>`;
   }
   // Walt's text: his first ink, the [second ink], and every decoded word faintly underlined in the player's pencil
@@ -296,7 +297,7 @@ export class Book {
     const s = this.story, read = s.has('nb.back.read');
     const rows = BACK_COVER.map((r) => {
       const ticked = s.has(bcFact(r));
-      return `<div class="nbw-rod ${r.ink}"><span class="n">${esc(r.n)}</span>${ticked ? '<span class="mine tick">✓</span>' : ''}${ticked && read ? `<span class="mine pair">${esc(r.pairWords)}</span>` : ''}</div>`;
+      return `<div class="nbw-rod ${r.ink}"><span class="n">${esc(r.n)}</span>${ticked ? '<span class="nbw-mine tick">✓</span>' : ''}${ticked && read ? `<span class="nbw-mine pair">${esc(r.pairWords)}</span>` : ''}</div>`;
     }).join('');
     return `<div class="nbw-leaf back"><div class="nbw-rods">${rows}</div></div>`;
   }
@@ -314,7 +315,7 @@ export class Book {
     const strip = `<div class="nbw-sc">Pages</div>${pages.map((p) => `<button type="button" class="nbw-c${sel && sel.id === p.id ? ' on' : ''}" data-nbpage="${esc(p.id)}"><span>${esc(p.def.name)}</span></button>`).join('')}`;
     const inv = this.t.inventory;
     const held = sel && inv && typeof inv.count === 'function' ? inv.count(sel.def.id, { reachable: false }) > 0 : false;
-    const left = sel ? `<div class="nbw-sheet given"><div class="nbw-hand other">${esc(sel.def.ref ? say(sel.def.ref) : '')}</div>${sel.def.loan && held && sel.def.loan.say ? `<div class="mine">${esc(say(sel.def.loan.say))}</div>` : ''}</div>` : '';
+    const left = sel ? `<div class="nbw-sheet given"><div class="nbw-hand other">${esc(sel.def.ref ? say(sel.def.ref) : '')}</div>${sel.def.loan && held && sel.def.loan.say ? `<div class="nbw-mine">${esc(say(sel.def.loan.say))}</div>` : ''}</div>` : '';
     return { strip, stripLabel: 'Pages', left, right: '' };
   }
 }
