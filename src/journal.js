@@ -46,6 +46,7 @@ export class Journal {
   // t: { hud, world, player, day, fishing, tasks, energy, outfitter, stats, wind, onUse }
   constructor(t) {
     Object.assign(this, t);
+    this.extra = new Map(); // st-b: sides added at run time (addSide: the story's Walt side, under STORY_ON only)
     this.el = document.getElementById('journal');
     this.open = false; this.tab = 'tasks'; this.page = 0; this.sig = ''; this.t = 0; this.side = 'journal';
     this.record = null; // round A-A: the season's record (record.js)
@@ -106,6 +107,8 @@ export class Journal {
         if (peek) this.showTask(peek); else this.show('pack');
       }
       else if (this.open && e.code === 'Escape' && !e.mapPin) {
+        const x = this.extra.get(this.side); // st-b
+        if (x && typeof x.esc === 'function' && x.esc()) return; // (a loose page put back first)
         if (this.side === 'map' && this.map.lake) this.map.closeLake();
         else if (this.side === 'journal' && this.tab === 'fish' && this.pam) { this.pam = null; this.render(true); } // (the pamphlet folds first)
         else this.close();
@@ -142,7 +145,8 @@ export class Journal {
     this.open = true;
     this.hud.openPaper('journal');
     this.el.classList.add('show');
-    if (this.side === 'pack') this.pack.show(); else if (this.side === 'map') this.map.show(); else this.render(true);
+    this.sideTabs(); // st-b
+    if (this.side === 'pack') this.pack.show(); else if (this.side === 'map') this.map.show(); else if (this.extra.has(this.side)) this.extra.get(this.side).show(); else this.render(true);
   }
   // M (hud.js): the book open at the map
   showMap() { if (this.open && this.side === 'map') return true; this.show('map'); return true; }
@@ -151,17 +155,22 @@ export class Journal {
     this.open = false;
     this.pack.hide();
     this.map.hide();
+    for (const x of this.extra.values()) x.hide(); // st-b
     this.el.classList.remove('show');
     this.hud.closePaper('journal');
   }
   setSide(side) {
-    if (!SIDES.includes(side)) return;
+    const x = this.extra.get(side) || null; // st-b: a side added at run time, turned to only while it shows
+    if (!SIDES.includes(side) && !(x && (!x.visible || x.visible()))) return;
     this.side = side;
     for (const b of this.el.querySelectorAll('.book-tab')) { const on = b.dataset.side === side; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); }
     this.jEl.classList.toggle('on', side === 'journal'); this.pEl.classList.toggle('on', side === 'pack');
     this.el.querySelector('.side.m').classList.toggle('on', side === 'map');
+    for (const [k, e] of this.extra) e.el.classList.toggle('on', k === side); // st-b
     if (!this.open) return;
     if (side !== 'map') this.map.hide();
+    for (const [k, e] of this.extra) if (k !== side) e.hide(); // st-b
+    if (x) { this.pack.hide(); x.show(); return; } // st-b
     if (side === 'pack') this.pack.show(); else if (side === 'map') { this.pack.hide(); this.map.show(); } else { this.pack.hide(); this.render(true); }
   }
   // while it is up, the page follows the game (a meal, a fish, the clock) at a gentle rate
@@ -169,8 +178,31 @@ export class Journal {
     if (!this.open) return;
     if (this.side === 'pack') { this.pack.update(dt); return; }
     if (this.side === 'map') { this.map.update(dt); return; }
+    if (this.extra.has(this.side)) { this.extra.get(this.side).update(dt); return; } // st-b
     if ((this.t += dt) > 0.5) { this.t = 0; this.render(false); }
   }
+  // st-b: a side added at run time (the story's Walt side, notebook.js, under STORY_ON; with the flag off nothing calls
+  // it): side = { el, label, visible(), show(), hide(), update(dt), esc()? }. Its tab sits on the book's top edge after
+  // the others, shown only while visible() holds (the Walt side: once the notebook is found). → the side
+  addSide(key, side) {
+    if (!key || !side || !side.el || this.extra.has(key)) return this.extra.get(key) || null;
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = `book-tab ${key.slice(0, 1)}`; b.dataset.side = key; b.setAttribute('role', 'tab'); b.textContent = side.label || key;
+    this.el.querySelector('.book-tabs').appendChild(b);
+    side.el.classList.add('side', key.slice(0, 1));
+    this.el.appendChild(side.el);
+    this.extra.set(key, { ...side, tab: b });
+    this.sideTabs();
+    return this.extra.get(key);
+  }
+  sideTabs() {
+    for (const [k, e] of this.extra) {
+      const vis = !e.visible || !!e.visible();
+      e.tab.hidden = !vis;
+      if (!vis && this.side === k) this.setSide('pack');
+    }
+  }
+  // /st-b
 
   // --- the words ------------------------------------------------------------------------------------------
   // fb3 C (16): a notice's state, plain. Taken: an empty box. In progress: a half box and the progress line ("1 of 2 in

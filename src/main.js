@@ -1212,11 +1212,29 @@ async function main() {
       const { installSeams, startFeed } = await import('./story-seams.js');
       const seams = installSeams(story);
       window.__game.storySeams = { ...seams, on: true, feed: null };
-      startFeed({ story, mods: { trip, outfitter, world }, guest: () => !!(window.__game.coop && window.__game.coop.guest) })
+      startFeed({ story, mods: { trip, outfitter, world, inventory /* st-b: feed-book.js */ }, guest: () => !!(window.__game.coop && window.__game.coop.guest) })
         .then((feed) => { window.__game.storySeams.feed = feed; console.log(`story K1b: the feed started (${feed.names().join(', ')})`); })
         .catch((e) => console.warn('story K1b: the feed', e));
     } catch (e) { console.warn('story K1b: the seams', e); }
   }
+  // st-b: the book's Walt side (docs/build/campaign-design.md §6, Round 1 stream B; notebook.js, casebook.js), only under
+  // STORY_ON: the notebook reader, the Walt page and pages given as the book's fourth side (journal.addSide), the back
+  // cover ticked from the story's carries, the book's rules and its two moments (waltpage, readhere). walt.js's Read opens
+  // it (walt.t.book). With the flag off nothing here is fetched or hung
+  if (STORY_ON && story.v === 2) {
+    try {
+      const { installBook } = await import('./notebook.js');
+      const sm = window.__game.storySeams || {};
+      const book = await installBook({ story, journal, hud, player, inventory, world, layer: sm.layer, pencil: sm.pencil, veil, outfitter, tasks });
+      walt.t.book = book;
+      for (const m of book.moments) if (!MOMENTS.some((q) => q.id === m.id)) { const { due, ...rest } = m; void due; MOMENTS.push(rest); }
+      const bookM = new Map(book.moments.map((m) => [m.id, m]));
+      const dueB = hints.due.bind(hints);
+      hints.due = (id, rec) => (bookM.has(id) ? bookM.get(id).due(rec) : dueB(id, rec));
+      window.__game.book = book;
+    } catch (e) { console.warn('story B: the book', e); }
+  }
+  // /st-b
   // gl-d: the trip-end tally and the board (the game-loop round, stream D; docs/build/game-loop-brief.md). Pay lands on
   // the trip's card as it counts up (record.js ended → tasks.settle), never at the board; no cap on notices held
   // (the owner's call 2026-11-05), each with a deadline that fits it; the new kinds (task-kinds-2.js: creel, campsite, beaver, iceout, colour,
