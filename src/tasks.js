@@ -376,7 +376,7 @@ registerKind('survey', {
   make(T, c) {
     const w = T.world, L = c.landing, [h0, h1] = BAND_HOPS.survey[c.band];
     let cands = [];
-    w.portages.forEach((p, i) => {
+    w.portagesPublic().forEach((p, i) => {
       if (p.rods < 15 || T.used('survey', i)) return;
       const d = Math.hypot(p.pts[0][0] - L.x, p.pts[0][1] - L.z);
       if (d > rangeOf(c.band)) return;
@@ -624,7 +624,7 @@ export class Tasks {
     if (this._graph) return this._graph;
     const adj = new Map();
     const add = (a, b, i, end) => { if (!adj.has(a)) adj.set(a, []); adj.get(a).push({ to: b, portage: i, end }); };
-    this.world.portages.forEach((p, i) => {
+    this.world.portagesPublic().forEach((p, i) => {
       const a = this.basinOf(p.launch[0].lake), b = this.basinOf(p.launch[1].lake);
       if (a < 0 || b < 0) return;
       add(a, b, i, 0); add(b, a, i, 1);

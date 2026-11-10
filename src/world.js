@@ -8,6 +8,7 @@ import { Creeks } from './creeks.js'; // the wetlands round: brooks and beaver d
 import { waterKinds, isFlowage } from './water-build.js'; // the season round: every water's level through the year
 import { loadEdge, isPast, EDGE } from './edge.js'; // the edge round: where the Boundary Waters end (the sites past the band marked c.past)
 import { readRoads } from './roads.js'; // the roads in 3D (stream E3): the last stretch of the real roads into each lot
+import { STORY_ON } from './story-flag.js'; // st-l: the story layer's clearings and carries (story-world.js), only under the flag
 
 // Where the baked data lives: VITE_DATA_URL (a bucket behind a CDN, see docs/HOSTING.md), else `data/`
 // under the app's own base path (public/data in development). Always ends in a slash.
@@ -127,6 +128,11 @@ export class World extends GridQueries {
     // the wetlands round: the brooks (land now, a stony bed) and the beaver dams, from a release that has them
     if (index.creeks) { onProgress(0.08, 'Reading the creeks…'); w.creeks = await Creeks.load(w, base); }
     w.markPast();
+    // st-l (campaign-design §7.1, §7.2): the story places' clearings and the story's carries, here, before the TileManager
+    // is made, so they are in the exclusions the workers get once. Only under STORY_ON (story-world.js is not even
+    // fetched with the flag off, and the world is main's exactly)
+    if (STORY_ON) { try { const { applyStoryWorld } = await import('./story-world.js'); await applyStoryWorld(w); } catch (e) { console.warn('story layer: the world', e); } }
+    // /st-l
     return w;
   }
 
@@ -189,6 +195,32 @@ export class World extends GridQueries {
     this.fields = index.version >= 4 ? index.fields || null : null;
     this.gridDesc = { cell: g.cell, originX: g.originX, originZ: g.originZ, tile: g.tile, halo: g.halo, fields: this.fields || undefined };
   }
+
+  // st-l (campaign-design §7.2): the portages anyone may know of. A story carry (story-world.js addStoryPortage,
+  // `hidden: true`) is appended after the release's and the fixes' own, so it is always at the tail: the public list is
+  // the head of the array, and an index into it is an index into world.portages (the saved and survey indices hold).
+  // With no story carry (the flag off, or none yet) it is world.portages itself. portagesAll() is the whole list, for
+  // the few that must see the hidden carry too (the trail's tread and clearing: props.js; story-lint allowlists it).
+  portagesPublic() {
+    const n = this.hiddenFrom;
+    if (n == null) return this.portages;
+    if (!this._public || this._public.length !== n) this._public = this.portages.slice(0, n);
+    return this._public;
+  }
+  portagesAll() { return this.portages; }
+  addStoryPortage(p) {
+    if (!p || !Array.isArray(p.pts) || p.pts.length < 2) return -1;
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+    for (const [x, z] of p.pts) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (z < z0) z0 = z; if (z > z1) z1 = z; }
+    const q = { name: null, lengthM: 0, rods: null, launch: [], ...p, hidden: !!p.hidden, fix: 'story', bbox: [x0, z0, x1, z1] };
+    if (!q.lengthM) for (let i = 1; i < q.pts.length; i++) q.lengthM += Math.hypot(q.pts[i][0] - q.pts[i - 1][0], q.pts[i][1] - q.pts[i - 1][1]);
+    if (q.hidden) { if (this.hiddenFrom == null) this.hiddenFrom = this.portages.length; }
+    else if (this.hiddenFrom != null) throw new Error('world.addStoryPortage: a public carry after a hidden one (the hidden are the tail)');
+    this.portages.push(q);
+    this._public = null;
+    return this.portages.length - 1;
+  }
+  // /st-l
 
   // The edge round (2026-11-08, the owner: "campsites past the band dropped from maps and parties"): a site past the
   // band round the wilderness (edge.js zone 0: Vermilion, Burntside, Sand Point, Superior...) is marked c.past. It stays

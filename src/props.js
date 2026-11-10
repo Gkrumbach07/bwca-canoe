@@ -75,7 +75,8 @@ export function exclusionsFor(world) {
   const segs = [];
   // (fb3 D: the trails keep the forest off only the tread plus a hand's width, TRAIL.clear in placement.js, along the
   // line the decal is drawn on, its corners rounded as buildTrail rounds them)
-  for (const p of world.portages) { const pts = rounded(p.pts); for (let i = 1; i < pts.length; i++) segs.push([pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1], TRAIL.clear]); }
+  for (const p of world.portagesAll()) { const pts = rounded(p.pts); // (st-l: the story carry cleared too)
+    for (let i = 1; i < pts.length; i++) segs.push([pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1], TRAIL.clear]); }
   for (const c of world.campsites) segs.push([c.x, c.z, c.x, c.z, 9]);
   // round world: each site's way up from its landing and its latrine trail (world.js c.access), as lawns (the trees, brush
   // and rocks kept off, the grass let through; a lawn's line plants no tunnel either: placement.js). After the sites' own
@@ -100,6 +101,9 @@ export function exclusionsFor(world) {
   // stream E3: each road's cut through the forest (roads.js ROAD_CLEAR past its half width), a lawn: the grass through
   for (const s of roadExclusions(world)) segs.push(s);
   for (const s of cabinExclusions(world)) segs.push(s); // round 4 C: the cabins at the edge and their docks, lawns
+  // st-l: the story places' clearings (story-world.js, only under STORY_ON: world.storyClear is undefined with the flag
+  // off), lawns and segments, never a positive-radius point (site.js reads those as campsites)
+  if (world.storyClear) for (const s of world.storyClear) segs.push(s);
   return segs;
 }
 
@@ -180,7 +184,7 @@ export function* tilePropsSteps(tg, world, tx, ty) {
   const rng = mulberry32(42 + tx * 1000 + ty);
 
   const decal = new TrailDecal();
-  for (const p of world.portages) {
+  for (const p of world.portagesAll()) { // (st-l: a story carry is walked like any other: its tread too)
     const [bx0, bz0, bx1, bz1] = p.bbox;
     if (bx1 < ox - 4 || bx0 > ox + size + 4 || bz1 < oz - 4 || bz0 > oz + size + 4) continue;
     buildTrail(ctx, p, decal, pieces);
@@ -2155,7 +2159,7 @@ function storeSite(ctx, F, ep, dock, pd) {
   // (cabins-2) the portage trails near the landing, as points a metre apart: no store, porch, steps or rack within
   // SITE.trail of one (none stands in a portage's way); and the dock's foot, where the way from the door goes
   const trail = [], [lx, lz] = F.W(0, 0);
-  for (const p of ctx.world.portages || []) {
+  for (const p of ctx.world.portagesPublic()) { // (st-l: never toward a story carry)
     const pts = p.pts || [];
     for (let k = 0; k + 1 < pts.length; k++) {
       const [x0, z0] = pts[k], [x1, z1] = pts[k + 1];

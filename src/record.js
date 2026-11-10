@@ -336,7 +336,7 @@ class Record {
     if (!this.lakeIds) { this.lakeIds = new Map(); w.lakes.forEach((l, i) => { const n = l && (l.displayName || l.name); if (n && !this.lakeIds.has(n)) this.lakeIds.set(n, i + 1); }); }
     return this.lakeIds.get(name) || 0;
   }
-  portageByName(name) { const w = this.world; return w && Array.isArray(w.portages) ? w.portages.find((p) => p && p.name === name) || null : null; }
+  portageByName(name) { const w = this.world; return w && Array.isArray(w.portages) ? w.portagesPublic().find((p) => p && p.name === name) || null : null; }
   // the prints taken between two moments (null: since the season began)
   printsIn(from, to) {
     const P = this.photo; if (!P || typeof P.prints !== 'function') return [];

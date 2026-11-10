@@ -101,7 +101,7 @@ export class Uniques {
       let spot = null;
       if (f.kind === 'portage') {
         const cands = [];
-        for (const p of w.portages) {
+        for (const p of w.portagesPublic()) {
           if (!p.pts || p.pts.length < 2 || (p.rods || 0) < f.rods) continue;
           const m = p.pts[Math.floor(p.pts.length / 2)], d = Math.hypot(m[0] - L.x, m[1] - L.z) / 1000;
           if (d >= f.km[0] && d <= f.km[1]) cands.push({ p, d });

@@ -225,7 +225,7 @@ export class Parties {
     // the water graph: basin -> [{ to, portage, end }] (as tasks.js graph)
     this.adj = new Map();
     const add = (a, b, i, end) => { let l = this.adj.get(a); if (!l) this.adj.set(a, (l = [])); l.push({ to: b, portage: i, end }); };
-    w.portages.forEach((p, i) => {
+    w.portagesPublic().forEach((p, i) => {
       if (!p.launch || p.launch.length < 2) return;
       const a = this.basinOfLake(p.launch[0].lake), b = this.basinOfLake(p.launch[1].lake);
       if (a < 0 || b < 0 || a === b) return;
