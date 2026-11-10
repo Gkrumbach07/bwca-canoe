@@ -11,6 +11,8 @@
 //                `when:`, a `then` of known actions (f: ppl: lead: walt: und: ring: scene: line: give: pay: queue: emit:);
 //                every f: key a rule writes or reads is declared in facts.js; every lock key has a `when`. The feed's
 //                adapters (src/feed-*.js) emit only events of the vocabulary. Skipped while story-data has no files.
+//   5 leads      story-data/leads-*.js (stream P): one subject, a reachable ring, real lines and choices, every INK row
+//                confirmed by a ring or a presence (no metal detector). See check 5 below.
 //   3 conditions Every condition (rules' when, locks' when, story-places' show/visible/when) parses by Appendix B, every
 //                atom is a known form, and each sensor clause can hold: month, date, hour, dark/daylight (the game's
 //                own sun, astro.js, at Ely), ice/iceseason (`month:6 & dark & hour:20` is an error; `hour:7-10 & dark`
@@ -176,6 +178,7 @@ export const atomsOfAst = (n, out = []) => { if (n.atom) out.push(n.atom); else 
 const WHO = '[a-z][\\w-]*', ID = '[\\w.-]+', N = '-?\\d+(?:\\.\\d+)?', CMP = '(?:>=|<=|>|<|=)';
 const FORMS = [
   [/^(true|false)$/, 'const'],
+  [/^(ringon|ringed|nickseen|onlake):[\w.-]+$/, 'sensor'], // (st-p: pencil.js PENCIL_SENSORS: a story ring on a lake, a place rung, a nickname seen, the player on a lake)
   [new RegExp(`^f:(${ID})(?:=(${ID}))?$`), 'fact'],
   [/^stage(?:>=|<=|>|<|=)S[0-7]$/, 'stage'], [/^S[0-7](?:-S[0-7])?$/, 'stage'], [/^t[0-5]$/, 'tier'], [new RegExp(`^tier${CMP}\\d$`), 'tier'],
   [new RegExp(`^bigCount${CMP}\\d+$`), 'derived'], [/^(north|home|coop|host|ice|iceseason|lowwater|fog|daylight|dark|run\.active|site\.island|in:store)$/, 'word'],
@@ -406,6 +409,67 @@ if (!dataFiles.length) {
       }
     }
     result('text: the extract is fresh and its conditions hold', errs.length === 0, { files, conds: n, errs: errs.slice(0, 30) });
+  }
+}
+
+// --- 5 leads and inks (stream P, Round 1; campaign-design §4 "Lint", §4.1 "No metal detector") -----------------------------
+// story-data/leads-*.js: every lead has exactly one subject (a place or a person; a `where` only on a person), ring.by or
+// ring.ask (so a ring is always reachable), a born and a closes that parse, a Walt line that exists (an extracted page
+// line, walt-lines.js, or the data's own LINES with its doc) in one sentence-ish line with no step words; every ask rings
+// a known place and names a real choice; every INK row's `when` reads a ring (ringon:) or a presence (onlake:), never
+// just true, and names a real notebook entry.
+{
+  const files = dataFiles.filter((f) => /^leads/.test(f));
+  if (!files.length) result('leads: subjects, rings, lines and inks', null, { why: 'no story-data/leads-*.js' });
+  else {
+    const errs = [];
+    try { const P = await import(pathToFileURL(path.join(SRC, 'pencil.js')).href); if (cond && cond.registerSensor) for (const [k, v] of Object.entries(P.PENCIL_SENSORS || {})) cond.registerSensor(k, v); } catch (e) { errs.push(`pencil.js: ${e.message}`); }
+    const STEP = /\b(then|after that|go to|next,)\b/i;
+    let textIds = new Set();
+    try { const TEXT = path.join(DATA, 'text'); for (const f of readdirSync(TEXT).filter((x) => x.endsWith('.json'))) for (const id of Object.keys(JSON.parse(readFileSync(path.join(TEXT, f), 'utf8')).text || {})) textIds.add(id); } catch { textIds = null; }
+    for (const n of files) {
+      const m = await load(n);
+      if (m.__error) { errs.push(`${n}: ${m.__error}`); continue; }
+      const LINES = m.LINES || {}, PLACES = m.PLACES || {}, LAKES = m.LAKES || {};
+      const lineOk = (id) => !!LINES[id] || !IDS.walt || IDS.walt.has(id);
+      const conds = [];
+      for (const [id, l] of Object.entries(LINES)) { if (!l.text || !l.doc) errs.push(`${n}: LINES ${id} needs text and doc`); else if (STEP.test(l.text)) errs.push(`${n}: LINES ${id} has a step word`); }
+      for (const L of m.LEADS || []) {
+        const at = `${n}:lead ${L.id}`, sub = L.subject || {};
+        if (('place' in sub) === ('person' in sub)) errs.push(`${at}: exactly one subject (place or person)`);
+        if (sub.where && !sub.person) errs.push(`${at}: a where only on a person`);
+        if (sub.place && !PLACES[sub.place]) errs.push(`${at}: no place ${sub.place}`);
+        if (sub.person && IDS.people && !IDS.people.has(sub.person)) errs.push(`${at}: no person ${sub.person}`);
+        if (!L.ring || !(L.ring.by || L.ring.ask)) errs.push(`${at}: needs ring.by or ring.ask`);
+        if (!L.born || !L.closes) errs.push(`${at}: needs born and closes`);
+        for (const w of [L.walt, L.after].filter(Boolean)) if (!lineOk(w)) errs.push(`${at}: no Walt line ${w}`);
+        conds.push(...[L.born, L.followed, L.closes].filter(Boolean).map((c) => [c, at]));
+      }
+      for (const a of m.ASKS || []) {
+        const at = `${n}:ask ${a.id}`;
+        if (!PLACES[a.ring]) errs.push(`${at}: no place ${a.ring}`);
+        if (!a.choice && !a.ask) errs.push(`${at}: needs a choice id or its words`);
+        if (a.choice && textIds && !textIds.has(a.choice)) errs.push(`${at}: no text ${a.choice}`);
+        if (a.say && textIds && !textIds.has(a.say)) errs.push(`${at}: no text ${a.say}`);
+        for (const t of a.then || []) { const mm = /^walt:(.+)$/.exec(t); if (mm && !lineOk(mm[1])) errs.push(`${at}: no Walt line ${mm[1]}`); }
+        conds.push([a.if, at]);
+      }
+      for (const r of m.INK || []) {
+        const at = `${n}:ink ${r.nick}`;
+        if (!LAKES[r.lake]) errs.push(`${at}: no lake ${r.lake}`);
+        if (!r.when || /^\s*true\s*$/.test(r.when) || !/\b(ringon|onlake):/.test(r.when)) errs.push(`${at}: its when needs a ring (ringon:) or a presence (onlake:)`);
+        if (IDS.nb && r.nb && !IDS.nb.has(r.nb)) errs.push(`${at}: no notebook entry ${r.nb}`);
+        for (const nb of r.seen || []) if (IDS.nb && !IDS.nb.has(nb)) errs.push(`${at}: no notebook entry ${nb}`);
+        if (r.walt && !lineOk(r.walt)) errs.push(`${at}: no Walt line ${r.walt}`);
+        for (const t of (r.match && r.match.then) || []) { const mm = /^(walt|und):(.+)$/.exec(t); const why = mm && actionIdCheck(mm[1], mm[2]); if (why && !(mm[1] === 'walt' && LINES[mm[2]])) errs.push(`${at}: ${why}`); }
+        conds.push([r.when, at]); if (r.match) conds.push([r.match.when, at]);
+      }
+      for (const [c, at] of conds) {
+        const r = checkCond(c, at); errs.push(...(Array.isArray(r) ? r : r.errs));
+        if (cond && cond.compile) { const cc = cond.compile(c); if (!cc.ok || cc.warnings.length) errs.push(`${at}: '${c}': ${[...cc.errors, ...cc.warnings].join('; ')}`); }
+      }
+    }
+    result('leads: subjects, rings, lines and inks', errs.length === 0, { files, errs: errs.slice(0, 30) });
   }
 }
 

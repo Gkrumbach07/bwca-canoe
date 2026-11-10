@@ -226,7 +226,7 @@ class Sheets {
       const c = this.counts = new Map(SHEETS.map((t) => [t.id, { campsites: 0, portages: 0, lakes: 0 }]));
       const add = (x, z, k) => { const t = sheetAt(x, z); if (t) c.get(t.id)[k]++; };
       for (const p of w.campsites || []) if (!p.past) add(p.x, p.z, 'campsites'); // (the edge round: not past the band)
-      for (const p of w.portages || []) { const m = p.pts && p.pts[Math.floor(p.pts.length / 2)]; if (m) add(m[0], m[1], 'portages'); }
+      for (const { p } of publicPortages(w)) { const m = p.pts && p.pts[Math.floor(p.pts.length / 2)]; if (m) add(m[0], m[1], 'portages'); } // (st-p: the public ones)
       for (const l of w.lakes || []) if (l && l.name) add(l.cx, l.cz, 'lakes');
     }
     return this.counts.get(s.id);
@@ -271,3 +271,27 @@ class Sheets {
 export const sheets = new Sheets();
 export const owned = (id) => sheets.owned(id);
 export const showsDetail = (x, z) => sheets.showsDetail(x, z);
+
+// st-p (story Round 1, stream P; campaign-design §0 "Portage readers", §7.2): the portages a map may show, each with its
+// slot in world.portages (the index explored.crossed, the trip log and the hover read). world.portagesPublic() (stream L,
+// world.js) leaves the story's hidden carry out; until it exists the world's own list is walked, skipping anything
+// `hidden`. The same objects in the same order, so with no hidden carry (the flag off, main) the list is the world's.
+// Cached per world and length. → [{ p, i }]
+const PUB = { w: null, n: -1, m: -1, list: [] };
+export function publicPortages(w) {
+  const all = w && w.portages;
+  if (!all) return [];
+  const pub = typeof w.portagesPublic === 'function' ? w.portagesPublic() : null, src = pub || all;
+  if (PUB.w === w && PUB.n === all.length && PUB.m === src.length) return PUB.list;
+  const list = [];
+  for (let k = 0, j = 0; k < src.length; k++) {
+    const p = src[k];
+    if (!p || p.hidden) continue;
+    while (j < all.length && all[j] !== p) j++; // (indexed reads: the public list keeps the world's order)
+    list.push({ p, i: j < all.length ? j : -1 });
+    j++;
+  }
+  Object.assign(PUB, { w, n: all.length, m: src.length, list });
+  return list;
+}
+// /st-p

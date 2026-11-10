@@ -19,7 +19,7 @@ import { esc, plural, word, shortDate, fishSilhouette } from './hud.js';
 import { markOf } from './ep-start.js'; // round 2, entry points true to life: an entry point found at its start
 import { KINDS } from './tasks.js';
 import { names } from './names.js';
-import { sheets, sheetAt } from './sheets.js';
+import { sheets, sheetAt, publicPortages } from './sheets.js'; // (st-p: publicPortages, the hidden carry left out)
 import { explored } from './explored.js';
 import { teaWord } from './water.js';
 import { eventsAt } from './burns.js';
@@ -199,7 +199,7 @@ export class MapBook {
       out.push({ name: l.name, kind: l.river ? (l.creek ? 'creek' : 'river') : 'lake', x: l.cx, z: l.cz, lake: l.id, sub: l.river ? '' : acreWords(acresOf(l, w)), r: Math.sqrt((l.cells * w.cell * w.cell) / Math.PI), big: l.cells });
     }
     for (const p of names.places) out.push({ name: p.name, kind: p.kind, x: p.x, z: p.z, sub: p.lake ? w.lakeName(p.lake) || '' : '' });
-    w.portages.forEach((p, i) => {
+    publicPortages(w).forEach(({ p, i }) => { // (st-p: the public ones)
       if (!p.name || !p.pts || !p.pts.length) return;
       const m = p.pts[Math.floor(p.pts.length / 2)];
       out.push({ name: p.proper ? p.name : `${p.name} portage`, kind: 'portage', x: m[0], z: m[1], sub: `${p.rods} rods`, i });
@@ -344,7 +344,7 @@ export class MapBook {
     const ice = f && f.iceOf ? f.iceOf(id) : null, year = (this.journal.day && this.journal.day.year) || 2026;
     const ids = this.pieces(id);
     const sites = w.campsites.map((c, i) => [c, i]).filter(([c]) => !c.past && ids.has(c.lake ?? lakeAt(w, c.x, c.z))); // (the edge round: not past the band)
-    const portages = w.portages.map((p, i) => [p, i]).filter(([p]) => p.launch && p.launch.some((l) => ids.has(l.lake)) && !p.launch.every((l) => ids.has(l.lake)));
+    const outs = publicPortages(w).map(({ p, i }) => [p, i]).filter(([p]) => p.launch && p.launch.some((l) => ids.has(l.lake)) && !p.launch.every((l) => ids.has(l.lake)));
     const eps = w.entryPoints.filter((e) => ids.has(e.lake));
     const tea = teaWord(L.cdom);
     const rows = [];
@@ -359,7 +359,7 @@ export class MapBook {
     rows.push(['Campsites', sites.length ? `${sites.length}${slept ? ` · ${word(slept)} slept at ✓` : ''}${numbered.length ? `<br><span class="soft">${numbered.slice(0, 24).map(([c]) => `#${c.usfs}`).join(' ')}${numbered.length > 24 ? ' …' : ''}</span>` : ''}` : '<span class="soft">none</span>']);
     // the portages out, by where they go (the shortest first)
     const dest = new Map();
-    for (const [p, i] of portages) { const o = p.launch.find((l) => !ids.has(l.lake)), nm = (o && w.lakeName(o.lake)) || 'unnamed water'; const d = dest.get(nm) || []; d.push([p.rods, explored.crossed(i)]); dest.set(nm, d); }
+    for (const [p, i] of outs) { const o = p.launch.find((l) => !ids.has(l.lake)), nm = (o && w.lakeName(o.lake)) || 'unnamed water'; const d = dest.get(nm) || []; d.push([p.rods, explored.crossed(i)]); dest.set(nm, d); }
     const dl = [...dest.entries()].sort((p, q) => Math.min(...p[1].map((r) => r[0])) - Math.min(...q[1].map((r) => r[0])));
     rows.push(['Portages', dl.length ? dl.slice(0, 12).map(([nm, rs]) => `to ${esc(nm)}, ${rs.sort((p, q) => p[0] - q[0]).map(([r, x]) => `${r}${x ? ' ✓' : ''}`).join(', ')} rods`).join('<br>') + (dl.length > 12 ? `<br><span class="soft">and ${dl.length - 12} more</span>` : '') : '<span class="soft">none</span>']);
     if (eps.length) rows.push(['Landings', eps.map((e) => `entry point ${e.ep}${e.name ? `, ${esc(e.name)}` : ''}`).join('<br>')]);

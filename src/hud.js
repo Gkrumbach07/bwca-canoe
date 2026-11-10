@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { clamp } from './rng.js';
 import { MONTHS, monthDay } from './astro.js';
 import { FRESH } from './wind.js';
-import { sheets, sheetAt, sheetById, SHEETS } from './sheets.js'; // hubs 2D, fb2 D: the map sheets, owned, and what the map may show
+import { sheets, sheetAt, sheetById, SHEETS, publicPortages } from './sheets.js'; // (st-p: publicPortages, the hidden carry left out) hubs 2D, fb2 D: the map sheets, owned, and what the map may show
 import { explored, INK_WATER, INK_RIM } from './explored.js'; // round A-B: the map filling in (the lakes paddled inked)
 import { lifeKmh } from './pace.js';
 import { miles, fmtDepth, fmtFtIn, fmtIn, fmtLbOz, fmtF, fmtMphMs, fmtMphKmh, fmtDist, scaleBar } from './units.js'; // imperial on screen; the game itself stays metric
@@ -1718,8 +1718,8 @@ export class Hud {
       const dp = sheet ? mPerPx / k : 0, close = mPerPx < 16, mid = mPerPx < 60 && dp < 72;
       ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       ctx.font = `italic 600 ${13 * k}px ${SERIF}`;
-      if (lay.portages && mPerPx < 40 && dp < 48) for (let pi = 0; pi < w.portages.length; pi++) { // (further out the red dashes were all you saw)
-        const p = w.portages[pi], [bx0, bz0, bx1, bz1] = p.bbox;
+      if (lay.portages && mPerPx < 40 && dp < 48) for (const { p, i: pi } of publicPortages(w)) { // (further out the red dashes were all you saw; st-p: the public ones)
+        const [bx0, bz0, bx1, bz1] = p.bbox;
         if (!inView(bx0, bz0, bx1, bz1) || !onMine(bx0, bz0, bx1, bz1)) continue;
         ctx.beginPath();
         p.pts.forEach(([x, z], n) => { const [a, b] = toPx(x, z); if (n) ctx.lineTo(a, b); else ctx.moveTo(a, b); });
