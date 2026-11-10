@@ -30,7 +30,7 @@ import { buildBook, inkParts, UND, BACK_COVER, PHOTO_AT, POCKET_PHOTOS, bcFor, b
 import { RULES_BOOK } from './story-data/rules-book.js';
 import { loadText, nbText, text as textOf, say } from './story-data/words.js';
 import { Casebook } from './casebook.js';
-import { boundFound, definePage, itemDef } from './items.js';
+import { bound, boundFound, definePage, itemDef } from './items.js';
 
 export const READ_SECS = 3;       // a spread open this long is read (10 §11.1)
 export const HERE_MAX_R = 150;    // m: no place is read-here from further (campaign-design §6.2, the lint's bound)
@@ -365,7 +365,7 @@ export async function installBook(t = {}) {
     carry: (i, trip = null) => book.onCarry({ i, trip }),
     pair: (a, b, trip = null) => book.onPair({ a, b, trip }),
     resolved: () => ({ ...book.resolved }),
-    definePage,
+    definePage, bound,
   };
   return book;
 }

@@ -51,11 +51,12 @@ export class Casebook {
   nicks() {
     const s = this.story, data = this.book.data, read = (nb) => s.nbHas('read', nb);
     const cut = s.has('nb.found') ? CUT.map((c) => (textOf(c.id) || {}).text || '').join('\n') : '';
-    return NICKS.filter((n) => cut.includes(n.match) || (data.nicks[n.nick] || []).some(read)).map((n) => {
+    return NICKS.map((n) => {
       const u = UND.find((q) => q.nick === n.nick);
-      const matched = s.has(`ink.${n.nick}`) || s.has(`knows.${n.nick}`) || (u && s.nbHas('und', u.nb));
-      return { ...n, matched, note: matched && u ? u.note : null };
-    });
+      const matched = s.has(`ink.${n.nick}`) || s.has(`knows.${n.nick}`) || !!(u && s.nbHas('und', u.nb));
+      const seen = matched || cut.includes(n.match) || (data.nicks[n.nick] || []).some(read); // (a nickname someone explained is known, read or not)
+      return seen ? { ...n, matched, note: matched && u ? u.note : null } : null;
+    }).filter(Boolean);
   }
   chip(nick) {
     const n = NICKS.find((q) => q.nick === nick), P = this.book.t.pencil, j = this.book.t.journal;
