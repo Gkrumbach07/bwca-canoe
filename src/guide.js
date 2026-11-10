@@ -33,6 +33,7 @@
 //     'near'   its target came within reach (reach().show turned true) ({ d }) · 'far' the other way
 //     '*'      every event, fn(evt, entry, detail)
 //   guide.stats() → { open, done, story, current, marks, sources } (the rigs)
+//   guide.act(id)                      an entry's one button (spec.action { label, run, short }), pressed in the journal
 //
 // An entry: { id, kind: 'story' | 'side' | 'starter' | 'ticket' | 'board', title, next (one plain line: what to do now,
 //   ending in a full stop), target: { kind: 'person' | 'place' | 'thing', key, label, pos() → { x, y, z } | null (the
@@ -51,9 +52,13 @@ export const GUIDE = {
   full: 0.6,        // of the reach: full strength inside this share of it, fading to nothing at its edge
   marksMax: 3,      // the locator draws at most this many at once (the main path's first)
   siteNear: 60,     // m: at a campsite to check, the next part is pointed at and named
+  exactR: 150,      // m: a notice's own ring this tight is a place to point at (a beaver dam's, the old trail's)
 };
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 const stop = (s) => { const w = String(s || '').trim(); return !w ? '' : /[.!?)]$/.test(w) ? w : `${w}.`; };
+// r4: metres over a shelf's `at` (props.js storeLayout) the gem's target sits, under the beams: a hand over the food and
+// tackle gondolas' tops, in front of the gear wall's upper shelves
+const SHELF_UP = { food: 0.75, tackle: 0.75, gear: 0.4 };
 const PART_LABEL = { grate: 'grate', latrine: 'latrine', pad: 'tent pad' };
 const PARTS = ['grate', 'latrine', 'pad'];
 
@@ -132,8 +137,13 @@ export class Guide {
       // r3 replay: { x, z, r } a place the target belongs to (a campsite): anywhere inside it the target shows at full
       within: g.within && Number.isFinite(g.within.x) && Number.isFinite(g.within.z) ? { x: g.within.x, z: g.within.z, r: Math.min(GUIDE.nearMax, Number(g.within.r) || GUIDE.siteNear) } : null,
     } : null;
-    return { id: String(s.id), kind, title: String(s.title || ''), next: cap(stop(s.next)), target, tutorial: !!s.tutorial, hold: !!s.hold, order: Number.isFinite(s.order) ? s.order : 0, done: !!s.done, source: s.source || src, ref: s.ref ?? null };
+    // (loop tasks: an entry may carry one button for its page in the journal, { label, run(), short: words when it
+    // can't be done now (the money short) }: the late season's rescue off the ice)
+    const a = s.action && typeof s.action.run === 'function' ? { label: String(s.action.label || 'Do it'), run: s.action.run, short: s.action.short ? String(s.action.short) : null } : null;
+    return { id: String(s.id), kind, title: String(s.title || ''), next: cap(stop(s.next)), target, tutorial: !!s.tutorial, hold: !!s.hold, order: Number.isFinite(s.order) ? s.order : 0, done: !!s.done, source: s.source || src, ref: s.ref ?? null, action: a };
   }
+  // an entry's button pressed (the journal): → its run()'s answer, or false
+  act(id) { const e = this.get(id); if (!e || !e.action || e.action.short) return false; try { const r = e.action.run(); this.sync(); return r; } catch (err) { console.warn('guide: act', id, err); return false; } }
   get loading() { const ti = this.t.title; return !!(ti && ti.state && ti.state !== 'game'); }
   sync() {
     const specs = new Map();
@@ -217,7 +227,10 @@ export class Guide {
       if (key === 'door') return flat(L.door, 1.0);
       if (key === 'dock') { const q = L.dockSide || L.dockLand; return q ? { x: q.x, y: this.groundY(q.x, q.z) + 0.6, z: q.z } : null; }
       if (key === 'maps') return L.mapTable ? flat(L.mapTable.at || L.mapTable, 0.25) : null;
-      if (key === 'food' || key === 'tackle' || key === 'gear') { const s = (L.shelves || []).find((q) => q.kind === key); return s ? flat(s.at || s, 1.0) : null; }
+      // (r4: a hand over the shelf's own top, not a metre over its middle: the gem had sat up in the beams, at the top of
+      // the view against the HUD's bar; the food and tackle gondolas stand 1.45 m, the gear wall 1.92, their `at` 0.8 and
+      // 1.0 up)
+      if (key === 'food' || key === 'tackle' || key === 'gear') { const s = (L.shelves || []).find((q) => q.kind === key); return s ? flat(s.at || s, SHELF_UP[key]) : null; }
       const q = L[key];
       return q ? flat(q.at || q, 0.5) : null;
     };
@@ -255,7 +268,7 @@ export class Guide {
     return null;
   }
   taskNext(T, t) {
-    if (t.status === 'done') return 'Paid when you come in';
+    if (t.status === 'done') return t.cut ? 'No longer posted, still paid when you come in' : 'Paid when you come in'; // (r4 loopfix: a cut kind's)
     const k = (T.kinds || {})[t.kind];
     if (k && typeof k.next === 'function') { const w = k.next(T, t); if (w) return w; } // (a kind may say its own)
     if (t.kind === 'starter' || t.kind === 'campsite') {
@@ -295,7 +308,16 @@ export class Guide {
     }
     if (k && k.handsIn && typeof T.fishFor === 'function' && T.fishFor(t)) return { kind: 'place', key: `board:${t.from}`, label: 'the board', store: t.from, near: 20, pos: this.spot(t.from, 'board') };
     const sp = typeof T.spotOf === 'function' ? T.spotOf(t) : null;
-    if (!sp) return null;
+    if (!sp) {
+      // (loop tasks, 2026-11-08: a notice of several places, or of one place not kept as its spot (the next beaver dam,
+      // the next site of a last check, the Secchi's deep spot, the next bend of a primitive area's trail) is pointed at
+      // where its own pencil ring is exact: tight, or no wider than GUIDE.exactR. A ring round a bay or a lake (the loon
+      // count, the creel survey) says only "about here", so no gem for it)
+      let r = null; try { r = k && typeof k.target === 'function' ? k.target(T, t) : null; } catch { r = null; }
+      if (!r || !Number.isFinite(r.x) || !Number.isFinite(r.z) || !(r.tight || (r.r || Infinity) <= GUIDE.exactR)) return null;
+      const x = r.x, z = r.z;
+      return { kind: 'place', key: `${t.kind}:${Math.round(x)}:${Math.round(z)}`, label: r.label || '', near: 40, pos: () => ({ x, y: this.groundY(x, z) + 0.4, z }) };
+    }
     return { kind: t.kind === 'item' ? 'thing' : 'place', key: `${t.kind}:${Math.round(sp.x)}:${Math.round(sp.z)}`, label: '', near: 40, pos: () => ({ x: sp.x, y: this.groundY(sp.x, sp.z) + 0.4, z: sp.z }) };
   }
   // the ranger's tickets written up: paid from the journal anywhere; in or about a store, its counter is pointed at

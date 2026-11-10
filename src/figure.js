@@ -94,11 +94,36 @@ function torsoWeights(y, z) {
   return w;
 }
 
-function buildMesh(cols, res = 1) {
+function buildMesh(cols, res = 1, { pfd = true } = {}) {
   const m = new Mesher(true);
   const col = Object.fromEntries(Object.entries(cols).map(([k, v]) => [k, C(v)]));
   const n = (k) => Math.max(4, Math.round(k * res));
   const spec = torsoSpec(1.1);
+  // --- the PFD shell over the shirt, and its shoulder straps: built last, so its triangles end the index and the figure
+  // can take it off by drawing the range before them (r4 body: fig.setPfd)
+  const pfdShell = () => {
+    const rows = [[1.04, 0.003, 'pfdDark'], [1.052, 0.024, 'pfdDark'], [1.065, 0.025, 'pfd'], [1.15, 0.027, 'pfd'], [1.25, 0.029, 'pfd'], [1.33, 0.027, 'pfd'], [1.372, 0.022, 'pfd'], [1.386, 0.018, 'pfdDark'], [1.394, 0.003, 'pfdDark']];
+    const rings = [];
+    for (const [y, add, c] of rows) {
+      const [, cx, rf, rb, rz] = torsoAt(spec, y);
+      const colAt = (th) => (Math.abs(Math.sin(th)) < 0.13 && Math.cos(th) > 0 && c === 'pfd' ? col.pfdDark : col[c]);
+      rings.push(ringPts(V3(cx, y, 0), V3(1, 0, 0), V3(0, 0, 1), n(20), (th) => [(Math.cos(th) >= 0 ? rf : rb) + add, rz + add * 0.85], { shape: 2.5, col: colAt, w: (th, p) => torsoWeights(y, p.z) }));
+    }
+    loft(m, rings);
+    // straps: over the shoulders from the front panel to the back
+    for (const sg of [-1, 1]) {
+      const pts = [[0.118, 1.372], [0.085, 1.43], [0.035, 1.468], [-0.025, 1.47], [-0.075, 1.44], [-0.11, 1.372]];
+      const rr = [];
+      for (let i = 0; i < pts.length; i++) {
+        const [x, y] = pts[i], p = V3(x, y, sg * 0.098);
+        const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)];
+        const t = V3(b[0] - a[0], b[1] - a[1], 0).normalize();
+        const f = frame(t, V3(0, 0, 1));
+        rr.push(ringPts(p, f.ex, f.ey, 6, [0.026, 0.006], { shape: 3, col: col.pfdDark, w: torsoWeights(Math.min(y, 1.46), sg * 0.12) }));
+      }
+      loft(m, rr, { capStart: true, capEnd: true });
+    }
+  };
   // --- the torso, neck and head: one loft
   {
     const rings = [];
@@ -134,30 +159,6 @@ function buildMesh(cols, res = 1) {
         ringPts(V3(-0.005, hy, ez), V3(0, 1, 0), V3(1, 0, 0), n(6), [0.024, 0.014], { col: col.skin, w: [[B.head, 1]] }),
         ringPts(V3(-0.008, hy, ez + sg * 0.012), V3(0, 1, 0), V3(1, 0, 0), n(6), [0.022, 0.012], { col: col.skin, w: [[B.head, 1]] }),
       ], { capEnd: true });
-    }
-  }
-  // --- the PFD shell over the shirt, and its shoulder straps
-  {
-    const rows = [[1.04, 0.003, 'pfdDark'], [1.052, 0.024, 'pfdDark'], [1.065, 0.025, 'pfd'], [1.15, 0.027, 'pfd'], [1.25, 0.029, 'pfd'], [1.33, 0.027, 'pfd'], [1.372, 0.022, 'pfd'], [1.386, 0.018, 'pfdDark'], [1.394, 0.003, 'pfdDark']];
-    const rings = [];
-    for (const [y, add, c] of rows) {
-      const [, cx, rf, rb, rz] = torsoAt(spec, y);
-      const colAt = (th) => (Math.abs(Math.sin(th)) < 0.13 && Math.cos(th) > 0 && c === 'pfd' ? col.pfdDark : col[c]);
-      rings.push(ringPts(V3(cx, y, 0), V3(1, 0, 0), V3(0, 0, 1), n(20), (th) => [(Math.cos(th) >= 0 ? rf : rb) + add, rz + add * 0.85], { shape: 2.5, col: colAt, w: (th, p) => torsoWeights(y, p.z) }));
-    }
-    loft(m, rings);
-    // straps: over the shoulders from the front panel to the back
-    for (const sg of [-1, 1]) {
-      const pts = [[0.118, 1.372], [0.085, 1.43], [0.035, 1.468], [-0.025, 1.47], [-0.075, 1.44], [-0.11, 1.372]];
-      const rr = [];
-      for (let i = 0; i < pts.length; i++) {
-        const [x, y] = pts[i], p = V3(x, y, sg * 0.098);
-        const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)];
-        const t = V3(b[0] - a[0], b[1] - a[1], 0).normalize();
-        const f = frame(t, V3(0, 0, 1));
-        rr.push(ringPts(p, f.ex, f.ey, 6, [0.026, 0.006], { shape: 3, col: col.pfdDark, w: torsoWeights(Math.min(y, 1.46), sg * 0.12) }));
-      }
-      loft(m, rr, { capStart: true, capEnd: true });
     }
   }
   // --- arms into fists
@@ -241,6 +242,8 @@ function buildMesh(cols, res = 1) {
     }
     loft(m, fr, { capStart: true, capEnd: true });
   }
+  m.pfdAt = m.i.length;
+  if (pfd) pfdShell();
   return m;
 }
 
@@ -421,14 +424,15 @@ export function buildFigure(mat, cols = FIGURE_COLORS) {
     bones[n].position.copy(J.off);
   }
   const group = new THREE.Group();
-  const geo = buildMesh(cols, 1).geometry();
+  const body0 = buildMesh(cols, 1), pfdAt = body0.pfdAt, geo = body0.geometry();
   const hatM = buildHat(cols);
   // occlusion in the bind pose, baked in the background after startup: the armpits, between the legs, the
-  // collar, under the hat's brim and the PFD
+  // collar, under the hat's brim (r4 body: the occluder without the PFD shell, which comes off: the shirt under it is
+  // never shaded by a vest that is not there)
   const hatG = hatM.geometry();
   {
     let body = null;
-    const proxy = () => body || (body = trianglesOf(buildMesh(cols, 0.35).geometry()));
+    const proxy = () => body || (body = trianglesOf(buildMesh(cols, 0.35, { pfd: false }).geometry()));
     bakeLater(() => {
       const hatTris = trianglesOf(hatG, new THREE.Matrix4().makeTranslation(P.head.x, P.head.y, P.head.z));
       const b = proxy(), all = new Float32Array(b.length + hatTris.length); all.set(b); all.set(hatTris, b.length);
@@ -446,5 +450,9 @@ export function buildFigure(mat, cols = FIGURE_COLORS) {
   hat.castShadow = true; hat.receiveShadow = true;
   bones.head.add(hat);
   const poser = new Poser(joints);
-  return { group, mesh, hat, bones, joints, poser, bind: P };
+  // r4 body: the life jacket on or off (its shell and straps are the index's last triangles: the range before them is
+  // drawn without it; one mesh either way, no program added)
+  let pfdOn = true;
+  const setPfd = (on) => { on = !!on; if (on === pfdOn) return; pfdOn = on; geo.setDrawRange(0, on ? Infinity : pfdAt); };
+  return { group, mesh, hat, bones, joints, poser, bind: P, setPfd, get pfd() { return pfdOn; } };
 }

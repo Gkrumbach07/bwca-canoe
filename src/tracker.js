@@ -114,7 +114,11 @@ export class Tracker {
   update(dt = 0) {
     const G = this.t.guide;
     if (!G || !this.enabled) { this.draw(null); return; }
-    if (this.veiled) { this.draw(null, true); return; }
+    if (this.veiled) { this.unveil = true; this.draw(null, true); return; }
+    // (r4: the guide syncs every GUIDE.syncS; the moment a talk, the journal or the sheet is put away its entries could be
+    // a quarter second old, and the card came back saying the step just done: "Talk to Brooke at the counter" flashed
+    // after the talk, before "Buy food". Coming out from under a veil, the guide is synced first.)
+    if (this.unveil) { this.unveil = false; try { G.sync(); } catch (e) { console.warn('tracker: sync', e); } }
     const step = Number.isFinite(dt) && dt > 0 ? Math.min(dt, 0.5) : 0;
     // (r3 replay: a tutorial step just come up is said first; other news waits behind it TRACKER.tutFirstS: the talk's
     // end brought "New task: First night out" before "Next: Buy food", so a new player read the side job first)

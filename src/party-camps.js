@@ -62,12 +62,24 @@ const HULLS = [0xa9aca8, 0xa9aca8, 0xa9aca8, 0xc5a46e, 0xc5a46e, 0x5b7a5a, 0x9c4
 const HULL_HEX = { aluminium: 0xa4a9ac, kevlar: 0xc0954c, forest: 0x46542f };
 const NO_STORE = Object.freeze({}); // (r2 2 verify: npcs.js giveWay with no store's door)
 const TENT_OUT = 1.2; // s (r2 2): stooped in a tent's door before walking out of it
+// r4 body: the tents are pitched after they land and struck before they go (they had stood up the moment the camp came,
+// and gone with it): game hours. A tent waits as a packed bag where it will stand, is spread out flat, and rises on its
+// poles; the next one a little later. Struck the same way backwards, the last done well before they push off.
+export const PITCH = { after: 0.05, gap: 0.08, dur: 0.06, strike: 0.5, done: 0.12 };
 const ALL = Object.freeze({ camp: true, canoes: true, people: true });
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const C = (hex) => new THREE.Color(hex);
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const pick = (rng, a) => a[Math.floor(rng() * a.length)];
 const headingTo = (dx, dz) => Math.atan2(-dz, dx); // npcs.js: a figure's heading facing (dx, dz)
+const _S = new THREE.Matrix4();
+// r4 body: a tent's scale at u (0 packed .. 1 up): spread out over the first third, flat; then up on its poles (going
+// up, a little past and settling: the poles' spring; coming down, simply eased)
+function tentScale(u, up) {
+  const sp = clamp(u / 0.3, 0, 1), xz = 0.3 + 0.7 * sp * sp * (3 - 2 * sp), v = clamp((u - 0.3) / 0.7, 0, 1);
+  const r = up ? 1 + 2.4 * (v - 1) ** 3 + 1.4 * (v - 1) ** 2 : v * v * (3 - 2 * v);
+  return [xz, 0.03 + 0.97 * r, xz];
+}
 
 // --- the pieces, in their own frames, built once each ---------------------------------------------------------------
 const base = new Map();
@@ -203,6 +215,7 @@ export class PartyCamps {
   letGo(key) {
     const D = this.drawn.get(key); if (!D) return;
     if (this.people && this.people.smart) this.people.smart.clear(`camp:${key}`); // gl-e
+    this.tentsAway(D);
     if (D.mesh) { this.scene.remove(D.mesh); D.mesh.geometry.dispose(); }
     if (D.canoeMesh) { this.scene.remove(D.canoeMesh); D.canoeMesh.geometry.dispose(); }
     const dyn = this.tiles.dynamic || [];
@@ -278,10 +291,12 @@ export class PartyCamps {
       for (let k = 0; k < 14 && tents.length < want; k++) { const a = a0 + (k / 14) * Math.PI * 2; tryAt(F.x + Math.cos(a) * r, F.z + Math.sin(a) * r, kindOf()); }
       if (tents.length >= want) break;
     }
+    const tentPieces = []; // (r4 body: the tents last in the camp's mesh, so its draw range can leave them out while they go up)
     for (const tn of tents) {
       const pose = tentPose(G, tn.x, tn.z, tn.fdx, tn.fdz, tn.size), m = pose.matrix.clone();
       m.elements[12] -= ox; m.elements[14] -= oz;
-      pieces.push({ geo: tentGeometry(tn.kind, pick(rng, TENT_COLOURS)), m });
+      tn.geo = tentGeometry(tn.kind, pick(rng, TENT_COLOURS)); tn.world = pose.matrix.clone(); tn.obstacle = pose.obstacle;
+      tentPieces.push({ geo: tn.geo, m });
       obstacles.push(pose.obstacle);
       spots.tents.push({ x: tn.x + tn.fdx * (tn.size.ahead ? tn.size.ahead : tn.size.b + 1.0), z: tn.z + tn.fdz * (tn.size.ahead ? tn.size.ahead : tn.size.b + 1.0), heading: headingTo(tn.fdx, tn.fdz) });
     }
@@ -314,7 +329,8 @@ export class PartyCamps {
       if (m) { m.name = name; m.castShadow = true; m.receiveShadow = true; m.position.set(ox, 0, oz); m.matrixAutoUpdate = false; m.updateMatrix(); }
       return m;
     };
-    const mesh = merged(pieces, `party camp ${party.id}`), canoeMesh = merged(canoePieces, `party canoes ${party.id}`);
+    const tentFrom = pieces.reduce((n, q) => n + q.geo.getAttribute('position').count, 0);
+    const mesh = merged(pieces.concat(tentPieces), `party camp ${party.id}`), canoeMesh = merged(canoePieces, `party canoes ${party.id}`);
     if (mesh) this.scene.add(mesh);
     const dyn = this.tiles.dynamic || (this.tiles.dynamic = []);
     for (const o of obstacles) dyn.push(o);
@@ -322,9 +338,10 @@ export class PartyCamps {
     v.live = true; v.hear = CAMPS.hear; v.figs = [];
     const D = { key, c, party, stay: c.stay, site, v, mesh, obstacles, spots, canoeMesh, canoeObs, canoesIn: false, fireKey: `party:${party.id}`, d: Math.hypot(site.x - this.player.x, site.z - this.player.z), canoes: canoes.length, tents: tents.length,
       figs: v.members.map((m, i) => ({ key: `${key}#${i}`, x: 0, z: 0, y: 0, onGround: true, heading: 0, look: m.look, spec: { pose: 'stand', lean: 0.02, wave: 0 } })), wave: null, fireR: mulberry32(((c.stay.seed >>> 0) ^ 0xf17e) >>> 0)(),
-      tentList: tents, canoeAt: canoes.map((q) => ({ x: q.x, z: q.z, tx: q.tx, tz: q.tz, wx: q.wx, wz: q.wz, y: q.y, q: new THREE.Quaternion().setFromRotationMatrix(q.basis.clone().multiply(new THREE.Matrix4().makeRotationX(Math.PI))) })), born: this.now, ring: { x: F.x, z: F.z }, bench: L.bench ? { x: L.bench.x, z: L.bench.z } : null }; // (r2 2: for the walks round them, the way out of a tent, the canoes carried up and down)
+      tentList: tents, tentFrom, tentObjs: null, canoeAt: canoes.map((q) => ({ x: q.x, z: q.z, tx: q.tx, tz: q.tz, wx: q.wx, wz: q.wz, y: q.y, q: new THREE.Quaternion().setFromRotationMatrix(q.basis.clone().multiply(new THREE.Matrix4().makeRotationX(Math.PI))) })), born: this.now, ring: { x: F.x, z: F.z }, bench: L.bench ? { x: L.bench.x, z: L.bench.z } : null }; // (r2 2: for the walks round them, the way out of a tent, the canoes carried up and down)
     this.drawn.set(key, D);
     this.place(D);
+    this.pitch(D);
     this.canoesOn(D, this.shows(D.stay).canoes);
     return D;
   }
@@ -358,6 +375,90 @@ export class PartyCamps {
     return true;
   }
 
+  // --- r4 body: the tents pitched and struck -------------------------------------------------------------------------
+  // the hours (of today) the first tent goes up and the first comes down; null: not today (place(), each pass)
+  pitchHours(D, T) {
+    const s = D.stay, n = Math.max(1, D.tentList.length);
+    D.pitchGap = Math.min(PITCH.gap, (PITCH.strike - PITCH.done - PITCH.dur) / Math.max(1, n - 1));
+    D.pitchAt = null; D.strikeAt = null; D.bagUntil = null;
+    if (T === s.start) D.pitchAt = this.times(s).landed + PITCH.after;
+    if (T === s.end) { const t = this.times(s), dep = Number.isFinite(t.depart) ? t.depart : s.leave; D.strikeAt = dep - PITCH.strike; D.bagUntil = dep; }
+  }
+  // how far up tent i is now: 0 packed (or gone) .. 1 pitched
+  tentU(D, i) {
+    if (D.pitchAt == null && D.strikeAt == null) return 1;
+    const h = this.day.hours, g = D.pitchGap ?? PITCH.gap;
+    if (D.pitchAt != null) return clamp((h - (D.pitchAt + i * g)) / PITCH.dur, 0, 1);
+    return 1 - clamp((h - (D.strikeAt + i * g)) / PITCH.dur, 0, 1);
+  }
+  // being put up or taken down now (or next), so someone is at it
+  tentBusy(D, i) {
+    if (i == null || i >= D.tentList.length) return false;
+    const h = this.day.hours, g = D.pitchGap ?? PITCH.gap;
+    const t0 = D.pitchAt != null ? D.pitchAt + i * g + ((D.tentLate && D.tentLate[i]) || 0) : D.strikeAt != null ? D.strikeAt + i * g : null;
+    return t0 != null && h > t0 - 0.03 && h < t0 + PITCH.dur;
+  }
+  // the frame: while any tent is not fully up, each is drawn on its own (the camp's mesh drawn without them): a packed
+  // bag where it will stand, spread out flat, then risen on its poles; once all are up, back in the camp's one mesh
+  pitch(D) {
+    const n = D.tentList.length; if (!n || !D.mesh) return;
+    const us = D.tentU || (D.tentU = new Array(n).fill(1));
+    let moving = false;
+    // (round 4 fix: a tent about to rise where you stand waits till you step off its spot, then goes up from flat: its
+    // collision box used to switch on under you and shove you 1.22 m aside in one tick. `late` is how long it waited, h)
+    const late = D.tentLate || (D.tentLate = new Array(n).fill(0)), pl = this.player, g = D.pitchGap ?? PITCH.gap;
+    for (let i = 0; i < n; i++) {
+      us[i] = this.tentU(D, i);
+      if (D.pitchAt != null && late[i] > 0) us[i] = clamp((this.day.hours - (D.pitchAt + i * g) - late[i]) / PITCH.dur, 0, 1);
+      if (D.pitchAt != null && us[i] > 0 && us[i] < 1 && !(D.tentObjs && D.tentObjs[i].u > 0) && pl && this.onSpot(D.tentList[i].obstacle, pl.x, pl.z)) {
+        late[i] = Math.max(late[i], this.day.hours - (D.pitchAt + i * g)); us[i] = 0;
+      }
+      if (us[i] < 1) moving = true;
+    }
+    if (!moving) { if (D.tentObjs) this.tentsAway(D); return; }
+    if (!D.tentObjs) {
+      const mat = D.mesh.material;
+      D.tentObjs = D.tentList.map((tn) => {
+        const tent = new THREE.Mesh(tn.geo, mat), bag = new THREE.Mesh(itemGeometry('drybag', 2), mat);
+        for (const o of [tent, bag]) { o.castShadow = true; o.receiveShadow = true; o.matrixAutoUpdate = false; o.visible = false; this.scene.add(o); }
+        tent.name = 'party tent'; bag.name = 'party tent bag';
+        const G = this.tiles.groundAt(tn.x, tn.z);
+        bag.matrix.makeRotationY(Math.atan2(tn.fdx, tn.fdz)).setPosition(tn.x, G - 0.01, tn.z);
+        return { tent, bag, u: -1, obs: true };
+      });
+      D.mesh.geometry.setDrawRange(0, D.tentFrom);
+    }
+    const h = this.day.hours, bagTime = D.pitchAt != null ? h >= (D.arrive ?? 0) : D.bagUntil != null && h < D.bagUntil;
+    for (let i = 0; i < n; i++) {
+      const o = D.tentObjs[i], u = us[i], tn = D.tentList[i];
+      o.bag.visible = u <= 0 && bagTime;
+      o.tent.visible = u > 0;
+      if (u > 0 && u !== o.u) o.tent.matrix.copy(tn.world).multiply(_S.makeScale(...tentScale(u, D.pitchAt != null)));
+      o.u = u;
+      this.tentObstacle(D, o, tn, u > 0);
+    }
+  }
+  // standing on (or against) a tent's footprint: its box or circle, a body's half-width wider
+  onSpot(o, x, z, pad = 0.45) {
+    if (!o) return false;
+    const dx = x - o.x, dz = z - o.z;
+    if (o.box) return Math.abs(dx * o.ux + dz * o.uz) <= o.hx + pad && Math.abs(-dx * o.uz + dz * o.ux) <= o.hz + pad;
+    return Math.hypot(dx, dz) <= (o.r || 0) + pad;
+  }
+  tentObstacle(D, o, tn, on) {
+    if (o.obs === on) return;
+    o.obs = on;
+    const dyn = this.tiles.dynamic || (this.tiles.dynamic = []), k = dyn.indexOf(tn.obstacle);
+    if (on && k < 0) dyn.push(tn.obstacle); else if (!on && k >= 0) dyn.splice(k, 1);
+  }
+  // all up (or the camp let go): the tents back in the camp's mesh, the pieces away
+  tentsAway(D) {
+    if (!D.tentObjs) return;
+    D.tentObjs.forEach((o, i) => { this.scene.remove(o.tent); this.scene.remove(o.bag); this.tentObstacle(D, o, D.tentList[i], true); });
+    D.tentObjs = null;
+    if (D.mesh) D.mesh.geometry.setDrawRange(0, Infinity);
+  }
+
   // --- the hours of a camp ------------------------------------------------------------------------------------------
   // what they are doing at abs day T, hour h: 'landing' | 'evening' | 'night' | 'morning' | 'packing' | 'day'
   phase(s, T, h) {
@@ -370,6 +471,7 @@ export class PartyCamps {
     const T = this.parties.today, h = this.day.hours, ph = this.phase(D.stay, T, h), S = D.spots, show = this.shows(D.stay);
     const n = show.people ? Math.min(3, D.v.members.length) : 0; // (p2 C: on the way in or gone out, they are the moving party's)
     D.arrive = T === D.stay.start ? this.times(D.stay).arrive : D.stay.land;
+    this.pitchHours(D, T);
     // (r2 2 final: the morning they go, kept a moment past their time till the moving party says whether its sterns will
     // lift them (departOf sets holdCanoes): its actors made a few frames on, the canoes had gone off the bank for 8 frames
     // and come back to be lifted)
@@ -464,7 +566,8 @@ export class PartyCamps {
       const reg = (act, list) => { if (list && list.length) sm.register({ where, act, slots: list.map((q) => ({ x: q.x, z: q.z, heading: q.heading, seat: q.seat })), x: list[0].x, z: list[0].z }); };
       reg('cook', S.fire); reg('sit', S.seats); reg('unload', S.shore); reg('load', S.shore); reg('fish', S.shore); reg('tent', S.tents);
     }
-    const W = CAMP_WANTS[ph] || CAMP_WANTS.day, wants = wet ? { cook: 3, tent: 1 } : W;
+    const W0 = CAMP_WANTS[ph] || CAMP_WANTS.day, W = (ph === 'landing' || ph === 'packing') && D.tentList.some((_, i) => this.tentBusy(D, i)) ? { ...W0, tent: 4 } : W0; // (r4 body: the tents going up or down want hands)
+    const wants = wet ? { cook: 3, tent: 1 } : W;
     const people = []; for (let k = 0; k < n; k++) people.push({ key: `${v.key}#${k}`, wants });
     const m = sm.assign(where, people, sm.clock);
     v.figs = [];
@@ -472,7 +575,8 @@ export class PartyCamps {
       const a = m.get(`${v.key}#${k}`); if (!a) continue;
       const s = a.obj.slots[a.slot], f = D.figs[k], id = `${a.obj.id}#${a.slot}`;
       f.act = a.act;
-      this.goTo(f, s, id, s.seat ? { pose: 'sit', seat: s.seat } : a.act === 'cook' || a.act === 'load' || a.act === 'unload' ? { pose: 'stoop', wave: 0 } : a.act === 'fish' ? { pose: 'stand', lean: 0.05, hands: 'front', pitch: 0.25, wave: 0 } : { pose: 'stand', lean: 0.02, wave: f.spec.wave || 0 }, G, D);
+      const work = a.act === 'tent' && this.tentBusy(D, a.slot); // (r4 body: at a tent going up or coming down: stooped to it)
+      this.goTo(f, s, id, s.seat ? { pose: 'sit', seat: s.seat } : work || a.act === 'cook' || a.act === 'load' || a.act === 'unload' ? { pose: 'stoop', wave: 0 } : a.act === 'fish' ? { pose: 'stand', lean: 0.05, hands: 'front', pitch: 0.25, wave: 0 } : { pose: 'stand', lean: 0.02, wave: f.spec.wave || 0 }, G, D);
       v.figs[k] = f;
     }
     this.markIn(D);
@@ -534,6 +638,7 @@ export class PartyCamps {
     if ((this.t += dt) >= CAMPS.tick) { this.t = 0; this.sync(); for (const D of this.drawn.values()) { D.d = Math.hypot(D.site.x - p.x, D.site.z - p.z); this.place(D); } }
     const T = this.parties.today;
     for (const D of this.drawn.values()) {
+      this.pitch(D); // r4 body: the tents going up or coming down
       // the greeter, drawn while they greet (a little past figR); the hand lifted, eased up and down
       if (D.wave) {
         D.wave.t += dt;

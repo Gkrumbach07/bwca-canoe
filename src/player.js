@@ -527,7 +527,9 @@ export class Player {
       this.speed *= 0.9; this.yawRate = 0; st.power *= 0.9; this.easeBoost(1, dt);
       this.placeOnWater(dt);
       // (the season round: E walks you ashore over the ice, the canoe left where it is frozen in)
-      this.prompt = { key: 'E', text: 'Iced in until ice-out in early May (= steps the date) · walk ashore over the ice' };
+      // (loop tasks: in Adventure the date keys are off; the way out is the walk, or a rescue from the journal)
+      const adv = typeof window !== 'undefined' && window.__game && window.__game.trip && window.__game.trip.adventure;
+      this.prompt = { key: 'E', text: adv ? 'Frozen in · walk ashore over the ice' : 'Iced in until ice-out in early May (= steps the date) · walk ashore over the ice' };
       if (inp.pressed('KeyE')) this.stepOut();
       return;
     }
@@ -623,7 +625,7 @@ export class Player {
     else if (ok(this.x, nz, this.heading)) { this.z = nz; this.speed *= 0.7; }
     else {
       this.speed *= -0.15;
-      if (!w.inBounds(nx, nz, 40)) this.prompt = { text: 'Edge of the map — turn back', key: null };
+      if (!w.inBounds(nx, nz, 40)) this.prompt = { text: 'Past here is off your maps', key: null };
       else if (!w.isReady(nx, nz)) this.prompt = { text: 'Loading the lake ahead…', key: null };
     }
     this.damHold(); // a beaver dam across the creek holds the hull off (creeks.js)
@@ -1531,7 +1533,7 @@ export class Player {
         this.lapsing = boostWant > 1 && (onTrail || (!campArea && !yard)); // (travelling: a trail or open land, as before; a camp's and a store's walk is not)
         this.easeBoost(boostWant, dt);
         nx = this.x + mx * this.speed * this.boost * dt; nz = this.z + mz * this.speed * this.boost * dt;
-        if (!w.inBounds(nx, nz, 40)) { nx = this.x; nz = this.z; this.speed = 0; note = 'Edge of the map — turn back'; }
+        if (!w.inBounds(nx, nz, 40)) { nx = this.x; nz = this.z; this.speed = 0; note = 'Past here is off your maps'; }
         else if (!w.isReady(nx, nz)) { nx = this.x; nz = this.z; this.speed = 0; note = 'Loading the land ahead…'; }
         const near = w.tiles ? w.tiles.treesNear(nx, nz, 4.5) : [];
         ft.near = near;
@@ -1719,7 +1721,10 @@ export class Player {
     let trailText = null;
     if (onTrail) {
       const p = this.trailPoint(trail.trail, trail.along);
-      const remaining = p.tx * f.x + p.tz * f.z >= 0 ? trail.trail.length - trail.along : trail.along;
+      let remaining = p.tx * f.x + p.tz * f.z >= 0 ? trail.trail.length - trail.along : trail.along;
+      // (at an end, facing out of the trail: what lies ahead is the whole carry, not "0 rods to go": playtest r4-final,
+      // the 75 lot's arrival)
+      if (remaining < RODS * 0.5) remaining = trail.trail.length - remaining;
       const rods = Math.round(remaining / RODS);
       trailText = `${trail.def.name} · ${rods} ${rods === 1 ? 'rod' : 'rods'} to go`;
     }

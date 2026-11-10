@@ -4,6 +4,7 @@ import { storeLayouts, outfittersNear } from './props.js';
 import { makeLookMaterial } from './shading.js';
 
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+const _ots = new THREE.Vector3();
 
 // ---------------------------------------------------------------------------------------------------------------------
 // What stands between the pivot (the walker's head, or a little over the canoe) and the third-person camera, the way
@@ -53,6 +54,14 @@ export const SEE = {
 };
 const SEE_STRENGTH = 0.95;
 const SHOULDER = 0.75; // m: how far right of him the view moves looking all the way down (ChaseCamera.update)
+// r4 body: the story's person close by (the guide's step is someone a few metres off: the staffer at the talk): from the
+// usual chase his own body hid her. The view eases over his shoulder (the side she stands on, right if dead ahead), in
+// closer and lower, the look on his line at her distance and her face's height (the dot on her), so she and the gem over her are both in view; and back out
+// once she is behind him, further than r or the step is done. near / r: m from him; cos: in front of him within about
+// 70 degrees; dist: the chase's length (m, never longer than the wheel set it); side: m off his line; pitch: the tilt;
+// drop: m under her speaker point (a hand over the head) the look is at; rate:
+// the ease's rate (1/s: about a second each way)
+export const OTS = { near: 0.8, r: 4.5, cos: 0.34, dist: 3.4, side: 0.95, pitch: 0.16, drop: 0.45, rate: 2.2, swap: 0.6, swapRate: 1.6 };
 const CARRY_PITCH = 0.1; // rad: the chase's tilt on foot under the canoe (0.27 elsewhere; polish A)
 const seePars = /* glsl */ `
 uniform vec4 uSee;
@@ -391,6 +400,8 @@ export class ChaseCamera {
     this.pullV = 0;           // fb2 E: the spring's speed (m/s)
     this.pullHold = 0;        // fb2 E: seconds the way has been clear (it eases out after PULL.hold)
     this.sight = null;        // the last sightLine: { hard, soft } metres along the line from the pivot
+    this.story = null;        // r4 body: the guide's step's person when near ({ x, y, z } its speaker point; main.js), or null
+    this.ots = 0; this.otsSide = 1; // r4 body: how far over the shoulder (0..1, eased), and which side (1 his right)
     this.seeStrength = 0;     // fb2 E: how strongly the vegetation between the camera and the walker is seen through (SEE)
     const lock = () => {
       if (!this.wantsLock || this.locked) return;
@@ -565,13 +576,34 @@ export class ChaseCamera {
       this.forwardYaw = player.heading + this.userYaw;
       pitch = this.pitch + this.userPitch;
     }
-    const dist = this.distance * (onFoot ? 0.8 : 1);
+    let dist = this.distance * (onFoot ? 0.8 : 1);
     const tx = player.x, tz = player.z;
+    // r4 body: over the shoulder by the story's person (OTS)
+    const S = this.story, fw = player.forward;
+    let otsWant = 0, otsLat = 0;
+    if (footLook && !carry && S && Number.isFinite(S.x + S.y + S.z)) {
+      const dx = S.x - tx, dz = S.z - tz, d = Math.hypot(dx, dz);
+      otsLat = -dx * fw.z + dz * fw.x; // (+ to his right)
+      if (d > OTS.near && d < OTS.r && (dx * fw.x + dz * fw.z) / d > OTS.cos) otsWant = 1;
+      (this.otsAt || (this.otsAt = new THREE.Vector3())).set(S.x, S.y, S.z); // (kept: the ease back out after the step is gone)
+    }
+    if (this.ots < 0.02 && otsWant) this.otsSide = this.otsSideWant = otsLat < -0.25 ? -1 : 1; // (the side chosen as it starts)
+    // (round 4 fix: then kept until the person is well over to his other side (OTS.swap m across), where his head would
+    // stand between the camera and them: the camera then swings over to that shoulder, eased, never a cut)
+    else if (otsWant) {
+      if (otsLat < -OTS.swap) this.otsSideWant = -1; else if (otsLat > OTS.swap) this.otsSideWant = 1;
+      this.otsSide += ((this.otsSideWant ?? this.otsSide) - this.otsSide) * (1 - Math.exp(-dt * OTS.swapRate));
+    }
+    this.ots = this.first ? otsWant : this.ots + (otsWant - this.ots) * (1 - Math.exp(-dt * OTS.rate));
+    if (this.ots < 1e-3) this.ots = 0;
+    const ots = smoothstep(0, 1, this.ots);
+    if (ots > 0) { dist += (Math.min(dist, OTS.dist) - dist) * ots; pitch += (clamp(OTS.pitch - this.viewPitch * 0.6, -0.1, 1.1) - pitch) * ots; } // (the mouse's tilt still swings it)
     const ty = (onFoot ? player.altitude + 1.6 : this.world.levelAt(tx, tz) + 0.6);
     // fb2 E: looking down on foot the view moves over his right shoulder (the camera and the look point together, up to
     // SHOULDER m), so what is pointed at by his feet shows beside his head on the screen, not under it (stream A's
     // crosshair: a branch at his feet, the fire ring); level, it is straight behind him as before
-    const down = footLook ? smoothstep(0, 1, -this.viewPitch) : 0, shx = -player.forward.z * SHOULDER * down, shz = player.forward.x * SHOULDER * down;
+    const down = footLook ? smoothstep(0, 1, -this.viewPitch) : 0, shK = SHOULDER * down * (1 - ots) + OTS.side * this.otsSide * ots;
+    const shx = -player.forward.z * shK, shz = player.forward.x * shK;
     const px = tx + shx + Math.cos(yaw) * Math.cos(pitch) * dist, pz = tz + shz - Math.sin(yaw) * Math.cos(pitch) * dist;
     let py = ty + Math.sin(pitch) * dist;
     // never below the ground or the water, anywhere along the line from the paddler to the camera: on a slope
@@ -608,7 +640,17 @@ export class ChaseCamera {
         ly = ty + 0.4 + (gy - ty - 0.4) * s * s * (3 - 2 * s);
       }
     }
-    this.look.lerp(new THREE.Vector3(tx + shx + player.forward.x * ahead, ly, tz + shz + player.forward.z * ahead), this.first ? 1 : 1 - Math.exp(-dt * (footLook ? 16 : 8)));
+    // r4 body: over her shoulder the look converges on his line at her distance and her face's height (the camera off to
+    // the side, the look not): the middle of the screen, the dot, is on her while he faces her, and turning him turns it
+    let lx = shx, lz = shz;
+    if (ots > 0 && this.otsAt) {
+      const A = this.otsAt, along = clamp((A.x - tx) * player.forward.x + (A.z - tz) * player.forward.z, 1, OTS.r);
+      const lk = shK ? (SHOULDER * down * (1 - ots)) / shK : 0;
+      lx = shx * lk; lz = shz * lk;
+      ahead += (along - ahead) * ots; ly += (A.y - OTS.drop - ly) * ots;
+    }
+    const lookT = _ots.set(tx + lx + player.forward.x * ahead, ly, tz + lz + player.forward.z * ahead);
+    this.look.lerp(lookT, this.first ? 1 : 1 - Math.exp(-dt * (footLook ? 16 : 8)));
     const cam = this.pullIn(dt, tx, ty, tz);
     this.first = false;
     // fb2 E: pulled in, the camera keeps the bearing and tilt it has at full length (a spring arm: it slides toward the

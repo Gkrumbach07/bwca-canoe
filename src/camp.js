@@ -590,7 +590,8 @@ export class Camp {
     for (const c of inv.campReach()) for (const e of c.grid) if (e.uid === uid && !e.box) { const d = itemDef(e.id); return d && d.slot === 'tent' ? { c, e, def: d } : null; }
     return null;
   }
-  // off the designated sites in Adventure: only inside the primitive area of the trip's PMA permit (permits.allowsOffsite)
+  // off the designated sites in Adventure: only inside the primitive area of the trip's PMA permit (permits.allowsOffsite).
+  // (Quetico is out of bounds, the owner's later call: no camping of its own there)
   offsiteOk(x, z) { const P = this.trip && this.trip.permits; return !!(P && typeof P.allowsOffsite === 'function' && P.allowsOffsite(x, z)); }
   // why that tent can't be pitched from here now, or null; site: the one you stand at (or null off one)
   pitchRefused(tent) {

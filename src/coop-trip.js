@@ -176,7 +176,7 @@ export class CoopTrip {
     };
     // an evacuation is the player's own (below)
     const evac = core.evacuate.bind(core);
-    core.evacuate = (why) => (this.grouped ? this.evacuate(why) : evac(why));
+    core.evacuate = (why, o) => (this.grouped ? this.evacuate(why) : evac(why, o)); // (loop tasks: o, the rescue off the ice's fee)
   }
   hookOutfitter() {
     const o = this.g.outfitter; if (!o) return;

@@ -391,3 +391,74 @@ and one truck draw call while it is in view. Load cost: two small tables in `src
   script should prefer the named road the graph in `outfitters.js` uses.
 - The behaviour past the box's edge is read from `world.js`/`tiles.js`, not played.
 - Not in this proposal: the starting-weather and starter-route ideas in the same message (their own streams).
+
+## As built: streams E1 + E2 (2026-11-08, branch claude/edge-roads)
+
+*(The Quetico permit, ticket and own notice below were superseded by the owner's later call the same day: Quetico is
+DLC, out of bounds like any land past the edge; `edge.js` remapQuetico reads its cells as out.)*
+
+- **The table.** `scripts/edge-osm.mjs` (OSM roads and towns from the Geofabrik extracts, Quetico relation 14520069 from
+  Overpass, into `data-cache/edge`) and `scripts/edge.mjs` (run on a host: it reads the release's tiles for the water)
+  write `src/edge.bin` (26 KB: a 50 m grid of zones and the outlines) and `src/map-roads.bin` (17 KB: 1,121 km of
+  roads, 24 towns, 12 "to Cook 9 mi" exits). Zones: **out** 6,650 km², **wild** (the BWCAW) 4,415, **doorstep** 487
+  (400 m round the BWCAW, 1.5 km round every put-in, lot, head and outfitter's yard, each lot's road 1.5 km toward town
+  and the walk from a lot to its road up to 3.2 km, the roads joining lots within 4 km (22 joins), and 36 ways in by
+  water 250 m wide), **Quetico** 2,256 (the park and 400 m round it, more than 60 m past the BWCAW's line). Every entry
+  point's put-in, lot and store is wild or doorstep; the three lots inside the box's 200 m south margin (Bog Lake, Little
+  Isabella, Snake River) keep their doorstep. Rerun `scripts/edge.mjs` whenever a lot or a store moves (E3).
+- **The notice** (`src/edge.js` EdgeWatch, `edge.css`): a Forest Service brown sign under the energy bar's row, "You have
+  left the Boundary Waters", up after 2.2 s out and down after 2.2 s back in (a jump of 200 m or a teleport at once),
+  the second line the first time only; Quetico's in park green, "Quetico Provincial Park", gone with a Quetico permit
+  held (`permits.holdsQuetico`, a held permit of kind `quetico`: none sold yet). Nothing in the walker or the canoe
+  reads it. On the map, a printed tag at the top of the sheet while out.
+- **Quetico's ticket.** Camping off a site is allowed in Quetico (it has no designated sites); a tent pitched there on an
+  Adventure trip without a Quetico permit is one $50 ticket a trip (`PRICES.quetico`), on Ontario Parks' own notice.
+- **The campsites past the band** (154, plus one of world-fixes' added sites) are marked `c.past` in world.js, kept in
+  the list (the saves and tables go by index), still built in 3D, but off every map, the sheets' counts, the parties,
+  the visitors and the notices. `?edge=off` marks none.
+- **The map.** Past the edge washed 34 % toward the paper; the edge a fine pencil line; Quetico's outline dashed green;
+  the roads (highways double, county roads single, solid paved / dashed gravel, the lots' spurs fine dashed) and the
+  towns in spaced capitals on the HUD sheet, the book's map, the start map and the portraits (`map-render drawRegion`
+  `roads`/`edge` options); the counter map has the real roads under its pencil lines.
+- **Rig:** `scripts/edge-test.mjs`.
+
+## Round 4, stream B: the roads, the lots, the stores and the doorstep (2026-11-09, branch claude/r4-roadsfix)
+
+The adversarial check of loop-r4 (728fb87) found the truck crossing water and trunks on the made two-tracks (D2), roads
+ungraded with trunks on them (D5), South Lake, Homer and Magnetic with no doorstep way in by water (D3), lots by the
+map's south edge and a "turn back" at it (D6), and no lot or store moved to its road end (the join's E3 leftover).
+
+- **The stores at their road ends** (owner call 6). `scripts/ep-fixes.mjs` SPEC `store`: Moose River North's (16) store now
+  stands on the Moose River's low east bank by Forest Road 206, just outside the line (landings.json `from`: the west bank
+  and the reach south of the road stood its floor 8.5 m over the water, 31 steps of 0.22 m), a 96 m drive off the road; Bog Lake's (67), whose real road end is 1.2 km off the map, stands by its lot near the south edge with its
+  dock on Bush Creek, 155 m in. Each row keeps `storeMoved` (the old spot); a trip saved there carries on at the new
+  store's door or dock (`outfitters.js fromMovedStore`, main.js). Slim Lake's (6) store already stood 3 m from North Arm
+  Road: its road now starts at the store, not at the release's put-in 1.3 km off (the cause of its "421 m"). Their yards,
+  docks, keepers and starter routes come from the same builder (`r2-outfitter-places.mjs` now builds from ep-fixes' spots).
+- **The lots.** Every trailhead lot already stood at its real road end (round 2's ep-fixes) except the three clipped by the
+  map's south edge: Bog Lake's head lot, Little Isabella (75) and Snake River (84) now stand 170 m in from it (CLIP_IN), their
+  carries to the water as posted. Trout Lake (1) stays a boat-in lodge; Crab Lake (4) stays the outfitter's boat drop;
+  the shared entry points (47/48, 52, 66, 70) put in at their hosts'.
+- **The roads** (`scripts/roads.mjs`). A start off its road gets a made two-track found on the release's ground: a search on
+  a 4 m lattice round it (1.5 km), water and the waterline all but shut, steep ground dear, the stores' footprints and docks
+  shut, to the nearest drivable way (tracks dearer than roads), or, for a lot by the south edge, out to the edge toward its
+  real road off the map (the truck comes in from there). The line is kept straight where it stays as dry and within 2 m of
+  the ground. An outfitter's route starts at the truck's stand behind its store (`stand`); every route says whether it
+  can be driven (`drive`; all 51 can; South Lake has no road within 1.2 km and no ride by road). The heights by the water
+  are the ground's own as `detail-build.js` grades it (no grade within 4 m of the shore, never under the lake's level by
+  the shore): the 0.6–1.15 m steps at Thimbleberry's store and North Arm Road.
+- **The truck** drives every route marked `drive`, a store's from its stand, a lot's from inside it clear of its sign and
+  box (`truck.js spot`). Where a route crosses water off the drawn bridges (at a junction or a chain's end), `roads.json`
+  carries a bridge of its own. Where roads meet, each is eased to one height over its last 24 m. A trailhead's sign and
+  permit box and a portage's sign never stand on a road (props.js); a store standing on an OSM way (Thimbleberry on North
+  Arm Road) lets that piece of way go, the road ending at its yard. The trailheads' lots as props.js plans them are in
+  `outfitter-places.json` (`lots`), so each lot's road starts in it.
+- **The doorstep** (`scripts/edge.mjs`). A way in by water is now the shortest path on the release's 10 m water and the
+  portages' lines only (never other dry land, never Quetico) from each put-in, dock and outfitter's head put-in to the
+  wilderness's own water, stamped 250 m wide plus every water cell within 700 m of it; every road of `roads.json` is
+  stamped too. South Lake's way is 9.7 km along Gunflint (the 50 m grid had joined lakes a canoe cannot pass and found
+  1.2 km). `scripts/r4-doorstep-check.mjs` holds every start to it apart on the 10 m water: 55/55.
+- **The map's edge** says "Past here is off your maps" (player.js; the join kept stream A's wording), no "turn back".
+- **Rigs:** `scripts/r4-roads-test.mjs` (every start drivable, every route driven every 2 m with no water off a deck, no trunk
+  and level, the roads graded round each stop, the moved stores, the edge's words, the looks), `scripts/r4-doorstep-check.mjs`
+  (node, a host).

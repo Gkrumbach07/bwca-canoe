@@ -29,7 +29,7 @@
 // the home store's door (the keeper's forty dollars as you step in), and so does a ride's end; a page reloaded in a
 // store comes back on its floor (updateArrival).
 import { kv } from './store.js'; // the saves' store (IndexedDB, read into memory before the boot)
-import { outfitterName, trailheadName, isOutfitter, hostOf, roadOf, placeOf } from './outfitters.js';
+import { outfitterName, trailheadName, isOutfitter, hostOf, roadOf, placeOf, fromMovedStore } from './outfitters.js';
 import { trailheadLayout, trailheadAt, trailheadDist } from './trailhead.js';
 import { esc, plural, word } from './hud.js';
 import { drawCounterMap, markerAt } from './counter-map.js';
@@ -388,6 +388,7 @@ export class Outfitter {
     if (this.distTo(l, p.x, p.z) > ARRIVAL_FAR || !(p.mode === 'paddle' || p.onFoot)) { if (a.why === 'season' || a.pending) this.pendingShow = true; return; }
     this.tieUp(l, L, a.why === 'reload' || a.why === 'ride' || a.why === 'evac');
     if (a.why === 'ride') this.hud.note(`The truck leaves you at ${l.name}: the canoe at the dock, the door open.`, 5);
+    if (a.why === 'ride' && this.truck) { const r = this.rides && this.rides.last; if (r && r.pickup) this.truck.park(a.ep); else this.truck.leave(a.ep); } // stream E3: the truck that brought you, behind the store (truck.js)
     if (a.why === 'evac' && a.pending) this.pendingShow = true;
     const v = this.visit;
     if (a.why === 'reload') {
@@ -413,6 +414,7 @@ export class Outfitter {
     this.arrival = null;
     if (this.distTo(e, p.x, p.z) > ARRIVAL_FAR || !(p.mode === 'paddle' || p.onFoot)) return;
     this.setDown(T, e);
+    if (a.why === 'ride' && this.truck) this.truck.leave(e.ep); // stream E3: the truck in the lot, then off down the road (truck.js)
     // (round 2: a portage-first start: the canoe off the roof in the lot, the carry from its edge; a boat drop at a portage)
     const o = T.open, carry = o ? `the ${o.posted || o.rods}-rod portage` : 'the portage', far = o && o.i != null && this.world.portages[o.i] ? this.world.portages[o.i].launch[o.end] : null, toLake = far ? this.world.lakeName(far.lake) : null;
     if (a.why === 'ride' && T.water && T.water.dry && T.drop === 'boat') this.hud.note(`The outfitter's boat leaves you at the start of ${carry}${toLake ? ` to ${toLake}` : ''}. The canoe is on the shore: Q on it to shoulder it.`, 7);
@@ -1099,7 +1101,11 @@ export class Outfitter {
       const f = this.player.fishing;
       if (f && Array.isArray(d.stringer) && !f.stringer.length) for (const s of d.stringer) if (s && s.species) f.stringer.push({ species: s.species, length: +s.length || 0 });
       this.pendingShow = false;
-      if (d.pos && Math.hypot(d.pos.x - this.player.x, d.pos.z - this.player.z) > 40 && this.onTeleport) await this.onTeleport(d.pos.x, d.pos.z);
+      // (chk-r4b: a trip under way at a store that has moved since, Moose River North's old landing, carries on at the store
+      // where it stands now, as the saved spot does: outfitters.js fromMovedStore)
+      const mv = d.pos ? fromMovedStore(this.world, { ...d.pos, mode: this.player.mode }) : null;
+      const pos = mv ? { x: mv.x, z: mv.z } : d.pos;
+      if (pos && Math.hypot(pos.x - this.player.x, pos.z - this.player.z) > 40 && this.onTeleport) await this.onTeleport(pos.x, pos.z);
       const core = this.core, dw = core && core.active ? core.dayWords() : '';
       if (moved === 'v2') this.hud.note('An older trip, back as an open one: no dates, no exit and no permit. Come in when you like; any counter sells food.', 8);
       else if (moved === 'v1') this.hud.note('An older trip, back as Sandbox: the same lakes with no limits.', 7);

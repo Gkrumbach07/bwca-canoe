@@ -216,6 +216,7 @@ export class Parties {
     this.siteLake = own ? Int32Array.from(own) : table ? Int32Array.from(table) : this.guessLakes();
     this.basinSites = new Map();
     w.campsites.forEach((c, i) => {
+      if (c.past) return; // (the edge round: no party camps past the band)
       const b = this.basinOfLake(this.siteLake[i]); if (b < 0) return;
       let l = this.basinSites.get(b); if (!l) this.basinSites.set(b, (l = [])); l.push(i);
     });

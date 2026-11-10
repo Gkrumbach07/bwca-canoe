@@ -8,6 +8,7 @@ import { itemDef } from './items.js';
 import { fmtIn, fmtInUp } from './units.js';
 import { flyerHtml, flyerStyle } from './flyers.js'; // the notices as the paper they are, on the cork and in the pile as in the journal
 import './flyers.css';
+import { isPast } from './edge.js'; // (r4 loopfix: no notice sends you past the edge of the Boundary Waters, Quetico included)
 
 // The board: notices pinned up at each outfitter, the tasks they set, and the money they pay.
 //
@@ -66,6 +67,52 @@ const STANDING = 0.25;       // standing with an outfitter for each notice claim
 export const KIND_DAYS = { fish: 3, lunch: 3, firewood: 3, berries: 5, item: 7, deadfall: 7, litter: 7, fetch: 7, npc: 7, survey: 10, secchi: 10,
   creel: 10, campsite: 10, beaver: 10, colour: 10, report: 14, photo: 14, pma: 14, iceout: 5, lastcheck: 7, loons: 7, starter: 3 };
 const DAYS_ELSE = 7;
+// The owner's board table (docs/plans/campaigns.md §1 "Board tasks", the sign-off marks 2026-11-02, checked again
+// 2026-11-08): each kind kept, its name there, whether it fits a day trip ('day': never on the far pin), wants a trip
+// ('trip': never on a close-by pin) or either, its pay band ($ under $15, $$ $15–40, $$$ over $40; "$–$$" spans both;
+// per: the band is for each pint or armful) and its season window in days of the year (null: all season; a kind
+// with a window of its own says so in inWindow(T, doy, ep), as the beaver dams and the ice-out lakers by the lake's own
+// ice). The kinds cut there (a rental left behind, odd jobs, a rental brought home, the latrine dig, the invasive
+// check, the smoke report, the bird list) are not in it and never written. The starter job and a visitor's favour are
+// never pinned (weight 0); the favour keeps its band. tasks.boardTable() for the rigs.
+export const BOARD_TABLE = {
+  fish: { name: 'Fish for the kitchen', fit: 'day', band: '$-$$' },
+  lunch: { name: 'Shore lunch class', fit: 'day', band: '$$' },
+  item: { name: 'Lost item', fit: 'either', band: '$$' },
+  survey: { name: 'Portage survey', fit: 'either', band: '$$' },
+  deadfall: { name: 'Blowdown', fit: 'either', band: '$$' },
+  litter: { name: 'Litter', fit: 'either', band: '$' },
+  secchi: { name: 'Secchi reading', fit: 'either', band: '$$' },
+  loons: { name: 'Loon count', fit: 'either', band: '$$', window: [152, 243] },
+  report: { name: 'Route report', fit: 'trip', band: '$$$' },
+  photo: { name: 'Photo wanted', fit: 'either', band: '$-$$$' },
+  berries: { name: 'Blueberries', fit: 'day', band: '$', per: true },
+  firewood: { name: 'Firewood', fit: 'day', band: '$', per: true },
+  fetch: { name: 'An errand', fit: 'trip', band: '$$-$$$' },
+  npc: { name: 'A favour', fit: 'either', band: '$$' },
+  creel: { name: 'Creel survey', fit: 'either', band: '$$', window: [121, 273] },
+  campsite: { name: 'Campsite check', fit: 'either', band: '$$' },
+  beaver: { name: 'Beaver dam report', fit: 'either', band: '$$' },
+  iceout: { name: 'Ice-out lake trout', fit: 'day', band: '$$$' },
+  colour: { name: 'Colour photos', fit: 'either', band: '$$$', window: [255, 273] },
+  lastcheck: { name: 'Last check', fit: 'trip', band: '$$$', window: [274, 334] },
+  pma: { name: 'Primitive area survey', fit: 'trip', band: '$$$', window: [152, 304] },
+};
+export const PAY_BANDS = { $: [1, 14], $$: [15, 40], $$$: [41, 60] };
+// a band's dollars: "$$" → [15, 40], "$-$$$" → [1, 60]
+export function bandRange(band) {
+  const parts = String(band || '').split('-').map((b) => PAY_BANDS[b]).filter(Boolean);
+  return parts.length ? [parts[0][0], parts[parts.length - 1][1]] : null;
+}
+// a kind's pay kept inside its band (for each pint or armful where the band is per one)
+function inBand(key, n, t) {
+  const r = BOARD_TABLE[key] && bandRange(BOARD_TABLE[key].band);
+  if (!r || !Number.isFinite(n)) return n;
+  const k = BOARD_TABLE[key].per ? Math.max(1, (t && t.need) || 1) : 1;
+  return Math.round(Math.max(r[0] * k, Math.min(r[1] * k, n)));
+}
+// a kind fits the pin: a day kind never on the far pin, a trip kind never on a close-by one
+export const fitsBand = (key, band) => { const f = BOARD_TABLE[key] ? BOARD_TABLE[key].fit : 'either'; return !((f === 'day' && band === 'far') || (f === 'trip' && band === 'local')); };
 const MISSED_KEEP = 30;      // the missed notices kept for the journal
 // a missed notice's line, by kind, from whoever posted it ({who}: the first word of the signature; {they}: someone else)
 const MISSED_WORDS = {
@@ -177,7 +224,21 @@ export const NUMBERS = { HOPS, RANGE, BAND_KM, DEEP, TROUT_WATER, SPECIES_PAY, P
 // t) → several (a route's lakes), fraction(t) → 0..1 for the book, doneWords(t) for the notice once done. The new kinds
 // are in task-kinds.js.
 export const KINDS = {};
-export function registerKind(key, def) { KINDS[key] = { key, label: key, weight: { local: 1, medium: 1, far: 1 }, ...def }; return KINDS[key]; }
+export function registerKind(key, def) {
+  const K = { key, label: key, weight: { local: 1, medium: 1, far: 1 }, ...def };
+  // the owner's table: the band's pay, and the pins it fits (BOARD_TABLE)
+  if (typeof def.pay === 'function' && BOARD_TABLE[key]) { const raw = def.pay; K.rawPay = raw; K.pay = function (t, ...a) { return inBand(key, raw.call(this, t, ...a), t); }; }
+  if (BOARD_TABLE[key]) K.weight = Object.fromEntries(Object.entries(K.weight).map(([b, w]) => [b, fitsBand(key, b) ? w : 0]));
+  KINDS[key] = K;
+  return K;
+}
+// the kind is in its season on doy (the table's window, else its own inWindow; a kind with neither: all season)
+export function kindInWindow(key, doy, T = null, ep = null) {
+  const K = KINDS[key], row = BOARD_TABLE[key];
+  if (K && typeof K.inWindow === 'function') { try { return !!K.inWindow(T, doy, ep); } catch { return true; } }
+  const w = row && row.window;
+  return !w || (doy >= w[0] && doy <= w[1]);
+}
 
 registerKind('fish', {
   label: 'For the kitchen', weight: { local: 1.4, medium: 1.2, far: 1.1 }, handsIn: true,
@@ -469,7 +530,8 @@ export class Tasks {
     if (!done.length) return null;
     const lines = done.map((t) => { const pay = this.pay(t, t.from); this.emit('paid', t); return { id: t.id, title: t.title || 'A notice', pay, from: t.from, kind: t.kind, npc: t.npc || null, npcName: t.npcName || null }; });
     const total = lines.reduce((a, l) => a + l.pay, 0);
-    const words = lines.length === 1 ? `$${total} for “${lines[0].title}”.` : `$${total} for ${word(lines.length)} notices.`;
+    const cut = done.some((t) => t.cut) ? ' No longer posted, paid all the same.' : ''; // (r4 loopfix: a cut kind's)
+    const words = (lines.length === 1 ? `$${total} for “${lines[0].title}”.` : `$${total} for ${word(lines.length)} notices.`) + cut;
     this.note(words);
     this.changed(); this.boardChanged();
     const out = { lines, missed: [], total, words, now: true };
@@ -481,14 +543,41 @@ export class Tasks {
     const K = KINDS[kind], landing = this.landing(ep);
     if (!K || !landing) return null;
     const b = this.boards[ep] || { slots: SLOTS.map(() => null), n: 0 };
-    const rng = mulberry32(((this.seed * 2654435761) ^ (ep * 40503) ^ (++b.n * 9973) ^ 0x9d) >>> 0);
     const board = b.slots.map((id) => (id == null ? null : this.ads.get(id)));
-    const f = await K.make(this, { ep, band, rng, landing, reach: this.reach(landing.lake), board, turf: this.turfOf(ep) });
+    // (r4-final: a place past the edge is refused (pastNotice); another draw is tried, as the board's own picking does,
+    // so a kind with places on both sides of the edge (Moose Lake's local portages) is still written)
+    let f = null;
+    for (let k = 0; k < 6 && !f; k++) {
+      const rng = mulberry32(((this.seed * 2654435761) ^ (ep * 40503) ^ (++b.n * 9973) ^ 0x9d) >>> 0);
+      f = await K.make(this, { ep, band, rng, landing, reach: this.reach(landing.lake), board, turf: this.turfOf(ep) });
+      if (!f) return null;
+      if (this.pastNotice({ kind, from: ep, band, ...f }, K)) f = null;
+    }
     if (!f) return null;
     const t = { id: this.nextId++, kind, from: ep, fromName: landing.name, band, status: 'offered', posted: this.today(), ...f };
     t.pay = K.pay(t); t.clue = t.text;
     this.ads.set(t.id, t);
     return t;
+  }
+  // r4 loopfix (the adversarial check: board notices sat past the edge at dams, views and portages): a notice any of whose
+  // places (its spot, its ring or rings, its area) is past the edge (edge.js isPast: out of the Boundary Waters, Quetico
+  // included) is never written. An exact place (a spot, a dam, a station, a tight ring) is past when it is; an area (a
+  // lake's hint, a loose ring) only when all of it is: a lake the edge cuts (Snowbank: its south shore private land) is
+  // still a lake in the wilderness. t: a notice (or the make's fields with its kind)
+  pastNotice(t, K = KINDS[t && t.kind]) {
+    if (!t) return false;
+    const pts = [];
+    const add = (q, area = false) => { if (q && Number.isFinite(q.x) && Number.isFinite(q.z)) pts.push({ x: q.x, z: q.z, r: area || (q.r > 0 && !q.tight) ? q.r || AREA[1] : 0 }); };
+    add(this.spotOf(t)); add(t.at); add(t.hint, true); add(t.station);
+    for (const d of t.dams || []) add({ x: d.x, z: d.z });
+    for (const q of t.pts || []) add({ x: q.x, z: q.z });
+    const tt = { status: 'open', ...t };
+    if (K) {
+      try { if (typeof K.targets === 'function') for (const r of K.targets(this, tt) || []) add(r); } catch { /* the kind's own */ }
+      try { if (typeof K.target === 'function') add(K.target(this, tt)); } catch { /* the kind's own */ }
+    }
+    const pastArea = (q) => { if (!isPast(q.x, q.z)) return false; if (!q.r) return true; for (let k = 0; k < 8; k++) { const a = (k * Math.PI) / 4; if (!isPast(q.x + Math.cos(a) * q.r * 0.6, q.z + Math.sin(a) * q.r * 0.6)) return false; } return true; };
+    return pts.some(pastArea);
   }
   // home turf (stream B's reach): the basins of the lakes of the entry points an outfitter serves, or null without it
   turfOf(ep) {
@@ -509,6 +598,10 @@ export class Tasks {
   changed() { if (this.onChange) this.onChange(); }
   boardChanged() { if (this.onBoard) this.onBoard(); }
   today() { const d = this.day || (window.__game && window.__game.day); return d ? absDay(d.year, d.doy) : 0; }
+  doyNow() { const d = this.day || (typeof window !== 'undefined' && window.__game && window.__game.day); return d ? d.doy : 190; }
+  boardTable() { return BOARD_TABLE; }
+  inWindow(kind, doy = this.doyNow(), ep = null) { return kindInWindow(kind, doy, this, ep); }
+  bandRange(band) { return bandRange(band); }
   lakeRec(id) { return id > 0 ? this.world.lakes[id - 1] : null; }
   // d1 lakes: how deep a lake goes (the DNR's contour map, else its max depth: lake-facts.js), and whether lake trout
   // live in it (the DNR's survey where there is one: fishing.js bites them by it); with no facts, 20 m and deeper
@@ -618,7 +711,7 @@ export class Tasks {
     return (h != null && String(h).startsWith('party:')) || !!(typeof C.spoken === 'function' && C.spoken(k));
   }
   // a campsite a new notice may send you to: no other notice there, and no party on it today
-  siteOpen(site) { return !!site && !this.spotTaken(site.x, site.z) && !this.partyHolds(site); }
+  siteOpen(site) { return !!site && !site.past && !this.spotTaken(site.x, site.z) && !this.partyHolds(site); } // (the edge round: not past the band)
   // The area a notice describes, for the map's ring: the part of the lake a spot is on (the bay, the arm, the stretch:
   // 400–700 m, the ring pushed out over the water so the spot sits inside it, off its middle), or without a spot the
   // lake's deep middle (a laker notice). Never the whole lake: a big lake gets its side named ("the northeast side").
@@ -683,9 +776,18 @@ export class Tasks {
       mine.forEach((t, i) => { b.slots[i] = t.id; if (!t.band) t.band = SLOTS[i]; });
       for (let i = mine.length; i < SLOTS.length; i++) b.pending.push(i);
     } else if (today > b.day) {
+      // (loop tasks: a pin holding a notice that is gone from the list, taken off it elsewhere, is a bare pin)
+      b.slots.forEach((id, i) => { if (id != null && !this.ads.has(id)) b.slots[i] = null; });
       const n = Math.min(SLOTS.length, today - b.day);
       for (let k = 0; k < n; k++) this.changeOne(b);
       b.day = today;
+      // a notice nobody took whose season has gone (the colour photos in October, the loon count in September) comes
+      // down with the day's change, a bare pin to fill
+      const doy = this.doyNow();
+      b.slots.forEach((id, i) => {
+        const t = id != null ? this.ads.get(id) : null;
+        if (t && t.status === 'offered' && (!kindInWindow(t.kind, doy, this, ep) || this.pastNotice(t))) { /* (r4 loopfix: or one past the edge, written before it) */ this.ads.delete(t.id); b.slots[i] = null; if (!b.pending.includes(i)) b.pending.push(i); }
+      });
       this.changed();
     }
     if (b.pending.length && !this.filling.has(ep)) this.write(ep);
@@ -732,7 +834,8 @@ export class Tasks {
     const rng = mulberry32(((this.seed * 2654435761) ^ (ep * 40503) ^ (++b.n * 9973)) >>> 0);
     const board = b.slots.map((id) => (id == null ? null : this.ads.get(id)));
     const count = (k) => board.filter((t) => t && t.kind === k).length;
-    const kinds = Object.values(KINDS).filter((k) => (k.weight[band] || 0) > 0 && count(k.key) < 2);
+    const doy = this.doyNow();
+    const kinds = Object.values(KINDS).filter((k) => (k.weight[band] || 0) > 0 && count(k.key) < 2 && fitsBand(k.key, band) && kindInWindow(k.key, doy, this, ep));
     const lean = (this.leanOf && this.leanOf(ep)) || {}, wt = (k) => k.weight[band] * (count(k.key) ? 0.35 : 1) * (lean[k.key] ?? 1); // hubs 2C: each outfitter's board leans its own way (outfitters.js boardLean)
     const order = [];
     while (kinds.length) {
@@ -740,7 +843,7 @@ export class Tasks {
       for (; j < kinds.length - 1; j++) { r -= wt(kinds[j]); if (r <= 0) break; }
       order.push(kinds.splice(j, 1)[0]);
     }
-    if (!order.some((k) => k.key === 'fish') && KINDS.fish) order.push(KINDS.fish); // fish can always be asked for
+    if (!order.some((k) => k.key === 'fish') && KINDS.fish && fitsBand('fish', band)) order.push(KINDS.fish); // fish can always be asked for (on a pin a day trip reaches)
     for (const kind of order) {
       const f = await kind.make(this, { ep, band, rng, landing, reach, board, turf: this.turfOf(ep) });
       if (!f) continue;
@@ -748,6 +851,7 @@ export class Tasks {
       // to it; this catches the rest, a visitor's task written meanwhile among them)
       const sp = this.spotOf(f);
       if (sp && (this.spotTaken(sp.x, sp.z) || (sp.camp && this.partyHolds(sp.camp)))) continue;
+      if (this.pastNotice({ kind: kind.key, from: ep, band, ...f }, kind)) continue; // (r4 loopfix: none past the edge)
       const t = { id: this.nextId++, kind: kind.key, from: ep, fromName: landing.name, band, status: 'offered', posted: this.today(), ...f };
       t.pay = kind.pay(t); t.clue = t.text;
       this.ads.set(t.id, t);
@@ -1156,6 +1260,17 @@ export class Tasks {
     this.dueDay = null;
     if (d.v >= 3) {
       for (const t of d.ads || []) if (t && t.id != null && KINDS[t.kind]) this.ads.set(t.id, t);
+      // (r4 loopfix, the adversarial check: a notice of a cut kind you had already done, waiting to be handed in, kept
+      // its pay: it stays on the list as done, t.cut, and is paid as any done one is, when you come in; the journal says
+      // it is no longer posted but still paid)
+      for (const t of d.ads || []) if (t && t.id != null && !KINDS[t.kind] && t.status === 'done') { t.cut = true; this.ads.set(t.id, t); }
+      // (loop-r4 join: a notice you had taken of a kind cut from the boards, the owner's table 2026-11-08, is not
+      // dropped without a word: it goes to the missed list, no penalty, with a line saying it was sorted without you)
+      for (const t of d.ads || []) {
+        if (!t || t.id == null || KINDS[t.kind] || t.status !== 'open' || this.missed.some((m) => m.id === t.id)) continue;
+        this.missed.push({ id: t.id, kind: t.kind, title: t.title || 'A notice', from: t.from, npc: t.npc || null, line: 'Taken off the board: it got sorted without you. No harm done.', abs: this.today(), told: false, cut: true });
+      }
+      if (this.missed.length > MISSED_KEEP) this.missed.splice(0, this.missed.length - MISSED_KEEP);
       if (!(d.v >= 4)) { const today = this.today(); for (const t of this.ads.values()) if ((t.status === 'open' || t.status === 'done') && !Number.isFinite(t.due)) t.due = today + this.daysFor(t); }
       for (const [ep, b] of Object.entries(d.boards || {})) {
         if (!b || !Array.isArray(b.slots)) continue;
