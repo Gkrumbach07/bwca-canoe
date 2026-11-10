@@ -21,7 +21,9 @@
 import './edge.css';
 
 export const ZONE = { OUT: 0, WILD: 1, DOOR: 2, QUETICO: 3 }; // (QUETICO: the table's own code only; zoneAt never returns it)
-export const EDGE = { ready: false, cell: 50, x0: 0, z0: 0, W: 0, H: 0, zones: null, rings: [], inPath: null, qPath: null, qWash: null, qOut: 0, qDoor: 0 };
+export const EDGE = { ready: false, cell: 50, x0: 0, z0: 0, W: 0, H: 0, zones: null, rings: [], inPath: null, qPath: null, qWash: null, qOut: 0, qDoor: 0, bound: null };
+// r5: the wilderness boundary's Path2D, handed over by map-render.js as it loads (the map's wash is outside it)
+export function setBound(path) { EDGE.bound = path || null; }
 // the band round the wilderness (scripts/edge.mjs BAND): a Quetico cell this near a wild one is a doorstep, as any land
 export const BAND = 400;
 let eLoading = null;
@@ -184,10 +186,10 @@ export class EdgeWatch {
 // stores, no doorstep shapes (the owner 2026-11-10: "There shouldn't be a bubble around where the playable area is on the
 // map"): the doorstep band is the notice's business only (zoneAt), never drawn. Quetico lies outside the line, so it is
 // washed with the rest; its own outline in a fine dashed green as geography, as the agencies' maps draw a park.
-//   bound: the boundary's Path2D (map-render.js BOUNDARY.path, its rings even-odd); without it nothing is washed (the
-//          boundary still loading: the next draw has it)
+//   bound: the boundary's Path2D (map-render.js BOUNDARY.path, its rings even-odd; by default the one setBound was given);
+//          without it nothing is washed (the boundary still loading: the next draw has it)
 const WASH = 'rgba(236, 228, 207, 0.34)', QUETICO_LINE = 'rgba(46, 104, 60, 0.75)';
-export function paintEdge(ctx, v, k = 1, { wash = true, quetico = true, box = null, bound = null } = {}) {
+export function paintEdge(ctx, v, k = 1, { wash = true, quetico = true, box = null, bound = EDGE.bound } = {}) {
   if (!EDGE.ready && !bound) return;
   const s = 1 / v.mPerPx, px = v.mPerPx;
   ctx.save();

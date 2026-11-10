@@ -19,7 +19,7 @@
 import { BURNS, burnDate } from './burns.js';
 import { OUTFITTER_EPS, placeOf } from './outfitters.js'; // round 2 markers: an outfitter at its store, an entry point at its put-in
 import { markOf } from './ep-start.js'; // round 2, entry points true to life: an entry point marked at its start
-import { paintEdge, paintRoads } from './edge.js'; // the edge round: past the band a little faded, the roads and the towns
+import { paintEdge, paintRoads, setBound } from './edge.js'; // the edge round: past the band a little faded, the roads and the towns
 import { PMAS, inPoly } from './pma.js'; // r2: the primitive areas' outlines on every map
 
 export const FT = 0.3048;
@@ -542,7 +542,7 @@ export function loadBoundary(url = new URL('./boundary.bin', import.meta.url)) {
       path.closePath();
       BOUNDARY.rings.push({ hole, pts });
     }
-    BOUNDARY.path = path; BOUNDARY.box = box; BOUNDARY.ready = true;
+    BOUNDARY.path = path; BOUNDARY.box = box; BOUNDARY.ready = true; setBound(path); // (r5: the edge's map wash is outside it)
     return BOUNDARY;
   })().catch((e) => { console.warn('map: the wilderness boundary did not load', e); BOUNDARY.ready = true; return BOUNDARY; });
   return bLoading;
