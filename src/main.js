@@ -998,7 +998,9 @@ async function main() {
     if (!document.getElementById('names-css')) { const s = document.createElement('style'); s.id = 'names-css'; s.textContent = '#place.minor .name { font-size: 46px; } #place.minor { gap: 8px; } @media (max-width: 720px) { #place.minor .name { font-size: 32px; } }'; document.head.appendChild(s); }
     const showP = hud.showPlace.bind(hud);
     hud.showPlace = (kicker, name, sub, seconds, minor = false) => { names.minorShown = !!minor; if (hud.el && hud.el.place) hud.el.place.classList.toggle('minor', !!minor); showP(kicker, name, sub, seconds); };
-    const portageAt = () => { let best = null, bd = 40; for (const p of world.portages) for (const l of p.launch || []) { const d = Math.hypot(l.x - player.x, l.z - player.z); if (d < bd) { bd = d; best = p; } } return best; };
+    // st-l: portagesPublic (no story carry)
+    const portageAt = () => { let best = null, bd = 40; for (const p of world.portagesPublic()) for (const l of p.launch || []) { const d = Math.hypot(l.x - player.x, l.z - player.z); if (d < bd) { bd = d; best = p; } } return best; };
+    // /st-l
     const updP = player.update.bind(player);
     player.update = (dt) => {
       updP(dt);
@@ -1212,6 +1214,11 @@ async function main() {
       const { installSeams, startFeed } = await import('./story-seams.js');
       const seams = installSeams(story);
       window.__game.storySeams = { ...seams, on: true, feed: null };
+      // st-l: the story layer (story-layer.js): its places' props by the tiles, the dot's names and verbs, the triggers
+      // every 0.5 s, the photo targets; World.load made their clearings (story-world.js)
+      seams.layer.attach({ story, world, tiles, scene, player, pointer, photo, guest: () => !!(window.__game.coop && window.__game.coop.guest) });
+      window.__game.storyLayer = seams.layer;
+      // /st-l
       startFeed({ story, mods: { trip, outfitter, world }, guest: () => !!(window.__game.coop && window.__game.coop.guest) })
         .then((feed) => { window.__game.storySeams.feed = feed; console.log(`story K1b: the feed started (${feed.names().join(', ')})`); })
         .catch((e) => console.warn('story K1b: the feed', e));
