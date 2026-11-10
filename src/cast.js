@@ -19,6 +19,7 @@ import { PORCH, JOSIE, P1, HERE, WALK_AWAY } from './story-data/porch-act1.js';
 import { SceneRun, T, MANNERS } from './topics.js';
 import { storeLayout, storeLayouts } from './props.js';
 import { castPorch } from './grounding.js';
+import { RULES_TALK } from './story-data/rules-talk.js';
 
 const NEAR = 120;            // m: stores this near have their seats kept (npcs settles a roster within 70)
 const BARK_R = 9;            // m: the staged person's first word as you come this near
@@ -157,7 +158,7 @@ export class Cast {
     if (!this.on || ep == null) return;
     ep = Number(ep);
     const s = this.story;
-    void s; // (20 §6.1 armed by the return: rules-talk.js t.armed)
+    for (const r of RULES_TALK) if (r.on === 'store:enter' && !s.has(r.then[0].slice(2)) && s.when(r.when, { ep })) s.rules.apply(r, { ep }); // (rules-talk.js t.armed: 20 §6.1, armed by the return)
     if (ep === this.home()) this.seat('josie', ep, true);
   }
 
