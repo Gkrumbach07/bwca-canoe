@@ -48,7 +48,7 @@ const storyBad = [];
     n++;
     if (BANNED.test(l.text)) storyBad.push({ id: 'story: banned word', src: l.id, text: l.text });
     if (WALT_LORE.test(l.text) && !/f:nb\.found|stage>=S[1-7]|end:/.test(l.cond)) storyBad.push({ id: 'story: Walt lore before the notebook', src: l.id, text: l.text });
-    if (/green Kevlar/i.test(l.text) && !/ev\.watchers|canary|tier|t[1-4]\b/.test(l.cond)) storyBad.push({ id: 'story: green Kevlar unseen', src: l.id, text: l.text });
+    if (/green Kevlar/i.test(l.text) && !/ev\.watchers|canary|tier|t[1-4]\b|und:|knows/.test(l.cond)) storyBad.push({ id: 'story: green Kevlar unseen', src: l.id, text: l.text });
     if (/\bthe Ledger\b/.test(l.text) && !/end:/.test(l.cond)) storyBad.push({ id: 'story: the Ledger before an ending', src: l.id, text: l.text });
     if (kind === 'bark' && RESERVED.test(l.who || '')) storyBad.push({ id: 'story: a reserved speaker among visitors', src: l.id, text: l.text });
   }
