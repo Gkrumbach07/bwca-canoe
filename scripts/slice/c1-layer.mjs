@@ -36,6 +36,27 @@ export const HELPERS = () => {
     const yaw = Math.atan2(-(q.z - z), q.x - x); L.standAt(x, z, yaw); L.step(4); L.aim(q, y);
   };
   L.aim = (q, y) => { const p = g.player, cam = g.camera; for (let k = 0; k < 4; k++) { const d = Math.hypot(q.x - cam.position.x, q.z - cam.position.z), yaw = L.yawTo(q); g.chase.viewYaw = yaw; g.chase.forwardYaw = yaw; p.heading = yaw; if (y != null) g.chase.viewPitch = Math.atan2(y - cam.position.y, d); L.step(2); } };
+  // stand d m from a prop, on dry ground, facing it, from whichever side the dot finds it (eight bearings tried)
+  L.faceTo = (id, d, dy) => {
+    const q = L.prop(id), w = g.world; let t = null;
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2, x = q.x + Math.cos(a) * d, z = q.z + Math.sin(a) * d;
+      if (w.isWater(x, z)) continue;
+      const yaw = Math.atan2(-(q.z - z), q.x - x); L.standAt(x, z, yaw); L.step(4); L.aim(q, q.y + dy); L.step(4);
+      t = L.target(); if (t && t.ref === `story:${id}`) return t;
+    }
+    return t;
+  };
+  // a water spot r m from (x, z) whose straight line in to (x, z) is open water all the way (the last stretch paddled)
+  L.waterOut = (x, z, r, tx, tz) => {
+    const w = g.world;
+    for (let k = 0; k < 72; k++) {
+      const a = (k / 72) * Math.PI * 2, sx = x + Math.cos(a) * r, sz = z + Math.sin(a) * r;
+      let ok = true; for (let s = 0; s <= 1 && ok; s += 0.02) { const px = sx + (tx - sx) * s, pz = sz + (tz - sz) * s; if (!w.isWater(px, pz) || w.shoreAt(px, pz) > -2 && s < 0.97) ok = false; }
+      if (ok) return { x: sx, z: sz };
+    }
+    return null;
+  };
   L.target = () => { const t = g.pointer && g.pointer.target; return t ? { kind: t.kind, label: t.label || '', verb: t.e ? t.e.verb : null, ref: t.ref || null } : null; };
   L.layer = () => g.storyLayer;
   L.prop = (id) => { const q = g.storyLayer.prop(id); const b = g.storyLayer.builtList().find((r) => r.prop === id); return q ? { x: q.prop.x, z: q.prop.z, y: b ? b.y : g.tiles.groundAt(q.prop.x, q.prop.z) } : null; };
@@ -56,9 +77,9 @@ export const section = {
         if (!W) { result('slice 3 (L): C837 is a place', false, {}); return; }
         await page.evaluate(async (W) => { await window.__L.near(W.x, W.z); }, W);
         const before = await page.evaluate(async () => {
-          const L = window.__L, g = window.__game, q = L.prop('ws.c837.stump');
-          L.face(q, 1.7, q.y + 0.35); L.step(6);
-          return { t: L.target(), found: g.story.has('nb.found'), built: g.storyLayer.builtList().filter((b) => b.place === 'ws.c837').map((b) => b.prop) };
+          const L = window.__L, g = window.__game;
+          const t = L.faceTo('ws.c837.stump', 1.7, 0.35);
+          return { t, found: g.story.has('nb.found'), built: g.storyLayer.builtList().filter((b) => b.place === 'ws.c837').map((b) => b.prop) };
         });
         await shot(page, shots, 'L3-stump');
         await press(page, 'e'); // (E on a thing with no verb does nothing)
@@ -66,7 +87,7 @@ export const section = {
         result('slice 3 (L): before night one the stone on C837\'s stump reads "Stump", no verb, E does nothing', before.t && before.t.label === 'Stump' && !before.t.verb && !before.found && !noLook && before.built.includes('ws.c837.stone'), before);
         // night one (B's cutscene finds it; the rig stands in for it through walt.find, as chk-coop does)
         await page.evaluate(async () => { const g = window.__game; g.walt.find({ key: 2, lake: 'Lake One' }); await window.__L.wait(200); window.__L.step(6); });
-        const after = await page.evaluate(() => { const L = window.__L, q = L.prop('ws.c837.stump'); L.face(q, 1.7, q.y + 0.35); L.step(6); return L.target(); });
+        const after = await page.evaluate(() => window.__L.faceTo('ws.c837.stump', 1.7, 0.35));
         await press(page, 'e');
         const looked = await page.evaluate(() => { const s = window.__game.story; return { stone: s.has('stone.c837'), walt: s.walt().includes('20:2.4.w2') }; });
         await shot(page, shots, 'L3-stone');
@@ -81,20 +102,26 @@ export const section = {
         const C = await page.evaluate(() => { const q = window.__game.storyLayer.place('crews.landing'); return q && { x: q.x, z: q.z, n: q.n }; });
         if (!C) { result('slice 5 (L): the crews\' landing is a place', false, {}); return; }
         // out on the water ~200 m off, then paddle in by the keys
-        const start = await page.evaluate(async (C) => {
-          const g = window.__game, L = window.__L;
-          await g.player.teleport(C.x - C.n[0] * 230, C.z - C.n[1] * 230); await L.settle();
-          return { mode: g.player.mode, d: Math.round(Math.hypot(g.player.x - C.x, g.player.z - C.z)) };
-        }, C);
         const aimAt = { x: C.x - C.n[0] * 3, z: C.z - C.n[1] * 3 };
+        const start = await page.evaluate(async ([C, q]) => {
+          const g = window.__game, L = window.__L;
+          await g.player.teleport(C.x - C.n[0] * 60, C.z - C.n[1] * 60); await L.settle(); // (the tiles round it in, for isWater)
+          const o = L.waterOut(q.x, q.z, 215, q.x, q.z);
+          if (o) { await g.player.teleport(o.x, o.z); await L.settle(); }
+          return { mode: g.player.mode, d: Math.round(Math.hypot(g.player.x - C.x, g.player.z - C.z)), out: o };
+        }, [C, aimAt]);
         await page.keyboard.down('w');
-        let held = null, d = start.d, turned = 0;
-        for (let k = 0; k < 400 && d > 7; k++) {
+        let held = null, d = start.d, turned = 0, sign = 1, lastE = null, lastKey = null;
+        for (let k = 0; k < 900 && d > 6; k++) {
           const s = await page.evaluate((q) => { const g = window.__game, p = g.player, want = Math.atan2(-(q.z - p.z), q.x - p.x); let e = want - p.heading; while (e > Math.PI) e -= 2 * Math.PI; while (e < -Math.PI) e += 2 * Math.PI; return { e, d: Math.hypot(q.x - p.x, q.z - p.z), mode: p.mode }; }, aimAt);
           d = s.d;
-          const want = Math.abs(s.e) < 0.08 ? null : s.e > 0 ? 'a' : 'd'; // (a turns the heading up: player.js forward = (cos h, -sin h))
+          if (s.mode !== 'paddle') break;
+          // which of A and D turns which way is learnt: a key held that made the error worse is the other's
+          if (lastKey && lastE != null && Math.abs(s.e) > Math.abs(lastE) + 0.02 && Math.abs(lastE) > 0.1) sign = -sign;
+          const want = Math.abs(s.e) < 0.06 ? null : (s.e * sign > 0 ? 'a' : 'd');
           if (want !== held) { if (held) await page.keyboard.up(held); if (want) { await page.keyboard.down(want); turned++; } held = want; }
-          await page.evaluate(() => window.__L.step(8));
+          lastE = s.e; lastKey = want;
+          await page.evaluate(() => window.__L.step(10));
         }
         if (held) await page.keyboard.up(held);
         await page.keyboard.up('w');
@@ -109,7 +136,7 @@ export const section = {
         // the three by the dot
         const looks = {};
         for (const [id, dy, dist] of [['crews.crib', 0.45, 3.2], ['crews.pine', 1.35, 1.6], ['crews.grade', 0.35, 1.8]]) {
-          const t = await page.evaluate(([id, dy, dist]) => { const L = window.__L, q = L.prop(id); L.face(q, dist, q.y + dy); L.step(6); return L.target(); }, [id, dy, dist]);
+          const t = await page.evaluate(([id, dy, dist]) => window.__L.faceTo(id, dist, dy), [id, dy, dist]);
           await shot(page, shots, `L5-${id}`);
           await press(page, 'e');
           looks[id] = t;

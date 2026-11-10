@@ -83,9 +83,12 @@ try {
     const lot = await A.evaluate(async () => {
       const g = window.__game, L = window.__L, ep = g.world.entryPoints.find((e) => e.ep === 33);
       await L.near(ep.x, ep.z);
-      for (let k = 0; k < 30; k++) { L.step(10); await L.wait(40); g.storyLayer.poll(); if (g.storyLayer.builtList().some((b) => b.place === 'ep33.crewcamp')) break; }
-      const pl = g.storyLayer.place('ep33.crewcamp'), b = g.storyLayer.builtList().filter((q) => q.place === 'ep33.crewcamp');
-      return { placed: Number.isFinite(pl.x), built: b.map((q) => q.prop), names: [g.storyLayer.dotName('ep33.slab'), g.storyLayer.dotName('ep33.pole')], verbs: g.storyLayer.verbs('ep33.slab').map((v) => v.verb) };
+      let pl = g.storyLayer.place('ep33.crewcamp');
+      for (let k = 0; k < 30 && !Number.isFinite(pl.x); k++) { L.step(10); await L.wait(40); }
+      const lotD = Number.isFinite(pl.x) ? Math.round(Math.hypot(pl.x - ep.x, pl.z - ep.z)) : null;
+      if (Number.isFinite(pl.x)) { L.standAt(pl.x + 4, pl.z + 4); for (let k = 0; k < 40; k++) { L.step(5); await L.wait(40); g.storyLayer.poll(); if (g.storyLayer.builtList().filter((b) => b.place === 'ep33.crewcamp').length === 2) break; } }
+      pl = g.storyLayer.place('ep33.crewcamp'); const b = g.storyLayer.builtList().filter((q) => q.place === 'ep33.crewcamp');
+      return { placed: Number.isFinite(pl.x), lotD, built: b.map((q) => q.prop), names: [g.storyLayer.dotName('ep33.slab'), g.storyLayer.dotName('ep33.pole')], verbs: g.storyLayer.verbs('ep33.slab').map((v) => v.verb) };
     });
     result('4 the EP 33 lot: the slab and the pole beside it once the lot is built; the dot reads Slab / Pole, Look only', lot.placed && lot.built.length === 2 && lot.names.join() === 'Slab,Pole' && lot.verbs.join() === 'Look', lot);
     if (lot.placed) { await A.evaluate(() => { const L = window.__L, q = L.prop('ep33.pole'); L.face(q, 6, q.y + 2.5); L.step(10); }); await A.screenshot({ path: path.join(OUT, 'L4-ep33-lot.png') }); }
@@ -100,8 +103,8 @@ try {
     await B.waitForFunction(() => window.__game.coop.role === 'guest' && window.__game.title.state === 'game' && !window.__game.player.teleporting && !!window.__game.storyLayer, null, { timeout: 150000, polling: 250 });
     await B.evaluate(HELPERS);
     for (const s of section.steps.filter((x) => x.guest)) { try { await s.run({ page: B, result, shots: OUT }); } catch (e) { result(`slice ${s.step} (L) ran`, false, { error: String(e.stack || e).slice(0, 800) }); } }
-    const host = await A.evaluate(() => ({ mode: window.__game.story.mode, stone: window.__game.story.has('stone.c837') }));
-    result('5 the host unchanged by the guest (live, its stone still counted)', host.mode === 'live' && host.stone, host);
+    const host = await A.evaluate(() => ({ mode: window.__game.story.mode, stone: window.__game.story.has('stone.c837'), crib: window.__game.story.has('landing.crib') }));
+    result('5 the host unchanged by the guest (live, its stone still counted)', host.mode === 'live' && host.stone && host.crib, host);
   }
 } catch (e) { result('rig ran to the end', false, { error: String(e && e.stack || e).slice(0, 1500) }); }
 finally { for (const b of browsers) { try { await b.close(); } catch { /* */ } } }
