@@ -590,29 +590,6 @@ if (ground) {
     for (let i = 0; i < B.n; i++) B.h[i] = B.raw[i] = a != null && b != null ? a + ((b - a) * i) / Math.max(1, B.n - 1) : (a ?? b);
   }
 }
-for (const B of built) {
-  const { c, pts, n, h, w, water, raw } = B;
-  if (ground) {
-    // round 4: by the water the ground the game draws (detail-build.js chunkGround): no road grade within 4 m of the shore
-    // (eased in from 1 to 4 m), and never under the lake's level by the shore (sd < 30)
-    pts.forEach(([x, z], i) => {
-      if (water[i]) return;
-      const g = ground.at(x, z), t = Math.min(1, Math.max(0, (g.sd - 1) / 3)), k = t * t * (3 - 2 * t);
-      h[i] = raw[i] + (h[i] - raw[i]) * k;
-      if (g.lv === g.lv) h[i] = Math.max(h[i], g.lv + 0.04 * Math.min(g.sd, 5));
-    });
-    for (let i = 0; i < n; i++) { const cut = h[i] - raw[i]; w[i] = SHOULDER(cut); if (!water[i]) cuts.push(Math.abs(cut)); }
-    wet += water.reduce((t, v) => t + v, 0);
-    for (let i = 0; i < n;) { // the water a road crosses (a culvert, a bridge: for the owner's list)
-      if (!water[i]) { i++; continue; }
-      let j = i; while (j < n && water[j]) j++;
-      crossings.push({ name: c.name, k: c.k, m: (j - i) * STEP, end: i === 0 || j === n, x: Math.round(pts[i][0]), z: Math.round(pts[i][1]) });
-      i = j;
-    }
-  }
-  B.rows = pts.map(([x, z], i) => [x, z, h[i], water[i] ? -w[i] : w[i]]);
-  B.cum = [0]; for (let i = 1; i < n; i++) B.cum.push(B.cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
-}
 // each chain's two ends (round 5, worked out here, no longer at load): joined to another road (no fade), at a start
 // (faded in over a few metres: the lot's own gravel or the landing), at the box's edge (faded out over 30 m, so it reads
 // as going on), or a real dead end (a driveway's, a turnaround: 8 m)
@@ -640,6 +617,11 @@ if (ground) for (const B of built) {
 }
 // round 4: where a route crosses water off those (the ground read finer, every 2 m), a bridge of its own from bank to bank
 const segGap = (q, x, z) => { const ex = q.bx - q.ax, ez = q.bz - q.az, L2 = ex * ex + ez * ez, t = L2 ? Math.max(0, Math.min(1, ((x - q.ax) * ex + (z - q.az) * ez) / L2)) : 0; return Math.hypot(x - q.ax - ex * t, z - q.az - ez * t); };
+// (round 5: a route's bridge level with the road's own grade there, not the bank's ground: EP 40's dip at the bank)
+const ptBins = new Map();
+for (const B of built) B.pts.forEach(([x, z], i) => { const k = `${Math.floor(x / 32)},${Math.floor(z / 32)}`; let l = ptBins.get(k); if (!l) ptBins.set(k, (l = [])); l.push([B, i]); });
+const pointsNear = (x, z, r) => { const out = []; for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) for (const q of ptBins.get(`${Math.floor(x / 32) + dx},${Math.floor(z / 32) + dz}`) || []) { const d = Math.hypot(q[0].pts[q[1]][0] - x, q[0].pts[q[1]][1] - z); if (d < r) out.push([q[0], q[1], d]); } return out; };
+const levelNear = ([x, z], fallback) => { const l = pointsNear(x, z, 4).filter((q) => !q[0].water[q[1]]).sort((p, q) => p[2] - q[2]); return l.length ? l[0][0].h[l[0][1]] : fallback; };
 let routeBridgeN = 0;
 if (ground) for (const r of routes) {
   const pts = resample(r.pts, 2), wetA = pts.map(([x, z]) => ground.at(x, z).sd < 0.5);
@@ -647,11 +629,40 @@ if (ground) for (const r of routes) {
     if (!wetA[i]) { i++; continue; }
     let j = i; while (j < pts.length && wetA[j]) j++;
     if (j < pts.length && (j - i) * 2 <= 80) {
-      const A = pts[i - 1], Bp = pts[j], ha = ground.at(A[0], A[1]).h, hb = ground.at(Bp[0], Bp[1]).h, mx = (A[0] + Bp[0]) / 2, mz = (A[1] + Bp[1]) / 2;
+      const A = pts[i - 1], Bp = pts[j], ha = levelNear(A, ground.at(A[0], A[1]).h), hb = levelNear(Bp, ground.at(Bp[0], Bp[1]).h), mx = (A[0] + Bp[0]) / 2, mz = (A[1] + Bp[1]) / 2;
       if (!bridges.some((q) => segGap(q, mx, mz) < 6)) { bridges.push({ ax: +A[0].toFixed(1), az: +A[1].toFixed(1), ah: +ha.toFixed(2), bx: +Bp[0].toFixed(1), bz: +Bp[1].toFixed(1), bh: +hb.toFixed(2), hw: 2.6, k: 1, key: r.key }); routeBridgeN++; }
     }
     i = j + 1;
   }
+}
+// round 5 (the owner's "the trucks float"; round 4's EP 40 bridge end): each bridge's ends met by the road's own grade,
+// an abutment: the road's points within ABUT m of a bridge's end kept at the road's level (no fade to the bank's ground by
+// the water), and drawn so (roads.bin marks them: road-grade.js grades them right to the water's edge)
+const ABUT = 10;
+for (const B of built) B.abut = new Uint8Array(B.n);
+for (const q of bridges) for (const [x, z] of [[q.ax, q.az], [q.bx, q.bz]]) for (const [B, i] of pointsNear(x, z, ABUT)) if (!B.water[i]) B.abut[i] = 1;
+for (const B of built) {
+  const { c, pts, n, h, w, water, raw } = B;
+  if (ground) {
+    // round 4: by the water the ground the game draws (detail-build.js chunkGround): no road grade within 4 m of the shore
+    // (eased in from 1 to 4 m), and never under the lake's level by the shore (sd < 30)
+    pts.forEach(([x, z], i) => {
+      if (water[i]) return;
+      const g = ground.at(x, z), t = B.abut[i] ? 1 : Math.min(1, Math.max(0, (g.sd - 1) / 3)), k = t * t * (3 - 2 * t);
+      h[i] = raw[i] + (h[i] - raw[i]) * k;
+      if (g.lv === g.lv) h[i] = Math.max(h[i], g.lv + 0.04 * Math.min(g.sd, 5));
+    });
+    for (let i = 0; i < n; i++) { const cut = h[i] - raw[i]; w[i] = SHOULDER(cut); if (!water[i]) cuts.push(Math.abs(cut)); }
+    wet += water.reduce((t, v) => t + v, 0);
+    for (let i = 0; i < n;) { // the water a road crosses (a culvert, a bridge: for the owner's list)
+      if (!water[i]) { i++; continue; }
+      let j = i; while (j < n && water[j]) j++;
+      crossings.push({ name: c.name, k: c.k, m: (j - i) * STEP, end: i === 0 || j === n, x: Math.round(pts[i][0]), z: Math.round(pts[i][1]) });
+      i = j;
+    }
+  }
+  B.rows = pts.map(([x, z], i) => [x, z, h[i], water[i] ? -w[i] : w[i]]);
+  B.cum = [0]; for (let i = 1; i < n; i++) B.cum.push(B.cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
 }
 const bl = bridges.map((b) => Math.hypot(b.bx - b.ax, b.bz - b.az)).sort((a, b) => b - a);
 console.log(`roads: ${bridges.length} bridges (${routeBridgeN} on the routes alone), the longest ${bl.slice(0, 5).map((m) => m.toFixed(0)).join(', ')} m`);
@@ -667,7 +678,8 @@ cuts.sort((a, b) => a - b);
 // A piece (gzipped): varint runs; per run varint chain, varint s0 (dm along the chain to the run's first point), varint
 // the chain's length (dm), u8 kind, u8 half width (dm), u8 flags (1 a centre line, 2 a driveway or an aisle), u8 fade at
 // the chain's start, u8 at its end (m), varint points; the first point zigzag x, z (dm), h (cm), then each one's zigzag
-// differences; and per point a u8 shoulder (dm, 0x80 over water).
+// differences; and per point a u8 shoulder (dm, 0x80 over water); then varint abutments, each its point's index in the
+// run (differences): the points by a bridge's end, graded right to the water's edge.
 const binFile = path.resolve(arg('--bin', path.join(root, 'src/roads.bin')));
 const PAD = 80, TILE_M = index.grid.tile * index.grid.cell;
 const pieceRuns = new Map(); // 'tx,ty' -> [{ B, i0, i1 }]
@@ -709,6 +721,8 @@ for (const k of [...pieceRuns.keys()].sort((a, b) => { const [ax, ay] = a.split(
       out.push(Math.min(127, Math.round(Math.abs(w) * 10)) | (w < 0 ? 128 : 0));
       if (i > i0) pieceKm += Math.hypot(x - B.rows[i - 1][0], z - B.rows[i - 1][1]) / 1000;
     }
+    const ab = []; for (let i = i0; i <= i1; i++) if (B.abut[i]) ab.push(i - i0);
+    varint(out, ab.length); let pa = 0; for (const q of ab) { varint(out, q - pa); pa = q; }
   }
   const [tx, ty] = k.split(',').map(Number), gz = zlib.gzipSync(Buffer.from(out), { level: 9 });
   pieceBufs.push({ tx, ty, gz }); pieceBytes += gz.length; pieceRaw += out.length;

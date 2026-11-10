@@ -105,7 +105,9 @@ export function decodePiece(buf) {
       p[i * 4] = X; p[i * 4 + 1] = Z; p[i * 4 + 2] = h / 100; p[i * 4 + 3] = (w & 128 ? -1 : 1) * (w & 127) / 10;
       if (X < box[0]) box[0] = X; if (Z < box[1]) box[1] = Z; if (X > box[2]) box[2] = X; if (Z > box[3]) box[3] = Z;
     }
-    chains.push({ id, s0, total, k, hw, line: !!(fl & 1), svc: !!(fl & 2), fadeA, fadeB, n, p, bbox: box });
+    const na = vi(), ab = na ? new Uint8Array(n) : null; // (the abutments: by a bridge's end)
+    for (let q = 0, at = 0; q < na; q++) { at += vi(); ab[at] = 1; }
+    chains.push({ id, s0, total, k, hw, line: !!(fl & 1), svc: !!(fl & 2), fadeA, fadeB, n, p, ab, bbox: box });
   }
   return chains;
 }
@@ -142,6 +144,7 @@ export function gradeOf(chains) {
       if (p[a + 3] < 0 || p[b + 3] < 0) continue; // (over water: the bed stays the bed)
       out[o++] = p[a]; out[o++] = p[a + 1]; out[o++] = p[a + 2]; out[o++] = p[a + 3];
       out[o++] = p[b]; out[o++] = p[b + 1]; out[o++] = p[b + 2]; out[o++] = p[b + 3]; out[o++] = core; out[o++] = ex;
+      out[o++] = c.ab && (c.ab[i - 1] || c.ab[i]) ? 1 : 0; // (an abutment: graded to the water's edge)
     }
   }
   return out.subarray(0, o);

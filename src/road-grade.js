@@ -12,10 +12,11 @@
 // piece of the tile it builds (setRoadGrade, before each build); the main thread keeps one per installed tile
 // (addTileGrade / dropTileGrade, by tile: setGradeFrame) and answers each point from its own tile's.
 //
-// The table: a flat Float32Array of segments, SEG floats each: x0, z0, h0, w0, x1, z1, h1, w1, core, ex (h the road's
+// The table: a flat Float32Array of segments, SEG floats each: x0, z0, h0, w0, x1, z1, h1, w1, core, ex, ab (h the road's
 // height at each end, w its shoulder there; core the flat half width; ex the forest's clearing round the line, negative a
-// lawn: roads.js clearOf).
-export const SEG = 10;
+// lawn: roads.js clearOf; ab 1 by a bridge's end, an abutment: graded right to the water's edge, the caller's shore fade
+// not taken, so the bank meets the deck).
+export const SEG = 11;
 export const ROAD_SHOULDER = 0.9; // metres of flat gravel shoulder past the drawn half width
 const BIN = 32;
 
@@ -64,12 +65,13 @@ const binAt = (T, x, z) => T.bins.get((Math.floor(x / BIN) + 65536) * 131072 + (
 // the core, 0 past the shoulder), times k (the caller's own fade: the shore). Where two roads meet, the nearer one's
 // height wins (weights by the fourth power of the distance).
 export function roadGradeAt(x, z, h, k = 1) {
-  if (!(k > 0)) return h;
   const T = setAt(x, z), l = T && binAt(T, x, z);
   if (!l) return h;
-  const S = T.S;
+  const S = T.S, kk = k > 0 ? k : 0;
   let K = 0, sw = 0, st = 0;
   for (const s of l) {
+    const ks = S[s + 10] ? 1 : kk;
+    if (!(ks > 0)) continue;
     const ax = S[s], az = S[s + 1], ex = S[s + 4] - ax, ez = S[s + 5] - az, L2 = ex * ex + ez * ez;
     const t = L2 > 1e-9 ? Math.max(0, Math.min(1, ((x - ax) * ex + (z - az) * ez) / L2)) : 0;
     const d = Math.hypot(x - ax - ex * t, z - az - ez * t), core = S[s + 8], w = S[s + 3] + (S[s + 7] - S[s + 3]) * t;
@@ -78,9 +80,9 @@ export function roadGradeAt(x, z, h, k = 1) {
     if (k1 <= 0) continue;
     const th = S[s + 2] + (S[s + 6] - S[s + 2]) * t, wt = k1 / (d * d * d * d + 0.05);
     sw += wt; st += wt * th;
-    if (k1 > K) K = k1;
+    if (k1 * ks > K) K = k1 * ks;
   }
-  return K > 0 ? h + (st / sw - h) * K * k : h;
+  return K > 0 ? h + (st / sw - h) * K : h;
 }
 
 // Is (x, z) within a road's reach (its core and shoulder) plus pad metres?
