@@ -32,7 +32,7 @@ function stumpCut({ rng }) {
     const a = k * 2.1 + rng() * 0.6, ca = Math.cos(a), sa = Math.sin(a);
     b.cyl(V(ca * r * 0.7, 0.12, sa * r * 0.7), V(ca * (r + 0.32), -0.06, sa * (r + 0.32)), 0.08, 0.04, 5, TILE.BARK, COL.bark);
   }
-  return { geo: b.build(), dots: [{ y: h * 0.7, r: 0.45 }], top: h };
+  return { geo: b.build(), dots: [{ y: h * 0.75, r: 0.55 }], top: h }; // (the dot's sphere takes the stone on top too)
 }
 function quartzCobble({ rng }) {
   const b = new PropBuilder();

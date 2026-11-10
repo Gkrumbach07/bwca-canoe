@@ -82,7 +82,7 @@ export const section = {
         await page.evaluate(async (W) => { await window.__L.near(W.x, W.z); }, W);
         const before = await page.evaluate(async () => {
           const L = window.__L, g = window.__game;
-          const t = L.faceTo('ws.c837.stump', 1.7, 0.35);
+          const t = L.faceTo('ws.c837.stump', 2.5, 0.4);
           return { t, face: L.lastFace, found: g.story.has('nb.found'), built: g.storyLayer.builtList().filter((b) => b.place === 'ws.c837').map((b) => b.prop) };
         });
         await shot(page, shots, 'L3-stump');
@@ -91,7 +91,7 @@ export const section = {
         result('slice 3 (L): before night one the stone on C837\'s stump reads "Stump", no verb, E does nothing', before.t && before.t.label === 'Stump' && !before.t.verb && !before.found && !noLook && before.built.includes('ws.c837.stone'), before);
         // night one (B's cutscene finds it; the rig stands in for it through walt.find, as chk-coop does)
         await page.evaluate(async () => { const g = window.__game; g.walt.find({ key: 2, lake: 'Lake One' }); await window.__L.wait(200); window.__L.step(6); });
-        const after = await page.evaluate(() => window.__L.faceTo('ws.c837.stump', 1.7, 0.35));
+        const after = await page.evaluate(() => window.__L.faceTo('ws.c837.stump', 2.5, 0.4));
         await press(page, 'e');
         const looked = await page.evaluate(() => { const s = window.__game.story; return { stone: s.has('stone.c837'), walt: s.walt().includes('20:2.4.w2') }; });
         await shot(page, shots, 'L3-stone');
