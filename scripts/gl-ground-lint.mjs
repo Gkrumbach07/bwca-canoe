@@ -32,6 +32,30 @@ const RULES = String.raw`[
   ['fine words in the rain', (t, D) => D.raining && /\b(beautiful|lovely|nice|good) (day|morning) for it\b|\bnice day\b|\bsunshine\b/i.test(t)],
 ]`;
 
+// st-t (campaign-design §5.4): the story's ambient pools (ambient.js over 70-world-texture), checked in Node before the
+// browser: no banned word (cellar, cache, far end, flowage, Gull's east bay, the cans, Eino, alive, Wade); Walt lore only
+// after the notebook (its condition carries f:nb.found); "green Kevlar" only with the watchers seen (ev.watchers), a
+// canary or a page understood (und:, knows: Norm's 2019 fellas); "the Ledger" only after an ending; no reserved speaker (the cast) in a visitor's pool. Each broken one is a
+// BROKEN line of its own, and fails the lint like any other.
+const storyBad = [];
+{
+  const { readFileSync } = await import('node:fs');
+  const { Ambient, POOLS, BANNED, WALT_LORE, RESERVED } = await import('../src/ambient.js');
+  const w = JSON.parse(readFileSync(new URL('../src/story-data/text/world.json', import.meta.url), 'utf8'));
+  const A = new Ambient().use(w);
+  let n = 0;
+  for (const kind of Object.keys(POOLS)) for (const l of A.all(kind)) {
+    n++;
+    if (BANNED.test(l.text)) storyBad.push({ id: 'story: banned word', src: l.id, text: l.text });
+    if (WALT_LORE.test(l.text) && !/f:nb\.found|stage>=S[1-7]|end:/.test(l.cond)) storyBad.push({ id: 'story: Walt lore before the notebook', src: l.id, text: l.text });
+    if (/green Kevlar/i.test(l.text) && !/ev\.watchers|canary|tier|t[1-4]\b/.test(l.cond)) storyBad.push({ id: 'story: green Kevlar unseen', src: l.id, text: l.text });
+    if (/\bthe Ledger\b/.test(l.text) && !/end:/.test(l.cond)) storyBad.push({ id: 'story: the Ledger before an ending', src: l.id, text: l.text });
+    if (kind === 'bark' && RESERVED.test(l.who || '')) storyBad.push({ id: 'story: a reserved speaker among visitors', src: l.id, text: l.text });
+  }
+  log(`story ambient pools: ${n} lines, ${storyBad.length} broken`);
+}
+// /st-t
+
 const browser = await launch();
 const report = { checked: 0, lines: 0, bad: [], rawB: new Map() };
 try {
@@ -75,6 +99,7 @@ try {
 } finally {
   await browser.close();
 }
+report.bad.push(...storyBad); // st-t
 for (const b of report.bad.slice(0, 40)) log('BROKEN', JSON.stringify(b));
 if (report.rawB.size) { log(`outfitters.js (stream B's, read only): ${report.rawB.size} keeper lines the people never say when they are untrue; for B:`); for (const x of [...report.rawB.values()].slice(0, 30)) log('  B', JSON.stringify(x)); }
 const pass = OFF ? report.bad.length > 0 : !report.bad.length && report.lines > 1000; // (--off: passes when the lint catches what grounding would have)
