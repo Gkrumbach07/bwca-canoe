@@ -294,7 +294,7 @@ class StoryLayer {
       const base = pr.on ? m.get(pr.on) : null, y = base ? base.y + (base.top || 0) : ground;
       let mesh = null;
       if (r.geo) {
-        mesh = new THREE.Mesh(r.geo, propMaterial());
+        mesh = new THREE.Mesh(r.geo, t.material || propMaterial()); // (t.material: the Node checks, which have no canvas for the atlas)
         mesh.name = `story ${pr.id}`; mesh.castShadow = true; mesh.receiveShadow = true;
         mesh.position.set(pr.x, y, pr.z); mesh.rotation.y = (pr.heading || 0) + Math.PI;
         mesh.matrixAutoUpdate = false; mesh.updateMatrix(); mesh.updateMatrixWorld(true);
