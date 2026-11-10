@@ -245,15 +245,16 @@ function fit(c, wantDock, others, pier) {
       const cw = Math.min(12, Math.max(5, along ? c.len : c.wid)), cd = Math.min(9, Math.max(4.5, along ? c.wid : c.len));
       const X = [-fz, fx], W = (a, b) => [x + X[0] * a + fx * b, z + X[1] * a + fz * b];
       // the ground under the cabin and its deck (src/cabins.js buildCabin's samples, and between)
-      let gMin = Infinity, gMax = -Infinity, wet = false, lMax = -Infinity;
+      let gMin = Infinity, gMax = -Infinity, wet = false, lMax = -Infinity, gBody = -Infinity;
       for (let i = 0; i <= 8 && !wet; i++) for (let j = 0; j <= 8; j++) {
-        const [px, pz] = W(-cw / 2 + (i / 8) * cw, -cd / 2 + (j / 8) * (cd + CAB.deck)), h = mesh(px, pz);
+        const bb = -cd / 2 + (j / 8) * (cd + CAB.deck), [px, pz] = W(-cw / 2 + (i / 8) * cw, bb), h = mesh(px, pz);
         if (!(h === h) || world.shoreAt(px, pz) < SHORE_CLEAR || lakeAt(px, pz)) { wet = true; break; }
-        gMin = Math.min(gMin, h); gMax = Math.max(gMax, h);
+        gMin = Math.min(gMin, h); gMax = Math.max(gMax, h); if (bb <= cd / 2) gBody = Math.max(gBody, h);
         const l = lidar(px, pz); if (l === l) lMax = Math.max(lMax, l);
       }
       if (wet) { why = 'water under it'; continue; }
       if (gMax - gMin > STEEP) { why = `the slope (${(gMax - gMin).toFixed(1)} m)`; continue; }
+      if (gMax - gBody > 0.15) { why = 'a rise under its deck'; continue; } // (a bank higher than the cabin's own ground: it would sit in a hollow)
       // the detail re-seats it by the LiDAR's rise at its middle: the LiDAR under it no higher than the floor then
       const lc = lidar(x, z) - mesh(x, z);
       if (lMax > -Infinity && lc === lc && gMax + CAB.lift + lc - lMax < 0.05) { why = 'the LiDAR under it'; continue; }
