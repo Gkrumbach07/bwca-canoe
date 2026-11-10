@@ -6,11 +6,12 @@
 //     a door rung
 //   season B (home --home-b, default 31): P1 taken · 4d–4f the declines, R3, Farm's porch
 //   season C (home --home): 1b P1 left on the shelf · 1c R1 a trip later (one push a trip: R1 and R3 never on one trip)
+//   8 a store with no porch (Sawbill 38): his truck in the lot
 //   7 a co-op guest (mirror): a walkout stages nobody, no story topic on a keeper
 //   (and no page errors)
 //
 //   npx vite --port 5641 --strictPort &
-//   APP=http://localhost:5641 node scripts/c1-talk-test.mjs [--home 25] [--home-b 31] [--only A|B|C|off|guest]
+//   APP=http://localhost:5641 node scripts/c1-talk-test.mjs [--home 25] [--home-b 31] [--only A|B|C|D|off|guest]
 import { createRequire } from 'node:module';
 import { readdirSync, existsSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -83,6 +84,23 @@ try {
     await newSeason(c, HOME);
     await run(c, [shelf, r1], { home: HOME });
     await c.close();
+  }
+  if (!ONLY || ONLY === 'D') {
+    // a store with no porch (Sawbill 38): Tauno by his own pickup in the lot, the store's truck kept away
+    const d = await open(`${APP}/?story=1`);
+    await newSeason(d, 38);
+    const t = await d.evaluate(() => {
+      const g = window.__game, T = window.__t, c = g.storyTalk.cast;
+      const L = g.outfitter.layout(38);
+      const st = c.debug.stage('tauno', 38, 'porch', 'foot');
+      T.step(20);
+      const tr = c.ownTruck, me = st && st.find((x) => x.who === 'tauno');
+      const fig = me ? T.figure('cast:tauno:38') : null;
+      return { porch: !!(L.look && L.look.porch), me, fig, truck: tr ? { visible: !!(tr.mesh && tr.mesh.visible), x: tr.x, z: tr.z } : null, rides: g.truck ? { gone: g.truck.gone, visible: !!(g.truck.mesh && g.truck.mesh.visible) } : null };
+    });
+    result('8 no porch (Sawbill 38): Tauno at his pickup in the lot (his own, drawn; the store\'s truck away), on the ground',
+      !t.porch && t.me && t.me.truck && t.truck && t.truck.visible && Math.hypot(t.truck.x - t.me.x, t.truck.z - t.me.z) < 5 && t.fig && Math.abs(t.fig.y - t.fig.ground) < 0.35 && t.rides && t.rides.gone === '38', t);
+    await d.close();
   }
   if (!ONLY || ONLY === 'guest') {
     const c = await open(`${APP}/?story=1`);
