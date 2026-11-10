@@ -152,6 +152,7 @@ try {
   // an old Sandbox save stuck at the talk: the state and the inventory of an empty-handed Sandbox season, saved, reloaded
   await ev(async () => {
     const g = window.__game, ob = g.onboarding, inv = g.inventory;
+    ob.update = () => {}; // (this page's loop must not kit it again before the reload: the load is what is tested)
     ob.state = { v: 1, step: 'door', done: false, season: g.profile.seasonId, nudged: true, path: { food: false, leeches: false, canoe: false }, loan: false };
     ob.write();
     inv.newSeason();
