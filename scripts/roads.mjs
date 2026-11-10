@@ -654,7 +654,7 @@ for (const B of built) {
       if (water[i]) return;
       const g = ground.at(x, z), t = B.abut[i] ? 1 : Math.min(1, Math.max(0, (g.sd - 1) / 3)), k = t * t * (3 - 2 * t);
       h[i] = raw[i] + (h[i] - raw[i]) * k;
-      if (g.lv === g.lv) h[i] = Math.max(h[i], g.lv + 0.04 * Math.min(g.sd, 5));
+      if (g.lv === g.lv && g.sd <= 6) h[i] = Math.max(h[i], g.lv + 0.04 * Math.min(g.sd, 5)); // (round 5: only by the water, ROAD_DRY, as detail-build.js now has it)
     });
     for (let i = 0; i < n; i++) { const cut = h[i] - raw[i]; w[i] = SHOULDER(cut); if (!water[i]) cuts.push(Math.abs(cut)); }
     wet += water.reduce((t, v) => t + v, 0);

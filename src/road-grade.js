@@ -85,6 +85,25 @@ export function roadGradeAt(x, z, h, k = 1) {
   return K > 0 ? h + (st / sw - h) * K : h;
 }
 
+// How much of a road's own grade (x, z) takes, 0 to 1 (1 on its core), whatever the caller's fade (detail-build.js: a
+// road's ground is not stood up to a pond's level past ROAD_DRY m from its shore: round 5, EP 50)
+export const ROAD_DRY = 6;
+export function roadCoreAt(x, z) {
+  const T = setAt(x, z), l = T && binAt(T, x, z);
+  if (!l) return 0;
+  const S = T.S;
+  let K = 0;
+  for (const s of l) {
+    const ax = S[s], az = S[s + 1], ex = S[s + 4] - ax, ez = S[s + 5] - az, L2 = ex * ex + ez * ez;
+    const t = L2 > 1e-9 ? Math.max(0, Math.min(1, ((x - ax) * ex + (z - az) * ez) / L2)) : 0;
+    const d = Math.hypot(x - ax - ex * t, z - az - ez * t), core = S[s + 8], w = S[s + 3] + (S[s + 7] - S[s + 3]) * t;
+    if (d >= core + w) continue;
+    const u = d <= core ? 0 : (d - core) / w, k1 = 1 - u * u * (3 - 2 * u);
+    if (k1 > K) K = k1;
+  }
+  return K;
+}
+
 // Is (x, z) within a road's reach (its core and shoulder) plus pad metres?
 export function nearRoad(x, z, pad = 0) {
   const T = setAt(x, z), l = T && binAt(T, x, z);
