@@ -37,6 +37,9 @@ try {
   const shot = async (name, el = null) => { const f = path.join(SHOTS, `r5-mapkit-${name}.png`); if (el) await page.locator(el).screenshot({ path: f }); else await page.screenshot({ path: f }); log('shot', f); return f; };
   const boot = async () => {
     await page.waitForFunction(() => { const g = window.__game; return g && g.title && g.onboarding && g.guide && typeof g.step === 'function' && g.title.state === 'title' && g.prewarmed; }, null, { timeout: 300000, polling: 500 });
+    await helpers();
+  };
+  const helpers = async () => {
     await ev(() => {
       const g = window.__game;
       window.__p = { step: (n = 30, dt = 1 / 30) => { for (let left = n; left > 0; left -= 200) g.step(dt, Math.min(200, left)); } };
@@ -54,7 +57,9 @@ try {
     await ev(() => { const w = window.__game.title.wizard; w.setDate(191); w.next(); });
     await page.waitForTimeout(300);
     await page.click('#btn-start');
-    await page.waitForFunction(() => { const g = window.__game; return g.title.state === 'game' && !g.player.teleporting && !!g.outfitter.visit; }, null, { timeout: 180000, polling: 250 });
+    // (a season into an empty slot reloads the page: the game comes back on its own, the helpers with it)
+    await page.waitForFunction(() => { const g = window.__game; return g && g.title && g.player && g.prewarmed && g.title.state === 'game' && !g.player.teleporting && !!g.outfitter.visit; }, null, { timeout: 300000, polling: 250 });
+    await helpers();
     if (await ev(() => window.__game.outfitter.open)) { await page.keyboard.press('Escape'); await page.waitForTimeout(300); }
     await ev(() => window.__p.step(20));
     return sm;
@@ -156,7 +161,8 @@ try {
   await boot();
   const stuck0 = await ev(() => { const s = window.__game.onboarding.state || {}; return { loan: !!s.loan, step: s.step, mode: window.__game.profile.mode }; });
   await page.click('#btn-continue').catch(() => ev(() => window.__game.title.continueTrip()));
-  await page.waitForFunction(() => { const g = window.__game; return g.title.state === 'game' && !g.player.teleporting; }, null, { timeout: 180000, polling: 250 });
+  await page.waitForFunction(() => { const g = window.__game; return g && g.title && g.title.state === 'game' && !g.player.teleporting; }, null, { timeout: 180000, polling: 250 });
+  await helpers();
   if (await ev(() => window.__game.outfitter.open)) { await page.keyboard.press('Escape'); await page.waitForTimeout(300); }
   await ev(() => window.__p.step(20));
   const stuck = await kit();
