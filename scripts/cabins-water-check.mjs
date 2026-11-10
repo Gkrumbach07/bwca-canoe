@@ -3,8 +3,9 @@
 // release's tiles, its levels and rapids.json's drops), and every cabin's spot checked off the water and the roads.
 // Plain node, no Vite (the tiles read raw): the bake's own proof, run again over the table as it stands.
 //
-//   node scripts/cabins-water-check.mjs [--data <release dir>] [--table src/cabins.json] [--json out.json]
-// Prints a line a cabin and PASS/FAIL; exits 1 when any dock fails.
+//   node scripts/cabins-water-check.mjs [--data <release dir>] [--table src/cabins.json] [--json out.json] [--stores]
+// Prints a line a cabin and PASS/FAIL; exits 1 when any dock fails. --stores: the outfitters' store docks too
+// (src/outfitter-places.json), reported only (not this table's: they are not held to it here).
 import fs from 'node:fs';
 import zlib from 'node:zlib';
 import { dockWaterway, dropsOf, DOCK_WATER } from '../src/cabins-water.js';
@@ -53,6 +54,14 @@ table.cabins.forEach((c, i) => {
   rows.push(r);
   console.log(`${r.ok ? 'PASS' : 'FAIL'} cabin ${i} lake ${c.lake} ${c.osm || 'made'} sd ${r.sd} road ${r.road} m drop ${r.drop} m ${r.dock ? `dock: ${r.why || `open water ${r.toOpen} m out, ${r.reached} cells`}` : 'no dock'}`);
 });
+if (process.argv.includes('--stores')) {
+  const P = JSON.parse(fs.readFileSync('src/outfitter-places.json', 'utf8')).places || {};
+  for (const [ep, v] of Object.entries(P)) {
+    if (!v.dock) continue;
+    const [x, z] = v.dock, i = grid.cellI(x), j = grid.cellJ(z), L = grid.lakeCell(i, j), w = dockWaterway(grid, x, z, grid.levelCell(i, j), drops);
+    console.log(`${w.ok ? 'ok  ' : 'NOT '} store dock EP ${ep} ${v.name} on ${(index.lakes[L - 1] && index.lakes[L - 1].name) || `water ${L}`}: ${w.why || `open water ${w.open.steps * g.cell} m out`}`);
+  }
+}
 console.log(`${rows.length - fails}/${rows.length} pass (docks ${rows.filter((r) => r.dock).length}; DOCK_WATER ${JSON.stringify(DOCK_WATER)})`);
 if (arg('--json')) fs.writeFileSync(arg('--json'), JSON.stringify(rows, null, 1));
 process.exit(fails ? 1 : 0);
