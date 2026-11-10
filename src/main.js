@@ -115,7 +115,7 @@ import { BurnNotes } from './burn-notes.js'; // the real burns
 import { Permits } from './permits.js'; // gl-a: permits
 import { EdgeWatch } from './edge.js'; // the edge round: the notice while you are out of the Boundary Waters
 import { PermitDesk } from './permit-desk.js'; // gl-a: the permit desk
-import { story } from './story-hooks.js'; // gl-c: the story's event bus and saved state
+import { story, loadStory } from './story-hooks.js'; // gl-c: the story's event bus and saved state (loadStory: the v2 story under STORY_ON)
 import { STORY_ON } from './story-flag.js'; // st-k1b: the story's dev flag (?story=1 in dev)
 import { onboarding } from './onboarding.js'; // gl-c: the home counter's first visit, the old gear
 import { starter } from './starter.js'; // the start round: each outfitter's first night out, the season's sky and its kind first days
@@ -129,6 +129,7 @@ const loadingEl = document.getElementById('loading'), barEl = document.getElemen
 const progress = (f, msg) => { barEl.style.width = `${Math.round(f * 100)}%`; if (msg) msgEl.textContent = msg; };
 
 async function main() {
+  if (STORY_ON) await loadStory(); // (st-k1a: the v2 story, made before anything reads `story`; a no-op with the flag off)
   const world = await World.load(progress);
   // d2 join: a season made on another map release carried to this one's lake, site and trail numbers, before anything
   // reads it (migrate.js)

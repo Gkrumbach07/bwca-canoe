@@ -94,7 +94,13 @@ export class Story {
 }
 
 // (the R0 join: story.js and its rules are imported only under the flag, so with it off not one v2 module is fetched or
-// evaluated; the build keeps them as a chunk never loaded. es2022 target: top-level await is fine)
-const StoryV2 = STORY_ON ? (await import('./story.js')).StoryV2 : null;
-export const story = STORY_ON ? new StoryV2({ io: save }) : new Story();
+// evaluated; the build keeps them as a chunk never loaded. c1base: no top-level await here. One made this module, and
+// main.js with it, evaluate a tick late, so key listeners other modules add as they load landed in another order: with
+// the flag off an Escape out of a talk opened the pause card (r3-journal-test 5a). So `story` is a live binding: the
+// v1 story at load with the flag off, exactly as main; under STORY_ON null until main() awaits loadStory() first thing)
+export let story = STORY_ON ? null : new Story();
+export async function loadStory() {
+  if (STORY_ON && !story) { const { StoryV2 } = await import('./story.js'); story = new StoryV2({ io: save }); }
+  return story;
+}
 export { STORY_ON };
