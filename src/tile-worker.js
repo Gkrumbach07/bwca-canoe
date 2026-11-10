@@ -183,7 +183,7 @@ const v4 = () => !!(cfg && cfg.grid && cfg.grid.format >= 4);
 
 // round 5: the tile's roads (roads.js tileRoads), asked for with the tile; the placement's exclusions with its roads' clearing
 const roadsOf = (tx, ty) => (cfg.roads ? tileRoads(tx, ty, cfg.roadsBaked).catch(() => null) : Promise.resolve(null));
-const withRoads = (ex, R) => { if (!R || !R.ex.length) return ex; if (!ex || !ex.length) return R.ex; const o = new Float32Array(ex.length + R.ex.length); o.set(ex); o.set(R.ex, ex.length); return o; };
+const withRoads = (ex, R, key = 'ex') => { const a = R && R[key]; if (!a || !a.length) return ex; if (!ex || !ex.length) return a; const o = new Float32Array(ex.length + a.length); o.set(ex); o.set(a, ex.length); return o; };
 async function buildFine(m) {
   const g = cfg.grid;
   if (!v4()) gradeAhead('fine', m.tx, m.ty);
@@ -216,7 +216,7 @@ async function buildFine(m) {
   clearPlants(aquatic.bins, ox, oz); // d1 rapids: no pads or reeds where the water falls or boils
   // the cover map, its splat part filled by the terrain build: each cell the weights of its centre vertex, so the
   // grass blends what the ground there is drawn with (placement.js coverField, groundcover.js)
-  const cover = coverField(grid, i0, j0, g.tile, veg.shade, exclusions, site);
+  const cover = coverField(grid, i0, j0, g.tile, veg.shade, withRoads(cfg.exclusions, R, 'exGrass'), site); // (round 5: no tuft on a road's surface: roads.js GRASS_OFF)
   const cellSplat = cover.subarray(COVER_SPLAT_AT(grid.side));
   grid.low = low; // wetlands round 2: the water lower, the terrain's bank as it was (the season round: its bared bed marked)
   const terrain = partTerrain(buildTerrainChunk(grid, i0, j0, g.tile, { shade: veg.shade, fine: true, originX: ox, originZ: oz, site, cellSplat }), g.tile * g.cell, g.cell); // round A-C

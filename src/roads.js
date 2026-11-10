@@ -112,7 +112,7 @@ export function decodePiece(buf) {
   return chains;
 }
 // a tile's roads: { chains, segs (road-grade.js's table), ex (the forest's clearing, placement.js's [x1, z1, x2, z2, r]
-// segments) }, or null (none there, another release, `?roads=off`). baked: the release's stamp.
+// segments), exGrass (the grass's: clearingOf) }, or null (none there, another release, `?roads=off`). baked: the release's stamp.
 export async function tileRoads(tx, ty, baked = null) {
   if (roadsOff()) return null;
   if (!index) index = loadIndex().catch((e) => { console.warn('roads: the tiles\' roads did not load', e); return { at: new Map(), whole: null, stamp: null }; });
@@ -125,7 +125,7 @@ export async function tileRoads(tx, ty, baked = null) {
       const gz = I.whole ? I.whole.slice(at[0], at[0] + at[1]) : (await range(at[0], at[0] + at[1])).buf;
       const raw = await new Response(new Blob([gz]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
       const chains = decodePiece(raw);
-      return { chains, segs: gradeOf(chains), ex: clearingOf(chains) };
+      return { chains, segs: gradeOf(chains), ex: clearingOf(chains), exGrass: clearingOf(chains, true) };
     })().catch((e) => { console.warn(`roads: tile ${key}`, e); return null; }));
     while (pieces.size > 12) pieces.delete(pieces.keys().next().value); // (a worker's few: the tiles and the chunks it builds)
   }
@@ -149,11 +149,15 @@ export function gradeOf(chains) {
   }
   return out.subarray(0, o);
 }
-// the corridor (placement.js's exclusions): [x1, z1, x2, z2, radius] along each road, a segment every two points
-export function clearingOf(chains) {
+// the corridor (placement.js's exclusions): [x1, z1, x2, z2, radius] along each road, a segment every two points.
+// grass: the grass's own (placement.js coverField; round 5): the tufts are drawn from the 10 m cells' cover read with a
+// bilinear filter, so a gravel or blacktop road is kept bare out to every cell whose cover reaches its surface (its half
+// width and a cell's half diagonal); a two-track stays a lawn
+export const GRASS_OFF = 7.5;
+export function clearingOf(chains, grass = false) {
   const out = [];
   for (const c of chains) {
-    const p = c.p, rad = clearOf(c);
+    const p = c.p, rad = grass && c.k !== KIND.track ? c.hw + GRASS_OFF : clearOf(c);
     for (let i = 0; i + 1 < c.n; i += 2) {
       const j = Math.min(c.n - 1, i + 2);
       if (p[i * 4] === p[j * 4] && p[i * 4 + 1] === p[j * 4 + 1]) continue; // (never a point: site.js reads those as campsites)
