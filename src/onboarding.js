@@ -405,7 +405,7 @@ export function packGear(inv, { pack: packId, gift, order, food = FOOD_DAYS }) {
 // the pot, a canister stove and a canister, the life jacket, your own things out of the crate and three days of food in
 // the barrel. The plain things, never the story's (Walt's pack, tent and stove are Adventure's). → the item ids given
 export const SANDBOX_GIFT = ['aframe', 'pot', 'stove', 'fuel', 'pfd'];
-const ORDER_SB = ['aframe', 'sleepingbag', 'pad', 'pfd', 'tacklebox', 'pot', 'clothes', 'tarp', 'stove', 'fuel', 'tablets'];
+const ORDER_SB = ['aframe', 'sleepingbag', 'pad', 'tacklebox', 'pfd', 'pot', 'clothes', 'tarp', 'stove', 'fuel', 'tablets']; // (so the 6×8 pack takes it all)
 export function sandboxKit(inv) {
   const q = { quiet: true }, out = [];
   const bucket = inv.addContainer('bucket', 'canoe', null, q);

@@ -43,6 +43,8 @@ try {
     await ev(() => {
       const g = window.__game;
       window.__p = { step: (n = 30, dt = 1 / 30) => { for (let left = n; left > 0; left -= 200) g.step(dt, Math.min(200, left)); } };
+      // one frame's draw calls (every pass) and the programs compiled so far
+      window.__p.cost = () => { const ri = g.renderer.info, was = ri.autoReset; window.__p.step(6); ri.autoReset = false; ri.reset(); window.__p.step(1); const r = { calls: ri.render.calls, tris: ri.render.triangles, programs: ri.programs.length }; ri.autoReset = was; return r; };
       // the page's own module copies (a fresh import('/src/x.js') can be a second instance): by the loaded URL
       window.__p.mod = (name) => { const e = performance.getEntriesByType('resource').map((r) => r.name).find((n) => new RegExp(`/src/${name}\\.js(\\?|$)`).test(n)); return import(e || `/src/${name}.js`); };
     });
@@ -125,7 +127,7 @@ try {
   const adv = await kit();
   result('4 Adventure: no canoe, no paddle, no jacket at the start (the talk lends them)', adv.mode === 'adventure' && adv.noCanoe && !adv.hull && adv.canoe.length === 0 && adv.long.length === 0 && adv.pfd === 0 && adv.noPfd === true, adv);
   result('5 Adventure: the staff talk is to come and is the first step', adv.pending && !adv.done && adv.steps.includes('story:onboard:talk'), adv);
-  const advCost = await ev(async () => { const g = window.__game; g.renderer.info.autoReset = true; window.__p.step(4); return { calls: g.renderer.info.render.calls, programs: g.renderer.info.programs.length }; });
+  const advCost = await ev(() => window.__p.cost());
 
   // --- 7-11 Sandbox ---------------------------------------------------------------------------------------------------------
   await season('sandbox');
@@ -145,7 +147,7 @@ try {
   // the dock with the canoe: a look
   await ev(() => { const g = window.__game, L = g.outfitter.landing(g.profile.home), p = g.player, h = g.player.canoe.hull; if (g.chase) { const y = Math.atan2(-(L.z - p.z), L.x - p.x); g.chase.viewYaw = y; g.chase.forwardYaw = y; if (g.chase.snap) g.chase.snap(); } window.__p.step(10); return !!h.visible; });
   await shot('sandbox-start');
-  const sbCost = await ev(async () => { const g = window.__game; g.renderer.info.autoReset = true; window.__p.step(4); return { calls: g.renderer.info.render.calls, programs: g.renderer.info.programs.length }; });
+  const sbCost = await ev(() => window.__p.cost());
 
   // an old Sandbox save stuck at the talk: the state and the inventory of an empty-handed Sandbox season, saved, reloaded
   await ev(async () => {
@@ -153,10 +155,13 @@ try {
     ob.state = { v: 1, step: 'door', done: false, season: g.profile.seasonId, nudged: true, path: { food: false, leeches: false, canoe: false }, loan: false };
     ob.write();
     inv.newSeason();
+    window.__saved = { onboard: JSON.parse(JSON.stringify(window.__game.onboarding.state)) };
     if (g.saver && g.saver.save) try { g.saver.save(); } catch { /* the page's own */ }
     if (g.store && g.store.flush) await g.store.flush();
     await new Promise((r) => setTimeout(r, 1500));
+    return null;
   });
+  const held = await ev(async () => { const S = await window.__p.mod('save'); return S.save.read('onboard'); });
   await page.reload({ timeout: 180000 });
   await boot();
   const stuck0 = await ev(() => { const s = window.__game.onboarding.state || {}; return { loan: !!s.loan, step: s.step, mode: window.__game.profile.mode }; });
@@ -166,9 +171,9 @@ try {
   if (await ev(() => window.__game.outfitter.open)) { await page.keyboard.press('Escape'); await page.waitForTimeout(300); }
   await ev(() => window.__p.step(20));
   const stuck = await kit();
-  result('11 an old Sandbox save stuck at the talk is kitted on load', stuck0.mode === 'sandbox' && stuck0.loan === false && stuck.loan && !stuck.noCanoe && stuck.canoe.includes('pack3') && stuck.pfd >= 1 && stuck.meals >= 6 && !stuck.pending, { stuck0, stuck });
+  result('11 an old Sandbox save stuck at the talk is kitted on load', stuck0.mode === 'sandbox' && held && held.loan === false && held.path && stuck.loan && !stuck.noCanoe && stuck.canoe.includes('pack3') && stuck.pfd >= 1 && stuck.meals >= 6 && !stuck.pending, { held, stuck0, stuck });
 
-  result('12 cost at the home store (calls, programs): Adventure vs Sandbox (the canoe shown is the loan\'s, drawn after a talk too)', true, { adventure: advCost, sandbox: sbCost });
+  result('12 cost at the home store, one frame (calls, programs): Adventure vs Sandbox (the canoe shown is the loan\'s, drawn after a talk too)', true, { adventure: advCost, sandbox: sbCost });
   const notice = await ev(async () => { const E = await window.__p.mod('edge'); return { ready: E.EDGE.ready, doorZones: E.EDGE.zones.reduce((n, z) => n + (z === 2), 0) }; });
   result('6 the notice still reads the doorstep band (zones in the table, unchanged)', notice.ready && notice.doorZones > 1000, notice);
 } catch (e) {
