@@ -44,3 +44,20 @@ lifted a step at a time), src/truck.js, src/thicket.js and src/mire-relief.js (o
 scripts/r5-roads-test.mjs (new), scripts/loop-r4-all.sh (adds it).
 
 Rebake on a host: `node scripts/roads.mjs --osm ~/bwca-cache/roads` (about a minute on ben).
+
+**The bridges' ends.** Within 10 m of each bridge's end, the road is kept at its own graded level. It does not fade to
+the bank's ground by the water, and road-grade.js grades it right to the water's edge, so the bank meets the deck. These
+are the abutments, marked per point in roads.bin. A route's own small bridges (round 4's, found every 2 m) now take the
+road's level rather than the bank's ground. Round 4's EP 40 bridge-end dip was 0.22 m below the road at the bank.
+
+## For the join and the other streams
+
+- **Cabins (cabins.js `blocked`):** a cabin is skipped when `nearestRoad` finds a road within 22 m. With every road in
+  the world, 9 of the 30 spots fall within 22 m of one. Most of those roads are the cabin's own driveway, 8 to 22 m off.
+  The cabins stream (or the join) should measure from the road's edge (`nearestRoad(...).d - road.hw`) with a smaller
+  clearance, or skip driveways (`road.svc`). Otherwise those cabins drop out once this merges.
+- **The map (map-roads.bin, scripts/edge.mjs):** the map letters the highways and county roads (OSM trunk to tertiary)
+  and the spurs to the lots. The 3D world now has every road. To put "the same roads in both", edge.mjs should add the
+  minor classes, simplified, to map-roads.bin. That is the map stream's file, so it is not changed here.
+- **roads.json `roads`** keeps the routes' stretches (with heights) for edge.mjs, cabins.mjs and the round 4 rigs. The
+  game no longer draws them.
