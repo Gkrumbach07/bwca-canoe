@@ -222,6 +222,26 @@ export function nearestRoad(world, x, z, max = 30) {
   return best;
 }
 
+// metres from (x, z) to the nearest road's edge (its drawn half width), by each segment of its line, and that road
+// ({ gap, road }), or null past max (round 5, for the join: cabins.js skips a cabin with a road within 22 m of its middle,
+// which with every road in the box takes out the cabins by their own driveways; a gap from the edge says more)
+export function roadClearance(world, x, z, max = 60) {
+  const R = world && world.roads;
+  if (!R) return null;
+  const t = world.tileOf ? world.tileOf(x, z) : null, T = t && R.tiles.get(t[1] * world.ntx + t[0]);
+  let best = null;
+  for (const r of T ? T.chains : R.list) {
+    const b = r.bbox, m = max + r.hw;
+    if (x < b[0] - m || x > b[2] + m || z < b[1] - m || z > b[3] + m) continue;
+    for (let i = 0; i + 1 < r.n; i++) {
+      const ax = r.p[i * 4], az = r.p[i * 4 + 1], ex = r.p[i * 4 + 4] - ax, ez = r.p[i * 4 + 5] - az, L2 = ex * ex + ez * ez;
+      const u = L2 ? Math.max(0, Math.min(1, ((x - ax) * ex + (z - az) * ez) / L2)) : 0, gap = Math.hypot(x - ax - ex * u, z - az - ez * u) - r.hw;
+      if (gap < max && (!best || gap < best.gap)) best = { gap, road: r };
+    }
+  }
+  return best;
+}
+
 // the truck's way out from a start (an entry point's number, or 'h<ep>'): [[x, z], ...] from the start's end of the
 // road, or null
 export function routeOf(world, key) {
