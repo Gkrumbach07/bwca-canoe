@@ -50,7 +50,7 @@ export const steps = [
     needs: 'read:NB01',
     run: async (page, ctx = {}) => {
       // the player's pencil (B's chip picked, the map clicked): through pencil.pick and a click at the join; the API here
-      await page.evaluate(() => { const g = window.__game, P = g.pencil, id = P.debug.lakeOfKey('lakeone'), L = g.world.lakes[id - 1]; P.pencilAt('frontporch', L.cx, L.cz) || P.pencilAt('frontporch', L.cx + 150, L.cz); });
+      await page.evaluate(() => { const P = window.__game.pencil, w = P.debug.waterOf('lakeone'); if (w) P.pencilAt('frontporch', w.x, w.z); });
       const via = await asked(page, ctx, 'Ruth', 'nick.frontporch');
       const r = await page.evaluate(() => ({ ink: window.__game.story.get('ink.frontporch'), und: window.__game.story.nbHas('und', 'NB01') }));
       return { pass: r.ink === 'lakeone' && r.und, more: { via, r } };

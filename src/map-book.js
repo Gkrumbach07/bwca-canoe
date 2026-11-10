@@ -340,7 +340,7 @@ export class MapBook {
     h.storyClick = (x, z) => this.pencilClick(x, z);
     h.storyRub = (x, z, rm) => !!(this.pencil && this.pencil.rubAt(x, z, rm));
     h.storyEsc = () => this.pencilOff();
-    h.storyDrop = (nick, x, z) => { if (!this.pencil) return false; this.pencil.pencilAt(nick, x, z); this.pencil.cancel(); this.render(true); return true; };
+    h.storyDrop = (nick, x, z) => { if (!this.pencil || !h.lakeShown(x, z)) return false; this.pencil.pencilAt(nick, x, z); this.pencil.cancel(); this.render(true); return true; };
     h.storyCursor = () => (this.pick || (this.pencil && this.pencil.picking) ? 'crosshair' : '');
     pencil.on('mode', () => { if (this.open) this.render(true); });
     return this;
@@ -358,6 +358,7 @@ export class MapBook {
       return true;
     }
     if (!P.picking) return false;
+    if (!this.hud.lakeShown(x, z)) return true; // (blank paper: no lake to pencil on; the pencil stays out)
     P.pencilAt(P.picking, x, z); // (no feedback: a lake under the point or nothing, and the pencil is put away)
     P.cancel();
     this.render(true);

@@ -47,7 +47,7 @@ class Pencil {
     this.keyCache = new Map();   // world lake id → LAKES key | null
     this.busy = false; this.again = false;
     this.offs = [];
-    this.debug = { inkRows: INK, places: PLACES, lakes: LAKES, keyOf: (id) => this.lakeKeyOf(id), lakeOfKey: (k) => this.lakeOfKey(k), xz: (p) => this.placeXZ(p) };
+    this.debug = { inkRows: INK, places: PLACES, lakes: LAKES, keyOf: (id) => this.lakeKeyOf(id), lakeOfKey: (k) => this.lakeOfKey(k), xz: (p) => this.placeXZ(p), waterOf: (k) => this.waterOf(k) };
   }
 
   // --- wiring ---------------------------------------------------------------------------------------------------------
@@ -118,6 +118,15 @@ class Pencil {
     let best = 0, bd = Infinity; const n = normName(q.name);
     for (const L of w.lakes) { if (!L || normName(L.name) !== n) continue; const d = Math.hypot(L.cx - q.x, L.cz - q.z); if (d < bd && d < 25000) { bd = d; best = L.id; } }
     return best;
+  }
+  // a point on that LAKES key's water (its middle may be an island): rigs and the auto ink
+  waterOf(key) {
+    const id = this.lakeOfKey(key), L = this.lakeRec(id); if (!L) return null;
+    for (let rad = 0; rad < 3000; rad += 40) for (let a = 0; a < 6.283; a += rad ? 40 / rad : 7) {
+      const x = L.cx + Math.cos(a) * rad, z = L.cz + Math.sin(a) * rad;
+      if (this.lakeId(x, z) === id) return { x: Math.round(x), z: Math.round(z), lake: id };
+    }
+    return null;
   }
   // a PLACES key → { x, z, r, label } or null
   placeXZ(key) {
@@ -295,7 +304,8 @@ class Pencil {
     let n = name;
     if (!n) { // (auto: the far end inks without the player's pencil, at the lake's own middle)
       const id = this.lakeOfKey(row.lake), L = this.lakeRec(id), q = LAKES[row.lake] || {};
-      n = { nick: row.nick, lake: id, key: row.lake, name: L ? L.name || '' : '', x: Math.round(L ? L.cx : q.x), z: Math.round(L ? L.cz : q.z), inked: false, d: this.now() };
+      const wp = this.waterOf(row.lake) || { x: L ? L.cx : q.x, z: L ? L.cz : q.z };
+      n = { nick: row.nick, lake: id, key: row.lake, name: L ? L.name || '' : '', x: Math.round(wp.x), z: Math.round(wp.z), inked: false, d: this.now() };
       this.doc.names.push(n);
     }
     n.inked = true;
