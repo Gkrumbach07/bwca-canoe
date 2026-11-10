@@ -220,7 +220,7 @@ try {
     result('1 roads at every look outside the wilderness: the tile\'s roads in, one within 60 m, graded (the detail within 0.3 m), no trunk on a core', bad.length === 0,
       { looks: Object.fromEntries(Object.entries(looks).map(([k, L]) => [k, { chains: L.chains, near: L.near, pts: L.graded.pts, off: L.graded.off.slice(0, 4), offN: L.graded.off.length, trunks: L.graded.trunks.slice(0, 3) }])) });
     const progs = Object.values(cost).every((c) => c.on.programs <= c.off.programs + 0);
-    result('0 the cost: no new shader program at any look; the bytes before the title (src/roads.bin: its index and the start's pieces, under 200 KB)', progs && bytes.roadsBin < 200 * 1024, { bytes, cost });
+    result('0 the cost: no new shader program at any look; the bytes before the title (src/roads.bin: its index and the pieces round the start, under 200 KB)', progs && bytes.roadsBin < 200 * 1024, { bytes, cost });
   }
 
   // ---- 2 the truck, frame by frame ------------------------------------------------------------------------------------
