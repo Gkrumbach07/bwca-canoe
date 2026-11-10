@@ -9,6 +9,12 @@
 //   5 the walker is held off (walks into the front: stops outside the box), and the dock is stood on (a box with a top)
 //   6 the cost: no shader program, and no mesh a cabin (the tile's one props mesh; ?cabins=off for the A/B)
 //   7 no page errors
+// Round 5 (the owner, 2026-11-10: "make sure all the cabins can be placed", the docks "in navigable water"): every
+// cabin of the table visited (2-5 over all of them, not one a lake), and
+//   8 every dock navigable: from the end cabins.js built, the water search (src/cabins-water.js dockWaterway, on the
+//     page's own world: its cells' lake ids, levels, depths and shore distances, and rapids.json's drops) reaches open
+//     water and goes on, no rapids, falls or creek step on the way; the end where the table's bake put it
+//   ALL=0 (or --picks) for the old one-a-lake run. Shots: a cabin a lake from its lawn, and from its dock's end out.
 //
 //   APP=http://localhost:5521 node scripts/r4-cabins-test.mjs [--shots <dir>]
 import { createRequire } from 'node:module';
@@ -29,6 +35,7 @@ const results = [];
 const result = (name, pass, more = {}) => { results.push({ name, pass: !!pass }); log(pass ? 'PASS' : 'FAIL', name, JSON.stringify(more).slice(0, 1600)); };
 const until = (page, fn, a, timeout = 120000) => page.waitForFunction(fn, a, { timeout, polling: 250 });
 const TABLE = JSON.parse(readFileSync(new URL('../src/cabins.json', import.meta.url), 'utf8'));
+const ALL = process.env.ALL !== '0' && !process.argv.includes('--picks');
 
 const HELPERS = () => {
   const g = window.__game, H = window.__c4 = {};
@@ -86,6 +93,8 @@ const PICK = Object.keys(TABLE.lakes).map(Number).map((lake) => {
   const list = TABLE.cabins.map((c, i) => ({ ...c, i })).filter((c) => c.lake === lake);
   return list.find((c) => c.dock) || list[0];
 }).filter(Boolean);
+const VISIT = ALL ? TABLE.cabins.map((c, i) => ({ ...c, i })) : PICK;
+const isPick = (c) => PICK.some((p) => p.i === c.i);
 
 try {
   const page = await open();
@@ -97,11 +106,12 @@ try {
   const nearEp = TABLE.cabins.filter((c) => t1.eps.some(([x, z]) => Math.hypot(x - c.x, z - c.z) < 180)).length;
   const nearSite = TABLE.cabins.filter((c) => t1.sites.some(([x, z]) => Math.hypot(x - c.x, z - c.z) < 100)).length;
   const docks = TABLE.cabins.filter((c) => c.dock).length;
-  result('1 the table: 20+ cabins on the four lakes, all out past the band, none by an entry point or a campsite, most docked', TABLE.cabins.length >= 20 && Object.keys(TABLE.lakes).every((k) => byLake[k] >= 3) && zones.ready && zones.z.every((z) => z === 0) && !nearEp && !nearSite && docks >= TABLE.cabins.length / 2, { n: TABLE.cabins.length, byLake, notOut: zones.z.filter((z) => z !== 0).length, edgeReady: zones.ready, nearEp, nearSite, docks });
+  result('1 the table: 30 cabins on the four lakes, all out past the band, none by an entry point or a campsite, most docked', TABLE.cabins.length >= 30 && Object.keys(TABLE.lakes).every((k) => byLake[k] >= 3) && zones.ready && zones.z.every((z) => z === 0) && !nearEp && !nearSite && docks >= TABLE.cabins.length / 2, { n: TABLE.cabins.length, byLake, notOut: zones.z.filter((z) => z !== 0).length, edgeReady: zones.ready, nearEp, nearSite, docks });
 
   // ---- 2..5 at one cabin a lake ---------------------------------------------------------------------------------------
   const per = [];
-  for (const c of PICK) {
+  await page.evaluate(async () => { const u = [...performance.getEntriesByType('resource')].map((e) => e.name).find((n) => /\/src\/cabins-water\.js/.test(n)) || '/src/cabins-water.js'; const m = await import(u); const R = await import('/src/rapids.json').then((x) => x.default).catch(() => null); window.__cw = { m, drops: R ? m.dropsOf(R) : null }; });
+  for (const c of VISIT) {
     const r = await page.evaluate(async (c) => {
       const g = window.__game, H = window.__c4, out = { i: c.i, lake: c.lake };
       const F = { x: c.fx, z: c.fz }, X = { x: -c.fz, z: c.fx };
@@ -135,8 +145,16 @@ try {
       if (L.dock) {
         const d = L.dock, mx = (d.from.x + d.to.x) / 2, mz = (d.from.z + d.to.z) / 2;
         const tops = g.tiles.treesNear(mx, mz, d.len / 2 + 1).filter((t) => t.box && Number.isFinite(t.top) && Math.abs(t.top - d.deckY) < 0.01);
+        { const dl0 = Math.hypot(d.to.x - d.from.x, d.to.z - d.from.z) || 1, ux = (d.to.x - d.from.x) / dl0, uz = (d.to.z - d.from.z) / dl0; out.dockTo = [d.to.x - ux * 1.2, d.to.z - uz * 1.2, d.to.x + ux * 60, d.to.z + uz * 60]; }
         out.dock = { len: +d.len.toFixed(1), over: +(d.deckY - d.level).toFixed(2), endDepth: +(d.level - g.tiles.groundAt(d.to.x, d.to.z)).toFixed(2), stood: tops.length > 0 };
         const dl = Math.hypot(d.to.x - d.from.x, d.to.z - d.from.z) || 1;
+        // 8 the water search from the end as built, on the page's world (the tiles round it in)
+        const cw = window.__cw, lake = g.world.lakes[c.lake - 1];
+        if (cw && cw.drops) {
+          const w = cw.m.dockWaterway(g.world, d.to.x, d.to.z, lake.level, cw.drops);
+          out.water = { ok: w.ok, why: w.why, reached: w.reached, toOpen: w.open ? w.open.steps * g.world.cell : null };
+        } else out.water = { ok: false, why: 'no cabins-water.js or rapids.json' };
+        if (c.dock.end) out.endOff = +Math.hypot(d.to.x - c.dock.end[0], d.to.z - c.dock.end[1]).toFixed(1);
         out.dockTrunks = 0;
         for (let s = 0; s <= dl; s += 1) { const x = d.from.x + (d.to.x - d.from.x) * s / dl, z = d.from.z + (d.to.z - d.from.z) * s / dl; out.dockTrunks += g.tiles.treesNear(x, z, 1).filter((t) => !t.box && !t.shape && Number.isFinite(t.r) && Math.hypot(t.x - x, t.z - z) < 1).length; }
       }
@@ -147,11 +165,19 @@ try {
         const [x, z] = W(a, b), lake = g.world.lakes[c.lake - 1];
         if (g.tiles.groundAt(x, z) > (lake ? lake.level : -1e9) + 0.3) { from = [x, z]; break; }
       }
-      if (from) { H.look(from[0], from[1], c.x, c.z); for (let i = 0; i < 15; i++) { H.step(6); await H.wait(40); } H.look(from[0], from[1], c.x, c.z); }
+      if (from && c.shoot) { H.look(from[0], from[1], c.x, c.z); for (let i = 0; i < 15; i++) { H.step(6); await H.wait(40); } H.look(from[0], from[1], c.x, c.z); }
       out.from = from && from.map(Math.round);
       return out;
-    }, c);
-    await shot(page, `r4-cabin-${c.lake}-${c.i}`);
+    }, { ...c, shoot: isPick(c) });
+    if (isPick(c)) await shot(page, `r4-cabin-${c.lake}-${c.i}`);
+    // the owner's look: stood on the dock's end, out over the water a canoe would take
+    if (isPick(c) && r.built && r.dockTo) {
+      await page.evaluate(async ([x, z, tx, tz]) => { const H = window.__c4; H.look(x, z, tx, tz); for (let i = 0; i < 15; i++) { H.step(6); await H.wait(40); } H.look(x, z, tx, tz); }, r.dockTo);
+      await shot(page, `r5-dock-out-${c.lake}-${c.i}`);
+      await page.evaluate(([x, z, tx, tz]) => { const H = window.__c4; H.look(x, z, tx, tz); }, [r.dockTo[0], r.dockTo[1], c.x, c.z]);
+      await page.evaluate(async () => { for (let i = 0; i < 15; i++) { window.__c4.step(6); await window.__c4.wait(40); } });
+      await shot(page, `r5-dock-back-${c.lake}-${c.i}`);
+    }
     // 5 the walker: W held from 6 m out in front, straight at the cabin's front wall for 4 s; never inside its walls
     if (r.built) {
       await page.evaluate((c) => { const H = window.__c4, F = { x: c.fx, z: c.fz }, X = { x: -c.fz, z: c.fx }, a = c.w / 4 + 1.0, b = c.d / 2 + 6; H.standAt(c.x + X.x * a + F.x * b, c.z + X.z * a + F.z * b, Math.atan2(F.z, -F.x)); H.look(c.x + X.x * a + F.x * b, c.z + X.z * a + F.z * b, c.x + X.x * a, c.z + X.z * a); }, c);
@@ -174,14 +200,15 @@ try {
     log('cabin', JSON.stringify(r));
   }
   const built = per.filter((r) => r.built);
-  result('2 built: a cabin on each lake stands in its tile', built.length === PICK.length, { per: per.map((r) => ({ i: r.i, lake: r.lake, built: r.built, skipped: r.skipped })) });
+  result(`2 built: ${ALL ? 'every cabin of the table' : 'a cabin on each lake'} stands in its tile (${built.length}/${VISIT.length})`, built.length === VISIT.length, { per: per.map((r) => ({ i: r.i, lake: r.lake, built: r.built, skipped: r.skipped })) });
   result('3 the ground: the floor 0.3 m over the highest ground it was built on, and over the drawn ground after the detail', built.length && built.every((r) => Math.abs(r.lift - 0.3) < 0.08 && r.overDrawn > -0.15), { per: built.map((r) => ({ i: r.i, lift: r.lift, overDrawn: r.overDrawn, dy: r.dy, ground: r.groundBuilt })) });
   result('4 no tree trunk in a cabin or on its dock', built.length && built.every((r) => r.trunks === 0 && !(r.dockTrunks > 0)), { per: built.map((r) => ({ i: r.i, trunks: r.trunks, dock: r.dockTrunks })) });
   const docked = built.filter((r) => r.dock);
   result('5 the walker held off the cabin; its dock stood on, over the water, its end in water', built.every((r) => r.box && r.walked > 1 && r.walkIn > r.wallAt - 0.05) && docked.length >= 2 && docked.every((r) => r.dock.stood && r.dock.over > 0.3 && r.dock.endDepth > 0.2), { per: built.map((r) => ({ i: r.i, box: r.box, walked: r.walked, walkIn: r.walkIn, wall: r.wallAt, dock: r.dock })) });
 
+  result('8 every dock navigable: from its end out to open water and on (no rapids, falls, creek step, shallows or narrows); its end where the bake put it', docked.length >= (ALL ? Math.ceil(VISIT.length * 2 / 3) : 2) && docked.every((r) => r.water && r.water.ok && !(r.endOff > 3)), { docked: docked.length, per: docked.map((r) => ({ i: r.i, ok: r.water && r.water.ok, why: r.water && r.water.why, open: r.water && r.water.toOpen, endOff: r.endOff })) });
   // ---- 6 the cost: the same tile with ?cabins=off ---------------------------------------------------------------------
-  const c0 = built.length ? PICK.find((c) => c.i === built[0].i) : PICK[0];
+  const c0 = PICK.find((c) => built.some((r) => r.i === c.i)) || PICK[0];
   const costOf = async (pg) => pg.evaluate(async (c) => {
     const H = window.__c4, F = { x: c.fx, z: c.fz };
     await H.goto(c.x + F.x * 14 + F.z * 10, c.z + F.z * 14 - F.x * 10); await H.ready(c.x, c.z, 200);
