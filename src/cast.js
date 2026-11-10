@@ -188,7 +188,9 @@ export class Cast {
     const R = CAST[who]; if (!R) return null;
     const a = this.args(ep), B = this.c.beats, ob = this.c.onboarding;
     if (who === 'josie' && ob && typeof ob.pending === 'function' && ob.pending(ep)) return null; // (the onboarding's own staffer stands there)
-    const k = this.key(who, ep), cur = this.live.get(k);
+    const k = this.key(who, ep);
+    let cur = this.live.get(k);
+    if (cur && cur.at === 'foot' && cur.done && !cur.talking) { this.unstage(k); cur = null; } // (a stop that is over gives way to his seat)
     for (const slot of R.where) {
       if (slot.at === 'walkout') continue;
       const atHere = slot.at === `porch:${ep}` || (slot.at === 'porch:home' && a.home) || (slot.at === 'counter:home' && a.home);
