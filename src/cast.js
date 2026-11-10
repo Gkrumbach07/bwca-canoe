@@ -281,7 +281,7 @@ export class Cast {
   // Josie at the home counter: R1, R1b, then the topic that stays; else a word of hers by stage (70 §4.4)
   josieTalk(st) {
     const dlg = this.c.talk, s = this.story, slot = st.slot || {}, n = this.c.npcs, amb = this.c.ambient;
-    const take = () => { const ob = this.c.onboarding; if (ob && typeof ob.takeLater === 'function') ob.takeLater(); };
+    const take = () => { const ob = this.c.onboarding; if (ob && typeof ob.takeLater === 'function') ob.takeLater(); s.rules.apply({ id: 'josie:take', then: ['f:bundle.later', 'f:bundle.taken'] }, {}); };
     let start = slot.scene;
     if (!start && s.has('bundle.shelf') && !s.has('bundle.later') && s.has('rehook.R1b')) start = 'still';
     const run = new SceneRun(this.c.topics, JOSIE, { who: 'josie', args: this.args(st.ep), mark: n && n.mark ? (t) => n.mark(t) : null, hooks: { take } });
