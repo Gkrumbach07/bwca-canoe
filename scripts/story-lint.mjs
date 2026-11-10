@@ -409,6 +409,43 @@ if (!dataFiles.length) {
   }
 }
 
+// --- 5 talk (stream T, Round 1): the scenes and topics (story-data/porch-act1.js, topics-act1.js, cast.js) --------------
+// every line id resolves in the extract, every condition passes checkCond (the scene's own context names: topics.js
+// TALK_SENSORS), every fact a scene or topic writes is declared, every walt: id is a Walt-page line
+{
+  const files = ['porch-act1.js', 'topics-act1.js', 'cast.js'].filter((f) => existsSync(path.join(DATA, f)));
+  if (!files.length || !existsSync(path.join(SRC, 'topics.js'))) result('talk: the Act I scenes and topics', null, { why: 'no stream T data yet' });
+  else {
+    const errs = [];
+    const tp = await import(pathToFileURL(path.join(SRC, 'topics.js')).href);
+    for (const f of readdirSync(path.join(DATA, 'text')).filter((x) => x.endsWith('.json'))) tp.texts.add(JSON.parse(readFileSync(path.join(DATA, 'text', f), 'utf8')));
+    const fm = await import(pathToFileURL(path.join(DATA, 'facts.js')).href);
+    const conds = [], acts = [];
+    const walk = (x, k = null) => {
+      if (Array.isArray(x)) { for (const y of x) { if (k === 'then' && typeof y === 'string') acts.push(y); else walk(y, k === 'then' ? 'then' : null); } return; }
+      if (x && typeof x === 'object') for (const [kk, v] of Object.entries(x)) { if (kk === 'when' && typeof v === 'string' && v) conds.push(v); else walk(v, kk); }
+    };
+    for (const f of files) {
+      const m = await import(pathToFileURL(path.join(DATA, f)).href);
+      walk(m);
+      for (const id of tp.textIds(m)) if (tp.T(id) == null && !/^70\.8\./.test(id)) errs.push(`${f}: no text '${id}'`);
+    }
+    for (const c of new Set(conds)) {
+      const words = Object.keys(tp.TALK_SENSORS).join('|');
+      const r = checkCond(c.replace(new RegExp(`(^|[\\s!(&|])(?:${words})(?=$|[\\s)&|])`, 'g'), '$1f:nb.found'), `talk '${c}'`); // (the scene's own flags: true or false, either can hold)
+      errs.push(...(Array.isArray(r) ? r : r.errs));
+    }
+    for (const a of acts) {
+      const m = /^([a-z]+):(.+)$/.exec(a);
+      if (!m) { errs.push(`talk: bad action '${a}'`); continue; }
+      if (m[1] === 'f' && !fm.factRow(m[2].split('=')[0])) errs.push(`talk: writes undeclared fact '${m[2]}'`);
+      if (m[1] === 'walt' && IDS.walt && !IDS.walt.has(m[2])) errs.push(`talk: no Walt-page line '${m[2]}'`);
+      if (m[1] !== 'do' && !ACTIONS.includes(m[1])) errs.push(`talk: unknown action '${a}'`);
+    }
+    result('talk: the Act I scenes and topics (lines, conditions, facts, Walt lines)', errs.length === 0, { files, conds: new Set(conds).size, actions: acts.length, errs: errs.slice(0, 30) });
+  }
+}
+
 const fails = Object.values(report.checks).filter((c) => c.pass === false).length;
 if (JSON_OUT) console.log(JSON.stringify(report));
 console.log(fails ? `story-lint: ${fails} FAIL` : 'story-lint: all pass');

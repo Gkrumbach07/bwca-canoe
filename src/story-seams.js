@@ -26,6 +26,7 @@ export async function startFeed({ story, mods = {}, guest = () => false } = {}) 
     import('./story-feed.js'),
     import('./feed-trip.js'),      // K1b: trip.js's log
     import('./feed-outfitter.js'), // K1b: the store's door
+    import('./feed-talk.js'),      // st-t: who you talk to, what you ask
     // (Round 1 streams: their feed-*.js here, one line each)
   ]);
   return feed.start({ story, mods, guest });
