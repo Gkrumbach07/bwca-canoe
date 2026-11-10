@@ -35,7 +35,7 @@
 .nbw u.dec { text-decoration: underline; text-decoration-color: rgba(74, 64, 54, .55); text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
 .nbw .nbw-mine { font: 600 20px/1.15 var(--pencil-font); color: var(--pencil); }
 .nbw .nbw-margin { margin: 10px 0 0 auto; max-width: 78%; transform: rotate(-2.5deg); text-align: right; font-size: 22px; }
-.nbw .nbw-here { position: absolute; left: -6px; bottom: -6px; transform: rotate(-3deg); font-size: 18px; opacity: .9; }
+.nbw .nbw-here { display: inline-block; margin: 8px 0 0 -4px; transform: rotate(-3deg); font-size: 19px; opacity: .9; }
 .nbw .nbw-here.fresh { animation: nbw-pencil 1.2s ease-out; }
 @keyframes nbw-pencil { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
 .nbw .nbw-turn { position: absolute; bottom: 14px; z-index: 4; appearance: none; border: none; background: none; cursor: pointer; font: 600 30px/1 var(--pencil-font); color: var(--ink-soft); padding: 2px 8px; }

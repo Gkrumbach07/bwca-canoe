@@ -279,8 +279,7 @@ export class Book {
     const photos = (leaf.photos || []).map((id) => `<button type="button" class="nbw-print${s.nbHas('nbphoto', id) ? '' : ' undot'}" data-nbloose="${id}" style="--tilt:${side === 'left' ? -3 : 2.5}deg" aria-label="A photograph">${s.nbHas('nbphoto', id) ? '' : '<i class="nbw-dot"></i>'}</button>`).join('');
     const fresh = this.here && this.here.nb === nb && performance.now() - this.here.t < 4000;
     return `<div class="nbw-leaf nbw-e ${n <= BLUE_UNTIL ? 'blue' : 'lead'}" data-nb="${nb}">
-      <div class="nbw-scroll"><div class="nbw-hand">${this.inkHtml(leaf.text, nb)}</div>${und && leaf.part !== 2 ? `<div class="nbw-margin nbw-mine">${esc(und.note)}</div>` : ''}</div>
-      ${here ? `<div class="nbw-here nbw-mine${fresh ? ' fresh' : ''}">he was here</div>` : ''}
+      <div class="nbw-scroll"><div class="nbw-hand">${this.inkHtml(unwrap(leaf.text), nb)}</div>${und && leaf.part !== 2 ? `<div class="nbw-margin nbw-mine">${esc(und.note)}</div>` : ''}${here ? `<div class="nbw-here nbw-mine${fresh ? ' fresh' : ''}">he was here</div>` : ''}</div>
       ${photos ? `<div class="nbw-prints">${photos}</div>` : ''}</div>`;
   }
   // Walt's text: his first ink, the [second ink], and every decoded word faintly underlined in the player's pencil
@@ -320,6 +319,18 @@ export class Book {
   }
 }
 
+// the docs wrap Walt's text at about 62 characters for the page they are on; a wrapped line runs on here (a line he
+// broke short himself, the last page's, stays a line)
+export function unwrap(t) {
+  const lines = String(t || '').split('\n'), out = [];
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    if (out.length && lines[i - 1].length >= WRAP_AT && l.trim() && !/^\[/.test(l)) out[out.length - 1] += ` ${l}`;
+    else out.push(l);
+  }
+  return out.join('\n');
+}
+const WRAP_AT = 52;
 function textOrNull(id) { const e = textOf(id); return e && e.text ? e.text : null; }
 // the words, each underlined where it occurs (already escaped)
 function underline(html, words) {
