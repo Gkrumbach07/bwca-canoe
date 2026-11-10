@@ -163,7 +163,8 @@ try {
       const [x0, z0] = H.xz(lat, lon);
       await H.goNear(x0, z0);
       const near = H.nearestOn(x0, z0, 2000);
-      const out = { at: [Math.round(x0), Math.round(z0)], roads: !!w.roads, chains: H.chains(x0, z0).length, near: near ? { d: Math.round(near.d), k: near.c.k, svc: near.c.svc } : null, graded: { pts: 0, off: [], trunks: [] } };
+      const probe = await fetch(new URL('/src/roads.bin', location.href), { headers: { Range: 'bytes=0-31' } }).then((r) => r.status, (e) => String(e));
+      const out = { at: [Math.round(x0), Math.round(z0)], roads: !!w.roads, bin: w.roads && w.roads.bin, probe, tilesIn: w.roads && w.roads.tiles ? w.roads.tiles.size : null, tile: w.tileOf(x0, z0), chains: H.chains(x0, z0).length, near: near ? { d: Math.round(near.d), k: near.c.k, svc: near.c.svc } : null, graded: { pts: 0, off: [], trunks: [] } };
       let vx = x0, vz = z0, tx = x0 + 30, tz = z0;
       if (near) {
         const c = near.c, i = near.i, j = Math.min(c.n - 1, i + 8), i0 = Math.max(0, i - 3);

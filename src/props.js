@@ -206,7 +206,7 @@ export function* tilePropsSteps(tg, world, tx, ty) {
   for (const ep of heads) { const a = anchorOf(ep); if (inside(a.x, a.z)) { yield; buildTrailhead({ ...ctx, H: Hdrawn }, ep, pieces, group); yield; } } // (merged into this tile's props: no draw call of its own)
   // stream E3: the roads, in the same decal (after the stores, so a road stops at the yard it comes to)
   if (world.roads) { yield* roadRows(ctx, decal, lots, tileChains(world, tx, ty)); roadBridges(ctx, pieces); yield; }
-  decal.lift(ctx);
+  yield* decal.liftSteps(ctx);
   const trail = decal.mesh();
   if (trail) group.add(trail);
 
@@ -265,6 +265,7 @@ function stone(b, p, s, yaw, rng, { up = 1.6, deep = 1.15, tilt = 0, tint = null
 // has faded (at the ends and at the water), how worn its middle is, and how boggy the ground is (land.js MIRE: the
 // shader churns the tread to black mud with water standing in it). Indexed, one mesh a tile.
 const ACROSS = [-1, -0.55, 0, 0.55, 1];
+const LIFT_STEP = 4000;
 class TrailDecal {
   constructor() { this.p = []; this.n = []; this.sa = []; this.sb = []; this.fl = []; this.tr = []; this.ix = []; this.rows = 0; }
   // a row: centre (world x, z), unit normal (nx, nz), half width, fade, wear; returns its row index
@@ -298,13 +299,16 @@ class TrailDecal {
   // A straight span of the decal cuts under the ground where a terrain crease runs across it (the shore band's
   // bumps fold the mesh every 5 m): every triangle is tested at its edge midpoints and centre, and its corners
   // raised by however far the ground pokes through, twice over.
-  lift(ctx) {
+  lift(ctx) { const it = this.liftSteps(ctx); while (!it.next().done); }
+  // (round 5: a step at a time, LIFT_STEP triangles a step: a tile of town streets is tens of thousands)
+  *liftSteps(ctx) {
     const P = this.p, I = this.ix, ox = ctx.ox, oz = ctx.oz;
     if (!I.length) return;
     const y = (i) => P[i * 3 + 1];
     for (let pass = 0; pass < 2; pass++) {
       const up = new Float32Array(P.length / 3);
       for (let t = 0; t < I.length; t += 3) {
+        if (t && t % (LIFT_STEP * 3) === 0) yield;
         const a = I[t], b = I[t + 1], c = I[t + 2];
         let need = 0;
         for (const [wa, wb, wc] of [[0.5, 0.5, 0], [0, 0.5, 0.5], [0.5, 0, 0.5], [1 / 3, 1 / 3, 1 / 3]]) {
