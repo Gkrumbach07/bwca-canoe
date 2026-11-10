@@ -88,8 +88,9 @@ const PLACES = { // (the middles of the OSM ways, data-cache/edge/roads.json)
   gunflint: [48.0636, -90.5387], grade: [47.8384, -90.7670], cranelake: [48.0564, -92.4799], sawbill: [47.8291, -90.8893],
   arrowhead: [47.9424, -89.9881], kawishiwi: [47.8850, -91.7292],
 };
-const RIG = () => {
+const RIG = async () => {
   const g = window.__game, H = window.__r5r, w = g.world;
+  try { H.deckAt = (await import('/src/roads.js')).deckAt; } catch { H.deckAt = null; } // (a pure function of the world: a second copy of the module is harmless)
   H.xz = (lat, lon) => { const P = w.meta.proj; return [(lon - P.lon0) * P.mPerDegLon, -(lat - P.lat0) * P.mPerDegLat]; };
   H.calls = () => { H.step(2); const i = g.renderer.info; return { calls: i.render.calls, tris: i.render.triangles, programs: i.programs.length }; };
   // the chains of the tile (x, z) is in (roads.js tileChains), the nearest drivable point on them (gravel or blacktop first)
@@ -107,7 +108,7 @@ const RIG = () => {
   // (the ground under its middle above the underside: > 0 is the ground through the body) }
   H.tyres = () => {
     const T = g.truck, m = T.mesh.matrix.elements, out = { gap: -Infinity, sink: -Infinity, belly: -Infinity };
-    const G = (x, z) => Math.max(g.tiles.groundAt(x, z), H.deck(x, z));
+    const G = (x, z) => Math.max(g.tiles.groundAt(x, z), H.deckAt ? H.deckAt(w, x, z) : -Infinity); // (the deck as drawn: roads.js deckAt)
     const P = (lx, ly, lz) => [m[0] * lx + m[4] * ly + m[8] * lz + m[12], m[1] * lx + m[5] * ly + m[9] * lz + m[13], m[2] * lx + m[6] * ly + m[10] * lz + m[14]];
     for (const a of [1.72, -1.63]) for (const s of [-0.93, 0.93]) {
       const [x, y, z] = P(s, 0, a), d = y - G(x, z);
@@ -154,6 +155,24 @@ try {
     await off.evaluate(RIG);
   }
 
+  // (--probe x,z;x,z: what the roads and the ground are at a few points, and stop)
+  if (arg('probe', null)) {
+    for (const q of arg('probe').split(';')) {
+      const [px, pz] = q.split(',').map(Number);
+      const r = await page.evaluate(async ([x, z]) => {
+        const g = window.__game, H = window.__r5r, w = g.world;
+        await H.goNear(x, z); for (let i = 0; i < 30; i++) { H.step(4); await H.wait(40); }
+        const pts = [];
+        for (const c of H.chains(x, z)) for (let i = 0; i < c.n; i++) { const d = Math.hypot(c.p[i * 4] - x, c.p[i * 4 + 1] - z); if (d < 14) pts.push({ id: c.id, k: c.k, hw: c.hw, d: +d.toFixed(1), h: +c.p[i * 4 + 2].toFixed(2), w: c.p[i * 4 + 3], ground: +g.tiles.groundAt(c.p[i * 4], c.p[i * 4 + 1]).toFixed(2), mesh: +g.tiles.meshGroundAt(c.p[i * 4], c.p[i * 4 + 1]).toFixed(2), sd: +w.shoreAt(c.p[i * 4], c.p[i * 4 + 1]).toFixed(1) }); }
+        pts.sort((a, b) => a.d - b.d);
+        return { at: [x, z], ground: g.tiles.groundAt(x, z), deck: H.deck(x, z), detail: ((g.tiles.detail && g.tiles.detail.at(x, z)) || {}).r, sd: w.shoreAt(x, z), pts: pts.slice(0, 16) };
+      }, [px, pz]);
+      log('probe', JSON.stringify(r));
+      await page.evaluate(([x, z]) => { const H = window.__r5r; H.look(x + 9, z + 7, x, z); H.step(5); }, [px, pz]);
+      await shot(page, `r5-probe-${Math.round(px)}_${Math.round(pz)}`);
+    }
+    await browser.close(); process.exit(0);
+  }
   // ---- 1 the roads at each look -----------------------------------------------------------------------------------------
   const looks = {}, cost = {};
   for (const name of LOOKS || Object.keys(PLACES)) {
