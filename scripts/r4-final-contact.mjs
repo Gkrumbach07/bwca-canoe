@@ -16,6 +16,7 @@ function findPw() { if (process.env.PW) return process.env.PW; const base = path
 function findChrome() { if (process.env.CHROME) return process.env.CHROME; const base = path.join(homedir(), 'Library/Caches/ms-playwright'); const shells = existsSync(base) ? readdirSync(base).filter((d) => d.startsWith('chromium_headless_shell-')).sort() : []; for (const s of shells.reverse()) for (const d of readdirSync(path.join(base, s))) { const p = path.join(base, s, d, 'chrome-headless-shell'); if (existsSync(p)) return p; } return undefined; }
 const { chromium } = createRequire(import.meta.url)(findPw());
 const log = (...a) => console.log(new Date().toISOString().slice(11, 23), ...a);
+const until = (page, fn, a, timeout = 120000) => page.waitForFunction(fn, a, { timeout, polling: 250 });
 // places by latitude and longitude (index.json proj), in the page
 const SPOTS = {
   lakeOne: [47.94, -91.48], basswood: [48.08, -91.62], mooseLake: [47.985, -91.5], farmLake: [47.96, -91.67],
