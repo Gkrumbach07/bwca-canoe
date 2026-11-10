@@ -574,7 +574,11 @@ if (ground) {
   // height, the mean of the dry ends' when there are any, else of theirs all; each wet end's run over the water levelled
   // from its own bank to it (two decks meet there at one height)
   for (const [k, list] of at) {
-    if (!tgt.has(k)) tgt.set(k, list.reduce((t, q) => t + q.B.h[q.e], 0) / list.length);
+    if (!tgt.has(k)) { // (the roads there with any dry ground: a road all over the water has no height of its own yet, 0)
+      const own = list.filter((q) => !q.B.water.every((v) => v));
+      if (!own.length) continue;
+      tgt.set(k, own.reduce((t, q) => t + q.B.h[q.e], 0) / own.length);
+    }
     const target = tgt.get(k);
     for (const { B, e } of list) {
       if (!B.water[e] || B.water.every((v) => v)) continue;
@@ -611,7 +615,7 @@ if (ground) for (const B of built) {
     let j = i; while (j < n && water[j]) j++;
     const a = i > 0 ? i - 1 : junction(pts[0]) ? 0 : -1, b = j < n ? j : junction(pts[n - 1]) ? n - 1 : -1;
     const span = a >= 0 && b > a ? Math.hypot(pts[b][0] - pts[a][0], pts[b][1] - pts[a][1]) : 0;
-    if (a >= 0 && b > a && span <= BRIDGE_MAX) bridges.push({ ax: +pts[a][0].toFixed(1), az: +pts[a][1].toFixed(1), ah: +h[a].toFixed(2), bx: +pts[b][0].toFixed(1), bz: +pts[b][1].toFixed(1), bh: +h[b].toFixed(2), hw: Math.max(1.7, c.hw), k: c.k });
+    if (a >= 0 && b > a && span <= BRIDGE_MAX && h[a] > 1 && h[b] > 1) bridges.push({ ax: +pts[a][0].toFixed(1), az: +pts[a][1].toFixed(1), ah: +h[a].toFixed(2), bx: +pts[b][0].toFixed(1), bz: +pts[b][1].toFixed(1), bh: +h[b].toFixed(2), hw: Math.max(1.7, c.hw), k: c.k });
     i = j;
   }
 }
