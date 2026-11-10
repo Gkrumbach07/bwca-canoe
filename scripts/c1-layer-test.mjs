@@ -86,7 +86,7 @@ try {
       let pl = g.storyLayer.place('ep33.crewcamp');
       for (let k = 0; k < 30 && !Number.isFinite(pl.x); k++) { L.step(10); await L.wait(40); }
       const lotD = Number.isFinite(pl.x) ? Math.round(Math.hypot(pl.x - ep.x, pl.z - ep.z)) : null;
-      if (Number.isFinite(pl.x)) { L.standAt(pl.x + 4, pl.z + 4); for (let k = 0; k < 40; k++) { L.step(5); await L.wait(40); g.storyLayer.poll(); if (g.storyLayer.builtList().filter((b) => b.place === 'ep33.crewcamp').length === 2) break; } }
+      if (Number.isFinite(pl.x)) { await g.tiles.ensure(pl.x, pl.z, 130); L.standAt(pl.x + 4, pl.z + 4); for (let k = 0; k < 40; k++) { L.step(5); await L.wait(40); g.storyLayer.poll(); if (g.storyLayer.builtList().filter((b) => b.place === 'ep33.crewcamp').length === 2) break; } }
       pl = g.storyLayer.place('ep33.crewcamp'); const b = g.storyLayer.builtList().filter((q) => q.place === 'ep33.crewcamp');
       return { placed: Number.isFinite(pl.x), lotD, built: b.map((q) => q.prop), names: [g.storyLayer.dotName('ep33.slab'), g.storyLayer.dotName('ep33.pole')], verbs: g.storyLayer.verbs('ep33.slab').map((v) => v.verb) };
     });

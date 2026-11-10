@@ -39,11 +39,15 @@ export const HELPERS = () => {
   // stand d m from a prop, on dry ground, facing it, from whichever side the dot finds it (eight bearings tried)
   L.faceTo = (id, d, dy) => {
     const q = L.prop(id), w = g.world; let t = null;
+    L.lastFace = [];
     for (let k = 0; k < 8; k++) {
       const a = (k / 8) * Math.PI * 2, x = q.x + Math.cos(a) * d, z = q.z + Math.sin(a) * d;
-      if (w.isWater(x, z)) continue;
+      if (w.isWater(x, z)) { L.lastFace.push({ k, water: true }); continue; }
       const yaw = Math.atan2(-(q.z - z), q.x - x); L.standAt(x, z, yaw); L.step(4); L.aim(q, q.y + dy); L.step(4);
-      t = L.target(); if (t && t.ref === `story:${id}`) return t;
+      t = L.target();
+      const p = g.player, c = g.camera.position;
+      L.lastFace.push({ k, t: t && t.ref, mode: p.mode, d: +Math.hypot(p.x - q.x, p.z - q.z).toFixed(2), py: +(p.foot ? p.foot.y : 0).toFixed(2), qy: +q.y.toFixed(2), cam: [+(c.x - q.x).toFixed(1), +c.y.toFixed(1), +(c.z - q.z).toFixed(1)], n: (g.storyLayer.builtList().filter((b) => b.prop === id)).length });
+      if (t && t.ref === `story:${id}`) return t;
     }
     return t;
   };
@@ -79,7 +83,7 @@ export const section = {
         const before = await page.evaluate(async () => {
           const L = window.__L, g = window.__game;
           const t = L.faceTo('ws.c837.stump', 1.7, 0.35);
-          return { t, found: g.story.has('nb.found'), built: g.storyLayer.builtList().filter((b) => b.place === 'ws.c837').map((b) => b.prop) };
+          return { t, face: L.lastFace, found: g.story.has('nb.found'), built: g.storyLayer.builtList().filter((b) => b.place === 'ws.c837').map((b) => b.prop) };
         });
         await shot(page, shots, 'L3-stump');
         await press(page, 'e'); // (E on a thing with no verb does nothing)

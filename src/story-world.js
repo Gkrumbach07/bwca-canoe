@@ -37,13 +37,14 @@ export function storyPlaces(world, data, sites = null) {
   return { places, sites: S, portages, stale, baked };
 }
 
-// a starred site as a place: the stump 1.6 m up from the landing (the way up's direction), the stone on it. Dot: "Stump"
+// a starred site as a place: the stump up from the landing (the way up's direction) on dry ground, the stone on it. Dot: "Stump"
 // until the notebook is found (before night one, no Walt lore at all: Ignoring it all), then "A white stone on a stump".
 // Look (after night one) counts the stone (stone.<site>) and gives 20 §2.4's Walt line; three stones are lock 4's key B
 // (story-data/rules-layer.js). Reading his entry for this site here is "read it where he wrote it" (he was here).
 export function sitePlace(s) {
   const up = s.up || [0, 1], L = s.landing || [s.x, s.z];
-  const x = +(L[0] + up[0] * 1.6).toFixed(2), z = +(L[1] + up[1] * 1.6).toFixed(2), heading = Math.atan2(-up[0], -up[1]);
+  const at = s.stump || [L[0] + up[0] * 1.6, L[1] + up[1] * 1.6]; // (story-places.mjs: up from the landing to dry ground)
+  const x = +at[0].toFixed(2), z = +at[1].toFixed(2), heading = Math.atan2(-up[0], -up[1]);
   const stump = `${s.id}.stump`;
   return {
     id: s.id, name: `${s.lake}${s.nick ? `, ${s.nick}` : ''} (a starred site)`, kind: 'site', x, z, lake: s.lake, lakeId: s.lakeId, site: s.site ?? null, nb: s.nb || [],

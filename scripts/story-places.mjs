@@ -223,6 +223,16 @@ const OUT = { for: FOR, v: 'v9', places: {}, portages: {} }, SITES = { for: FOR,
   const GULL = [-19835, 26740];
   for (const [id, q] of Object.entries(SITES.sites)) { const d = Math.hypot(q.landing[0] - GULL[0], q.landing[1] - GULL[1]); if (d < 2000) far.push(`${id}: ${Math.round(d)} m`); }
   result('gull: no starred stone within 2 km of Gull\'s landing', far.length === 0, { near: far });
+  // the stump: up from the landing (the way's direction) to dry ground, 1.2 m past the water line (the landing's last
+  // point is where a canoe floats; a stump there would stand in the lake)
+  const wet = [], sd = {};
+  for (const [id, q] of Object.entries(SITES.sites)) {
+    const up = q.up || [0, 1]; let k = 1.6, x, z, v;
+    for (; k <= 30; k += 0.5) { x = q.landing[0] + up[0] * k; z = q.landing[1] + up[1] * k; v = sdAt(x, z); if (v >= 1.2) break; }
+    if (!(v >= 1.2)) { wet.push(`${id}: no dry ground within 30 m up from the landing`); continue; }
+    q.stump = [r1(x), r1(z)]; sd[id] = +k.toFixed(1);
+  }
+  result('stones: every stump on dry ground (≥ 1.2 m from the water line), within 30 m of its landing', wet.length === 0, { wet, upTo: Math.max(...Object.values(sd)) });
 }
 
 // --- the portages the story names -------------------------------------------------------------------------------------
