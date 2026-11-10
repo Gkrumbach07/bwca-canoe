@@ -135,7 +135,8 @@ export const section = {
         await page.keyboard.up('w');
         await page.evaluate(() => { window.__L.step(30); const g = window.__game; if (g.wind) g.wind.override = null; });
         await press(page, 'e');
-        await page.evaluate(() => window.__L.step(120));
+        // the nose-in steers to the bank and steps out (player.js goAshore / landing): up to 20 s of game time
+        await page.evaluate(() => { const L = window.__L, p = window.__game.player; for (let k = 0; k < 40 && !p.onFoot; k++) L.step(15); L.step(30); });
         const landed = await page.evaluate((C) => { const p = window.__game.player; return { mode: p.mode, onFoot: p.onFoot, d: Math.round(Math.hypot(p.x - C.x, p.z - C.z)) }; }, C);
         result('slice 5 (L): the last 200 m paddled (W, A/D held) and E steps ashore at the crews\' landing', start.mode === 'paddle' && start.d > 150 && landed.onFoot && landed.d < 30, { start, landed, turned, left: Math.round(d), modeAt, aUp, dh: +dh.toFixed(3) });
         if (!landed.onFoot) await page.evaluate((C) => window.__L.standAt(C.x + C.n[0] * 2, C.z + C.n[1] * 2), C); // (so the rest is still tried)
