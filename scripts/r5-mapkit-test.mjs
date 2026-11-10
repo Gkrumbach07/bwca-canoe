@@ -145,7 +145,7 @@ try {
   });
   result('10 the life jacket rule reads the jacket owned, not the loan flag', worn.noPfdWithoutLoan === false && worn.pfdOwned >= 1, worn);
   // the dock with the canoe: a look
-  await ev(() => { const g = window.__game, L = g.outfitter.landing(g.profile.home), p = g.player, h = g.player.canoe.hull; if (g.chase) { const y = Math.atan2(-(L.z - p.z), L.x - p.x); g.chase.viewYaw = y; g.chase.forwardYaw = y; if (g.chase.snap) g.chase.snap(); } window.__p.step(10); return !!h.visible; });
+  await ev(() => { const g = window.__game, p = g.player, h = g.player.canoe.hull, L = new g.THREE.Vector3(); h.getWorldPosition(L); if (g.chase) { const y = Math.atan2(-(L.z - p.z), L.x - p.x); g.chase.viewYaw = y; g.chase.forwardYaw = y; if (g.chase.snap) g.chase.snap(); } window.__p.step(10); return !!h.visible; });
   await shot('sandbox-start');
   const sbCost = await ev(() => window.__p.cost());
 
