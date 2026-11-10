@@ -279,7 +279,11 @@ try {
   // (r4-final: at the hull itself, its gunwales; aimed under your own feet the view at Moose River North's moved dock,
   // whose berth lies a little above the bank you stand on, looked past the hull's stern: SWEEP showed every pitch from
   // level to the default third-person look on the hull)
-  await ev((q) => { const g = window.__game, H = window.__p, h = g.player.canoe && g.player.canoe.hull, v = new g.THREE.Vector3(); if (h) h.getWorldPosition(v); H.aimAt(q, h ? v.y + 0.3 : g.player.foot ? g.player.foot.y - 0.3 : null); H.step(6); }, toCanoe.d);
+  await ev((q) => {
+    const g = window.__game, H = window.__p, h = g.player.canoe && g.player.canoe.hull, v = new g.THREE.Vector3(); if (h) h.getWorldPosition(v);
+    const tries = [() => H.look(H.yawTo(q), -0.2), () => H.aimAt(q, h ? v.y + 0.3 : null), () => H.aimAt(q, g.player.foot ? g.player.foot.y - 0.3 : null)];
+    for (const t of tries) { t(); H.step(6); const tg = g.pointer.target; if (tg && tg.kind === 'canoe') return; }
+  }, toCanoe.d);
   const preE = await ev(() => { const g = window.__game, p = g.player, H = window.__p, h = g.player.canoe && g.player.canoe.hull, v = new g.THREE.Vector3(); if (h) h.getWorldPosition(v); const a = g.packs.hullAction(), d = p.carry && p.carry.drop; return { target: H.screen().target, p: { x: +p.x.toFixed(1), z: +p.z.toFixed(1), y: p.foot ? +p.foot.y.toFixed(2) : null, mode: p.mode }, hull: h ? { x: +v.x.toFixed(1), y: +v.y.toFixed(2), z: +v.z.toFixed(1) } : null, drop: d ? { x: +d.x.toFixed(1), z: +d.z.toFixed(1), h: +(d.heading || 0).toFixed(2) } : null, dist: d ? +g.inventory.hullDist({ x: d.x, z: d.z, heading: d.heading || 0 }, p.x, p.z).toFixed(2) : null, act: a ? `${a.e && a.e.verb}${a.e && a.e.why ? '/' + a.e.why : ''} · ${a.label}` : null, cam: { x: +g.camera.position.x.toFixed(1), y: +g.camera.position.y.toFixed(2), z: +g.camera.position.z.toFixed(1) } }; });
   log('before E at the canoe', JSON.stringify(preE));
   await page.keyboard.press('KeyE');
