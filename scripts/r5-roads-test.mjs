@@ -92,7 +92,20 @@ const RIG = async () => {
   const g = window.__game, H = window.__r5r, w = g.world;
   try { H.deckAt = (await import('/src/roads.js')).deckAt; } catch { H.deckAt = null; } // (a pure function of the world: a second copy of the module is harmless)
   H.xz = (lat, lon) => { const P = w.meta.proj; return [(lon - P.lon0) * P.mPerDegLon, -(lat - P.lat0) * P.mPerDegLat]; };
-  H.calls = () => { H.step(2); const i = g.renderer.info; return { calls: i.render.calls, tris: i.render.triangles, programs: i.programs.length }; };
+  H.calls = () => { H.step(2); const i = g.renderer.info; return { calls: i.render.calls, tris: i.render.triangles, programs: i.programs.length, ...H.decal() }; };
+  // the trail decals (e3-roads-test's count): a tile's decal that holds only road rows is a draw call the roads added
+  // (the rest were there for the portages, lots and campsites' ways); shown: those in a tile drawn now
+  H.decal = () => {
+    let meshes = 0, roadVerts = 0, roadOnly = 0, shown = 0;
+    g.scene.traverse((o) => {
+      if (!(o.isMesh && o.name === 'trail')) return;
+      meshes++; const a = o.geometry.getAttribute('aTrail'); let r = 0;
+      if (a) for (let i = 0; i < a.count; i++) if (a.getY(i) < -0.5) r++;
+      roadVerts += r;
+      if (a && r === a.count) { roadOnly++; let v = true; for (let q = o; q; q = q.parent) if (!q.visible) v = false; if (v) shown++; }
+    });
+    return { decals: meshes, roadVerts, roadOnlyDecals: roadOnly, roadOnlyShown: shown };
+  };
   // the chains of the tile (x, z) is in (roads.js tileChains), the nearest drivable point on them (gravel or blacktop first)
   H.chains = (x, z) => { const R = w.roads; if (!R || !R.tiles) return []; const [tx, ty] = w.tileOf(x, z), T = R.tiles.get(ty * w.ntx + tx); return T ? T.chains : []; };
   H.nearestOn = (x, z, max = 400) => {
