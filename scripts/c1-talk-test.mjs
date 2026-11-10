@@ -58,7 +58,7 @@ try {
     const z = await off.evaluate(() => {
       const g = window.__game;
       const loaded = performance.getEntriesByType('resource').map((r) => r.name).filter((n) => /\/src\/(topics|cast|beats|ambient|feed-talk|story-data\/(porch-act1|topics-act1|cast|rules-talk))\.js/.test(n));
-      return { loaded, talk: g.storyTalk ?? null, sources: (g.npcs.talkSources || []).length, pools: g.npcs.pools ? g.npcs.pools.size : 0, road: typeof g.rides === 'object' && g.rides ? typeof g.rides.roadLine : 'n/a', p1: typeof g.onboarding.p1, pick: typeof g.talk?.pickLake };
+      return { loaded, talk: g.storyTalk ?? null, sources: (g.npcs.talkSources || []).length, pools: g.npcs.pools ? g.npcs.pools.size : 0, road: typeof g.rides === 'object' && g.rides ? typeof g.rides.roadLine : 'n/a', p1: typeof g.onboarding.p1, pick: typeof (g.dialogue && g.dialogue.pickLake) };
     });
     result('0 flag off: none of T\'s modules loaded, no talk source or pool on the people, no road line, no P1 hook', z.loaded.length === 0 && z.talk === null && z.sources === 0 && z.pools === 0 && z.p1 === 'undefined' && z.road !== 'function', z);
     await off.close();

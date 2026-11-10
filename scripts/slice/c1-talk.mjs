@@ -23,7 +23,7 @@ export const HELPERS_T = () => {
   // through the store's door: in to the middle, then out to the foot of the steps (outfitter.updateVisit sees both)
   T.walkIn = (ep) => { const L = g.outfitter.layout(ep); T.standAt(L.centre.x, L.centre.z); T.step(12); return !!(g.outfitter.visit && g.outfitter.visit.inside); };
   T.walkOut = (ep) => { const L = g.outfitter.layout(ep), f = L.stepsFoot || L.door; T.standAt(f.x - (L.axes.b.x * 0.5), f.z - (L.axes.b.z * 0.5)); T.step(12); return !!(g.outfitter.visit && !g.outfitter.visit.inside); };
-  T.convo = () => { const c = g.talk && g.talk.convo; return c ? { who: c.name, by: c.node && c.node.by, say: c.node && c.node.say, choices: (c.node && c.node.choices || []).map((o) => o.text) } : null; };
+  T.convo = () => { const c = g.dialogue && g.dialogue.convo; return c ? { who: c.name, by: c.node && c.node.by, say: c.node && c.node.say, choices: (c.node && c.node.choices || []).map((o) => o.text) } : null; };
   T.indexOf = (prefix) => { const c = T.convo(); return c ? c.choices.findIndex((t) => t.startsWith(prefix)) : -1; };
   T.talkTo = (key) => g.npcs.talkTo(key);
   T.keeperKey = (ep) => { const r = g.npcs.at(ep) || []; const k = r.find((v) => v.keeper); return k ? k.key : null; };
