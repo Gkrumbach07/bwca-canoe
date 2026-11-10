@@ -66,6 +66,10 @@ const EDGE_IN = 30;                             // a two-track out to the map's 
 const STAND_BACK = 12.5;                        // the truck's stand behind a store (truck.js: the yard's back, 4.5 m past it)
 const DENSE = 20;                               // the graph's ways cut to pieces no longer than this (m)
 const TARGET_MIN = 2500;                        // the way out heads for a county road at least this far from the start
+// (round 5: the game keeps its ground at the water's level within 30 m of the shore, detail-build.js chunkGround, on
+// every 2 m vertex; a road a little past 30 m but under a lake's level had its vertices within 30 m stood up to the
+// level through it, EP 50's two-track 0.74 m. The road is kept at the level out to LV_REACH m, a vertex's reach past 30.)
+const LV_REACH = 37;
 const STEP = 6, SMOOTH = 14;                    // the heights: a sample every STEP m, smoothed over a Gaussian of SMOOTH m
 const SHOULDER = (cut) => Math.min(10, 2.5 + 2.2 * Math.abs(cut));
 const OUTFITTERS = [51, 64, 49, 69, 40, 38, 36, 67, 25, 31, 6, 16, 1, 12]; // (src/outfitters.js OUTFITTERS)
@@ -521,7 +525,7 @@ async function loadGround() {
   };
   return {
     close: () => vite.close(),
-    at: (x, z) => { if (cache.size > 2e6) cache.clear(); const sd = world.shoreAt(x, z), l = lidar(x, z); return { sd, h: l === l ? l : terrain.meshHeightAt(world, x, z, cache), lv: sd < 30 ? world.levelAt(x, z, 3) : NaN }; },
+    at: (x, z) => { if (cache.size > 2e6) cache.clear(); const sd = world.shoreAt(x, z), l = lidar(x, z); return { sd, h: l === l ? l : terrain.meshHeightAt(world, x, z, cache), lv: sd < 30 ? world.levelAt(x, z, 3) : sd < LV_REACH ? world.levelAt(x, z, 4) : NaN }; },
     coarse: (x, z) => ({ sd: world.shoreAt(x, z), h: terrain.meshHeightAt(world, x, z, cache) }), // (the made two-tracks' search)
   };
 }
@@ -650,7 +654,7 @@ for (const B of built) {
       if (water[i]) return;
       const g = ground.at(x, z), t = B.abut[i] ? 1 : Math.min(1, Math.max(0, (g.sd - 1) / 3)), k = t * t * (3 - 2 * t);
       h[i] = raw[i] + (h[i] - raw[i]) * k;
-      if (g.lv === g.lv) h[i] = Math.max(h[i], g.lv + 0.04 * Math.min(g.sd, 5));
+      if (g.lv === g.lv) h[i] = Math.max(h[i], g.lv + 0.04 * Math.min(g.sd, 5)); // (round 5: out to LV_REACH, past the game's 30 m: EP 50's bump)
     });
     for (let i = 0; i < n; i++) { const cut = h[i] - raw[i]; w[i] = SHOULDER(cut); if (!water[i]) cuts.push(Math.abs(cut)); }
     wet += water.reduce((t, v) => t + v, 0);
