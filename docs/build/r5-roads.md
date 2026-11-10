@@ -61,3 +61,30 @@ road's level rather than the bank's ground. Round 4's EP 40 bridge-end dip was 0
   minor classes, simplified, to map-roads.bin. That is the map stream's file, so it is not changed here.
 - **roads.json `roads`** keeps the routes' stretches (with heights) for edge.mjs, cabins.mjs and the round 4 rigs. The
   game no longer draws them.
+
+## Also in this stream
+
+- **Grass on the roads:** the grass tufts come from each 10 m cell's cover, read with a bilinear filter, so a road kept
+  bare only out to its trees' clearing still grew tufts on its surface. The grass now has a clearing of its own: a
+  gravel or blacktop road's half width plus 7.5 m (`roads.js GRASS_OFF`). Two-tracks stay lawns.
+- **Ponds by the road:** near the shore the game stands its ground up to the water's level (detail-build.js, within
+  30 m). A pond perched 2.5 m over EP 50's two-track, 30 m off, stood the road's vertices up through it. Past 6 m from
+  the shore, a road's core is no longer stood up, and it eases back over the shoulder. The bake does the same.
+- **Junctions on the water:** a road wholly over water had no height when a junction's level was worked out, which put
+  Tomahawk Road's crossing at EP 34 at half the road's height. Fixed in the bake.
+- **The decal:** a road's rows are 3 vertices across every 3.5 m, instead of 5 across every 2.5 m. They are graded flat
+  across their core, so they need no more to lie on the ground. A town's streets now cost about a third of the
+  triangles they did.
+- **The Moose Lake Boat Access post:** a portage's sign now looks for a spot off the road out to 12 m, not 8.
+
+## What is left
+
+- **The detail's blend band.** Within 40 m of the shore, the 10 m mesh is not graded: its tees have to stay the mean of
+  their ends (terrain-build.js ROAD_FROM). Where a 2 m chunk eases into the 10 m mesh at its ring's edge, a road there
+  rises toward the ungraded mesh, by up to 2 m on a hillside road. With the player standing at the spot, the ground is
+  on the road's height to the centimetre (EP 43, 50 and 54 were probed). The rigs that look 100 m or more from the player
+  count these: r4-roads checks 2 and 3, and r5-roads check 2.
+- **The truck's twist.** The truck is a rigid body on four wheels. Where the ground under it twists, it sits on the
+  plane through its tyres, so two tyres stand a little off the ground and two press a little in. Across 51 routes, 147
+  of 243,540 frames (0.06 %) have a tyre more than 0.10 m off. The worst are 0.16 to 0.40 m, at EP 75, 50, 62, 34, 43
+  and 14 (made two-tracks on steep ground, or the blend band). The ground never comes through the body.
