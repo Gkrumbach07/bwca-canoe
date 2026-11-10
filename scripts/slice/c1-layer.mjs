@@ -109,17 +109,18 @@ export const section = {
         const aimAt = { x: C.x - C.n[0] * 3, z: C.z - C.n[1] * 3 };
         const start = await page.evaluate(async ([C, q]) => {
           const g = window.__game, L = window.__L;
+          if (g.wind) { g.wind.override = 1; g.wind.speed = 1; } // (a light air: the line in is the rig's, not the day's wind; 11.4's drift is not this stream's)
           await g.player.teleport(C.x - C.n[0] * 60, C.z - C.n[1] * 60); await L.settle(); // (the tiles round it in, for isWater)
           const o = L.waterOut(q.x, q.z, 215, q.x, q.z);
           if (o) { await g.player.teleport(o.x, o.z); await L.settle(); }
           return { mode: g.player.mode, d: Math.round(Math.hypot(g.player.x - C.x, g.player.z - C.z)), out: o };
         }, [C, aimAt]);
         await page.keyboard.down('w');
-        let held = null, d = start.d, turned = 0, sign = 1, lastE = null, lastKey = null;
+        let held = null, d = start.d, turned = 0, sign = 1, lastE = null, lastKey = null, modeAt = null;
         for (let k = 0; k < 900 && d > 6; k++) {
           const s = await page.evaluate((q) => { const g = window.__game, p = g.player, want = Math.atan2(-(q.z - p.z), q.x - p.x); let e = want - p.heading; while (e > Math.PI) e -= 2 * Math.PI; while (e < -Math.PI) e += 2 * Math.PI; return { e, d: Math.hypot(q.x - p.x, q.z - p.z), mode: p.mode }; }, aimAt);
           d = s.d;
-          if (s.mode !== 'paddle') break;
+          if (s.mode !== 'paddle') { modeAt = { mode: s.mode, d: Math.round(s.d) }; break; }
           // which of A and D turns which way is learnt: a key held that made the error worse is the other's
           if (lastKey && lastE != null && Math.abs(s.e) > Math.abs(lastE) + 0.02 && Math.abs(lastE) > 0.1) sign = -sign;
           const want = Math.abs(s.e) < 0.06 ? null : (s.e * sign > 0 ? 'a' : 'd');
@@ -129,11 +130,11 @@ export const section = {
         }
         if (held) await page.keyboard.up(held);
         await page.keyboard.up('w');
-        await page.evaluate(() => window.__L.step(30));
+        await page.evaluate(() => { window.__L.step(30); const g = window.__game; if (g.wind) g.wind.override = null; });
         await press(page, 'e');
         await page.evaluate(() => window.__L.step(120));
         const landed = await page.evaluate((C) => { const p = window.__game.player; return { mode: p.mode, onFoot: p.onFoot, d: Math.round(Math.hypot(p.x - C.x, p.z - C.z)) }; }, C);
-        result('slice 5 (L): the last 200 m paddled (W, A/D held) and E steps ashore at the crews\' landing', start.mode === 'paddle' && start.d > 150 && landed.onFoot && landed.d < 30, { start, landed, turned, left: Math.round(d) });
+        result('slice 5 (L): the last 200 m paddled (W, A/D held) and E steps ashore at the crews\' landing', start.mode === 'paddle' && start.d > 150 && landed.onFoot && landed.d < 30, { start, landed, turned, left: Math.round(d), modeAt });
         if (!landed.onFoot) await page.evaluate((C) => window.__L.standAt(C.x + C.n[0] * 2, C.z + C.n[1] * 2), C); // (so the rest is still tried)
         await page.evaluate(() => { window.__game.storyLayer.poll(); window.__L.step(4); });
         const stood = await page.evaluate(() => window.__game.story.has('crews.stood'));
