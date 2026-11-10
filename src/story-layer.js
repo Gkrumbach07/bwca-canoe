@@ -108,7 +108,8 @@ class StoryLayer {
     this.t = t;
     this.load(t.world);
     const st = t.story;
-    if (st && typeof st.addRules === 'function') st.addRules(RULES_LAYER);
+    // (the rules are in story.js's data from its start: added here only to a story made without them, the Node checks')
+    if (st && st.rules && st.rules.rules instanceof Map && !st.rules.rules.has(RULES_LAYER[0].id) && typeof st.addRules === 'function') st.addRules(RULES_LAYER);
     // the atoms the rules read off the live world (story-cond.js SENSORS names them already)
     if (st && typeof st.sensor === 'function') {
       this.offs.push(st.sensor('at', (id) => { const pl = this.place(String(id)), p = this.me(); return !!(pl && p && Math.hypot(pl.x - p.x, pl.z - p.z) <= pl.r); }));
