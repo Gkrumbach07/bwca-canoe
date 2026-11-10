@@ -88,3 +88,25 @@ road's level rather than the bank's ground. Round 4's EP 40 bridge-end dip was 0
   plane through its tyres, so two tyres stand a little off the ground and two press a little in. Across 51 routes, 147
   of 243,540 frames (0.06 %) have a tyre more than 0.10 m off. The worst are 0.16 to 0.40 m, at EP 75, 50, 62, 34, 43
   and 14 (made two-tracks on steep ground, or the blend band). The ground never comes through the body.
+
+## Measured
+
+Cost, on the same host with `?roads=off`:
+- No new shader program: 86 at every look, with the roads and without.
+- Each decal that holds only road rows is a draw call the roads add, in a tile that had no trail before. At the
+  looks, 0 to 9 of them are drawn: Ely 9, Winton 7, Echo 6, the Grade 5, the Fernberg 2, the Gunflint Trail 0. At the
+  home store (e3-roads-test) it is 1, plus the truck's own call.
+- Triangles: the road rows are 3 across every 3.5 m. A town of streets (Ely, 1,089 roads in its tile) adds about
+  0.3 M triangles; a forest road adds 0.05 to 0.15 M.
+- Bytes before the title: roads.json is 81 KB gzipped, against round 4's 65 KB. roads.bin's index and the pieces
+  round the start come to about 110 KB on the dev server (by range). Each tile's piece after that is 3 KB at the median
+  and 59 KB at the most (Ely).
+- Install steps: the worst were 200 to 500 ms with the roads and the same without, on a loaded host. Nothing here is
+  new: the decal's lift now runs a step at a time.
+
+The truck, every route posed every 0.3 m, its four tyres against the ground drawn under them (r5-roads-test check 2):
+
+| | routes | worst tyre off the ground | routes with a tyre > 0.15 m off | the ground through the body |
+|---|---:|---|---:|---|
+| main 1057fb6 | 47 of 51 | 1.75 m (EP 50), 1.39 (EP 20), 1.27 (EP 40) | 32 | yes (EP 20, EP 50) |
+| this branch | 51 | 0.40 m (EP 75); 147 of 243,540 frames over 0.10 m | 6 | never |
