@@ -12,8 +12,8 @@ page.on('pageerror', (e) => console.log('pageerror', e.message));
 await page.goto(APP, { timeout: 180000 });
 await page.waitForFunction(() => { const g = window.__game; return g && g.title && typeof g.step === 'function' && g.title.state === 'title' && g.prewarmed; }, null, { timeout: 300000, polling: 500 });
 const r = await page.evaluate(() => {
-  const g = window.__game, P = g.parties, out = {};
-  for (const ep of [16, 67, 31, 75, 1]) {
+  const g = window.__game, P = g.parties, out = {}; g.day.setClock(2026, 191, 9); g.step(1/30, 2);
+  for (const ep of [16, 67, 31, 75, 1, 25]) {
     const e = P.eps.find((x) => x.ep === ep);
     let n = 0, legs = 0, days = [];
     for (let d = P.today - 10; d < P.today + 10; d++) { const c = P.count(ep, d), l = P.entering(ep, d).length; n += c; legs += l; days.push(`${c}/${l}`); }
