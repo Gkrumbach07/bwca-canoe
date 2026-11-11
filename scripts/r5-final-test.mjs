@@ -362,6 +362,8 @@ try {
   }
   // ======================== C: the contact sheet's shots (no checks) ========================
   if (on('C')) {
+    // the nearest road to (x, z) long enough to look along (n points or more), a 1/2 class road (not a driveway)
+    const nearLong = (x, z, n) => { let b = null; for (const c of CHAINS) { if (c.n < n || ![1, 2].includes(c.k) || c.svc) continue; const bb = c.bbox; if (x < bb[0] - 2500 || x > bb[2] + 2500 || z < bb[1] - 2500 || z > bb[3] + 2500) continue; for (let i = 0; i + n <= c.n; i++) { const d = Math.hypot(c.p[i * 4] - x, c.p[i * 4 + 1] - z); if (!b || d < b.d) b = { d, c, i }; } } return b; };
     const third = () => ev(() => { const g = window.__game; if (g.chase.mode !== 'third' && g.chase.setMode) g.chase.setMode('third'); });
     const noon = () => ev(() => { const g = window.__game; g.day.setClock(g.day.year, g.day.doy, 11.5); window.__q.step(30); });
     // a Sandbox season at Pitcher Plant (67, moved onto Bog Lake): the store's dock, the canoe at it, the lake ahead
@@ -381,16 +383,16 @@ try {
     const standLook = (a, f, pitch = -0.08) => ev(async ([a, f, pitch]) => { const g = window.__game, H = window.__q; H.closeAll(); await H.goNear(a[0], a[1], 2, 45000); for (let k = 0; k < 20; k++) { H.step(4); await H.wait(30); } H.standAt(a[0], a[1]); H.aimAt({ x: f[0], z: f[1] }, null); g.chase.viewPitch = pitch; g.day.setClock(g.day.year, g.day.doy, 11.5); H.step(40); return { mode: g.player.mode, at: [Math.round(g.player.x), Math.round(g.player.z)] }; }, [a, f, pitch]);
     // the roads outside the wilderness: Ely's streets and the Gunflint Trail, stood on the road and looking along it
     for (const [tag, lat, lon, k] of [['ely', 47.9033, -91.8668, 14], ['gunflint', 47.988, -90.349, 14], ['echo', 47.949, -91.874, 14]]) {
-      const q = XZ(lat, lon), b = nearChain(q.x, q.z, 2500, [1, 2]);
+      const q = XZ(lat, lon), b = nearLong(q.x, q.z, k + 1);
       if (!b) { log('no road at', tag); continue; }
-      const c = b.c, i = Math.min(b.i, c.n - 1 - k), a = [c.p[i * 4], c.p[i * 4 + 1]], f = [c.p[(i + k) * 4], c.p[(i + k) * 4 + 1]];
+      const c = b.c, i = b.i, a = [c.p[i * 4], c.p[i * 4 + 1]], f = [c.p[(i + k) * 4], c.p[(i + k) * 4 + 1]];
       log('road', tag, JSON.stringify(await standLook(a, f)));
       await third(); await real(400);
       await shot(`c-road-${tag}`);
     }
     // the truck on its road close up: set on Ely's road (the pose the game gives it, on its four wheels), seen from beside
     {
-      const q = XZ(47.9033, -91.8668), b = nearChain(q.x, q.z, 2500, [1, 2]), c = b.c, i = Math.min(b.i, c.n - 1 - 20), pts = [];
+      const q = XZ(47.9033, -91.8668), b = nearLong(q.x, q.z, 21), c = b.c, i = b.i, pts = [];
       for (let k = i; k <= i + 20; k++) pts.push([c.p[k * 4], c.p[k * 4 + 1]]);
       const r = await ev(async (pts) => {
         const g = window.__game, H = window.__q, T = g.truck, cum = [0];
