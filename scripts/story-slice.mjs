@@ -468,7 +468,7 @@ async function slice() {
     });
     await shot(A, 'slice-7-walt-page');
     await closeBook(A);
-    result('7d the Walt page: "Walt (W.H.)", ten lines or more in their sections, every line in words (none blank), the turned line struck', /^Walt/.test(wp.head) && /\(W\.H\.\)/.test(wp.head) && wp.lines.length >= 10 && wp.lines.every((l) => l.trim().length > 3) && wp.heads.includes('People') && wp.heads.includes('Leads'), wp);
+    result('7d the Walt page: "Walt (W.H.)", ten lines or more in their sections, every line in words (none blank, no bare note: "(ringed)" on the crews\' line)', /^Walt/.test(wp.head) && /\(W\.H\.\)/.test(wp.head) && wp.lines.length >= 10 && wp.lines.every((l) => l.trim().length > 3 && !/^\(/.test(l.trim())) && wp.lines.some((l) => /crews' landing.*\(ringed\)$/.test(l)) && wp.heads.includes('People') && wp.heads.includes('Leads'), wp);
   });
 
   // step 8 (K1a): a co-op guest: no story, the stones read "Stump", no Tauno; nothing breaks for either player -----------
