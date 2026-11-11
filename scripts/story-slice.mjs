@@ -151,7 +151,7 @@ async function talkE(page, key) {
   await page.keyboard.press('e');
   for (let k = 0; k < 10; k++) { if (await page.evaluate(() => { window.__L.step(2); return !!window.__t.convo(); })) return { ok: true, via: 'E' }; await page.waitForTimeout(60); }
   await page.evaluate((k) => window.__t.talkTo(k), key);
-  for (let k = 0; k < 10; k++) { if (await page.evaluate(() => { window.__L.step(2); return !!window.__t.convo(); })) return { ok: true, via: 'api (E did not open it)' }; await page.waitForTimeout(80); }
+  for (let k = 0; k < 25; k++) { if (await page.evaluate(() => { window.__L.step(2); return !!window.__t.convo(); })) return { ok: true, via: 'api (E did not open it)' }; await page.waitForTimeout(100); }
   return { ok: false, via: 'neither E nor the API opened it' };
 }
 // the store's keeper, once the roster has settled (E on them)
@@ -377,6 +377,9 @@ async function slice() {
     await A.evaluate(() => window.__J.refresh());
     const pre = await A.evaluate(() => { const g = window.__game, p = g.player, inv = g.profile.inventory; return { hours: +g.day.hours.toFixed(2), mode: p.mode, carry: p.carry ? { drop: !!p.carry.drop, trail: !!p.carry.trail } : null, canoe: (inv.long || []).filter((l) => /canoe|boat/i.test(l.id)).map((l) => [l.id, l.where]), trip: g.trip ? { active: !!g.trip.active, adventure: !!g.trip.adventure } : null, energy: +g.energy.value.toFixed(2), boat: p.boat ? Object.keys(p.boat).slice(0, 6) : null, papers: g.hud && g.hud.papers ? [...(g.hud.papers.keys ? g.hud.papers.keys() : g.hud.papers)].slice(0, 6) : null, paused: !!(g.pause && (g.pause.open || g.pause.shown)), focus: document.activeElement ? `${document.activeElement.tagName}#${document.activeElement.id || ''}` : null, journal: g.journal.open, talk: !!window.__t.convo(), dock: !!(g.outfitter && g.outfitter.docking) }; });
     log('before the landing', JSON.stringify(pre));
+    // the hands free for the paddle: a rod left up (a digit pressed as a talk closed picks it up) idles the hands
+    const hands = await A.evaluate(() => { const g = window.__game, p = g.player, f = p.fishing, c = g.canoe || p.canoe; const was = { rodUp: !!(f && f.rodUp), climb: c && c.state ? c.state.climb : null, held: g.inventory && g.inventory.hands ? g.inventory.hands() : null }; if (f && f.rodUp) f.stow(true); return was; });
+    log('the hands before the paddle', JSON.stringify(hands));
     for (const s of LAYER.steps.filter((q) => q.step === 5)) await s.run({ page: A, result, shots: SHOTS });
     const post = await A.evaluate(() => { const g = window.__game, p = g.player; return { hours: +g.day.hours.toFixed(2), mode: p.mode, speed: p.speed, energy: +g.energy.value.toFixed(2), bilge: g.canoe && g.canoe.bilge, low: g.energy.low || null }; });
     log('after the landing', JSON.stringify(post));
