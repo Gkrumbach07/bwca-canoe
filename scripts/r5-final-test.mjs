@@ -339,9 +339,22 @@ try {
       await until(() => !window.__game.veil.active && !window.__game.player.teleporting, null, 240000).catch(() => null);
       r.arrived = await state();
       // the truck pulls out, frames by step (as chk-r5's TR)
-      await ev(() => { const g = window.__game; for (let f = 0; f < 900; f++) { if (f % 15 === 14) g.step(1 / 30, 1); else g.advance(1 / 30, 1); if (!g.truck.job || g.truck.job.kind !== 'leave') break; } });
+      // (at about the wall clock's pace: 15 frames, then the page's own 0.4 s, so the chunks' builds land as in play)
+      r.drive = await ev(async () => {
+        const g = window.__game, H = window.__q, T = g.truck, R = H.R, o = { frames: 0, held: 0, sunk20: 0, worstSink: 0, worstAt: null, float10: 0 };
+        for (let f = 0; f < 2400; f++) {
+          if (f % 15 === 14) { g.step(1 / 30, 1); await H.wait(400); } else g.advance(1 / 30, 1);
+          if (!T.job || T.job.kind !== 'leave' || !T.mesh.visible) break;
+          if (T.job.wait > 0) continue;
+          o.frames++; if (T.job.s <= (T.job.s0 ?? T.job.s) + 0.01 && T.job.v === 0) o.held++;
+          const e = T.mesh.matrix.elements, gaps = [];
+          for (const a of [1.72, -1.63]) for (const sd of [-0.93, 0.93]) { const x = e[0] * sd + e[8] * a + e[12], y = e[1] * sd + e[9] * a + e[13], z = e[2] * sd + e[10] * a + e[14], gr = g.tiles.groundAt(x, z), dk = R.deckAt(g.world, x, z); gaps.push(y - (Number.isFinite(gr) ? Math.max(gr, dk) : dk)); }
+          const mn = Math.min(...gaps); if (mn < -0.2) o.sunk20++; if (mn > 0.1) o.float10++; if (mn < o.worstSink) { o.worstSink = +mn.toFixed(2); o.worstAt = [Math.round(T.job.s), Math.round(T.x), Math.round(T.z), H.det(T.x, T.z)]; }
+        }
+        return o;
+      });
       r.after = await state();
-      result(`R ride to ${to} and the truck away`, true, r);
+      result(`R ride to ${to} and the truck away on its tyres (sunk past 0.2 m ${r.drive.sunk20} frames, afloat past 0.1 m ${r.drive.float10})`, r.drive.sunk20 <= 2 && r.drive.float10 <= 2, r);
     }
     // and home once more
     const fin = await ev(async () => { const g = window.__game, H = window.__q, L = g.outfitter.landing(g.profile.home); const ok = await Promise.race([H.tp(L.x, L.z).then(() => 'ok'), H.wait(120000).then(() => 'timeout')]); return ok; });
