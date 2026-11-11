@@ -574,7 +574,7 @@ export class Coop {
     if (d) m.d = d; // (none: no canoe set down; a friend's screen hides it)
     // r3 replay: before the staff talk lends one there is no canoe: the berth is sent (nc), held for it, and nothing drawn
     if (d && onboarding.noCanoe && !cap) m.nc = 1;
-    if (onboarding.noCanoe) m.np = 1; // round 4 join: no life jacket yet either (a friend's screen draws none on them swimming)
+    if (onboarding.noPfd) m.np = 1; // round 4 join: no life jacket yet either (a friend's screen draws none on them swimming)
     // round 2: the height the body stands on, as this screen has it (the owner, 2026-11-01: "standing on top of a rock …
     // to them it just looks like I'm standing inside the rock"): on foot the feet's (the rig is 0.1 over them: a rock's top,
     // a deck, a stair, in a hop the height in the air); afloat and swimming the water's level under you

@@ -347,7 +347,7 @@ export class World extends GridQueries {
       if (r.name) e.name = r.name;
       e.start = r.start || null;
       if (Number.isFinite(r.x) && Number.isFinite(r.z) && this.lakes[r.lake - 1]) { e.x = r.x; e.z = r.z; e.lake = r.lake; }
-      for (const k of ['lot', 'open', 'shares', 'head', 'drop', 'clipped', 'storeMoved']) if (r[k] != null) e[k] = r[k]; // (round 4 storeMoved: a store moved to its road end, its old spot: outfitters.js fromMovedStore)
+      for (const k of ['lot', 'open', 'shares', 'head', 'drop', 'clipped', 'storeMoved', 'storeWas']) if (r[k] != null) e[k] = r[k]; // (round 4 storeMoved: a store moved to its road end, its old spot: outfitters.js fromMovedStore)
       eps++;
     }
     return { eps, portages, lakes };

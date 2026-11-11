@@ -29,7 +29,9 @@ const _ots = new THREE.Vector3();
 // shape, the props' boxes, and inside a store its walls and ceiling.
 // (doorHalf, doorTop: the store's door, props.js DOOR, 1.2 m wide and 2.05 m high; stoop: how far out through it the
 // camera may stand)
-const SIGHT = { margin: 0.12, step: 0.18, wall: 4.0, shelf: 1.5, post: 2.5, ceiling: 2.55, bigTrunk: 0.35, trunkNear: 1.4, doorHalf: 0.6, doorTop: 2.05, stoop: 1.1 };
+const SIGHT = { margin: 0.12, step: 0.18, wall: 4.0, shelf: 1.5, post: 2.5, ceiling: 2.55, bigTrunk: 0.35, trunkNear: 1.4, doorHalf: 0.6, doorTop: 2.05, stoop: 1.1, far: 80 };
+// (far: no line longer than any chase is tested: the frame after a teleport the camera still stands where it was, km off,
+// and the test along that line (every tree within half of it, every 0.18 m) held the page for minutes: chk-r5's rides)
 // the pull, along the line from the walker: min, the closest the camera comes (m); margin, how far it stays off what it
 // meets (the spring works inside it, so the camera never goes into the thing itself); inW, the spring's rate coming in
 // (rad/s, critically damped: about a tenth of a second); hold, the seconds the way must stay clear before it eases out;
@@ -260,7 +262,7 @@ export function sightLine(world, ax, ay, az, bx, by, bz, out = {}, opts = {}) {
   const S = _seg;
   S.ax = ax; S.ay = ay; S.az = az; S.dx = bx - ax; S.dy = by - ay; S.dz = bz - az;
   const L = (S.L = Math.hypot(S.dx, S.dy, S.dz));
-  if (L < 0.05) return out;
+  if (L < 0.05 || !(L < SIGHT.far)) return out;
   const tiles = world.tiles;
   const ground = (x, z) => (tiles ? tiles.groundAt(x, z) : world.heightAt(x, z));
   let hard = 1, indoors = false, floorY = 0;

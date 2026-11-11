@@ -16,7 +16,7 @@ import { meshHeightAt, groundPre, bedPre, bedGrain, bedBare, splatAt, landW } fr
 import { brookCut } from './brook-cut.js'; // wetlands round 2: the brooks cut into the 2 m ground
 import { mireSample, mireAttr } from './mire-relief.js'; // the density round: the wetlands' hummocks and hollows
 import { rampAt } from './ramps.js'; // round ramps: the campsites' ways up graded into the ground
-import { roadGradeAt } from './road-grade.js'; // stream E3: the roads graded into the ground
+import { roadGradeAt, roadCoreAt, ROAD_DRY } from './road-grade.js'; // stream E3: the roads graded into the ground
 
 const HEADER = 56, MAGIC = 0x43445742; // 'BWDC' (scripts/detail-bake.mjs)
 const DEEP = 30; // metres from the shore past which a 10 m quad of lake bed is drawn as the 10 m mesh draws it
@@ -73,7 +73,9 @@ export function chunkGround(grid, D, cache) {
       if (rel) { h += mireSample(grid, x, z, sd, ra) - brookCut(x, z, sd); for (let c = 0; c < 4; c++) rel[q * 4 + c] = s8(ra[c]); } // a brook's little V (brook-cut.js) and the mire's relief (mire-relief.js), on the 2 m lattice only
       h = rampAt(x, z, h); // round ramps (ramps.js): a campsite's way up graded in, its shelf at the water
       h = roadGradeAt(x, z, h, smoothstep(1, 4, sd)); // stream E3 (road-grade.js): a road's grade, off the water's edge
-      if (sd < 30) { const lv = grid.levelAt(x, z, 3); if (lv === lv) h = Math.max(h, lv + 0.04 * Math.min(sd, 5)); }
+      // (round 5: not on a road past ROAD_DRY m from the shore, eased back up over its shoulder: a pond perched over the road
+      // 30 m off stood its vertices 2.5 m up through it, EP 50's two-track; the road is never under drawn water there)
+      if (sd < 30) { const lv = grid.levelAt(x, z, 3); if (lv === lv) { const up = Math.max(h, lv + 0.04 * Math.min(sd, 5)); h = sd <= ROAD_DRY ? up : h + (up - h) * (1 - roadCoreAt(x, z)); } }
       v[q] = h;
     }
   }

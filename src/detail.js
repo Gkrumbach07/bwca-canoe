@@ -112,6 +112,15 @@ export class DetailStreamer {
     return c;
   }
   parentOf(c) { return this.rec(5, c.gx >> 1, c.gy >> 1); }
+  // the ground at (x, z) is as fine as it will get with the player at (px, pz): its 2 m chunk in, or none to come there
+  // (no LiDAR there, the detail off, or past the 2 m ring) (round 5: the truck waits in the lot for it, truck.js)
+  settled(x, z, px, pz) {
+    if (!this.active) return true;
+    const L = this.levels[2], gx = Math.floor((x - this.gox) / L.size), gy = Math.floor((z - this.goz) / L.size);
+    const c = this.rec(2, gx, gy);
+    if (!c || this.installed[2].has(this.gk(gx, gy))) return true;
+    return this.dist(c, px, pz) > RING[2].in;
+  }
   tileReady(c) { const e = this.tm.tiles.get(c.tileKey); return !!(e && e.state === 'ready'); }
   dist(c, px, pz) {
     const dx = Math.max(0, c.x0 - px, px - c.x0 - c.size), dz = Math.max(0, c.z0 - pz, pz - c.z0 - c.size);

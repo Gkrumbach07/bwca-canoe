@@ -5,7 +5,8 @@
 // town names on it). Writes two small tables in src/:
 //
 //   src/edge.bin       where you are: a 50 m grid of zones over the baked box, and the outlines the map draws
-//   src/map-roads.bin  the roads and towns the map letters (OpenStreetMap), gzipped JSON in whole metres
+//   src/map-roads.bin  the roads and towns the map letters (OpenStreetMap), gzipped JSON in whole metres; its minor
+//                      roads replaced by src/roads.bin's (scripts/map-roads.mjs, round 5)
 //
 //   node scripts/edge.mjs [--data ~/bwca-data-v9] [--cache data-cache/edge] [--cell 50]
 //
@@ -450,4 +451,9 @@ for (const r of qRings) { const s = simplify(r, 30).map(([x, z]) => [Math.round(
   const out = zlib.gzipSync(Buffer.from(JSON.stringify(doc)), { level: 9 });
   fs.writeFileSync('src/map-roads.bin', out);
   console.log(`src/map-roads.bin: ${lines.length} lines (${km.toFixed(0)} km), ${towns.length} towns, ${exits.length} exits (${exits.map((e) => e[0]).join('; ')}), ${out.length} bytes`);
+}
+// (round 5: the map's minor roads are the 3D world's own, src/roads.bin: the spurs above replaced by every road it draws)
+if (fs.existsSync('src/roads.bin')) {
+  const { execFileSync } = await import('node:child_process');
+  execFileSync(process.execPath, [path.join(path.dirname(new URL(import.meta.url).pathname), 'map-roads.mjs')], { stdio: 'inherit' });
 }

@@ -20,6 +20,8 @@
 //   onboarding.isWaltItem(id) → bool                              onboarding.give() → [item ids] (the gear, once)
 //   onboarding.showCounter(landing): set by main.js (the counter's own show, unwrapped), opened as the talk ends
 //   onboarding.skip() (a co-op guest: never the scene; coop-give.js gives the plain kit instead)
+//   onboarding.sandboxKit() (r5: a Sandbox season is kitted at once, no staff talk: update() calls it; → ids or null)
+//   onboarding.noPfd → bool: no life jacket to wear afloat (none owned and no canoe lent yet: canoe.noPfd, main.js)
 //   packGear(inv, { pack, gift, order }) → [item ids]: a pack into the canoe, the gift and your own things out of the crate
 //     into it, three days of food in the barrel (the scene's give, and a co-op guest's starter kit: guestKit(inv))
 //
@@ -86,6 +88,32 @@ export class Onboarding {
   // a co-op guest: the visit is no season of theirs, so no scene and no old gear (kv is frozen: nothing is written)
   skip() { this.dismiss(); this.state = { ...blankOnboard(this.state ? this.state.season : null), step: 'done', done: true, guest: true, path: null, loan: true }; }
   write() { if (this.state) save.write(NS, this.state); }
+  // r5 (the owner, 2026-11-10: "in sandbox mode, if you don't go through the tutorial, you don't get a canoe or anything. I
+  // don't think that should be the case"): a Sandbox season is for playing, not for the onboarding gate. It starts kitted
+  // (sandboxKit below: the canoe and its loan, the paddle, the life jacket, a pack with a tent, the pot and a stove, your
+  // own things packed in, food and bait), the staff talk is never asked for and no main-path steps show. Adventure keeps
+  // the empty-handed start and the talk. An old Sandbox save still waiting at the talk gets the same on load.
+  get sandbox() { const pr = this.t.profile; return !!(pr && pr.started && pr.mode === 'sandbox'); }
+  sandboxKit() {
+    const s = this.state, inv = this.t.inventory;
+    if (!s || !s.path || s.loan || s.guest || s.legacy || !this.sandbox || !inv || !Array.isArray(inv.containers) || typeof inv.addContainer !== 'function') return null;
+    const given = this.lend(inv);
+    given.push(...sandboxKit(inv));
+    s.loan = true; s.sandbox = true; s.step = 'done'; s.done = true; s.heard = true; s.nudged = true;
+    s.path = { food: true, leeches: true, canoe: true };
+    const sh = this.t.sheets, pr = this.t.profile;
+    try { if (sh && pr && typeof pr.sheets === 'function' && !pr.sheets().length && typeof sh.giveHome === 'function') sh.giveHome(); } catch { /* the sheets are D's */ }
+    this.write();
+    this.dismiss();
+    this.hull();
+    return given;
+  }
+  // a life jacket to wear afloat: any owned (r5: the rule is the jacket, not the loan flag), else the loan's (noCanoe)
+  get noPfd() {
+    const inv = this.t.inventory;
+    try { if (inv && typeof inv.count === 'function' && inv.count('pfd', { reachable: false }) > 0) return false; } catch { /* not in yet */ }
+    return this.noCanoe;
+  }
   get done() { return !this.state || !!this.state.done; }
   // r3: no canoe at the dock yet (a new season before the staff talk gives the loan)
   get noCanoe() { const s = this.state; return !!(s && s.path && !s.loan && !s.guest && !s.legacy); }
@@ -143,6 +171,7 @@ export class Onboarding {
 
   // --- each frame: the line at the door, and the staffer standing while the scene is to come ---------------------------
   update() {
+    if (this.state && !this.state.loan && this.sandbox) this.sandboxKit(); // r5: a Sandbox season never waits on the talk
     this.hull();
     this.tickPath();
     const o = this.t.outfitter, v = o && o.visit;
@@ -407,6 +436,25 @@ export function packGear(inv, { pack: packId, gift, order, food = FOOD_DAYS }) {
   inv.emit('containers');
   if (typeof inv.write === 'function') inv.write();
   return given;
+}
+// r5: a Sandbox season's kit, after the loan (Onboarding.lend: the barrel, the stringer, the ash paddle, the rod): a leech
+// bucket with a dozen, a tackle box with a jig and a spinner, and a Duluth pack #3 into the canoe with the A-frame tent,
+// the pot, a canister stove and a canister, the life jacket, your own things out of the crate and three days of food in
+// the barrel. The plain things, never the story's (Walt's pack, tent and stove are Adventure's). → the item ids given
+export const SANDBOX_GIFT = ['aframe', 'pot', 'stove', 'fuel', 'pfd'];
+const ORDER_SB = ['aframe', 'sleepingbag', 'pad', 'tacklebox', 'pfd', 'pot', 'clothes', 'tarp', 'stove', 'fuel', 'tablets']; // (so the 6×8 pack takes it all)
+export function sandboxKit(inv) {
+  const q = { quiet: true }, out = [];
+  const bucket = inv.addContainer('bucket', 'canoe', null, q);
+  if (bucket) { inv.put(bucket, 'leeches', { qty: 12, quiet: true }); out.push('bucket', 'leeches×12'); }
+  const crate = inv.crate;
+  if (crate && !inv.containers.some((c) => c.item === 'tacklebox')) {
+    const tb = inv.nestNew(crate, 'tacklebox');
+    if (tb) { for (const l of ['lure:jig', 'lure:mepps']) inv.put(tb, l, q); out.push('tacklebox'); }
+  }
+  out.push(...packGear(inv, { pack: 'pack3', gift: SANDBOX_GIFT, order: ORDER_SB }));
+  if (typeof inv.refreshUse === 'function') inv.refreshUse();
+  return out;
 }
 // A co-op guest's first visit: the starting kit (inventory.newSeason) and the scene's gear in its plain form: a Duluth
 // pack #3, the A-frame tent, the pot, a canister stove and a canister, three days of food. Nothing of the story. → ids
