@@ -349,7 +349,7 @@ async function main() {
   outfitter.rides = rides;
   // stream E3: the truck on the roads (truck.js): left in the lot by a ride and off down the road, up the road for a
   // pickup, behind the store you are at; one mesh of the props' material, drawn while in view
-  const truck = new Truck({ world, scene, groundAt: (x, z) => tiles.groundAt(x, z), player });
+  const truck = new Truck({ world, scene, groundAt: (x, z) => tiles.groundAt(x, z), player, settled: (x, z) => !tiles.detail || tiles.detail.settled(x, z, player.x, player.z) });
   outfitter.truck = truck; rides.truck = truck;
   { const tu = tiles.update.bind(tiles); tiles.update = (...a) => { const r = tu(...a); try { truck.settle(); } catch { /* the truck's own */ } return r; }; } // (chk-r5: the truck on this frame's ground, after the tiles and the 2 m chunks land)
   tasks.leanOf = (ep) => boardLean(ep, world);

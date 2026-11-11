@@ -19,7 +19,10 @@ import { isOutfitter, OUTFITTER_EPS } from './outfitters.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const C = (hex) => new THREE.Color(hex);
-export const TRUCK = { speed: 9, accel: 1.6, wheelbase: 3.35, track: 1.86, axles: [1.72, -1.63], squash: 0.12, wait: 2.5, come: 80, see: 260, parkNear: 320, comeMax: 12, maxSnap: 320 };
+export const TRUCK = { speed: 9, accel: 1.6, wheelbase: 3.35, track: 1.86, axles: [1.72, -1.63], squash: 0.12, wait: 2.5, come: 80, see: 260, parkNear: 320, comeMax: 12, maxSnap: 320, holdMax: 10, holdAhead: 160 };
+// (holdMax, holdAhead: chk-r5: a ride's truck pulled out 2.5 s after the fade, before the 2 m ground was in under its way;
+// on the 10 m ground a bridge's abutments fall into the creek's valley, and the truck dropped 2.6 m off the deck's end
+// at EP 80. It waits in the lot, up to holdMax s, until the ground is in for its first holdAhead m: settled)
 // (round 5: track the tyres' own middles, 0.93 m either side; axles where the wheels are built, along the body)
 
 // the pickup, in its own frame: +z forward, y up from the ground under its wheels
@@ -90,8 +93,9 @@ function smooth(pts, r = 4) { // (round 5: 4 m, not 6: a 6 m fillet took a turn 
 
 export class Truck {
   // { world, scene, groundAt (x, z) → y, player }
-  constructor({ world, scene, groundAt, player = null }) {
+  constructor({ world, scene, groundAt, player = null, settled = null }) {
     this.world = world; this.scene = scene; this.groundAt = groundAt; this.player = player;
+    this.settled = settled; // (x, z) → the ground there as fine as it will get (detail.js settled); null: always
     this.mesh = null; this.job = null; this.parkedAt = null;
     this.drawn = 0; // frames drawn (the rigs)
   }
@@ -221,7 +225,7 @@ export class Truck {
     if (!J) return this.idle();
     if (J.kind === 'park') { if (p && Math.hypot(p.x - this.x, p.z - this.z) > TRUCK.parkNear * 2) this.hide(); return; }
     if (J.kind === 'leave') {
-      if (J.wait > 0) { J.wait -= dt; return; }
+      if (J.wait > 0 || ((J.held = (J.held || 0) + dt) < TRUCK.holdMax && !this.groundAhead(J))) { J.wait -= dt; return; }
       J.v = Math.min(TRUCK.speed, J.v + TRUCK.accel * dt);
       J.s += J.v * dt;
       if (J.s >= J.path.len - TRUCK.wheelbase || (p && Math.hypot(p.x - this.x, p.z - this.z) > TRUCK.see * 2)) { this.hide(); return; }
@@ -241,6 +245,12 @@ export class Truck {
         J.done(true);
       }
     }
+  }
+  // the ground in under the way ahead (its first holdAhead m, every 20 m)
+  groundAhead(J) {
+    if (!this.settled) return true;
+    for (let s = J.s; s <= Math.min(J.path.len, J.s + TRUCK.holdAhead); s += 20) { const [x, z] = at(J.path, s); if (!this.settled(x, z)) return false; }
+    return true;
   }
   // nothing to do: behind the store you are at, else away
   idle() {
