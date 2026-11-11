@@ -5,7 +5,8 @@
 //   2 (the files) the map's roads are the world's: every road of src/roads.bin (a point every 40 m) has a line of
 //     src/map-roads.bin within 25 m, and every minor line's points a road within 25 m; the highways and county roads
 //     (classes 0, 1), the towns and the exits as on main
-//   3 (the files) the edge (src/edge.bin: the zones the notice reads, the doorstep) byte for byte as on main
+//   3 (the files) the edge (src/edge.bin: the zones the notice reads, the doorstep) as on main, but within 2.6 km of the
+//     two stores the final pass moved (6's dock onto Burntside, 67 up Bush Creek to Bog Lake)
 //   4 a Sandbox season at a store at its road's end (EP 67 Pitcher Plant on Bog Lake): kitted (the canoe drawn, the pack,
 //     the jacket, food), the roads round the store installed, the truck at its stand on its four tyres (0.15 m)
 //   5 the map round that store with the minor roads drawn (a shot), the map's minor cells loaded
@@ -90,8 +91,25 @@ const gitBlob = (p) => { try { return execFileSync('git', ['-C', root, 'show', `
     { roadPoints: n, offTheMap: miss, missAt, minorLines: M.lines.filter((f) => f[0] >= 2).length, minorPoints: m, minorOffRoad: mMiss, majorSameAsBase: same, bytes: readFileSync(path.join(root, 'src/map-roads.bin')).length });
 }
 {
+  // (the final pass: Pitcher Plant (67) moved up Bush Creek to Bog Lake and Thimbleberry's (6) dock onto Burntside, so the
+  // doorstep round their yards moved with them: the zones as on main everywhere farther than MOVED_R from those stores)
   const base = gitBlob('src/edge.bin'), now = readFileSync(path.join(root, 'src/edge.bin'));
-  result('3 the edge (zones, doorstep) byte for byte as on main', base ? Buffer.compare(base, now) === 0 : false, { base: base ? base.length : null, now: now.length });
+  const zonesOf = (buf) => { const raw = zlib.gunzipSync(buf), dv = new DataView(raw.buffer, raw.byteOffset, raw.byteLength); const cell = dv.getUint16(6, true), x0 = dv.getInt32(8, true), z0 = dv.getInt32(12, true), W = dv.getUint16(16, true), H = dv.getUint16(18, true); let o = 20; const varint = () => { let v = 0, m = 1, b; do { b = dv.getUint8(o++); v += (b & 127) * m; m *= 128; } while (b & 128); return v; }; const N = W * H, z = new Uint8Array(N), runs = varint(); for (let r = 0, k = 0; r < runs; r++) { const v = dv.getUint8(o++), n = varint(); z.fill(v, k, Math.min(N, k + n)); k += n; } return { cell, x0, z0, W, H, z }; };
+  const MOVED = [6, 67], MOVED_R = 2600, PL = JSON.parse(readFileSync(path.join(root, 'src/outfitter-places.json'), 'utf8')).places;
+  const near = MOVED.flatMap((ep) => [PL[ep].store, ...(ep === 67 ? [[-11773, 34392]] : [])]);
+  let diff = 0, far = 0, farAt = null;
+  if (base) {
+    const A = zonesOf(base), B = zonesOf(now);
+    if (A.W === B.W && A.H === B.H && A.x0 === B.x0 && A.z0 === B.z0) {
+      for (let k = 0; k < A.z.length; k++) {
+        if (A.z[k] === B.z[k]) continue;
+        diff++;
+        const x = A.x0 + ((k % A.W) + 0.5) * A.cell, zz = A.z0 + (Math.floor(k / A.W) + 0.5) * A.cell;
+        if (!near.some(([a, b]) => Math.hypot(x - a, zz - b) < MOVED_R)) { far++; farAt = farAt || [Math.round(x), Math.round(zz)]; }
+      }
+    } else far = -1;
+  }
+  result('3 the edge (zones, doorstep) as on main but round the two stores moved in the final pass', base ? far === 0 : false, { base: base ? base.length : null, now: now.length, cellsChanged: diff, farFromTheMoved: far, farAt });
 }
 
 // ---- the page -------------------------------------------------------------------------------------------------------------
