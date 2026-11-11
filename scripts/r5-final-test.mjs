@@ -374,7 +374,9 @@ try {
     // the start map (the season wizard's) and the book's map
     await page.keyboard.press('KeyI'); await real(900);
     await ev(() => { const b = [...document.querySelectorAll('button, [role=tab], .tab')].find((e) => e.offsetParent !== null && e.textContent.trim().toLowerCase() === 'map'); if (b) b.click(); });
-    await real(1800);
+    await real(1500);
+    for (let k = 0; k < 3; k++) { await page.mouse.move(800, 370); await page.mouse.wheel(0, 500); await real(700); }
+    await real(1200);
     await shot('c-map-book');
     await page.keyboard.press('KeyI'); await real(500);
     if (await ev(() => window.__game.title.state === 'pause')) await ev(() => window.__game.title.resume());
@@ -410,9 +412,9 @@ try {
       await shot('c-truck');
     }
     // two cabins' docks, from the bank by the dock's foot, the open water ahead
-    for (const i of [22, 3]) {
+    for (const [i, back, side] of [[22, 2, 3], [9, 0, 2.5], [5, 0, 2.5]]) {
       const c = CABINS[i], D = c.dock; if (!D) continue;
-      log('cabin', i, JSON.stringify(await standLook([D.x - D.dx * 2 + D.dz * 3, D.z - D.dz * 2 - D.dx * 3], [D.x + D.dx * 40, D.z + D.dz * 40], -0.1)));
+      log('cabin', i, JSON.stringify(await standLook([D.x - D.dx * back + D.dz * side, D.z - D.dz * back - D.dx * side], [D.x + D.dx * 40, D.z + D.dz * 40], -0.1)));
       await third(); await real(300);
       await shot(`c-cabin-${i}`);
     }
