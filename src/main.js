@@ -213,7 +213,7 @@ async function main() {
   const fauna = new Fauna(world, water, scene, { loons }); // beaver, moose, eagles, fish, insects, gulls, raven
 
   const canoe = buildCanoeRig({ water }); // the hull's water line rides the water's own swell
-  canoe.noPfd = () => onboarding.noCanoe; // round 4 join: the loaned life jacket comes at the staff talk
+  canoe.noPfd = () => onboarding.noPfd; // round 4 join: the loaned life jacket comes at the staff talk (r5: worn afloat once you own one, the loan or not)
   canoe.rig.traverse((o) => o.layers.enable(REFLECT_LAYER));
   canoe.rig.userData.foam.layers.disable(REFLECT_LAYER); // the line on the water is not mirrored in it
   scene.add(canoe.rig);
@@ -349,8 +349,9 @@ async function main() {
   outfitter.rides = rides;
   // stream E3: the truck on the roads (truck.js): left in the lot by a ride and off down the road, up the road for a
   // pickup, behind the store you are at; one mesh of the props' material, drawn while in view
-  const truck = new Truck({ world, scene, groundAt: (x, z) => tiles.groundAt(x, z), player });
+  const truck = new Truck({ world, scene, groundAt: (x, z) => tiles.groundAt(x, z), player, settled: (x, z) => !tiles.detail || tiles.detail.settled(x, z, player.x, player.z) });
   outfitter.truck = truck; rides.truck = truck;
+  { const tu = tiles.update.bind(tiles); tiles.update = (...a) => { const r = tu(...a); try { truck.settle(); } catch { /* the truck's own */ } return r; }; } // (chk-r5: the truck on this frame's ground, after the tiles and the 2 m chunks land)
   tasks.leanOf = (ep) => boardLean(ep, world);
   outfitter.keeperVoice = true; // the shop's counter (2B) renders the keeper, the signature and the rides itself, so 2C's stand-ins stay off
   // hubs 3B: the camera and the photo notices (photo.js). C raises it (the $25 35 mm, or the disposable the first photo

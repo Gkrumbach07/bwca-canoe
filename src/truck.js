@@ -19,7 +19,11 @@ import { isOutfitter, OUTFITTER_EPS } from './outfitters.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const C = (hex) => new THREE.Color(hex);
-export const TRUCK = { speed: 9, accel: 1.6, wheelbase: 3.35, track: 1.7, wait: 2.5, come: 80, see: 260, parkNear: 320, comeMax: 12, maxSnap: 320 };
+export const TRUCK = { speed: 9, accel: 1.6, wheelbase: 3.35, track: 1.86, axles: [1.72, -1.63], squash: 0.12, wait: 2.5, come: 80, see: 260, parkNear: 320, comeMax: 12, maxSnap: 320, holdMax: 10, holdAhead: 160 };
+// (holdMax, holdAhead: chk-r5: a ride's truck pulled out 2.5 s after the fade, before the 2 m ground was in under its way;
+// on the 10 m ground a bridge's abutments fall into the creek's valley, and the truck dropped 2.6 m off the deck's end
+// at EP 80. It waits in the lot, up to holdMax s, until the ground is in for its first holdAhead m: settled)
+// (round 5: track the tyres' own middles, 0.93 m either side; axles where the wheels are built, along the body)
 
 // the pickup, in its own frame: +z forward, y up from the ground under its wheels
 function truckGeometry() {
@@ -73,7 +77,7 @@ function at(path, s) {
   return [pts[lo][0] + (pts[hi][0] - pts[lo][0]) * t, pts[lo][1] + (pts[hi][1] - pts[lo][1]) * t];
 }
 // corners rounded (a fillet up to r m along each leg), as a truck turns
-function smooth(pts, r = 6) {
+function smooth(pts, r = 4) { // (round 5: 4 m, not 6: a 6 m fillet took a turn at a junction 2.5 m off the line, the outer tyres down the shoulder)
   if (pts.length < 3) return pts;
   const out = [pts[0]];
   for (let i = 1; i < pts.length - 1; i++) {
@@ -89,8 +93,9 @@ function smooth(pts, r = 6) {
 
 export class Truck {
   // { world, scene, groundAt (x, z) → y, player }
-  constructor({ world, scene, groundAt, player = null }) {
+  constructor({ world, scene, groundAt, player = null, settled = null }) {
     this.world = world; this.scene = scene; this.groundAt = groundAt; this.player = player;
+    this.settled = settled; // (x, z) → the ground there as fine as it will get (detail.js settled); null: always
     this.mesh = null; this.job = null; this.parkedAt = null;
     this.drawn = 0; // frames drawn (the rigs)
   }
@@ -139,24 +144,49 @@ export class Truck {
     const [x, z] = at(path, s0), [x1, z1] = at(path, s0 + 2);
     return { x, z, heading: Math.atan2(x1 - x, z1 - z), path, s0 };
   }
-  // the pose at s along a path, its wheels on the ground
+  // the pose at s along a path, its wheels on the ground (round 5, the owner: "The trucks float in the air"): each of the
+  // four wheels read on the ground as drawn under its own tyre (tiles.groundAt, or a bridge's deck: deckAt), the body
+  // pitched by the axles' heights and rolled by the sides', set on the plane through them; where the four are not on one
+  // plane (a twist), raised only once a tyre would be pressed in past SQUASH (a tyre a little into the ground reads as its weight on it; one off it as a float), so two float and two press in by the twist alike (this.gap: the
+  // worst wheel's gap, the rigs)
   pose(path, s) {
-    const m = this.ensure(), half = TRUCK.wheelbase / 2;
+    const m = this.ensure(), half = TRUCK.wheelbase / 2, A = TRUCK.axles;
     const [fx, fz] = at(path, s + half), [bx, bz] = at(path, s - half);
     let dx = fx - bx, dz = fz - bz; const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L;
-    const cx = (fx + bx) / 2, cz = (fz + bz) / 2, rx = dz, rz = -dx, w = TRUCK.track / 2, G = (x, z) => Math.max(this.groundAt(x, z), deckAt(this.world, x, z)); // (over a bridge: on its deck)
-    const yf = G(cx + dx * half, cz + dz * half), yb = G(cx - dx * half, cz - dz * half);
-    const yl = G(cx - rx * w, cz - rz * w), yr = G(cx + rx * w, cz + rz * w);
-    const y = Math.max((yf + yb) / 2, (yl + yr) / 2);
-    const fwd = V(dx, (yf - yb) / TRUCK.wheelbase, dz).normalize(), right = V(rx, (yr - yl) / TRUCK.track, rz).normalize();
+    const cx = (fx + bx) / 2, cz = (fz + bz) / 2, rx = dz, rz = -dx, w = TRUCK.track / 2;
+    const G = (x, z) => { const g = this.groundAt(x, z), d = deckAt(this.world, x, z); return Number.isFinite(g) ? Math.max(g, d) : d; };
+    const W = this.wheels || (this.wheels = new Float64Array(4));
+    const o = (A[0] + A[1]) / 2; // (the axles' middle, along the body)
+    let k = 0;
+    for (const a of A) for (const sd of [-1, 1]) W[k++] = G(cx + dx * (a - o) + rx * w * sd, cz + dz * (a - o) + rz * w * sd);
+    // (W: front left, front right, back left, back right)
+    const ok = W.every((v) => Number.isFinite(v)), fin = Array.from(W).filter((v) => Number.isFinite(v));
+    const mean = ok ? (W[0] + W[1] + W[2] + W[3]) / 4 : fin.length ? Math.max(...fin) : (this.lastY ?? 0); // (no ground under it yet: the last)
+    const pitch = ok ? ((W[0] + W[1]) - (W[2] + W[3])) / 2 / (A[0] - A[1]) : 0, roll = ok ? ((W[1] + W[3]) - (W[0] + W[2])) / 2 / TRUCK.track : 0;
+    const twist = ok ? Math.abs(W[0] - W[1] - W[2] + W[3]) / 4 : 0;
+    const lift = Math.max(0, twist - TRUCK.squash);
+    const fwd = V(dx, pitch, dz).normalize(), right = V(rx, roll, rz).normalize();
     const up = fwd.clone().cross(right).normalize(); // (forward × right is up: right here is +x of a truck facing +z)
     const Xa = up.clone().cross(fwd).normalize();
-    m.matrix.makeBasis(Xa, up, fwd).setPosition(cx, (Number.isFinite(y) ? y : 0) - 0.02, cz);
+    // the body's origin sits o m behind the axles' middle, on the plane: y there, then down by the tyre's own sink
+    const y = mean - pitch * o + lift - 0.015;
+    m.matrix.makeBasis(Xa, up, fwd).setPosition(cx - dx * o, y, cz - dz * o);
     m.matrixWorldNeedsUpdate = true;
     m.visible = true;
     this.x = cx; this.z = cz;
+    this.gap = ok ? twist + lift : NaN; // (the most a tyre stands off its ground; the most one is pressed in: SQUASH)
+    this.lastY = mean;
+    this.wheelY = ok ? Array.from(W) : null;
   }
   hide() { if (this.mesh) this.mesh.visible = false; this.job = null; this.parkedAt = null; }
+  // set on the ground again where it stands (main.js, each frame after the tiles' update: chk-r5, a truck parked on the
+  // 10 m ground stood 0.3-2.3 m over the 2 m ground once that came in under it, and a ride's truck was posed a frame
+  // before a chunk or a tile landed under it, 2.6 m into the ground for that frame): its four wheels on this frame's
+  // ground, as drawn
+  settle() {
+    const J = this.job, m = this.mesh;
+    if (J && J.path && m && m.visible) this.pose(J.path, J.s);
+  }
   // the canoe on the rack: a parked truck behind a store has one of its own; one that has just left yours (in the lot,
   // at the dock) or comes to fetch you and yours drives with the rack bare (playtest r4-final: "the canoe off the
   // roof" while one still rode on it)
@@ -195,7 +225,7 @@ export class Truck {
     if (!J) return this.idle();
     if (J.kind === 'park') { if (p && Math.hypot(p.x - this.x, p.z - this.z) > TRUCK.parkNear * 2) this.hide(); return; }
     if (J.kind === 'leave') {
-      if (J.wait > 0) { J.wait -= dt; return; }
+      if (J.wait > 0 || ((J.held = (J.held || 0) + dt) < TRUCK.holdMax && !this.groundAhead(J))) { J.wait -= dt; return; }
       J.v = Math.min(TRUCK.speed, J.v + TRUCK.accel * dt);
       J.s += J.v * dt;
       if (J.s >= J.path.len - TRUCK.wheelbase || (p && Math.hypot(p.x - this.x, p.z - this.z) > TRUCK.see * 2)) { this.hide(); return; }
@@ -215,6 +245,12 @@ export class Truck {
         J.done(true);
       }
     }
+  }
+  // the ground in under the way ahead (its first holdAhead m, every 20 m)
+  groundAhead(J) {
+    if (!this.settled) return true;
+    for (let s = J.s; s <= Math.min(J.path.len, J.s + TRUCK.holdAhead); s += 20) { const [x, z] = at(J.path, s); if (!this.settled(x, z)) return false; }
+    return true;
   }
   // nothing to do: behind the store you are at, else away
   idle() {

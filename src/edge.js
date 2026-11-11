@@ -13,15 +13,17 @@
 //                                       (Quetico) is read as any other land past the edge: within the band (400 m) of
 //                                       the wilderness a doorstep, else out (decodeEdge, remapQuetico)
 //   isPast(x, z)                        zone 0: off the maps' campsites and the parties' nights (world.js marks c.past)
-//   paintEdge(ctx, v, k)                the map: the paper past the edge washed a little, the edge a fine pencil line,
-//                                       Quetico washed as out with its dashed outline; v { x0, z0, mPerPx }
+//   paintEdge(ctx, v, k, { bound })     the map: the paper outside the real wilderness boundary washed a little (no band,
+//                                       no circles: r5), Quetico's dashed outline; v { x0, z0, mPerPx }
 //   loadMapRoads() · paintRoads(ctx, v, W, H, { k, lettered, inView })   the roads and the towns on the map
 //   new EdgeWatch({ hud, permits, coop }) · watch.update(dt, player)     the notice (main.js, each frame)
 //   watch.state → 'in' | 'out' (what the notice says now) · watch.raw (the zone under you this frame)
 import './edge.css';
 
 export const ZONE = { OUT: 0, WILD: 1, DOOR: 2, QUETICO: 3 }; // (QUETICO: the table's own code only; zoneAt never returns it)
-export const EDGE = { ready: false, cell: 50, x0: 0, z0: 0, W: 0, H: 0, zones: null, rings: [], inPath: null, qPath: null, qWash: null, qOut: 0, qDoor: 0 };
+export const EDGE = { ready: false, cell: 50, x0: 0, z0: 0, W: 0, H: 0, zones: null, rings: [], inPath: null, qPath: null, qWash: null, qOut: 0, qDoor: 0, bound: null };
+// r5: the wilderness boundary's Path2D, handed over by map-render.js as it loads (the map's wash is outside it)
+export function setBound(path) { EDGE.bound = path || null; }
 // the band round the wilderness (scripts/edge.mjs BAND): a Quetico cell this near a wild one is a doorstep, as any land
 export const BAND = 400;
 let eLoading = null;
@@ -178,27 +180,31 @@ export class EdgeWatch {
 }
 
 // --- the map -------------------------------------------------------------------------------------------------------------
-// The paper past the edge a little washed toward the paper colour (the owner: "slightly faded", never so you can't read
-// it), the edge a fine pencil line; Quetico washed the same (out of bounds), its own outline in a fine dashed green as
-// geography, as the agencies' maps draw a park.
-const WASH = 'rgba(236, 228, 207, 0.34)', EDGE_PENCIL = 'rgba(70, 60, 50, 0.55)', QUETICO_LINE = 'rgba(46, 104, 60, 0.75)';
-export function paintEdge(ctx, v, k = 1, { wash = true, line = true, quetico = true, box = null } = {}) {
-  if (!EDGE.ready || !EDGE.inPath) return;
+// The map draws the wilderness as it is: what lies outside the real boundary (the BWCAW line, boundary.bin, which
+// map-render.js inks with the agencies' dash and dot) is a little washed toward the paper colour (the owner: "slightly
+// faded", never so you can't read it), inholdings included; inside it nothing. No band, no circles round the lots or the
+// stores, no doorstep shapes (the owner 2026-11-10: "There shouldn't be a bubble around where the playable area is on the
+// map"): the doorstep band is the notice's business only (zoneAt), never drawn. Quetico lies outside the line, so it is
+// washed with the rest; its own outline in a fine dashed green as geography, as the agencies' maps draw a park.
+//   bound: the boundary's Path2D (map-render.js BOUNDARY.path, its rings even-odd; by default the one setBound was given);
+//          without it nothing is washed (the boundary still loading: the next draw has it)
+const WASH = 'rgba(236, 228, 207, 0.34)', QUETICO_LINE = 'rgba(46, 104, 60, 0.75)';
+export function paintEdge(ctx, v, k = 1, { wash = true, quetico = true, box = null, bound = EDGE.bound } = {}) {
+  if (!EDGE.ready && !bound) return;
   const s = 1 / v.mPerPx, px = v.mPerPx;
   ctx.save();
   ctx.setTransform(ctx.getTransform().multiply(new DOMMatrix([s, 0, 0, s, -v.x0 * s, -v.z0 * s])));
-  if (wash) {
-    const b = box || [EDGE.x0, EDGE.z0, EDGE.x0 + EDGE.W * EDGE.cell, EDGE.z0 + EDGE.H * EDGE.cell];
-    const p = new Path2D(); p.rect(b[0], b[1], b[2] - b[0], b[3] - b[1]); p.addPath(EDGE.inPath);
+  if (wash && bound) {
+    // the view's own box widened past the baked one, so the paper beyond the world reads as outside too
+    const b = box || [EDGE.x0, EDGE.z0, EDGE.x0 + EDGE.W * EDGE.cell, EDGE.z0 + EDGE.H * EDGE.cell], m = 5e5;
+    const p = new Path2D(); p.rect(b[0] - m, b[1] - m, b[2] - b[0] + 2 * m, b[3] - b[1] + 2 * m); p.addPath(bound);
     ctx.fillStyle = WASH; ctx.fill(p, 'evenodd');
-    if (EDGE.qWash) ctx.fill(EDGE.qWash); // (Quetico past the band: inside the table's outline, out all the same)
   }
   if (quetico && EDGE.qPath) { ctx.setLineDash([6 * k * px, 4 * k * px]); ctx.strokeStyle = QUETICO_LINE; ctx.lineWidth = 1.3 * k * px; ctx.lineJoin = 'round'; ctx.stroke(EDGE.qPath); ctx.setLineDash([]); }
-  if (line) { ctx.strokeStyle = EDGE_PENCIL; ctx.lineWidth = 1.1 * k * px; ctx.lineJoin = 'round'; ctx.stroke(EDGE.inPath); }
   ctx.restore();
 }
 
-export const ROADS = { ready: false, lines: [], towns: [], exits: [], names: [] };
+export const ROADS = { ready: false, lines: [], minor: [], towns: [], exits: [], names: [] };
 let rLoading = null;
 export function loadMapRoads(url = new URL('./map-roads.bin', import.meta.url)) {
   if (!rLoading) rLoading = (async () => {
@@ -220,6 +226,21 @@ export function decodeRoads(doc) {
     if (typeof Path2D !== 'undefined') { path = new Path2D(); for (let p = 0; p < n; p++) (p ? path.lineTo(pts[p * 2], pts[p * 2 + 1]) : path.moveTo(pts[p * 2], pts[p * 2 + 1])); }
     return { cls, name: ni >= 0 ? ROADS.names[ni] : '', paved: !!paved, pts, path, bbox: [x0, z0, x1, z1] };
   });
+  // (round 5: the minor roads, every road the world draws in 3D (scripts/map-roads.mjs): thousands of lines, so stroked
+  // as one path per class and 8 km cell rather than one by one)
+  ROADS.minor = [];
+  if (typeof Path2D !== 'undefined') {
+    const cells = new Map();
+    for (const r of ROADS.lines) {
+      if (r.cls < 2) continue;
+      const key = `${r.cls},${Math.floor(r.pts[0] / 8000)},${Math.floor(r.pts[1] / 8000)}`;
+      let c = cells.get(key);
+      if (!c) cells.set(key, (c = { cls: r.cls, path: new Path2D(), bbox: [Infinity, Infinity, -Infinity, -Infinity] }));
+      c.path.addPath(r.path);
+      c.bbox[0] = Math.min(c.bbox[0], r.bbox[0]); c.bbox[1] = Math.min(c.bbox[1], r.bbox[1]); c.bbox[2] = Math.max(c.bbox[2], r.bbox[2]); c.bbox[3] = Math.max(c.bbox[3], r.bbox[3]);
+    }
+    ROADS.minor = [...cells.values()];
+  }
   ROADS.towns = (doc.towns || []).map(([name, x, z, big]) => ({ name, x, z, big: !!big }));
   ROADS.exits = (doc.exits || []).map(([label, x, z, a]) => ({ label, x, z, a }));
   ROADS.ready = true;
@@ -240,13 +261,15 @@ export function paintRoads(ctx, v, W, H, { k = 1, lettered = null, inView = null
   ctx.save();
   ctx.setTransform(ctx.getTransform().multiply(new DOMMatrix([s, 0, 0, s, -x0 * s, -z0 * s])));
   ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-  const far = mPerPx > 60;
-  for (const pass of [2, 1, 0]) for (const r of ROADS.lines) {
+  // the minor roads (round 5: every road of the 3D world): the roads under 60 m a pixel, the driveways only close in
+  for (const c of ROADS.minor || []) {
+    if ((c.cls === 2 ? mPerPx > 60 : mPerPx > 8) || !view(...c.bbox)) continue;
+    ctx.strokeStyle = ROAD_INK; ctx.lineWidth = (c.cls === 2 ? 1 : 0.7) * k * mPerPx; ctx.setLineDash([3 * k * mPerPx, 2.5 * k * mPerPx]); ctx.stroke(c.path); ctx.setLineDash([]);
+  }
+  for (const pass of [1, 0]) for (const r of ROADS.lines) {
     if (r.cls !== pass || !r.path || !view(...r.bbox)) continue;
-    if (pass === 2 && far) continue;
     if (pass === 0) { ctx.strokeStyle = ROAD_INK; ctx.lineWidth = 3.2 * k * mPerPx; ctx.stroke(r.path); ctx.strokeStyle = ROAD_FILL; ctx.lineWidth = 1.5 * k * mPerPx; ctx.stroke(r.path); }
-    else if (pass === 1) { ctx.strokeStyle = ROAD_INK; ctx.lineWidth = (r.paved ? 1.6 : 1.3) * k * mPerPx; ctx.setLineDash(r.paved ? [] : [6 * k * mPerPx, 2 * k * mPerPx]); ctx.stroke(r.path); ctx.setLineDash([]); }
-    else { ctx.strokeStyle = ROAD_INK; ctx.lineWidth = 1 * k * mPerPx; ctx.setLineDash([3 * k * mPerPx, 2.5 * k * mPerPx]); ctx.stroke(r.path); ctx.setLineDash([]); }
+    else { ctx.strokeStyle = ROAD_INK; ctx.lineWidth = (r.paved ? 1.6 : 1.3) * k * mPerPx; ctx.setLineDash(r.paved ? [] : [6 * k * mPerPx, 2 * k * mPerPx]); ctx.stroke(r.path); ctx.setLineDash([]); }
   }
   ctx.restore();
   }

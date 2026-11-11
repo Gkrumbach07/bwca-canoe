@@ -1694,7 +1694,7 @@ export class Hud {
       paintCreeks(ctx, w, v, W, H, { k, onMine: clipped ? onMine : null, hits }); // the wetlands round: the brooks, the beaver dams
       paintRoads(ctx, v, W, H, { k, towns: false }); // the edge round: the roads, faint (OpenStreetMap)
       // the burns by the season's date, and the wilderness's own edge
-      if (lay.boundary) paintEdge(ctx, v, k, { box: [w.minX, w.minZ, w.maxX, w.maxZ] }); // the edge round: past the band a little faded, the edge in pencil, Quetico's line (under the wilderness's own ink and the primitive areas')
+      if (lay.boundary) paintEdge(ctx, v, k, { box: [w.minX, w.minZ, w.maxX, w.maxZ], bound: BOUNDARY.path }); // r5: outside the real wilderness boundary a little faded (no band, no bubble), Quetico's line (under the wilderness's own ink and the primitive areas')
       if (lay.burns) paintBurns(ctx, v, burnsInView(v, W, H), k);
       if (lay.boundary) { if (BOUNDARY.path) paintBoundary(ctx, v, k); else loadBoundary(); }
       if (lay.pmas) paintPmas(ctx, v, W, H, { k, focus: this.pmaFocus || null }); // r2: the primitive areas, public as the boundary is
