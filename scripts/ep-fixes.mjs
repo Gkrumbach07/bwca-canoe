@@ -95,9 +95,10 @@ export const SPEC = {
   // round 4: the store at the road end (the real lot is 1.2 km off the map's south edge): by the head's lot near the edge,
   // its dock on Bush Creek, the road in from the edge. Round 5 (chk-r5; the owner 2026-11-10: "no way for you to actually
   // paddle out without portaging right away"): no hull reaches open water from Bush Creek there (the creek under 2.4 m
-  // across for 640 m), so the store goes 650 m up the creek to Bog Lake's south-east shore, its dock on the lake, its
+  // across for 640 m), so the store goes up the creek to Bog Lake's east shore (110 m north of the portage's landing, 690 m from the old
+  // store), its dock on the lake, its
   // two-track on from the old road end (roads.mjs); `was` the round 4 spot (a trip saved there carries on here)
-  67: { name: 'Bog Lake', start: 'portage', clipped: true, store: { put: [47.78337, -91.38085], lake: 310, was: [[-11773, 34392]] }, head: { lot: [47.7724, -91.387], open: { i: 1173, mode: 'new', to: 310, posted: 232, name: 'Bog Lake Portage' } } },
+  67: { name: 'Bog Lake', start: 'portage', clipped: true, store: { put: [47.78431, -91.38105], lake: 310, was: [[-11773, 34392]] }, head: { lot: [47.7724, -91.387], open: { i: 1173, mode: 'new', to: 310, posted: 232, name: 'Bog Lake Portage' } } },
   68: { name: 'Pine Lake', start: 'paddle', put: [48.05056, -90.05722], lake: 228 },
   69: { name: 'John Lake', start: 'paddle' },
   70: { name: 'North Fowl Lake', start: 'paddle', shares: 69 },
