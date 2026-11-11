@@ -80,3 +80,36 @@ Left (low): the road ribbon 0.26–0.39 m over the ground at a crown or shoulder
 the close-ups); roads drawn to about 2.5 km (chk-r5 7, a draw-distance cost); "can't stand on a cabin dock" (chk-r5 8)
 is the rig's: cabins.json's `dock.end` is the water 4 m past the deck's end, so standing 1.5 m short of it is in the
 water. "Get in" from the water (chk-r5 5) did not reproduce: the Sandbox runs at 6 and 67 boarded on the first E.
+
+### The final pass's runs
+
+On fedora (ben shared and overloaded by the story workflow: its runs crashed or hung, so the table is fedora's), the head's
+code (src/ the same from e3e3452 on):
+
+| rig | result |
+|---|---|
+| gl-a/b/c/d, gl-join, glf-f1/f2/f3, gl-ground-lint | pass (20, 11, 28, 22, 8, 13, 13, 14; lint 0 broken) |
+| gl-e-test | 3/4 in the loop, 11/12 on a rerun (the evening greeting's "met at the store" line), 12/12 on the next: flaky, known |
+| r2-tickets, r2-pma, r2-starter, r2-join, r2-wizard, r2-markers, r2-npc-motion, r2-npc2 | pass (12, 16, 20, 5, 22, -, all, 14) |
+| r2-ep-check | EP 6/77 carries (known) |
+| r3-replay, r3-replay-play, r3-start, r3-guide, r3-join, r3-locator, r3-final, r3-final-play | pass |
+| r3-journal-test | 9/14 in the loop (the title card paused: the tracker never shown), 14/14 on a rerun: flaky |
+| edge-test, e3-roads-test, loop-tasks-test | 11/11, 10/10, 32/32 |
+| coop/game-loop, give, adventure, parties, r2-replay | 9/9, 14/14, 9/9, 12/12, 5/5 |
+| loop-r4-test | 15/15 (ben) |
+| r4-loopfix-test | ben: the browser crashed under load; fedora: 8/8 |
+| r4-roads-test (ben) | 4/6, the known kind: 50's tilt (0.37 m across), a trunk 1.1 m off 60's line (Hungry Jack Road), the grade off at 41/43/49. 67's new two-track and 80 are clean |
+| r5-roads-test | see below |
+| round4-test, r4-body, r4-tut, r4-cabins, r4-final, r5-mapkit, r4-doorstep-check | pass (18, 14, 13, 8, 11, -, 55 entry points) |
+| r5-fixes-test | 7/7 (3: the zones as main's but round the two stores moved, 52 cells) |
+| r5-final-test (P, D) | 24/24: the parked truck at 8 stores within 0.035 m at once and on the 2 m ground (1 has no road); all 14 docks paddled out |
+| r5-final-test R | 6/6 then 4/4 at the wall clock's pace: rides to 50, 75, 80, 62 and home; the truck on its tyres (0 frames sunk past 0.2 m) |
+| chk-r5 SB (67, 6) | kitted, "Get in" on the first E, 53 m paddled at each; reload the same |
+| chk-r5 TP | 13 stores with a road: every tyre within 0.024 m (was up to 2.32) |
+| chk-r5 SD2 | 6 and 67 out to open water with no stuck stop; 16, 36, 69 stuck on its shore-hugging way (r5-final D paddles them) |
+| chk-r5 TR | all 8 rides done, none hung; no frame afloat past 0.1 m; EP 80 still 12 frames sunk at its fast-forward pace (a rig artefact, see above) |
+
+Perf (ben, perf-baseline desktop, main 1057fb6 against the head, A B B A; ben at load 2–12 from the story workflow, so frame times
+are noisy): shader programs 86 on both everywhere; draw calls the same or fewer (Low store 458/472 → 384/405, dock 439/473 →
+355/382, paddle 269/268 → 319/267, map 413/408 → 333/362; Auto store 812/830 → 767/774); frame ms medians within the run-to-run
+spread (Low store 7.7/10.0 → 7.8/9.5, paddle 5.8/5.6 → 7.3/6.5, Auto store 11.9/20.7 → 16.4/11.0).
