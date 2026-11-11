@@ -193,10 +193,13 @@ async function slice() {
   await run('1', async () => {
     await goStore(A, ep);
     const door = await walkDoor(A, ep, 'in');
-    const counter = await A.evaluate(() => { const g = window.__game, S = g.outfitter.layout(g.profile.home), c = S.counter || S.centre; window.__L.face({ x: c.x, z: c.z }, 1.4, S.floorY + 1.0); window.__L.step(4); return { pending: g.onboarding.pending(g.profile.home) }; });
-    await A.keyboard.press('e'); await A.evaluate(() => window.__L.step(6)); await A.waitForTimeout(200);
+    // E on the counter when the dot is on it; else the counter's own E (outfitter.openHot: a visitor stood in the way)
+    const counter = await A.evaluate(() => { const g = window.__game, S = g.outfitter.layout(g.profile.home), c = S.counter || S.centre; window.__L.face({ x: c.x, z: c.z }, 1.4, S.floorY + 1.0); window.__L.step(4); const t = g.pointer && g.pointer.target; return { pending: g.onboarding.pending(g.profile.home), dot: t ? { ref: t.ref || null, label: t.label || '', verb: t.e ? t.e.verb : t.verb || null } : null }; });
     let via = 'E';
-    if (!(await A.evaluate(() => !!window.__t.convo()))) { via = 'api (E at the counter opened no talk)'; await A.evaluate(() => { const g = window.__game; if (g.onboarding.pending(g.profile.home)) g.onboarding.start(g.profile.home); }); await A.waitForTimeout(150); }
+    if (counter.dot && counter.dot.ref === 'counter') await A.keyboard.press('e');
+    else { via = `the counter's E (the dot was on ${counter.dot ? counter.dot.label || counter.dot.ref : 'nothing'})`; await A.evaluate(() => { const o = window.__game.outfitter; o.openHot('counter', o.visit.landing); }); }
+    for (let k = 0; k < 20 && !(await A.evaluate(() => { window.__L.step(3); return !!window.__t.convo(); })); k++) await A.waitForTimeout(80);
+    if (!(await A.evaluate(() => !!window.__t.convo()))) { via += '; api (no talk opened)'; await A.evaluate(() => { const g = window.__game; if (g.onboarding.pending(g.profile.home)) g.onboarding.start(g.profile.home); }); await A.waitForTimeout(150); }
     const first = await A.evaluate(() => window.__t.convo());
     const said = await hear(A);
     const r = await picks(A, ['What\'s BRM-14?', 'I\'ll take it.']);
