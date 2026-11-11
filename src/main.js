@@ -1284,7 +1284,7 @@ async function main() {
       texts.add(W.opening); texts.add(W.world);
       const seams = window.__game.storySeams || {};
       beats.attach(story);
-      void RULES_TALK; // (st-t: not added after attach: a data hash changed after the season loaded re-runs and rewrites a guest's own story2 (chk-coop C2); cast.js plays t.armed until the join registers rules-*.js at the story's construction)
+      void RULES_TALK; // (st-t: in the story from its construction, story-data/rules-all.js; never added after attach (chk-coop C2). cast.js still plays t.armed on its own store:enter, guarded by the fact)
       ambient.use(w70.default).attach({ story, grounded: (t) => npcs.grounded(t) });
       topics.use({ keeper: A1.KEEPER_TOPICS, floor: A1.FLOOR }).attach({ story, npcs, talk, pencil: seams.pencil || null, outfitter, world, day, profile, hud, beats, ambient });
       cast.attach({ story, npcs, talk, topics, beats, outfitter, profile, day, world, player, hud, onboarding, inventory, ambient, ridesTruck: truck,

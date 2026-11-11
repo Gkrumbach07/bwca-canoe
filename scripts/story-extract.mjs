@@ -19,7 +19,9 @@
 //   70            70.<section>.<n>, with the [condition] translated to the condition grammar (Appendix B)
 //   anything else <!-- id: some.id -->  before a block (a code block, a paragraph, a list item, a table row);
 //                 <!-- list: some.id --> before a list: each item's quote becomes some.id.1, .2, …
-//                 Flags after the id: `hint`, `bark` (length limits), `page` (a Walt page line).
+//                 Flags after the id: `hint`, `bark` (length limits), `page` (a Walt page line), `each` (an item with
+//                 several quotes: one id per quote, some.id.1, .2, …), `whole` (an item's whole words, not just its quote). A
+//                 list anchor takes a quoted list (> - …) too.
 //
 // Never changes a doc. Node only, no dependencies.
 
@@ -401,7 +403,9 @@ export function extractDoc(key, src, known) {
 
   let skipLevel = 0;
   for (let bi = 0; bi < B.length; bi++) {
-    const b = B[bi];
+    let b = B[bi];
+    // a list anchor before a quoted list ('> - …'): its first line is the quote's paragraph ('⟩ - …'), taken as an item
+    if (pending && pending.mode === 'list' && b.t === 'p' && /^⟩\s*[-*+]\s+/.test(b.text)) b = { ...b, t: 'item', ind: 0, text: b.text.replace(/^⟩\s*[-*+]\s+/, '') };
     if (b.t === 'h' && skipLevel && b.level <= skipLevel) skipLevel = 0;
     if (b.t === 'h' && !skipLevel && SKIP_HEAD.test(b.text)) skipLevel = b.level;
     if (skipLevel && b.t !== 'anchor' && !(pending && pending.mode === 'id')) continue;
@@ -432,8 +436,13 @@ export function extractDoc(key, src, known) {
       let e;
       if (b.t === 'item' && (e = speakerItem(b.text))) {
         if (a.flags.includes('bark')) e.bark = true;
+      } else if (a.flags.includes('each') && b.t === 'item' && (b.text.match(/"[^"]+"/g) || []).length > 1) {
+        // `each`: an item holding several quoted lines (People: *"…"* / *"…"*) gives one id per quote, id.1, id.2, …
+        const qs = [...b.text.matchAll(/"([^"]+)"/g)].map((m) => clean(m[1]));
+        qs.forEach((q, k) => put(`${id}.${k + 1}`, { k: kindOf(a.flags), text: q }, b.ln));
+        continue;
       } else {
-        let text = b.t === 'code' ? b.text : b.t === 'table' ? b.rows.map((r) => r.join(' | ')).join('\n') : b.t === 'item' ? quotedOr(b.text) : plain(b.text);
+        let text = b.t === 'code' ? b.text : b.t === 'table' ? b.rows.map((r) => r.join(' | ')).join('\n') : b.t === 'item' ? (a.flags.includes('whole') ? plain(b.text) : quotedOr(b.text)) : plain(b.text);
         while (b.t === 'p' && b.qg && B[bi + 1] && B[bi + 1].t === 'p' && B[bi + 1].qg === b.qg) text += '\n\n' + plain(B[++bi].text);
         e = { k: kindOf(a.flags), text };
         const cond = b.t === 'item' && b.text.match(/\)\s*$/) && b.text.match(/\(([^()]*)\)\s*$/);

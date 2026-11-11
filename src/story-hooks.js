@@ -101,8 +101,8 @@ export class Story {
 export let story = STORY_ON ? null : new Story();
 export async function loadStory() {
   if (STORY_ON && !story) {
-    const [{ StoryV2 }, { RULES_CORE }, { RULES_BOOK }] = await Promise.all([import('./story.js'), import('./story-data/rules-core.js'), import('./story-data/rules-book.js')]); // st-b: the book's rules known from the start, so the data stamp is the same every boot
-    story = new StoryV2({ io: save, rules: [...RULES_CORE, ...RULES_BOOK] });
+    const { StoryV2 } = await import('./story.js');
+    story = new StoryV2({ io: save }); // (every stream's rules from the start: story-data/rules-all.js, so the data stamp is the same every boot)
   }
   return story;
 }

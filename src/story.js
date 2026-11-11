@@ -26,8 +26,7 @@ import { compile, setFactCheck } from './story-cond.js';
 import { Rules } from './story-rules.js';
 import { FACTS, factRow, checkValue, ARCS, DOORS } from './story-data/facts.js';
 import { LOCKS, lockById, lockRules } from './story-data/locks.js';
-import { RULES_CORE } from './story-data/rules-core.js';
-import { RULES_LAYER } from './story-data/rules-layer.js'; // st-l: the story layer's rules, in the data from the start (a rule added later changes the data hash and rewrites a guest's own save before it is a mirror)
+import { RULES_ALL } from './story-data/rules-all.js'; // every stream's rules, in the data from the start (rules-all.js: a rule added later changes the data hash and rewrites a guest's own save before it is a mirror)
 import { RETIRED } from './story-data/retired.js';
 
 // every condition's fact reads checked against facts.js: an undeclared one (a bare 'wibble') is a loud warning
@@ -90,8 +89,7 @@ export class StoryV2 {
     this.lastQ = null;
     this.pending = false;
     this.beats = null;        // beats.js (§12), when it exists
-    this.rules = new Rules(this).add(rules || RULES_CORE).add(lockRules());
-    if (!rules) this.rules.add(RULES_LAYER); // st-l
+    this.rules = new Rules(this).add(rules || RULES_ALL).add(lockRules());
     this.env = {
       fact: (k) => this.get(k),
       keys: (p) => this.keys(p),

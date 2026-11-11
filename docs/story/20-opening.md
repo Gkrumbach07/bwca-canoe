@@ -1157,7 +1157,9 @@ Then, once:
   [This is `30` 4.1's "Who found him?", which gives Ollie's lead. It isn't given here.]
 
 **Gives:** flags `story.upwind`, and **`story.turn`** at the end of this node. Walt page:
+<!-- id: 20:U3.wp page each -->
 - People: *"Walt's brother was Eino Haapala. He was 28."* / *"Ollie said 'upwind'. Nobody listened."*
+<!-- id: 20:U3.wy page -->
 - Years: *"12 Oct 1977. Eino went out from Little Gabbro, 'for ducks'."*
 - Things that don't add up:
   - *"Ducks, and his shotgun on his mother's porch."*
@@ -1218,6 +1220,7 @@ The player may ask about each door once, in any order, then go:
 
 **Gives:** flags `door.guiding`, `door.boys`, `door.family`, `door.mining` = 'named'. Walt page, Leads (the Bald Eagle
 line is already struck through):
+<!-- list: 20:U5.w page whole -->
 > - Marlys, at Moose Lake. She ran the bunkhouse. Walt guided out of there longest.
 > - The fellas he tripped with. In at Sawbill every August. Ask at Baker.
 > - His sister Aili, at Crane Lake. "She won't talk to you."
