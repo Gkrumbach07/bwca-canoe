@@ -99,7 +99,7 @@ code (src/ the same from e3e3452 on):
 | loop-r4-test | 15/15 (ben) |
 | r4-loopfix-test | ben: the browser crashed under load; fedora: 8/8 |
 | r4-roads-test (ben) | 4/6, the known kind: 50's tilt (0.37 m across), a trunk 1.1 m off 60's line (Hungry Jack Road), the grade off at 41/43/49. 67's new two-track and 80 are clean |
-| r5-roads-test | see below |
+| r5-roads-test | checks 0 (no new program, roads.bin 60 KB before the title) and 1 (every look's roads in, graded, no trunk) pass; check 2 timed out at 3600 s both on ben and on fedora (each at load 80–200 from the story workflow), with 26 of 51 routes posed: 3 over 0.15 m (6 0.17, 14 0.16, 34 0.20; the join measured 6 routes over, worst 0.40 at 75), no sink past 0.15, the ground never through the body. 67's and h67's new two-track: r4-roads-test drove them every 2 m with nothing wrong |
 | round4-test, r4-body, r4-tut, r4-cabins, r4-final, r5-mapkit, r4-doorstep-check | pass (18, 14, 13, 8, 11, -, 55 entry points) |
 | r5-fixes-test | 7/7 (3: the zones as main's but round the two stores moved, 52 cells) |
 | r5-final-test (P, D) | 24/24: the parked truck at 8 stores within 0.035 m at once and on the 2 m ground (1 has no road); all 14 docks paddled out |
