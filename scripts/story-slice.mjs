@@ -161,18 +161,24 @@ async function keeperE(page, ep) {
 }
 // "Ask about…" shows three story topics, the newest part of the story first (topics.js): the topics above the one wanted
 // are asked first, as a player would, each by its number; → { ok, asked: [texts] }
-async function dig(page, want, max = 10) {
+// A keeper draws two rings a conversation at most (topics.js): before a third ring topic the talk is ended and taken up
+// again an hour later (reopen), as a player would come back to the counter
+const RINGS = /^(Can you ring|And Bald Eagle|Where's Farm|Who goes in at Sawbill|Walt's sister's|Ever hear a lake called)/;
+async function dig(page, want, { max = 14, reopen = null } = {}) {
   const asked = [], EXIT = /^(That’s all\.|That's all\.|Goodbye\.|…)$/;
+  let rings = 0;
   for (let k = 0; k < max; k++) {
     const c = await page.evaluate(() => window.__t.convo());
     if (!c) return { ok: false, why: 'no conversation', asked };
     const i = c.choices.findIndex((t) => t.startsWith(want));
+    if (i >= 0 && RINGS.test(want) && rings >= 2 && reopen) { await reopen(); rings = 0; asked.push('(a new talk)'); continue; }
     if (i >= 0) { await page.keyboard.press(`Digit${i + 1}`); await page.waitForTimeout(60); return { ok: true, asked }; }
     const ask = c.choices.findIndex((t) => /^Ask about/.test(t));
     if (ask >= 0) { await page.keyboard.press(`Digit${ask + 1}`); await page.waitForTimeout(60); continue; }
     if (c.choices.length === 1 && c.choices[0] === '…') { await page.keyboard.press('Digit1'); await page.waitForTimeout(60); continue; }
     const j = c.choices.findIndex((t) => !EXIT.test(t) && !asked.includes(t) && !/^Lake One, Two/.test(t));
     if (j < 0) return { ok: false, why: `no "${want}" in [${c.choices.join(' | ')}]`, asked };
+    if (RINGS.test(c.choices[j])) { if (rings >= 2 && reopen) { await reopen(); rings = 0; asked.push('(a new talk)'); continue; } rings++; }
     asked.push(c.choices[j]); await page.keyboard.press(`Digit${j + 1}`); await page.waitForTimeout(60); await hear(page, 6);
   }
   return { ok: false, why: 'too many topics', asked };
@@ -182,7 +188,10 @@ async function picks(page, list) {
   for (const p of list) { const r = await choose(page, p); out.push(r); if (!r.ok) return { ok: false, at: p, r, out }; }
   return { ok: true, out };
 }
-async function endTalk(page) { for (let k = 0; k < 10; k++) { const c = await page.evaluate(() => window.__t.convo()); if (!c) return; await page.keyboard.press('Escape'); await page.waitForTimeout(80); } }
+async function endTalk(page) {
+  for (let k = 0; k < 10; k++) { const c = await page.evaluate(() => window.__t.convo()); if (!c) break; await page.keyboard.press('Escape'); await page.waitForTimeout(80); }
+  await page.evaluate(() => window.__L.step(30)); // (the goodbye said, the person back to their seat, before the next talk or walk)
+}
 async function readSpread(page, nb, secs = 3.6) {
   await page.evaluate((nb) => { const g = window.__game, b = g.book; if (!g.journal.open) g.journal.show('pack'); g.journal.setSide('walt'); b.view = 'nb'; b.debug.spread(b.debug.spreadOf(nb)); }, nb);
   await page.evaluate((n) => window.__L.step(n), Math.round(secs * 30));
@@ -365,7 +374,11 @@ async function slice() {
     // the landing: L's section (the last 200 m paddled, E ashore, E Look on the crib, the tree, the grade); a day trip from
     // Little Gabbro (day use needs no permit), fed and rested
     await A.evaluate(() => window.__J.refresh());
+    const pre = await A.evaluate(() => { const g = window.__game, p = g.player, inv = g.profile.inventory; return { hours: +g.day.hours.toFixed(2), mode: p.mode, carry: p.carry ? { drop: !!p.carry.drop, trail: !!p.carry.trail } : null, canoe: (inv.long || []).filter((l) => /canoe|boat/i.test(l.id)).map((l) => [l.id, l.where]), trip: g.trip ? { active: !!g.trip.active, adventure: !!g.trip.adventure } : null, energy: +g.energy.value.toFixed(2), boat: p.boat ? Object.keys(p.boat).slice(0, 6) : null, papers: g.hud && g.hud.papers ? [...(g.hud.papers.keys ? g.hud.papers.keys() : g.hud.papers)].slice(0, 6) : null, paused: !!(g.pause && (g.pause.open || g.pause.shown)), focus: document.activeElement ? `${document.activeElement.tagName}#${document.activeElement.id || ''}` : null, journal: g.journal.open, talk: !!window.__t.convo(), dock: !!(g.outfitter && g.outfitter.docking) }; });
+    log('before the landing', JSON.stringify(pre));
     for (const s of LAYER.steps.filter((q) => q.step === 5)) await s.run({ page: A, result, shots: SHOTS });
+    const post = await A.evaluate(() => { const g = window.__game, p = g.player; return { hours: +g.day.hours.toFixed(2), mode: p.mode, speed: p.speed, energy: +g.energy.value.toFixed(2), bilge: g.canoe && g.canoe.bilge, low: g.energy.low || null }; });
+    log('after the landing', JSON.stringify(post));
     const c = await A.evaluate(() => { const g = window.__game, rg = g.pencil.ringFor('crews'); return { lead: g.leads.state('crews'), closed: !!(rg && rg.closed), seen: g.story.has('crews.seen'), line: g.story.walt().includes('20:11.2.w2') }; });
     result('5b the lead closes at the crib: its rings ticked and faint, the line under it', c.lead === 'closed' && c.closed && c.seen && c.line, c);
   });
@@ -438,7 +451,7 @@ async function slice() {
     await closeBook(A);
     const inn = await walkDoor(A, 31, 'in');
     const k2 = await keeperE(A, 31);
-    const r = await dig(A, 'Ever hear a lake called the Front Porch?');
+    const r = await dig(A, 'Ever hear a lake called the Front Porch?', { reopen: async () => { await endTalk(A); await A.evaluate(() => { const g = window.__game; g.day.setClock(g.day.year, g.day.doy, Math.min(17, g.day.hours + 1.1)); window.__L.step(6); }); await keeperE(A, 31); } });
     await hear(A, 3); await endTalk(A);
     const ink = await A.evaluate(() => ({ ink: window.__game.story.get('ink.frontporch'), und: window.__game.story.nbHas('und', 'NB01'), line: window.__game.story.walt().includes('20:5.2.w2') }));
     result('7c the chip clicked, Lake One clicked: the Front Porch pencilled; a keeper asked "Ever hear a lake called the Front Porch?" rings Lake One: inked, NB01 understood', chip.chip && !!spot.cx && pen.names.some(([n]) => n === 'frontporch') && k2.ok && r.ok && ink.ink === 'lakeone' && ink.und && ink.line, { chip, spot, pen, inn, k2, r: r.ok ? 'ok' : r, ink });
