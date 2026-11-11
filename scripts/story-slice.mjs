@@ -92,6 +92,18 @@ const harnessB = (page, state = {}) => ({
 });
 const shot = async (page, name) => { if (SHOTS) { try { await page.screenshot({ path: path.join(SHOTS, `${name}.png`) }); } catch { /* a nicety */ } } };
 const facts = (page, keys) => page.evaluate((ks) => Object.fromEntries(ks.map((k) => [k, window.__game.story.has(k)])), keys);
+// hear(), with a shot (the contact sheet, --shots) when a line matching `re` is on screen
+async function hearShot(page, re, name, n = 14) {
+  const said = [];
+  for (let k = 0; k < n; k++) {
+    const c = await page.evaluate(() => window.__t.convo());
+    if (!c) break;
+    if (!said.length || said[said.length - 1] !== c.say) { said.push(c.say); if (re.test(c.say || '')) await shot(page, name); }
+    if (c.choices.length === 1 && c.choices[0] === '…') { await page.keyboard.press('Digit1'); await page.waitForTimeout(60); continue; }
+    break;
+  }
+  return said;
+}
 
 // --- the join's own helpers in the page (window.__J): walking a route by the keys, E on a person ---------------------
 const HELPERS_J = () => {
@@ -245,7 +257,7 @@ async function slice() {
     for (let k = 0; k < 20 && !(await A.evaluate(() => { window.__L.step(3); return !!window.__t.convo(); })); k++) await A.waitForTimeout(80);
     if (!(await A.evaluate(() => !!window.__t.convo()))) { via += '; api (no talk opened)'; await A.evaluate(() => { const g = window.__game; if (g.onboarding.pending(g.profile.home)) g.onboarding.start(g.profile.home); }); await A.waitForTimeout(150); }
     const first = await A.evaluate(() => window.__t.convo());
-    const said = await hear(A);
+    const said = await hearShot(A, /high shelf|Pack and tent, all one bundle/, 'c1-01-bundle');
     const r = await picks(A, ['What\'s BRM-14?', 'I\'ll take it.']);
     await hear(A, 4);
     for (let k = 0; k < 8; k++) { const c = await A.evaluate(() => window.__t.convo()); if (!c) break; await A.keyboard.press('Digit1'); await A.waitForTimeout(80); }
@@ -354,6 +366,7 @@ async function slice() {
     result('4b out of the door by daylight (W): Tauno at the porch foot (his truck where there is no porch), on the ground, drawn', w.out.ok && w.t && w.t.slot === 'porch' && fig && Math.abs(fig.y - fig.ground) < 0.35 && fig.drawn, { w, fig });
     const k2 = w.t ? await talkE(A, `cast:tauno:${w.t.ep}`) : { ok: false };
     const t1 = await A.evaluate(() => window.__t.convo());
+    await shot(A, 'c1-06-porch');
     const r = await picks(A, ['Sorry?', 'Walk with him', 'A Swede?', 'You knew him?', 'Doing what?', 'What\'s BRM?', 'Who are you?', 'What do you want from me?', 'I\'ll go look.']);
     await hear(A, 6); await endTalk(A);
     const f = await facts(A, ['tauno.porch.done', 'tauno.porch.warm', 'knows.walt', 'knows.haapala', 'knows.boreal', 'knows.tauno', 'door.crews.taken']);
@@ -404,7 +417,10 @@ async function slice() {
     let k = t ? await talkE(A, `cast:tauno:${t.ep}`) : { ok: false };
     if (t && !k.ok) { await A.evaluate(() => window.__L.step(90)); k = await talkE(A, `cast:tauno:${t.ep}`); k.again = true; } // (under load his seat settles a moment later)
     const u1 = await A.evaluate(() => window.__t.convo());
-    const r = await picks(A, ['The crib\'s still there.', 'Somebody\'s flagged the grade.', 'Pink. New.', 'Measuring for who?', 'Away from the west shore', 'Somebody killed him.', 'Marlys?', 'I\'ll go.']);
+    const r0 = await picks(A, ['The crib\'s still there.', 'Somebody\'s flagged the grade.', 'Pink. New.', 'Measuring for who?', 'Away from the west shore', 'Somebody killed him.']);
+    await hearShot(A, /ask for Marlys/, 'c1-10-doors');
+    const r1 = r0.ok ? await picks(A, ['Marlys?', 'I\'ll go.']) : { ok: false };
+    const r = r0.ok ? r1 : r0;
     await hear(A, 4); await endTalk(A);
     const f = await facts(A, ['tauno.pink', 'knows.eino', 'tauno.upwind', 'tauno.turn', 'tauno.killed', 'door.guiding.named', 'door.boys.named', 'door.family.named', 'door.mining.named']);
     const stage = await A.evaluate(() => window.__game.story.stage);
@@ -414,6 +430,7 @@ async function slice() {
     const r2 = await picks(A, ['Ask about', 'Walt\'s sister\'s at Crane Lake?']);
     await hear(A, 3); await endTalk(A);
     const d = await A.evaluate(() => ({ ringed: window.__game.story.has('door.family.ringed'), ring: window.__game.pencil.ringFor('lv12'), lead: window.__game.leads.state('family') }));
+    if (SHOTS) { await A.evaluate(() => { const g = window.__game, mb = g.journal.map; g.journal.showMap(); mb.tab = 'marked'; mb.render(true); window.__L.step(3); }); await shot(A, 'c1-08-marked'); await closeBook(A); }
     result('6b at Farm\'s counter a keeper rings a door when asked (Crane Lake: Little Vermilion), the door ringed', k2.ok && r2.ok && d.ringed && !!d.ring, { inn, k2, r2: r2.ok ? 'ok' : r2, d });
   });
 
@@ -467,6 +484,10 @@ async function slice() {
     const r = await dig(A, 'Ever hear a lake called the Front Porch?', { reopen: async () => { await endTalk(A); await A.evaluate(() => { const g = window.__game; g.day.setClock(g.day.year, g.day.doy, Math.min(17, g.day.hours + 1.1)); window.__L.step(6); }); await keeperE(A, 31); } });
     await hear(A, 3); await endTalk(A);
     const ink = await A.evaluate(() => ({ ink: window.__game.story.get('ink.frontporch'), und: window.__game.story.nbHas('und', 'NB01'), line: window.__game.story.walt().includes('20:5.2.w2') }));
+    if (SHOTS) { // the contact sheet: Lake One on the map with the Front Porch inked
+      await A.evaluate(() => { const g = window.__game, P = g.pencil, h = g.hud, id = P.debug.lakeOfKey('lakeone'), L = g.world.lakes[id - 1]; g.journal.showMap(); h.lookAt(L.cx, L.cz, 3500, 0); h.drawMap(g.player); window.__L.step(3); });
+      await shot(A, 'c1-11-inked'); await closeBook(A);
+    }
     result('7c the chip clicked, Lake One clicked: the Front Porch pencilled; a keeper asked "Ever hear a lake called the Front Porch?" rings Lake One: inked, NB01 understood', chip.chip && !!spot.cx && pen.names.some(([n]) => n === 'frontporch') && k2.ok && r.ok && ink.ink === 'lakeone' && ink.und && ink.line, { chip, spot, pen, inn, k2, r: r.ok ? 'ok' : r, ink });
     const wp = await A.evaluate(() => {
       const g = window.__game, b = g.book; g.journal.show('pack'); g.journal.setSide('walt'); b.view = 'walt'; b.render(true);
@@ -504,7 +525,7 @@ async function slice() {
   await run('declines', async () => {
     const D = await openGame('declines');
     await newSeason(D, ep, 175);
-    const ctx = { home: ep };
+    const ctx = { home: ep, shot: (n) => shot(D, n) };
     for (const s of [T_SHELF, T_R1]) await s.run({ page: D, result, log, ctx });
     await newSeason(D, ep, 176); // (the declines on a season of their own: R1 was this trip's one push, as T's rig plays them)
     await T_DECLINES.run({ page: D, result, log, ctx });

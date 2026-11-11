@@ -229,6 +229,7 @@ export const declines = { id: 'declines', step: 4, title: 'the declines and the 
   const t3 = await page.evaluate(() => window.__t.tauno());
   if (t3) { await page.evaluate((k) => window.__t.talkTo(k), `cast:tauno:${t3.ep}`); await page.waitForTimeout(100); }
   const r3 = await page.evaluate(() => window.__t.convo());
+  if (ctx.shot) await ctx.shot('c1-07-again');
   const nt = await choose(page, 'Not today.');
   await hear(page, 3);
   const d2 = await facts(page, ['tauno.porch.declined2', 'rehook.R3']);
