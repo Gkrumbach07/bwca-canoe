@@ -104,12 +104,11 @@ const HELPERS_J = () => {
     const outside = { x: foot.x + b.x * 2.5, z: foot.z + b.z * 2.5 }, inside = { x: d.x - b.x * 3, z: d.z - b.z * 3 };
     return dir === 'in' ? [outside, foot, d, inside] : [inside, d, foot, { x: foot.x + b.x * 4, z: foot.z + b.z * 4 }];
   };
-  // the player as the slice wants them between places: the pack on, fed and watered, rested (the rig skips the meals)
+  // the player as the slice wants them between places: fed and watered, rested (the rig skips the meals; the pack is left
+  // where night one left it: on the back, the canoe would not paddle)
   J.refresh = () => {
-    const inv = g.profile.inventory, pack = inv.containers.find((k) => k.item === 'waltpack');
-    if (pack && pack.where === 'ground') { pack.where = 'back'; delete pack.at; inv.emit('containers'); }
-    g.energy.value = 1; if (g.energy.needs) { g.energy.needs.food = 1; g.energy.needs.water = 1; g.energy.needs.warmth = 1; }
-    return { pack: pack && pack.where };
+    g.energy.value = 1; if (g.energy.needs) { g.energy.needs.food = 1; g.energy.needs.water = 1; g.energy.needs.warmth = 1; g.energy.needs.rest = 1; }
+    return true;
   };
   J.at = () => ({ x: g.player.x, z: g.player.z, inside: !!(g.outfitter.visit && g.outfitter.visit.inside), mode: g.player.mode });
   J.face = (q) => { const yaw = L.yawTo(q); L.look(yaw); g.player.heading = yaw; };
@@ -149,10 +148,10 @@ async function talkE(page, key) {
   const f = await page.evaluate((key) => { const f = window.__t.figure(key); if (!f) return null; window.__L.face({ x: f.x, z: f.z }, 1.7, f.y + 1.45); window.__L.step(4); return f; }, key);
   if (!f) return { ok: false, why: `no figure ${key}` };
   await page.keyboard.press('e');
-  await page.evaluate(() => window.__L.step(4)); await page.waitForTimeout(120);
-  if (await page.evaluate(() => !!window.__t.convo())) return { ok: true, via: 'E' };
-  await page.evaluate((k) => window.__t.talkTo(k), key); await page.waitForTimeout(120);
-  return { ok: await page.evaluate(() => !!window.__t.convo()), via: 'api (E did not open it)' };
+  for (let k = 0; k < 10; k++) { if (await page.evaluate(() => { window.__L.step(2); return !!window.__t.convo(); })) return { ok: true, via: 'E' }; await page.waitForTimeout(60); }
+  await page.evaluate((k) => window.__t.talkTo(k), key);
+  for (let k = 0; k < 10; k++) { if (await page.evaluate(() => { window.__L.step(2); return !!window.__t.convo(); })) return { ok: true, via: 'api (E did not open it)' }; await page.waitForTimeout(80); }
+  return { ok: false, via: 'neither E nor the API opened it' };
 }
 // the store's keeper, once the roster has settled (E on them)
 async function keeperE(page, ep) {
@@ -439,10 +438,10 @@ async function slice() {
     await closeBook(A);
     const inn = await walkDoor(A, 31, 'in');
     const k2 = await keeperE(A, 31);
-    const r = await dig(A, 'Ever hear of the Front Porch?');
+    const r = await dig(A, 'Ever hear a lake called the Front Porch?');
     await hear(A, 3); await endTalk(A);
     const ink = await A.evaluate(() => ({ ink: window.__game.story.get('ink.frontporch'), und: window.__game.story.nbHas('und', 'NB01'), line: window.__game.story.walt().includes('20:5.2.w2') }));
-    result('7c the chip clicked, Lake One clicked: the Front Porch pencilled; a keeper asked "Ever hear of the Front Porch?" rings Lake One: inked, NB01 understood', chip.chip && !!spot.cx && pen.names.some(([n]) => n === 'frontporch') && k2.ok && r.ok && ink.ink === 'lakeone' && ink.und && ink.line, { chip, spot, pen, inn, k2, r: r.ok ? 'ok' : r, ink });
+    result('7c the chip clicked, Lake One clicked: the Front Porch pencilled; a keeper asked "Ever hear a lake called the Front Porch?" rings Lake One: inked, NB01 understood', chip.chip && !!spot.cx && pen.names.some(([n]) => n === 'frontporch') && k2.ok && r.ok && ink.ink === 'lakeone' && ink.und && ink.line, { chip, spot, pen, inn, k2, r: r.ok ? 'ok' : r, ink });
     const wp = await A.evaluate(() => {
       const g = window.__game, b = g.book; g.journal.show('pack'); g.journal.setSide('walt'); b.view = 'walt'; b.render(true);
       const el = document.querySelector('#journal .side.w');
