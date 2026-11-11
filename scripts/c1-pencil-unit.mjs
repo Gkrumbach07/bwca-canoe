@@ -104,6 +104,7 @@ function fresh() {
   const { story, pencil, leads } = fresh();
   ok(leads.asks({ ep: 25 }).every((a) => !a.id.startsWith('ring.')), 'leads: no rings before the porch');
   story.set('tauno.porch.done'); story.set('door.crews.taken');
+  story.set('tauno.said.t5'); story.set('knows.tauno'); // (chk-c1a: the Farm-mornings lead is born once he has said it and his name is known)
   ok(leads.state('crews') === 'open' && story.walt().includes('20:11.2.w1') && pencil.rings().length === 0, 'lead crews: born, its Walt line, no ring (Tauno marks nothing)');
   ok(leads.state('tauno') === 'open' && story.walt().includes('20:7.1.lead.tauno'), 'lead tauno: Farm mornings');
   let a = leads.asks({ ep: 25 }).map((q) => q.id);
