@@ -98,6 +98,14 @@ const keyOf = (h) => `${h.file}: ${h.text}`;
   const files = [...new Set(hits.map((h) => h.file))];
   result('portages: no raw .portages iteration outside the allowlist (new ones)', fresh.length === 0, { fresh: fresh.slice(0, 20), baseline: base.length, files: files.length });
   result('portages: the baseline only shrinks (every entry still there; run --update-baseline after converting)', gone.length === 0, { gone: gone.slice(0, 20) });
+  // st-l: world.portagesAll() (the list with the story's hidden carry in it) only where the carry must be walked like any
+  // other: the trail's tread and its clearing (props.js), the allowlist above, and the story layer's own modules
+  const ALL_OK = new Set([...PORTAGE_ALLOW, 'props.js', 'story-world.js', 'story-layer.js']), allBad = [];
+  for (const f of readdirSync(SRC).filter((n) => n.endsWith('.js') && !ALL_OK.has(n))) {
+    const t = readFileSync(path.join(SRC, f), 'utf8');
+    t.split('\n').forEach((l, i) => { if (/\bportagesAll\s*\(/.test(l) && !/^\s*\/\//.test(l)) allBad.push(`${f}:${i + 1}`); });
+  }
+  result('portages: world.portagesAll() only in the trail builders and the story layer', allBad.length === 0, { bad: allBad });
 }
 
 // --- the event vocabulary (Appendix A, "In") ------------------------------------------------------------------------

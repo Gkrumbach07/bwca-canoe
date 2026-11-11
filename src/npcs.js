@@ -659,7 +659,8 @@ class HintWriter {
   }
   portage(n = 0) {
     const w = this.world, L = this.P.landingOf(this.ep), out = [];
-    w.portages.forEach((p, i) => {
+    // st-l: portagesPublic (no story carry)
+    w.portagesPublic().forEach((p, i) => {
       if (!p.pts || !p.pts.length || p.rods < 25 || !p.launch || p.launch.length < 2) return;
       const d = Math.hypot(p.pts[0][0] - L.x, p.pts[0][1] - L.z);
       if (d > 9000) return;

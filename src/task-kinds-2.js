@@ -403,7 +403,7 @@ registerKind('colour', {
   make(T, c) {
     if (!within(doyOf(T), WINDOW.colour)) return null;
     const w = T.world, L = c.landing, band = { local: [0, 1], medium: [1, 2], far: [2, 3] }[c.band], cands = [];
-    w.portages.forEach((p, i) => {
+    w.portagesPublic().forEach((p, i) => {
       if (p.rods < 30 || !p.pts || T.used('colour', `colour:trail:${i}`)) return;
       const d = Math.hypot(p.pts[0][0] - L.x, p.pts[0][1] - L.z); if (d > rangeOf(c.band)) return;
       const ha = hopsOf(T, c, p.launch[0].lake), hb = hopsOf(T, c, p.launch[1].lake);

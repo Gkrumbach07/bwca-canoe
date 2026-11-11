@@ -522,7 +522,7 @@ export class Forage {
     const B = 256, k = (i, j) => `${i},${j}`;
     this.sites = new Map(); this.trails = new Map();
     for (const c of this.world.campsites) { const key = k(Math.floor(c.x / B), Math.floor(c.z / B)); if (!this.sites.has(key)) this.sites.set(key, []); this.sites.get(key).push(c); }
-    for (const p of this.world.portages) {
+    for (const p of this.world.portagesPublic()) {
       const b = p.bbox || [Infinity, Infinity, -Infinity, -Infinity];
       for (let i = Math.floor((b[0] - TRAIL_R) / B); i <= Math.floor((b[2] + TRAIL_R) / B); i++) for (let j = Math.floor((b[1] - TRAIL_R) / B); j <= Math.floor((b[3] + TRAIL_R) / B); j++) {
         const key = k(i, j); if (!this.trails.has(key)) this.trails.set(key, []); this.trails.get(key).push(p);

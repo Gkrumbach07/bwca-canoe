@@ -105,7 +105,7 @@ function siteRing(T, t, label = null) {
 // a portage notice's candidates, as the survey's: named both ends, within RANGE, a band's portages in
 function portageCands(T, c, kind, minRods) {
   const w = T.world, L = c.landing, hb = { local: [0, 1], medium: [1, 2], far: [2, 3] }[c.band], out = [];
-  w.portages.forEach((p, i) => {
+  w.portagesPublic().forEach((p, i) => {
     if (p.rods < minRods || T.used(kind, i) || !p.pts || p.pts.length < 3) return;
     const d = Math.hypot(p.pts[0][0] - L.x, p.pts[0][1] - L.z);
     if (d > rangeOf(c.band)) return;
@@ -736,7 +736,7 @@ function lakeLinks(T) {
   let m = LINKS.get(w);
   if (m) return m;
   m = new Map();
-  w.portages.forEach((p, i) => {
+  w.portagesPublic().forEach((p, i) => {
     const a = p.launch[0].lake, b = p.launch[1].lake, na = T.lakeName(a), nb = T.lakeName(b);
     if (!a || !b || !na || !nb || na === nb) return;
     for (const [x, y] of [[a, b], [b, a]]) { if (!m.has(x)) m.set(x, []); if (!m.get(x).some((e) => T.lakeName(e.to) === T.lakeName(y))) m.get(x).push({ to: y, portage: i, rods: p.rods }); }

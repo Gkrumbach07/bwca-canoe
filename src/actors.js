@@ -999,7 +999,7 @@ export class Actors {
       return { key: b.key, from: path[0].map(Math.round), to: path[1].map(Math.round), m: Math.round(Math.hypot(path[1][0] - path[0][0], path[1][1] - path[0][1])) };
     });
     // the carry: from the Lake One end; the canoes first, the packs a little behind
-    const q = (w.portages || []).find((t) => /^Lake One\s*[–-]\s*Kawishiwi River$/.test(t.name || ''));
+    const q = w.portagesPublic().find((t) => /^Lake One\s*[–-]\s*Kawishiwi River$/.test(t.name || ''));
     if (q) {
       let pts = trailOf(q);
       const l1 = q.launch.find((l) => /lake one/i.test(w.lakeName ? w.lakeName(l.lake) || '' : '')) || q.launch[0];

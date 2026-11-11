@@ -1,0 +1,538 @@
+{
+  "v": 1,
+  "about": "The story layer's places (docs/build/campaign-design.md §7.1; stream L, Round 1). Keyed by name and x/z, never baked: scripts/story-places.mjs finds each in the release the game runs (the shore, the campsite, the portage) and writes its `resolved` block; the runtime (story-layer.js) reads only `resolved`. A place: { id, name, x, z, lake, shore?: true (the anchor is the nearest shore of that lake; props sit at [along, in] metres from it, `in` inland), site?: v3 campsite id, trailhead?: ep (props beside that entry point's lot, placed when it is built), clear?: lawn radius (m), lanes?: [{ from: prop, toward: [x, z], len, r }], props: [{ id, kit, at, opts?, show?, visible?, dot: [{ when, name }] }], verbs: [{ prop, verb, when, then }], triggers: [{ on, r, nb?, when?, then }] }. Walt's starred sites are not here: walt-sites.js makes one place each. `portages`: the carries the story names (the back cover's 64 / 140 / 186, the 205/50 pair, NB36's P210), found by v3 id, name and x/z.",
+  "places": [
+    {
+      "id": "crews.landing",
+      "name": "The old crews' landing, Bald Eagle Lake, west shore",
+      "doc": "docs/story/20-opening.md §11.2; 03-places.md §1a; 90 §4",
+      "x": -25825,
+      "z": 29925,
+      "lake": "Bald Eagle Lake",
+      "shore": true,
+      "clear": 9,
+      "lanes": [
+        {
+          "from": "crews.pine",
+          "toward": [
+            -26950,
+            30600
+          ],
+          "len": 140,
+          "r": 2.2
+        }
+      ],
+      "props": [
+        {
+          "id": "crews.crib",
+          "kit": "crib",
+          "at": [
+            0,
+            -1.8
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Crib"
+            }
+          ],
+          "wet": true
+        },
+        {
+          "id": "crews.rock",
+          "kit": "landingRock",
+          "at": [
+            4.5,
+            -0.6
+          ],
+          "show": "true",
+          "wet": "edge"
+        },
+        {
+          "id": "crews.pine",
+          "kit": "redPine",
+          "at": [
+            4.5,
+            6.5
+          ],
+          "opts": {
+            "blaze": "orange",
+            "flag": "pink"
+          },
+          "show": "true",
+          "dot": [
+            {
+              "when": "f:tauno.orange",
+              "name": "Old blaze. Orange. · Pink flagging"
+            },
+            {
+              "when": "true",
+              "name": "Blaze · Pink flagging"
+            }
+          ]
+        },
+        {
+          "id": "crews.grade",
+          "kit": "gradeMouth",
+          "lane": 0,
+          "along": 7,
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Grade"
+            }
+          ]
+        },
+        {
+          "id": "crews.pine2",
+          "kit": "redPine",
+          "lane": 0,
+          "along": 55,
+          "side": 2.6,
+          "opts": {
+            "blaze": "orange"
+          },
+          "show": "true",
+          "dot": [
+            {
+              "when": "f:tauno.orange",
+              "name": "Old blaze. Orange."
+            },
+            {
+              "when": "true",
+              "name": "Blaze"
+            }
+          ]
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "crews.crib",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:landing.crib",
+            "f:crews.seen",
+            "walt:20:11.2.w2"
+          ]
+        },
+        {
+          "prop": "crews.grade",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:landing.grade",
+            "f:crews.seen",
+            "walt:20:11.2.w3"
+          ]
+        },
+        {
+          "prop": "crews.pine",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:landing.blaze",
+            "f:landing.pink",
+            "f:crews.seen",
+            "walt:20:11.2.w4",
+            "walt:20:11.2.w5"
+          ]
+        },
+        {
+          "prop": "crews.pine2",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:landing.blaze2"
+          ]
+        }
+      ],
+      "triggers": [
+        {
+          "on": "enter",
+          "r": 45,
+          "when": "true",
+          "then": [
+            "f:crews.stood"
+          ]
+        },
+        {
+          "on": "readHere",
+          "nb": "NB20",
+          "r": 60,
+          "when": "f:nb.found",
+          "then": [
+            "f:landing.nb20",
+            "walt:20:11.3.w2"
+          ]
+        }
+      ],
+      "search": 260
+    },
+    {
+      "id": "bald.c902",
+      "name": "Bald Eagle Lake, the site east of the crews' landing (C902)",
+      "doc": "docs/story/20-opening.md §11.3 (NB20 read where he wrote it)",
+      "site": "C902",
+      "lake": "Bald Eagle Lake",
+      "props": [],
+      "triggers": [
+        {
+          "on": "readHere",
+          "nb": "NB20",
+          "r": 70,
+          "when": "f:nb.found",
+          "then": [
+            "walt:20:11.3.w1"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ep33.crewcamp",
+      "name": "The old crew camp at the EP 33 road end: a slab and a pole",
+      "doc": "docs/story/20-opening.md §11.1 step 2; 30-mining-years.md §3",
+      "trailhead": 33,
+      "lake": "Little Gabbro Lake",
+      "props": [
+        {
+          "id": "ep33.slab",
+          "kit": "slab",
+          "at": [
+            -6,
+            4
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Slab"
+            }
+          ]
+        },
+        {
+          "id": "ep33.pole",
+          "kit": "pole",
+          "at": [
+            -9,
+            7.5
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Pole"
+            }
+          ]
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "ep33.slab",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:crews.slab"
+          ]
+        },
+        {
+          "prop": "ep33.pole",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:crews.pole"
+          ]
+        }
+      ],
+      "triggers": []
+    }
+  ],
+  "portages": [
+    {
+      "id": "bc.64",
+      "v3": "P289",
+      "name": "Little Trout Lake – Rum Lake",
+      "rods": 64,
+      "reach": 64,
+      "doc": "10-notebook.md NB15; 20 §2.2; 90 §13 check 3"
+    },
+    {
+      "id": "bc.140",
+      "v3": "P645",
+      "name": "Disappointment Lake – Snowbank Lake",
+      "rods": 140,
+      "reach": 25,
+      "doc": "10-notebook.md NB04; 90 §13 check 3"
+    },
+    {
+      "id": "bc.186",
+      "v3": "P188",
+      "name": "Grandpa Lake – Sea Gull Lake",
+      "rods": 185,
+      "reach": 51,
+      "doc": "10-notebook.md NB18 (the 186 he wrote; 185 drawn); 90 §13 check 3"
+    },
+    {
+      "id": "pair.205",
+      "v3": "P255",
+      "name": "Bald Eagle Lake – Gull Lake",
+      "rods": 205,
+      "doc": "the 205/50 pair (lock 2 key B); 90 §13 check 4"
+    },
+    {
+      "id": "pair.50",
+      "v3": "P256",
+      "name": "Gull Lake – Gull Lake",
+      "rods": 50,
+      "doc": "the 205/50 pair (lock 2 key B); 90 §13 check 4"
+    },
+    {
+      "id": "nb36.p210",
+      "v3": "P210",
+      "name": "Moose River – Big Moose Lake",
+      "rods": 61,
+      "ep": 8,
+      "end": "Big Moose Lake",
+      "km": [
+        2,
+        4.5
+      ],
+      "doc": "10-notebook.md NB36 (EP 8); 90 §13 check 11"
+    },
+    {
+      "id": "crews.p693",
+      "v3": "P693",
+      "rods": 6,
+      "doc": "20-opening.md §11.1: P693, 6 rods, into Bald Eagle"
+    }
+  ],
+  "resolved": {
+    "for": "2026-11-03T15:08:22.659Z",
+    "v": "v9",
+    "places": {
+      "crews.landing": {
+        "props": {
+          "crews.crib": {
+            "x": -25884.4,
+            "z": 30025.3,
+            "heading": -2.0837,
+            "sd": -2,
+            "y": 441.6
+          },
+          "crews.rock": {
+            "x": -25885.5,
+            "z": 30029.8,
+            "heading": -2.0837,
+            "sd": 0.1,
+            "y": 441.6
+          },
+          "crews.pine": {
+            "x": -25879.3,
+            "z": 30033.3,
+            "heading": -2.0837,
+            "sd": 6.6,
+            "y": 445.6
+          },
+          "crews.grade": {
+            "x": -25885.5,
+            "z": 30036.6,
+            "heading": 2.0576,
+            "sd": 4.5,
+            "y": 444.3
+          },
+          "crews.pine2": {
+            "x": -25929.1,
+            "z": 30056.7,
+            "heading": 2.0576,
+            "sd": 16.9,
+            "y": 445.5
+          }
+        },
+        "lanes": [
+          {
+            "a": [
+              -25879.3,
+              30033.3
+            ],
+            "b": [
+              -26003,
+              30098.8
+            ],
+            "r": 2.2,
+            "dir": [
+              -0.8838,
+              0.4678
+            ]
+          }
+        ],
+        "x": -25882.8,
+        "z": 30026.2,
+        "n": [
+          0.8713,
+          0.4907
+        ],
+        "u": [
+          -0.4907,
+          0.8713
+        ],
+        "lakeId": 77,
+        "off": 117,
+        "tried": 73
+      },
+      "bald.c902": {
+        "props": {},
+        "lanes": [],
+        "x": -24785.7,
+        "z": 29992.4,
+        "lakeId": 77,
+        "site": 1096,
+        "landing": [
+          -24773.5,
+          29969.1
+        ]
+      },
+      "ep33.crewcamp": {
+        "props": {},
+        "lanes": [],
+        "trailhead": 33
+      }
+    },
+    "portages": {
+      "bc.64": {
+        "i": 691,
+        "name": "Little Trout Lake – Rum Lake",
+        "rods": 64,
+        "shown": 64,
+        "off": 0,
+        "ends": [
+          [
+            54975,
+            13905,
+            525
+          ],
+          [
+            55245,
+            14075,
+            1101
+          ]
+        ]
+      },
+      "bc.140": {
+        "i": 1000,
+        "name": "Disappointment Lake – Snowbank Lake",
+        "rods": 140,
+        "shown": 148,
+        "off": 0,
+        "ends": [
+          [
+            -12405,
+            13105,
+            93
+          ],
+          [
+            -12835,
+            12595,
+            19
+          ]
+        ]
+      },
+      "bc.186": {
+        "i": 595,
+        "name": "Grandpa Lake – Sea Gull Lake",
+        "rods": 185,
+        "shown": 185,
+        "off": 0,
+        "ends": [
+          [
+            21615,
+            -8105,
+            520
+          ],
+          [
+            22265,
+            -7395,
+            18
+          ]
+        ]
+      },
+      "pair.205": {
+        "i": 659,
+        "name": "Bald Eagle Lake – Gull Lake",
+        "rods": 205,
+        "shown": 188,
+        "off": 0,
+        "ends": [
+          [
+            -24425,
+            28715,
+            77
+          ],
+          [
+            -23535,
+            28705,
+            2778
+          ]
+        ]
+      },
+      "pair.50": {
+        "i": 660,
+        "name": "Gull Lake – Gull Lake",
+        "rods": 50,
+        "shown": 44,
+        "off": 0,
+        "ends": [
+          [
+            -23355,
+            28205,
+            2778
+          ],
+          [
+            -23225,
+            27995,
+            186
+          ]
+        ]
+      },
+      "nb36.p210": {
+        "i": 614,
+        "name": "Moose River – Big Moose Lake",
+        "rods": 61,
+        "shown": 59,
+        "off": 0,
+        "ends": [
+          [
+            -66055,
+            4265,
+            18834
+          ],
+          [
+            -65765,
+            4395,
+            99
+          ]
+        ]
+      },
+      "crews.p693": {
+        "i": 1048,
+        "name": "Gabbro Lake – Gabbro Lake",
+        "rods": 6,
+        "shown": 6,
+        "off": 0,
+        "ends": [
+          [
+            -26655,
+            28005,
+            101
+          ],
+          [
+            -26685,
+            28025,
+            101
+          ]
+        ]
+      }
+    }
+  }
+}

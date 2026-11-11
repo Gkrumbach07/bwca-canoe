@@ -47,7 +47,7 @@ export function roadReach(world) {
   r = [];
   for (const [name, basins] of roads) {
     const names = new Set();
-    for (const p of world.portages) {
+    for (const p of world.portagesPublic()) {
       if (!p || !p.name || !p.launch) continue;
       if (basins.has(basin(p.launch[0].lake)) || basins.has(basin(p.launch[1].lake))) names.add(p.name);
     }

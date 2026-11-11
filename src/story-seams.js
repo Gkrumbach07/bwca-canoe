@@ -27,6 +27,7 @@ export async function startFeed({ story, mods = {}, guest = () => false } = {}) 
     import('./feed-trip.js'),      // K1b: trip.js's log
     import('./feed-outfitter.js'), // K1b: the store's door
     import('./feed-book.js'),      // st-b: the layer's read-here, pages and Walt's things got
+    import('./feed-place.js'),     // st-l: the story layer's verbs, read-here and photos
     // (Round 1 streams: their feed-*.js here, one line each)
   ]);
   return feed.start({ story, mods, guest });

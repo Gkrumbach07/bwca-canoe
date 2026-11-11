@@ -48,7 +48,7 @@ export function makeViews(world) {
     const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz) || 1;
     out.push(a[0], a[1], b[0] + (dx / L) * S.past, b[1] + (dz / L) * S.past, S.w0, S.w1, S.k, S.ring, S.kr);
   }
-  for (const p of world.portages) {
+  for (const p of world.portagesPublic()) {
     const P = VIEW.portage;
     for (const end of [0, 1]) {
       const e = end ? p.pts[p.pts.length - 1] : p.pts[0], l = p.launch && p.launch[end];

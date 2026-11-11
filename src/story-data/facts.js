@@ -64,6 +64,12 @@ export const FACTS = [
   { key: 'tauno.porch.done', kind: 'bool', doc: '20 R3 the porch, walked with him' },
   { key: 'tauno.turn', kind: 'bool', doc: '20 the turn: Eino named' },
   { key: 'tauno.call', kind: 'bool', doc: 'bible 6.4 Tauno\'s call' },
+  // st-l: the story layer's places (story-places.json, walt-sites.js; story-layer.js writes them from a place's verbs)
+  { key: 'landing.', kind: 'bool', doc: '20 §11.2–11.4 the crews\' landing: landing.crib|grade|blaze|pink|nb20|nwDrift (blaze2: the second pine up the grade)' },
+  { key: 'stone.', kind: 'bool', doc: '10 §9 a starred site\'s white stone looked at (stone.<v3 site>, walt-sites.js); three: knows.stones (rules-layer.js)' },
+  { key: 'crews.seen', kind: 'bool', doc: '20 §8 story.landing: a Look at the crib, the grade or the tree (lock 1 key C; tier 2)' },
+  { key: 'crews.stood', kind: 'bool', doc: '20 §11 stood at the crews\' landing (within 45 m)' },
+  // /st-l
 ];
 
 // the arcs whose yields are the big findings (§3.3 story.big), and the doors the player can be offered
