@@ -153,7 +153,7 @@ async function talkE(page, key) {
   let other = null;
   for (let k = 0; k < 10; k++) {
     const c = await page.evaluate(() => { window.__L.step(2); return window.__t.convo(); });
-    if (c) { if (!want || !c.who || c.who === want || /old man|Tauno/.test(c.who) === /tauno/.test(key)) return { ok: true, via: 'E' }; other = c.who; break; }
+    if (c) { const mine = /^cast:tauno/.test(key) ? /old man|Tauno/i.test(c.who || '') : /^cast:josie/.test(key) ? /Josie/.test(c.who || '') : !want || c.who === want; if (mine) return { ok: true, via: 'E' }; other = c.who; break; }
     await page.waitForTimeout(60);
   }
   if (other) await endTalk(page); // (the dot was on someone else: a visitor stood between)
