@@ -308,11 +308,18 @@ try {
   if (on('R')) {
     const home = Number(process.env.R_HOME || 67);
     await season('sandbox', home, 196, '-r');
+    // a page that stops answering: paused by the debugger, its stack logged (the main thread busy in a loop)
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Debugger.enable');
+    let stack = null;
+    cdp.on('Debugger.paused', (e) => { stack = e.callFrames.slice(0, 18).map((f) => `${f.functionName || '(anon)'} ${String(f.url).replace(/^.*\/src\//, '')}:${f.location.lineNumber + 1}`); cdp.send('Debugger.resume').catch(() => null); });
+    const timed = async (p, ms) => { let t; const r = await Promise.race([p, new Promise((ok) => { t = setTimeout(() => ok('node-timeout'), ms); })]); clearTimeout(t); if (r === 'node-timeout') { await cdp.send('Debugger.pause').catch(() => null); await real(3000); log('R stuck: the stack', JSON.stringify(stack)); } return r; };
     const state = () => ev(() => { const g = window.__game, p = g.player, t = g.tiles, w = g.world; const [tx, ty] = w.tileOf(p.x, p.z); let raf = 0; return { t: Math.round(performance.now()), mode: p.mode, tp: !!p.teleporting, title: g.title.state, veil: !!g.veil.active, card: !!(g.record && g.record.shown), open: !!g.outfitter.open, q: t.queue.length, pend: t.pending.length, ensured: [...t.tiles.values()].filter((e) => e.ensured).map((e) => `${e.key}:${e.state}`).slice(0, 6), drawn: g.renderer ? g.renderer.info.render.frame : null, truck: g.truck.job ? g.truck.job.kind : null, at: [Math.round(p.x), Math.round(p.z)], raf }; });
     for (const to of (process.env.R_EPS || '50,75,80,62').split(',').map(Number)) {
       const r = { to };
       // home: the counter, Drive to <to>
-      r.home = await ev(async () => { const g = window.__game, H = window.__q, L = g.outfitter.landing(g.profile.home); g.truck.hide(); const t0 = performance.now(); const ok = await Promise.race([H.tp(L.x, L.z).then(() => 'ok'), H.wait(120000).then(() => 'timeout')]); return { ok, ms: Math.round(performance.now() - t0) }; });
+      r.home = await timed(ev(async () => { const g = window.__game, H = window.__q, L = g.outfitter.landing(g.profile.home); g.truck.hide(); const t0 = performance.now(); const ok = await Promise.race([H.tp(L.x, L.z).then(() => 'ok'), H.wait(120000).then(() => 'timeout')]); return { ok, ms: Math.round(performance.now() - t0) }; }), 150000);
+      if (r.home === 'node-timeout') { r.stack = stack; result(`R home before the ride to ${to}: the page stopped answering`, false, r); break; }
       if (r.home.ok !== 'ok') { r.stuck = await state(); await real(3000); r.stuck2 = await state(); result(`R home before the ride to ${to}`, false, r); break; }
       await ev(() => { const g = window.__game, o = g.outfitter; o.show(o.landing(g.profile.home), 'counter'); window.__q.step(4); });
       await real(900);
