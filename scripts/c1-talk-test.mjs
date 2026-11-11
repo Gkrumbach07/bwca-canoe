@@ -96,10 +96,16 @@ try {
       T.step(20);
       const tr = c.ownTruck, me = st && st.find((x) => x.who === 'tauno');
       const fig = me ? T.figure('cast:tauno:38') : null;
-      return { porch: !!(L.look && L.look.porch), me, fig, truck: tr ? { visible: !!(tr.mesh && tr.mesh.visible), x: tr.x, z: tr.z } : null, rides: g.truck ? { gone: g.truck.gone, visible: !!(g.truck.mesh && g.truck.mesh.visible) } : null };
+      // (chk-c1a: his pickup only where the store's truck stands within 10 m of the door: cast.js TRUCK_NEAR; else the porch foot)
+      const S = g.truck && typeof g.truck.spot === 'function' ? g.truck.spot(38) : null, f = L.stepsFoot || L.door;
+      const spotD = S && f ? +Math.hypot(S.x - f.x, S.z - f.z).toFixed(1) : null;
+      return { porch: !!(L.look && L.look.porch), me, fig, spotD, truck: tr ? { visible: !!(tr.mesh && tr.mesh.visible), x: tr.x, z: tr.z } : null, rides: g.truck ? { gone: g.truck.gone, visible: !!(g.truck.mesh && g.truck.mesh.visible) } : null };
     });
-    result('8 no porch (Sawbill 38): Tauno at his pickup in the lot (his own, drawn; the store\'s truck away), on the ground',
-      !t.porch && t.me && t.me.truck && t.truck && t.truck.visible && Math.hypot(t.truck.x - t.me.x, t.truck.z - t.me.z) < 5 && t.fig && Math.abs(t.fig.y - t.fig.ground) < 0.35 && t.rides && t.rides.gone === '38', t);
+    const ground = t.fig && Math.abs(t.fig.y - t.fig.ground) < 0.35, far = t.spotD != null && t.spotD > 10;
+    result('8 no porch (Sawbill 38): Tauno at his pickup in the lot (his own, drawn; the store\'s truck away), on the ground; where the store\'s truck stands > 10 m from the door, at the porch foot (the store\'s truck stays)',
+      !t.porch && t.me && ground && (far
+        ? !t.me.truck && t.me.at === 'foot' && t.rides && t.rides.visible
+        : t.me.truck && t.truck && t.truck.visible && Math.hypot(t.truck.x - t.me.x, t.truck.z - t.me.z) < 5 && t.rides && t.rides.gone === '38'), t);
     await d.close();
   }
   if (!ONLY || ONLY === 'guest') {
