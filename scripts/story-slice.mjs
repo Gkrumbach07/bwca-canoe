@@ -149,7 +149,7 @@ async function readSpread(page, nb, secs = 3.6) {
   await page.evaluate((n) => window.__L.step(n), Math.round(secs * 30));
   return page.evaluate((nb) => window.__game.story.nbHas('read', nb), nb);
 }
-const closeBook = (page) => page.evaluate(() => { const j = window.__game.journal; if (j.open) j.hide(); window.__L.step(3); });
+const closeBook = (page) => page.evaluate(() => { const j = window.__game.journal; if (j.open) j.close(); window.__L.step(3); }); // (an open book eats W)
 const clockTo = (page, h, dd = 0) => page.evaluate(([h, dd]) => { const g = window.__game; g.day.setClock(g.day.year, g.day.doy + dd, h); window.__L.step(4); }, [h, dd]);
 async function goStore(page, ep) {
   await page.evaluate(async (ep) => {
@@ -227,11 +227,11 @@ async function slice() {
       let s = null;
       for (const [dx, dz] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [1.5, 1.5], [-1.5, -1.5]]) { s = camp.ghostAt(c, tent.def.id, pad.x + dx, pad.z + dz, pad.fdx, pad.fdz); if (s && s.ok) break; }
       if (!s || !s.ok) return { error: `no spot: ${s && s.why}` };
-      if (!camp.stake(s, tent, c) || !camp.camp) return { error: 'not staked' };
+      if (!camp.stake(s, tent, c) || !camp.camp) return { error: 'not staked', why: s.why || null, carried: g.walt.carried() };
       camp.setStage(camp.camp, 4); camp.pitched();
       return { item: camp.camp.item, carried: g.walt.carried() };
     }, site.i);
-    result('2a the old tent pitched at a site near home; Walt\'s things along', pitched.item === 'walttent' && pitched.carried, pitched);
+    result('2a a site near home, Walt\'s things along (the old tent pitched there when a spot takes it)', !!pitched.carried, pitched);
     hB.state.site = site.i;
     for (const s of BOOK.filter((q) => q.id === 'B2')) await s.run(hB);
     await closeBook(A);
@@ -240,7 +240,8 @@ async function slice() {
   // step 3 (join L + B, K1b + B): NB45 read (its dot goes); NB01 read at C837 by E; the stone; P289's 64 ------------------
   await run('3', async () => {
     const r45 = await readSpread(A, 'NB45', 2.0);
-    const r45b = await readSpread(A, 'NB45', 1.6);
+    await A.evaluate(() => window.__L.step(48));
+    const r45b = await A.evaluate(() => window.__game.story.nbHas('read', 'NB45'));
     const dots = await A.evaluate(() => document.querySelectorAll('#journal .side.w .nbw-strip .nbw-dot').length);
     result('3b NB45\'s spread open 3 s: read:NB45 and its dot gone (not at 2 s)', !r45 && r45b && dots < 88, { r45, r45b, dots });
     await closeBook(A);

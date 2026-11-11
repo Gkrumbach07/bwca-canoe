@@ -26,11 +26,13 @@
 //   pencil.check() the inks and the matches against the story, now (it runs on every story event by itself)
 //   pencil.reset() (rigs) · pencil.debug
 import { INK, LAKES, PLACES } from './story-data/leads-act1.js';
+import { registerSensor } from './story-cond.js';
 
 export const SECOND_VOICE = 200;   // m: a ring this near one already drawn adds a voice instead (§4)
 export const PER_TALK = 2;         // rings one conversation pencils at most (§4)
 // the sensors this module answers (story-lint registers them too: check 5)
 export const PENCIL_SENSORS = { ringon: 'arg', ringed: 'arg', nickseen: 'arg', onlake: 'arg' };
+for (const [k, kind] of Object.entries(PENCIL_SENSORS)) registerSensor(k, kind); // (the join: known to the compiler in the game too, as topics.js does its own; else every ringed:/nickseen: warned)
 
 const blank = () => ({ rings: [], names: [], bearings: [], walked: [], ticks: [], seen: [] });
 const KEYS = Object.keys(blank());
