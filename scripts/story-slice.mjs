@@ -108,6 +108,7 @@ const HELPERS_J = () => {
   // where night one left it: on the back, the canoe would not paddle)
   J.refresh = () => {
     const e = g.energy; e.fresh(); e.bunk(); e.value = 1; // (a night in a bunk, breakfast, a full bottle: the bar full again)
+    if (g.player.seat) { g.player.seat = null; } // (up off a bench: Farm's porch sat the player down for the turn)
     return +e.value.toFixed(2);
   };
   J.at = () => ({ x: g.player.x, z: g.player.z, inside: !!(g.outfitter.visit && g.outfitter.visit.inside), mode: g.player.mode });
