@@ -345,6 +345,10 @@ async function slice() {
       return { i, name: p.name, bc: s.has('bc.64'), here: s.nbHas('here', 'NB15'), line: s.walt().includes('20:2.4.w1') };
     });
     result('3e P289 crossed (the carry logged as trip.js logs it): "64" pencilled, NB15 he was here, the Walt line', c64.bc && c64.here && c64.line, c64);
+    if (SHOTS) { // the contact sheet: the back cover, its 64 ticked
+      await A.evaluate(() => { const g = window.__game, b = g.book; g.journal.show('pack'); g.journal.setSide('walt'); b.view = 'nb'; b.debug.spread(b.data.backSpread); window.__L.step(4); });
+      await shot(A, 'b-back-cover'); await closeBook(A);
+    }
   });
 
   // step 4 (T): the return, the walkout by daylight: Tauno at the porch foot, T1–T6 warm (the Swede test), no ring --------
