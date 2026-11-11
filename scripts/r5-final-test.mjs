@@ -371,28 +371,46 @@ try {
     await shot('c-sandbox-67');
     // the start map (the season wizard's) and the book's map
     await page.keyboard.press('KeyI'); await real(900);
-    const mt = await page.$('#book [data-tab="map"], #book [data-tab="maps"], .book [data-tab="map"], .book [data-tab="maps"]');
-    if (mt) { await mt.click(); await real(1500); }
+    await ev(() => { const b = [...document.querySelectorAll('button, [role=tab], .tab')].find((e) => e.offsetParent !== null && e.textContent.trim().toLowerCase() === 'map'); if (b) b.click(); });
+    await real(1800);
     await shot('c-map-book');
-    await page.keyboard.press('Escape'); await real(500);
-    if (await ev(() => !!document.querySelector('#book.open'))) { await page.keyboard.press('KeyI'); await real(400); }
+    await page.keyboard.press('KeyI'); await real(500);
+    if (await ev(() => window.__game.title.state === 'pause')) await ev(() => window.__game.title.resume());
+    await ev(() => window.__q.closeAll());
+    // stood on land by the helpers alone (no teleport: that puts you afloat in your canoe), the canoe left at the dock
+    const standLook = (a, f, pitch = -0.08) => ev(async ([a, f, pitch]) => { const g = window.__game, H = window.__q; H.closeAll(); await H.goNear(a[0], a[1], 2, 45000); for (let k = 0; k < 20; k++) { H.step(4); await H.wait(30); } H.standAt(a[0], a[1]); H.aimAt({ x: f[0], z: f[1] }, null); g.chase.viewPitch = pitch; g.day.setClock(g.day.year, g.day.doy, 11.5); H.step(40); return { mode: g.player.mode, at: [Math.round(g.player.x), Math.round(g.player.z)] }; }, [a, f, pitch]);
     // the roads outside the wilderness: Ely's streets and the Gunflint Trail, stood on the road and looking along it
     for (const [tag, lat, lon, k] of [['ely', 47.9033, -91.8668, 14], ['gunflint', 47.988, -90.349, 14], ['echo', 47.949, -91.874, 14]]) {
-      const q = XZ(lat, lon), b = nearChain(q.x, q.z, 2500, [0, 1, 2]);
-      if (!b) continue;
+      const q = XZ(lat, lon), b = nearChain(q.x, q.z, 2500, [1, 2]);
+      if (!b) { log('no road at', tag); continue; }
       const c = b.c, i = Math.min(b.i, c.n - 1 - k), a = [c.p[i * 4], c.p[i * 4 + 1]], f = [c.p[(i + k) * 4], c.p[(i + k) * 4 + 1]];
-      await ev(async ([a, f]) => { const g = window.__game, H = window.__q; await H.tp(a[0], a[1]); await H.goNear(a[0], a[1], 2, 40000); H.standAt(a[0], a[1]); H.aimAt({ x: f[0], z: f[1] }, null); g.chase.viewPitch = -0.08; g.day.setClock(g.day.year, g.day.doy, 11.5); H.step(40); }, [a, f]);
+      log('road', tag, JSON.stringify(await standLook(a, f)));
       await third(); await real(400);
       await shot(`c-road-${tag}`);
     }
-    // the truck on its road: Loon Narrows (25) behind the store, then pulling out, seen from beside the road
-    await ev(async () => { const g = window.__game, H = window.__q, T = g.truck, S = T.spot(25, true); const L = g.outfitter.landing(25); await H.tp(L.x, L.z); await H.goNear(S.x, S.z, 2, 40000); T.hide(); T.gone = null; T.leave(25); for (let f = 0; f < 150; f++) g.advance(1 / 30, 1); H.step(2); const a = Math.atan2(T.z - S.z, T.x - S.x) + Math.PI / 2, vx = T.x + Math.cos(a) * 9, vz = T.z + Math.sin(a) * 9; H.standAt(vx, vz); H.aimAt({ x: T.x, z: T.z }, g.tiles.groundAt(T.x, T.z) + 1); g.chase.viewPitch = -0.1; H.step(6); });
-    await third(); await real(300);
-    await shot('c-truck');
-    // two cabins' docks, from the bank behind the dock's foot, the open water ahead
-    for (const i of [22, 7]) {
+    // the truck on its road close up: set on Ely's road (the pose the game gives it, on its four wheels), seen from beside
+    {
+      const q = XZ(47.9033, -91.8668), b = nearChain(q.x, q.z, 2500, [1, 2]), c = b.c, i = Math.min(b.i, c.n - 1 - 20), pts = [];
+      for (let k = i; k <= i + 20; k++) pts.push([c.p[k * 4], c.p[k * 4 + 1]]);
+      const r = await ev(async (pts) => {
+        const g = window.__game, H = window.__q, T = g.truck, cum = [0];
+        for (let k = 1; k < pts.length; k++) cum.push(cum[k - 1] + Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]));
+        const path = { pts, cum, len: cum[cum.length - 1] }, s = path.len / 2;
+        T.hide(); T.setRack(true); T.pose(path, s); T.job = { kind: 'park', key: 'look', path, s, v: 0 }; T.parkedAt = 'look';
+        const fx = pts[pts.length - 1][0] - pts[0][0], fz = pts[pts.length - 1][1] - pts[0][1], L = Math.hypot(fx, fz), ux = fx / L, uz = fz / L;
+        const vx = T.x - ux * 7 + uz * 6, vz = T.z - uz * 7 - ux * 6;
+        H.closeAll(); await H.goNear(vx, vz, 2, 45000); for (let k = 0; k < 20; k++) { H.step(4); await H.wait(30); }
+        H.standAt(vx, vz); H.aimAt({ x: T.x, z: T.z }, g.tiles.groundAt(T.x, T.z) + 0.6); g.chase.viewPitch = -0.12; g.day.setClock(g.day.year, g.day.doy, 11.5); H.step(40);
+        return { at: [Math.round(T.x), Math.round(T.z)], gap: T.gap, visible: T.mesh.visible };
+      }, pts);
+      log('truck', JSON.stringify(r));
+      await third(); await real(400);
+      await shot('c-truck');
+    }
+    // two cabins' docks, from the bank by the dock's foot, the open water ahead
+    for (const i of [22, 3]) {
       const c = CABINS[i], D = c.dock; if (!D) continue;
-      await ev(async ([c, D]) => { const g = window.__game, H = window.__q, x = D.x - D.dx * 4, z = D.z - D.dz * 4; await H.tp(x, z); await H.goNear(x, z, 2, 40000); for (let k = 0; k < 30; k++) { H.step(4); await H.wait(30); } H.standAt(x, z); H.aimAt({ x: D.x + D.dx * 40, z: D.z + D.dz * 40 }, null); g.chase.viewPitch = -0.1; g.day.setClock(g.day.year, g.day.doy, 11.5); H.step(30); }, [c, D]);
+      log('cabin', i, JSON.stringify(await standLook([D.x - D.dx * 2 + D.dz * 3, D.z - D.dz * 2 - D.dx * 3], [D.x + D.dx * 40, D.z + D.dz * 40], -0.1)));
       await third(); await real(300);
       await shot(`c-cabin-${i}`);
     }
