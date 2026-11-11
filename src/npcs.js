@@ -1461,6 +1461,37 @@ export class People {
     return out;
   }
 
+  // st-t: the story's hooks into the people (campaign-design §5.1, §15; stream T). None is used with the story off.
+  //   addTalkSource(fn) → off   fn(v) → [{ id, text, pri, tag, go }]: story topics on a keeper, under "Ask about…"
+  //   storyItems(v) → [items]   what the sources offer this keeper now (newest first)
+  //   addPool(kind, fn) → off   fn(ctx) → { text } | null: a story line a pool may say ('word': the keeper's word on the
+  //                             water), at most one in four of the pool's picks (ambient.js keeps the share)
+  //   standAt({ x, z, y?, heading, pose? }, rec) → the extraAt handle | null   someone outdoors by a store (the porch
+  //                             foot, the lot), seated on the ground (groundAt), drawn and settled with the store's people
+  addTalkSource(fn) { const L = this.talkSources || (this.talkSources = []); L.push(fn); return () => { const i = L.indexOf(fn); if (i >= 0) L.splice(i, 1); }; }
+  storyItems(v) {
+    const L = this.talkSources; if (!L || !L.length || !v || !v.keeper) return [];
+    const out = [];
+    for (const fn of L) { try { for (const it of fn(v) || []) if (it && it.text && !out.some((x) => x.id === it.id)) out.push(it); } catch (e) { console.warn('people: a talk source', e); } }
+    return out.sort((a, b) => (b.pri || 0) - (a.pri || 0));
+  }
+  addPool(kind, fn) { const M = this.pools || (this.pools = new Map()); if (!M.has(kind)) M.set(kind, []); M.get(kind).push(fn); return () => { const l = M.get(kind); const i = l.indexOf(fn); if (i >= 0) l.splice(i, 1); }; }
+  poolLine(kind, ctx = {}) {
+    const l = this.pools && this.pools.get(kind); if (!l || !l.length) return null;
+    for (const fn of l) { try { const r = fn(ctx); if (r && r.text && !this.said.has(r.text) && this.grounded(r.text)) return r; } catch (e) { console.warn('people: a pool', e); } }
+    return null;
+  }
+  standAt(spot, rec = {}) {
+    if (!spot || !Number.isFinite(spot.x) || !Number.isFinite(spot.z)) return null;
+    let best = null;
+    for (const L of storeLayouts()) { const d = Math.hypot(L.centre.x - spot.x, L.centre.z - spot.z); if (d < NEAR_STORE && (!best || d < best.d) && (rec.ep == null || Number(rec.ep) === L.ep)) best = { L, d }; }
+    if (!best) return null;
+    const { ep: _ep, ...r } = rec; void _ep;
+    const y = Number.isFinite(spot.y) ? spot.y : this.groundAt(best.L, spot.x, spot.z);
+    return this.extraAt(best.L.ep, { ...r, spot: { x: spot.x, z: spot.z, y, heading: spot.heading || 0 } });
+  }
+  // /st-t
+
   // Each store near you: the parties come and go by the schedule (a party arrives at the door and walks in; one going
   // in walks out to the dock as its time comes, and is party-moves.js's at the landing from then); everyone but the
   // keeper is at something (smart.js: the shelves, the counter, the board, the map table, the stove, the porch, the
@@ -2295,6 +2326,7 @@ export class People {
     if (this.s.paid[v.key]) return Math.random() < 0.5 ? ok('Thanks again for that.', PRI.ambient) : null;
     if (t) return ok(statusWords(t), PRI.ambient);
     if (v.hasTask && HOOK[v.arch] && !this.said.has(HOOK[v.arch])) return { text: HOOK[v.arch], pri: PRI.hook };
+    if (this.pools && Math.random() < 0.25) { const sl = this.poolLine('remark', { ep: v.ep, arch: v.arch }); if (sl) return { text: sl.text, pri: PRI.ambient }; } // st-t: a story bark, one in four at most
     const pool = [...(REMARKS[v.arch] || ['Hello.'])], h = this.day.hours, wet = this.weather && this.weather.wetness > 0.35;
     if (wet) pool.push('Wet one out there.', 'Shake off by the stove, if you like.');
     if (h < 9) pool.push('Early start, eh?');
@@ -2511,7 +2543,7 @@ export class People {
     if (more || none) out.push({ text: ws.n ? 'Anything else on the water?' : 'What’s the word on the water?', dim: !more, go: () => this.kWord(v) });
     const beat = this.arcBeat(v.ep);
     if (beat) out.push({ text: beat.ask, kind: 'arc', go: () => this.kBeat(v, beat) });
-    else if (this.askList(v).length) out.push({ text: 'Ask about…', go: () => this.kAsk(v) });
+    if ((!beat || this.storyItems(v).length) && this.askList(v).length) out.push({ text: 'Ask about…', go: () => this.kAsk(v) }); // (st-t: a ready story topic keeps "Ask about…" beside the arc's beat; no sources: as before)
     out.push({ text: 'The counter, please: a ride, a bunk, what I’m owed.', kind: 'counter', go: () => ({ end: true, after: () => this.openCounter(v) }) });
     out.push({ text: 'Goodbye.', kind: 'bye', go: () => null });
     return out;
@@ -2543,6 +2575,7 @@ export class People {
     // the weather, now (it changes within a week): after the rumours
     const F = this.groundCtx(), out = base.filter((x) => GROUND.ok(x.text, F)), wx = this.weatherWord(v.ep, m); // (gl-e: only what is true now)
     if (wx) out.splice(Math.min(3, out.length), 0, { id: 'weather', kind: 'weather', text: wx });
+    if (this.pools && out.length >= 3) { const sl = this.poolLine('word', { ep: v.ep, keeper: v.name }); if (sl) out.splice(Math.min(2, out.length), 0, { id: `story:${sl.id || sl.text.slice(0, 24)}`, kind: 'story', text: sl.text, heard: false }); } // st-t: one in four at most
     return out;
   }
   weatherWord(ep, m) {
@@ -2581,6 +2614,10 @@ export class People {
     if (told('self') < ch.past.length) out.push({ id: 'self', text: told('self') ? 'Tell me more about yourself.' : 'Tell me about yourself.', pri: told('self') ? 1.2 : 1.8, go: () => this.kPast(v) });
     const place = this.placeOf(v);
     if (told('place') < place.length) out.push({ id: 'place', text: told('place') ? 'What else about this place?' : 'Tell me about this place.', pri: told('place') ? 1 : 1.5, go: () => this.kPlace(v) });
+    // st-t: the story's topics (addTalkSource), up to three of their own; the keeper's own fill the rest (four at most)
+    const sti = this.storyItems(v);
+    if (sti.length) { const mine = out.sort((a, b) => b.pri - a.pri).slice(0, Math.max(1, 3 - Math.min(3, sti.length))); return [...sti.slice(0, 3), ...mine]; }
+    // /st-t
     return out.sort((a, b) => b.pri - a.pri).slice(0, 3);
   }
   askChoices(v) {

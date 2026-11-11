@@ -173,6 +173,10 @@ export class Onboarding {
     return s.heard ? 'Shelf in the back, whenever you want it.' : 'I’m at the counter when you’ve got a minute.';
   }
   hello(ep, landing) {
+    // st-t: P1 the counter (docs/story/20-opening.md §1.2) under STORY_ON: the keeper, Josie by the week and the bundle,
+    // taken or left on the shelf (cast.js p1, set by main.js's st-t block); with the flag off, as before
+    if (STORY_ON && typeof this.p1 === 'function') { let n = null; try { n = this.p1(ep, landing); } catch (e) { console.warn('onboarding: p1', e); } if (n) return n; }
+    // /st-t
     const take = { text: 'I’ll take it.', go: () => { this.give(); return this.after(ep, landing); } };
     const offer = () => ({ heard: this.heard(), say: 'There’s old gear in the back nobody takes. A canvas pack, a canvas tent, a stove with a dent in it. Heavy, but it all works. If you’re not going to need it, it’s yours.',
       choices: [take, { text: 'Why does nobody take it?', go: () => ({ say: 'It’s old. People want the light stuff. It’s been on that shelf since before I started here.', choices: [take, { text: 'Maybe later.', kind: 'bye', go: () => null }] }) }, { text: 'Maybe later.', kind: 'bye', go: () => null }] });
@@ -194,6 +198,7 @@ export class Onboarding {
     if (!this.state.path) return { say: 'It’s in your canoe at the dock. I put your own things in the pack, and three days of food in the barrel.', choices: [{ text: 'Thanks.', go: () => keeperNode }] };
     // r3: the loan, then only what is still missing (food, leeches): the shelves, never what it is for
     const pa = this.state.path, miss = [!pa.food ? 'No food in it, though: the provisions shelf is behind you.' : '', !pa.leeches ? 'Leeches are on the tackle shelf.' : ''].filter(Boolean).join(' ');
+    if (STORY_ON && this.state.shelf) return { say: `There’s one of our canoes at the dock for you, on loan, with a paddle, a life jacket, a barrel and a rod.${miss ? ` ${miss}` : ''}`, choices: [{ text: 'Thanks.', go: () => keeperNode }] }; // st-t: the bundle left on the shelf
     return { say: `There’s one of our canoes at the dock for you, on loan, with a paddle, a life jacket, a barrel and a rod. The old pack’s in it, your own things packed in.${miss ? ` ${miss}` : ''}`, choices: [{ text: 'Thanks.', go: () => keeperNode }] };
   }
   openCounter(landing) { if (landing && typeof this.showCounter === 'function') this.showCounter(landing); }
@@ -351,6 +356,32 @@ export class Onboarding {
     if (s && typeof s.emit === 'function') s.emit('gear:given', { items: given, ep: this.home, abs: this.abs });
     return given;
   }
+  // st-t (20 §1.2 "I'll wait for a rental."): the loan and the rest of the kit, the bundle (the old pack and tent) left
+  // on the shelf; the pot, the stove, a canister and the life jacket kept for you at the counter, your own things in the
+  // crate (no pack to put them in). → the item ids given
+  shelf() {
+    const inv = this.t.inventory, st = this.state;
+    if (!STORY_ON || !inv || !st || st.step === 'gear' || st.done) return [];
+    const given = [];
+    for (const id of ['pot', 'waltstove', 'fuel', ...(st.path ? LOAN.pack : [])]) { try { if (inv.place(id, 1, { crate: true, all: true, quiet: true })) given.push(id); } catch { /* kept nowhere */ } }
+    if (st.path) { given.push(...this.lend(inv)); st.loan = true; }
+    st.step = 'gear'; st.shelf = true; this.write();
+    this.hull();
+    if (typeof inv.write === 'function') inv.write();
+    return given;
+  }
+  // st-t (20 §9.2 R1/R1b): the bundle taken off the shelf later: the old pack into the canoe, the tent in it, your own
+  // things out of the crate into it. → the item ids given
+  takeLater() {
+    const inv = this.t.inventory, st = this.state;
+    if (!STORY_ON || !inv || !st || !st.shelf) return [];
+    const given = packGear(inv, { pack: 'waltpack', gift: ['walttent'], order: ORDER_R3, food: 0 });
+    st.shelf = false; this.write();
+    const s = this.t.story;
+    if (s && typeof s.emit === 'function') s.emit('gear:given', { items: given, ep: this.home, abs: this.abs });
+    return given;
+  }
+  // /st-t
 }
 
 // The pack into the canoe, the gift into it (else kept for you at the outfitters), your own things out of the crate into

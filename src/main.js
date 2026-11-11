@@ -1269,6 +1269,44 @@ async function main() {
     } catch (e) { console.warn('story B: the book', e); }
   }
   // /st-b
+  // st-t: Talk & cast (docs/build/campaign-design.md Part 4 Round 1, stream T), only under STORY_ON: the words by id
+  // (topics.js texts, the extract's words: story-data/words.js), story topics on the keepers under "Ask about…" (npcs.addTalkSource) and
+  // the return's one in gold (extraChoices), the cast by their schedules (cast.js: Tauno at the porch foot on a walkout,
+  // his Farm seat, Josie at the home counter), P1 at the counter (onboarding.p1), the push budget (beats.js), the
+  // ambient pools (ambient.js: one story line in four at most), the drive card's road line, the lake picker for a
+  // choice (dialogue.js pick), and the feed's talk adapter. With the flag off none of it is loaded.
+  if (STORY_ON && story.v === 2) {
+    try {
+      const [{ topics, texts }, { cast }, { beats }, { ambient }, A1, { RULES_TALK }, { connect }, { loadWords }] = await Promise.all([
+        import('./topics.js'), import('./cast.js'), import('./beats.js'), import('./ambient.js'), import('./story-data/topics-act1.js'),
+        import('./story-data/rules-talk.js'), import('./feed-talk.js'), import('./story-data/words.js')]);
+      const W = await loadWords(['opening', 'world']), w70 = { default: W.world };
+      texts.add(W.opening); texts.add(W.world);
+      const seams = window.__game.storySeams || {};
+      beats.attach(story);
+      void RULES_TALK; // (st-t: not added after attach: a data hash changed after the season loaded re-runs and rewrites a guest's own story2 (chk-coop C2); cast.js plays t.armed until the join registers rules-*.js at the story's construction)
+      ambient.use(w70.default).attach({ story, grounded: (t) => npcs.grounded(t) });
+      topics.use({ keeper: A1.KEEPER_TOPICS, floor: A1.FLOOR }).attach({ story, npcs, talk, pencil: seams.pencil || null, outfitter, world, day, profile, hud, beats, ambient });
+      cast.attach({ story, npcs, talk, topics, beats, outfitter, profile, day, world, player, hud, onboarding, inventory, ambient, ridesTruck: truck,
+        truck: () => new Truck({ world, scene, groundAt: (x, z) => tiles.groundAt(x, z), player }) });
+      npcs.addTalkSource((v) => topics.items(v));
+      npcs.extraChoices = npcs.extraChoices || [];
+      npcs.extraChoices.unshift((v) => topics.top(v));
+      const wk = () => `${day.year}:${Math.floor(day.doy / 7)}`;
+      npcs.addPool('word', (c) => { const l = ambient.pick('rumour', { seed: `${c.ep}:${wk()}`, ep: c.ep }); return l ? { id: l.id, text: l.text } : null; });
+      npcs.addPool('remark', (c) => { const l = ambient.pick('bark', { ep: c.ep }); return l ? { id: l.id, text: l.text } : null; });
+      { const kByeT = npcs.kBye.bind(npcs); npcs.kBye = (v, op) => { cast.josieClose(v); return kByeT(v, op); }; }
+      talk.pickLake = (o) => (story.ui && typeof story.ui.pickLake === 'function' ? story.ui.pickLake(o) : Promise.resolve(null));
+      rides.roadLine = ({ from, to, way = [], roads = [] }) => ambient.roadLine({ roads, towns: way, eps: [from, to], seed: `${from}:${to}:${day.year}:${day.doy}` });
+      onboarding.p1 = (ep, landing) => cast.p1(ep, landing);
+      connect({ npcs, topics });
+      const updT = outfitter.update.bind(outfitter);
+      outfitter.update = (dt) => { updT(dt); try { cast.update(dt); } catch (e) { if (!cast.warned) { cast.warned = true; console.warn('story T: cast', e); } } };
+      window.__game.storyTalk = { topics, cast, beats, ambient, texts, on: true };
+      console.log('story T: talk & cast');
+    } catch (e) { console.warn('story T: talk & cast', e); }
+  }
+  // /st-t
   // gl-d: the trip-end tally and the board (the game-loop round, stream D; docs/build/game-loop-brief.md). Pay lands on
   // the trip's card as it counts up (record.js ended → tasks.settle), never at the board; no cap on notices held
   // (the owner's call 2026-11-05), each with a deadline that fits it; the new kinds (task-kinds-2.js: creel, campsite, beaver, iceout, colour,

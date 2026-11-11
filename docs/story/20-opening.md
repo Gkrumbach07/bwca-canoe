@@ -785,6 +785,7 @@ at every counter while their lead is open:
 
 - **"Can you ring Little Gabbro for me?"** (If: `story.door1` is 'taken' or 'declined'.)
   **Keeper** (by manner):
+  <!-- list: 20:7.3.lg -->
   - warm: "Little Gabbro. There. Lovely little landing. Bald Eagle's just past it, one tiny carry."
   - dry: "Little Gabbro. Ringed. It's a little lake with a big lake behind it."
   - gruff: "There."
@@ -792,8 +793,10 @@ at every counter while their lead is open:
   - keen: "Okay! Little Gabbro! I've never been. Is it nice? Tell me if it's nice."
   - precise: "Little Gabbro, EP 33. Day use is free. Overnights are two a day in summer, and they go fast."
   **Gives:** a ring on the **Little Gabbro landing (EP 33)**.
+  <!-- id: 20:7.3.drive -->
   - **If** the home outfitter isn't Farm, the keeper adds the drive: "Drive's on you. It's a ways from here." (The
     `campaigns.md` drive cost, by distance.)
+  <!-- id: 20:7.3.farm -->
   - **If** the home outfitter is Farm: "That's ours. Walk out to the truck, I'll drive you."
 
 - **"And Bald Eagle's west shore?"** (If: the Little Gabbro ring was given, once.)
@@ -865,6 +868,7 @@ good read, and the world goes on.
 
 ### 9.2 The re-hooks
 
+<!-- id: 20:9.2 -->
 | # | The player has… | What the world does | Lines |
 |---|---|---|---|
 | **R1** | left the bundle on the shelf | Josie nudges once, at the counter, the next time the player buys a permit (bible P2). | **Josie:** "You never took that old stuff?" Choices: **"I'll take it now."** → the P1 take, same lines. **"No thanks."** → **Josie:** "It's not going anywhere. Literally. Nobody's touched it in years." |

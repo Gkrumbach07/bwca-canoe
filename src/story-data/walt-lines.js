@@ -45,6 +45,21 @@ export const WALT_LINES = [
   { id: '20:T4.w10', section: 'odd' },
   { id: '20:7.2.w1', section: 'names' },
   // /st-b
+  // st-t: the turn's Walt-page lines the extract has no page id for (docs/story/20-opening.md §12.3 U3's and U5's Gives;
+  // `src` names the doc's words where the extract kept them, under another kind). Casebook (B) writes them out.
+  { id: 'w.turn.eino', section: 'people', text: null, src: '20 §12.3 U3 Gives: People, "Walt\'s brother was Eino Haapala. He was 28."' },
+  { id: 'w.turn.ollie', section: 'people', text: null, src: '20 §12.3 U3 Gives: People, "Ollie said \'upwind\'. Nobody listened."' },
+  { id: 'w.turn.year', section: 'years', text: null, src: '20 §12.3 U3 Gives: Years, "12 Oct 1977. Eino went out from Little Gabbro, \'for ducks\'."' },
+  { id: 'w.turn.ducks', section: 'odd', text: null, src: '20:U3.c6' },
+  { id: 'w.turn.canoe', section: 'odd', text: null, src: '20:U3.c7' },
+  { id: 'w.turn.jacket', section: 'odd', text: null, src: '20:U3.c8' },
+  { id: 'w.turn.coroner', section: 'odd', text: null, src: '20:U3.c9' },
+  { id: 'w.turn.drift', section: 'odd', text: null, src: '20:U3.c10' },
+  { id: 'w.door.guiding', section: 'leads', text: null, src: '20 §12.3 U5 Gives: "Marlys, at Moose Lake. She ran the bunkhouse. Walt guided out of there longest."' },
+  { id: 'w.door.boys', section: 'leads', text: null, src: '20 §12.3 U5 Gives: "The fellas he tripped with. In at Sawbill every August. Ask at Baker."' },
+  { id: 'w.door.family', section: 'leads', text: null, src: '20 §12.3 U5 Gives: "His sister Aili, at Crane Lake. \'She won\'t talk to you.\'"' },
+  { id: 'w.door.mining', section: 'leads', text: null, src: '20 §12.3 U5 Gives: "Tauno, at Farm, mornings."' },
+  // /st-t
 ];
 
 // a text id with no row: its section by its id's prefix (the longest that matches), else 'odd'. Leads are a person's or a

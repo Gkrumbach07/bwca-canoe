@@ -70,6 +70,21 @@ export const FACTS = [
   { key: 'crews.seen', kind: 'bool', doc: '20 §8 story.landing: a Look at the crib, the grade or the tree (lock 1 key C; tier 2)' },
   { key: 'crews.stood', kind: 'bool', doc: '20 §11 stood at the crews\' landing (within 45 m)' },
   // /st-l
+  // st-t: Talk & cast (Round 1): the opening's flags (20 §8), the re-hooks (20 §9), what the keepers were asked
+  { key: 'bundle.', kind: 'bool', doc: '20 §1.2 P1: bundle.taken | bundle.shelf (story.bundle), bundle.later (taken at R1/R1b)' },
+  { key: 'rehook.', kind: 'bool', doc: '20 §9.2 a re-hook said (rehook.R1 … rehook.R7): once ever' },
+  { key: 'tauno.armed', kind: 'bool', doc: '20 §6.1 story.porch1 = armed: inside an outfitter after night one' },
+  { key: 'tauno.porch.warm', kind: 'bool', doc: '20 T3 porch1.warm: the Swede test corrected' },
+  { key: 'tauno.porch.toldBook', kind: 'bool', doc: '20 T3 porch1.toldBook: "I found a notebook in his tent."' },
+  { key: 'tauno.talk', kind: 'bool', doc: '§12 an engagement atom: the player talked with Tauno' },
+  { key: 'tauno.said.', kind: 'bool', doc: '20 T4/U1-U5 a topic of his used (each goes after it is used; "Where was I." resumes)' },
+  { key: 'tauno.pink', kind: 'bool', doc: '20 U2 turn.pink' },
+  { key: 'tauno.upwind', kind: 'bool', doc: '20 U3 story.upwind' },
+  { key: 'tauno.killed', kind: 'bool', doc: '20 U4 the word said' },
+  { key: 'tauno.doors', kind: 'bool', doc: '20 U5 the doors named' },
+  { key: 'asked.walt.', kind: 'bool', doc: '20 §5.2/§7.3/§12.4 a keeper topic of the opening asked (asked.walt.<topic>)' },
+  { key: 'ring.', kind: 'any', doc: '20 §7.3/§12.4 a keeper rang a story place (value: the keeper\'s name)' },
+  // /st-t
 ];
 
 // the arcs whose yields are the big findings (§3.3 story.big), and the doors the player can be offered

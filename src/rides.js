@@ -123,10 +123,15 @@ export class Rides {
     const sub = this.sandbox
       ? `Sandbox: the truck is free and the road takes no time. ${lake}, entry point ${to.ep}.`
       : `${kmWords(r.km)} miles${via} to ${lake}, ${rideTime(r.hours)}: $${r.price}. The canoe rides on the roof, the packs in the back.${lateWords}`;
+    // st-t (70 §3.2, campaign-design §5.4): the drive card's road line, one of the road's texture (STORY_ON: main.js sets
+    // roadLine; with the flag off there is none and the card is as before)
+    let road = null;
+    if (typeof this.roadLine === 'function') { try { road = this.roadLine({ from: from.ep, to: to.ep, way, roads: [roadOf(from.ep), roadOf(to.ep)] }); } catch { road = null; } }
+    // /st-t
     const card = {
       kicker: `${from.name} → ${to.name} · ${isOutfitter(to.ep) ? nearWords(to.ep, this.world) || `entry point ${to.ep}` : `entry point ${to.ep}`}`, // (round 2: an outfitter is near an entry point)
       text: `“${this.keeperWords(fromP, 'goodbye')}”`,
-      sub,
+      sub: road ? `${sub} ${road}` : sub,
       fadeIn: this.sandbox ? 0.6 : 1.2, hold: this.sandbox ? 0.4 : 3.2, fadeOut: this.sandbox ? 0.8 : 1.8,
       onDark: () => this.arrive(from, to, r, toP),
     };
