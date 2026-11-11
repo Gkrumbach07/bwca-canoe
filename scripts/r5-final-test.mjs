@@ -301,11 +301,11 @@ try {
         }
         // the truck posed along it, its tyres read off its matrix against the ground there (as chk-r5's TR reads them)
         const sinks = [];
-        for (let s = S.s0; s < Math.min(P.len, S.s0 + 160); s += 0.25) {
+        for (let s = S.s0; s < Math.min(P.len, S.s0 + Number(process.env.B_LEN || 600)); s += 0.25) {
           T.pose(P, s);
           const e = T.mesh.matrix.elements, Q = (lx, lz) => [e[0] * lx + e[8] * lz + e[12], e[1] * lx + e[9] * lz + e[13], e[2] * lx + e[10] * lz + e[14]];
           const gaps = []; for (const a of [1.72, -1.63]) for (const sd of [-0.93, 0.93]) { const [x, y, z] = Q(sd, a); const gr = g.tiles.groundAt(x, z), dk = R.deckAt(g.world, x, z); gaps.push(+(y - (Number.isFinite(gr) ? Math.max(gr, dk) : dk)).toFixed(2)); }
-          if (Math.min(...gaps) < -0.2) sinks.push([+s.toFixed(2), Math.round(T.x), Math.round(T.z), gaps, T.wheelY && T.wheelY.map((v) => +v.toFixed(2))]);
+          if (Math.min(...gaps) < -0.2) sinks.push([+s.toFixed(2), Math.round(T.x), Math.round(T.z), H.det(T.x, T.z), gaps, T.wheelY && T.wheelY.map((v) => +v.toFixed(2)), Number.isFinite(R.deckAt(g.world, T.x, T.z)) ? 'deck' : '']);
         }
         T.hide();
         return { key, det: H.det(S.x, S.z), worst, sinks: sinks.slice(0, 12), nSinks: sinks.length, prof: out.filter((q) => q[2] != null || out.some((w) => w[2] != null && Math.abs(w[0] - q[0]) < 8)) };
