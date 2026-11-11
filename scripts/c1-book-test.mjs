@@ -75,7 +75,7 @@ try {
   await h.step(90);
   await A.evaluate(() => { const g = window.__game, o = g.outfitter; o.openHot('counter', o.visit.landing); });
   await h.step(30); await A.waitForTimeout(900); await h.step(2);
-  const talked = await A.evaluate(async () => { const g = window.__game, d = g.npcs.dialogue; for (let i = 0; i < 12 && d.convo; i++) { const ch = (d.convo.node && d.convo.node.choices) || [], t = ch.findIndex((c) => /^I.ll take it/.test(c.text || '')); d.choose(t >= 0 ? t : 0); await new Promise((r) => setTimeout(r, 30)); } g.outfitter.hide(); // (the join: T's P1 asks; "I'll take it." takes the bundle) return { pack: !!g.profile.inventory.containers.find((c) => c.item === 'waltpack'), onboard: g.onboarding.state }; });
+  const talked = await A.evaluate(async () => { const g = window.__game, d = g.npcs.dialogue; for (let i = 0; i < 12 && d.convo; i++) { const ch = (d.convo.node && d.convo.node.choices) || [], t = ch.findIndex((c) => /^I.ll take it/.test(c.text || '')); d.choose(t >= 0 ? t : 0); await new Promise((r) => setTimeout(r, 30)); } /* (the join: T's P1 asks; "I'll take it." takes the bundle) */ g.outfitter.hide(); return { pack: !!g.profile.inventory.containers.find((c) => c.item === 'waltpack'), onboard: g.onboarding.state }; });
   result('setup: the staffer gives the old gear', talked.pack, talked);
   for (const s of SLICE.filter((q) => q.id === 'B1')) await s.run(h);
   // the old tent pitched at a free site near home, the pack set down by the pad (as gl-c-test does)
