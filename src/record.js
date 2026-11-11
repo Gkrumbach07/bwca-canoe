@@ -647,6 +647,8 @@ class Record {
     if (p && p.teleporting) return false;
     if (T && T.evacuating) return false;
     if (o && (o.open || o.shelfOpen || o.bunking || o.docking || o.arrival)) return false;
+    // (chk-r5: a ride's card covered the truck pulling away: it waits while the truck is within 150 m)
+    const tk = o && o.truck; if (tk && tk.job && (tk.job.kind === 'leave' || tk.job.kind === 'come') && tk.mesh && tk.mesh.visible && p && Math.hypot(tk.x - p.x, tk.z - p.z) < 150) return false;
     if (this.talk && this.talk.talking) return false;
     if (this.photo && this.photo.raised) return false;
     if (c && (c.dialOpen || c.night || c.busy)) return false;

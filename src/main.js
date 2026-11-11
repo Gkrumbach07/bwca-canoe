@@ -351,6 +351,7 @@ async function main() {
   // pickup, behind the store you are at; one mesh of the props' material, drawn while in view
   const truck = new Truck({ world, scene, groundAt: (x, z) => tiles.groundAt(x, z), player });
   outfitter.truck = truck; rides.truck = truck;
+  if (tiles.detail) { const t0 = tiles.detail.onTouched; tiles.detail.onTouched = (rect) => { if (t0) t0(rect); truck.touched(rect); }; } // (chk-r5: the truck set again on the 2 m ground as it comes in)
   tasks.leanOf = (ep) => boardLean(ep, world);
   outfitter.keeperVoice = true; // the shop's counter (2B) renders the keeper, the signature and the rides itself, so 2C's stand-ins stay off
   // hubs 3B: the camera and the photo notices (photo.js). C raises it (the $25 35 mm, or the disposable the first photo

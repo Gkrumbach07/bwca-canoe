@@ -175,6 +175,15 @@ export class Truck {
     this.wheelY = ok ? Array.from(W) : null;
   }
   hide() { if (this.mesh) this.mesh.visible = false; this.job = null; this.parkedAt = null; }
+  // the ground drawn under world rect [x0, z0, x1, z1] has changed (the detail streamer's chunk in or out, main.js): a
+  // truck standing or driving there is set on it again now, not a frame or half a second later
+  touched(rect) {
+    const J = this.job, m = this.mesh;
+    if (!J || !m || !m.visible || !J.path) return;
+    const r = TRUCK.wheelbase + 2;
+    if (this.x < rect[0] - r || this.x > rect[2] + r || this.z < rect[1] - r || this.z > rect[3] + r) return;
+    this.pose(J.path, J.s);
+  }
   // the canoe on the rack: a parked truck behind a store has one of its own; one that has just left yours (in the lot,
   // at the dock) or comes to fetch you and yours drives with the rack bare (playtest r4-final: "the canoe off the
   // roof" while one still rode on it)
@@ -211,9 +220,15 @@ export class Truck {
   update(dt) {
     const J = this.job, p = this.player;
     if (!J) return this.idle();
-    if (J.kind === 'park') { if (p && Math.hypot(p.x - this.x, p.z - this.z) > TRUCK.parkNear * 2) this.hide(); return; }
+    if (J.kind === 'park') {
+      if (p && Math.hypot(p.x - this.x, p.z - this.z) > TRUCK.parkNear * 2) { this.hide(); return; }
+      // (chk-r5: a truck parked on the 10 m ground stood 0.3-2.3 m over the 2 m ground once that came in under it: posed
+      // again every half second, and at once when the detail ground changes under it, touched)
+      if ((this.reposeT = (this.reposeT || 0) + 1) % 30 === 0) this.pose(J.path, J.s);
+      return;
+    }
     if (J.kind === 'leave') {
-      if (J.wait > 0) { J.wait -= dt; return; }
+      if (J.wait > 0) { J.wait -= dt; if ((this.reposeT = (this.reposeT || 0) + 1) % 30 === 0) this.pose(J.path, J.s); return; }
       J.v = Math.min(TRUCK.speed, J.v + TRUCK.accel * dt);
       J.s += J.v * dt;
       if (J.s >= J.path.len - TRUCK.wheelbase || (p && Math.hypot(p.x - this.x, p.z - this.z) > TRUCK.see * 2)) { this.hide(); return; }
