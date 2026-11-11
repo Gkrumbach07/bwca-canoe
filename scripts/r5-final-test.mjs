@@ -281,6 +281,29 @@ try {
       result(`D ${home}: from the dock ${r.way.river ? '1.5 km down its river or creek' : 'out to open water'} by paddling (${r.way.len} m${r.way.lakes ? ', ' + r.way.lakes.join(' / ') : ''})`, r.paddle.end === 'reached' && !(r.paddle.white || []).length && !r.paddle.stuck.length, r);
     }
   }
+  // ======================== B: a probe (no checks): the ground along a ride's way out, by its bridges ========================
+  if (on('B')) {
+    if (await ev(() => window.__game.title.state !== 'game')) await season('sandbox', 31, 196, '-b');
+    for (const key of (process.env.B_KEYS || '80').split(',')) {
+      const r = await ev(async (key) => {
+        const g = window.__game, H = window.__q, T = g.truck, S = T.spot(key, true); if (!S) return { key, none: true };
+        await H.tp(S.x, S.z); await H.goNear(S.x, S.z, 2, 40000);
+        const out = [], R = H.R, P = S.path;
+        let prev = null, worst = null;
+        for (let s = S.s0; s < Math.min(P.len, S.s0 + 160); s += 0.5) {
+          // the point s along: where the truck's wheels sample
+          let lo = 0; while (lo < P.cum.length - 2 && P.cum[lo + 1] < s) lo++;
+          const t = (s - P.cum[lo]) / Math.max(1e-6, P.cum[lo + 1] - P.cum[lo]), x = P.pts[lo][0] + (P.pts[lo + 1][0] - P.pts[lo][0]) * t, z = P.pts[lo][1] + (P.pts[lo + 1][1] - P.pts[lo][1]) * t;
+          const gr = g.tiles.groundAt(x, z), dk = R.deckAt(g.world, x, z), y = Math.max(gr, dk);
+          if (prev != null && (!worst || Math.abs(y - prev) > worst.step)) worst = { step: +Math.abs(y - prev).toFixed(2), s: +s.toFixed(1), x: Math.round(x), z: Math.round(z), ground: +gr.toFixed(2), deck: Number.isFinite(dk) ? +dk.toFixed(2) : null };
+          prev = y;
+          if (Math.round(s * 2) % 4 === 0) out.push([+s.toFixed(1), +gr.toFixed(2), Number.isFinite(dk) ? +dk.toFixed(2) : null]);
+        }
+        return { key, det: H.det(S.x, S.z), worst, prof: out.filter((q) => q[2] != null || out.some((w) => w[2] != null && Math.abs(w[0] - q[0]) < 8)) };
+      }, key);
+      log('B', JSON.stringify(r).slice(0, 4000));
+    }
+  }
   // ======================== C: the contact sheet's shots (no checks) ========================
   if (on('C')) {
     const third = () => ev(() => { const g = window.__game; if (g.chase.mode !== 'third' && g.chase.setMode) g.chase.setMode('third'); });
