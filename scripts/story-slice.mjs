@@ -107,8 +107,8 @@ const HELPERS_J = () => {
   // the player as the slice wants them between places: fed and watered, rested (the rig skips the meals; the pack is left
   // where night one left it: on the back, the canoe would not paddle)
   J.refresh = () => {
-    g.energy.value = 1; if (g.energy.needs) { g.energy.needs.food = 1; g.energy.needs.water = 1; g.energy.needs.warmth = 1; g.energy.needs.rest = 1; }
-    return true;
+    const e = g.energy; e.fresh(); e.bunk(); e.value = 1; // (a night in a bunk, breakfast, a full bottle: the bar full again)
+    return +e.value.toFixed(2);
   };
   J.at = () => ({ x: g.player.x, z: g.player.z, inside: !!(g.outfitter.visit && g.outfitter.visit.inside), mode: g.player.mode });
   J.face = (q) => { const yaw = L.yawTo(q); L.look(yaw); g.player.heading = yaw; };
@@ -290,7 +290,7 @@ async function slice() {
     hB.state.site = site.i;
     for (const s of BOOK.filter((q) => q.id === 'B2')) await s.run(hB);
     await closeBook(A);
-    await A.evaluate(() => window.__J.refresh()); // (the morning: the pack picked up off the ground, breakfast)
+    await A.evaluate(() => window.__J.refresh()); // (the morning: breakfast)
   });
 
   // step 3 (join L + B, K1b + B): NB45 read (its dot goes); NB01 read at C837 by E; the stone; P289's 64 ------------------
