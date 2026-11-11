@@ -36,11 +36,21 @@ and four store docks with no way out to open water. Fixed here, with the minors 
 
 - **The truck set on this frame's ground** (`truck.js settle`, called by main.js after the tiles' update each frame,
   while it is in view). `park()` posed the truck once on the 10 m ground at 320 m; the 2 m ground comes in at 300 m and
-  nothing set it down again, so it stood 0.3–2.3 m over the LiDAR ground (Pitcher Plant 2.1–2.3 m) or sank into it. And a
-  ride's truck was posed in the people's update, before the frame's tiles and 2 m chunks landed, so for that frame it
-  stood on the ground of the frame before (the checker's 2.6 m sink frames on the EP 80 ride, by its bridge over the
-  creek). Now it is posed again on the frame's own ground after the tiles' update: four ground reads and four deck reads
-  a frame while it is in view.
+  nothing set it down again, so it stood 0.3–2.3 m over the LiDAR ground (Pitcher Plant 2.1–2.3 m) or sank into it. Now
+  it is posed again on the frame's own ground after the tiles' update: four ground and four deck reads a frame while
+  it is in view. chk-r5's TP on the head: 13 stores with a road, every tyre within 0.024 m (was up to 2.32).
+- **A ride's truck waits in the lot for the 2 m ground** (`truck.js groundAhead`, `detail.js settled`): up to 10 s
+  more, until the 2 m chunks are in under its first 160 m. On the 10 m ground EP 80's bridge abutments fall 4 m into
+  Larch Creek's valley, and the truck pulled out 2.5 s after the fade and dropped off the deck's end (chk-r5's 2.6 m sink
+  frames). Watched at about the wall clock's pace (r5-final-test R) the EP 80 ride holds 5 s, then 0 frames sunk past
+  0.2 m (worst 0.07) and none afloat past 0.1 m; 50 and 75 the same. chk-r5's TR still counts the EP 80 frames, because it
+  runs 45 frames at a time without letting the chunk builds land, so the 10 s wait is spent before they do (a rig
+  artefact: on the 2 m ground the whole way out has no sunk tyre, r5-final-test B).
+- **The page no longer hangs after a teleport** (`camera.js sightLine`: no line longer than 80 m is tested). The frame
+  after a teleport the chase camera still stood where it was, kilometres off, and the occlusion test along that line
+  (every tree within half its length, every 0.18 m) held the page for minutes. That was chk-r5's "the rig hung going home
+  before the third ride": paused by the debugger, the stack was `sightLine ← pullIn ← chase.update ← frame`. Eight rides
+  and home in turn now run straight through.
 - **Every home dock paddles out.** Measured in the page with the hull's own test (player.js: the middle 1.2 m from the
   shore, the ends 0.5 m, afloat), a 2 m lattice from the canoe at the dock, paddled along by W (r5-final-test D). The
   checker's way-finding hugged the shores (0.3–1.5 m), so its stuck spots were partly the rig's; the static
