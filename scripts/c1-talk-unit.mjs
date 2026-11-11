@@ -193,7 +193,7 @@ function keeperRig(ep = 31, name = 'Ruth Aho', manner = 'warm', home = 31) {
   t.attach({ npcs, pencil, profile: { started: true, home } }).use({ keeper: KEEPER_TOPICS, floor: FLOOR });
   return { s, t, rings, v: { key: `k:${ep}`, ep, keeper: true, name } };
 }
-test('the return: "Whose gear was this?" on top in gold (the keeper\'s own words, Josie\'s at home); nothing before night one', () => {
+test('the return: "Whose gear was this?" on top in gold (20 §5.2 by manner, "Before my time", Josie\'s at home); nothing before night one', () => {
   const { s, t, v } = keeperRig();
   assert.equal(t.top(v), null);
   assert.equal(t.items(v).length, 0, 'no Walt lore before the notebook');
@@ -201,8 +201,8 @@ test('the return: "Whose gear was this?" on top in gold (the keeper\'s own words
   const top = t.top(v);
   assert.equal(top.text, T('20:5.2.c1'));
   let n = top.go();
-  assert.equal(n.say, world.text['70.8.1.1'].text);
-  n = n.choices[0].go(); // Go on? no: Ruth's next is Josie's (the 70 line has no Go on)
+  assert.equal(n.say, 'I wish I could tell you. Before my time, whoever it was.'); // (warm: "since {year}" has no year here, so it goes; chk-c1a 4: not 70 §8's)
+  n = n.choices[0].go(); // Josie's after it at home
   assert.ok(n.say === T('20:5.2.14') && n.by === 'Josie');
   assert.ok(s.walt().includes('20:5.2.w1') && s.get('walt.gear') === 31);
   assert.equal(t.top(v), null, 'once');
