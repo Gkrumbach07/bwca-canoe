@@ -74,6 +74,7 @@ export const FACTS = [
   { key: 'bundle.', kind: 'bool', doc: '20 §1.2 P1: bundle.taken | bundle.shelf (story.bundle), bundle.later (taken at R1/R1b)' },
   { key: 'rehook.', kind: 'bool', doc: '20 §9.2 a re-hook said (rehook.R1 … rehook.R7): once ever' },
   { key: 'tauno.armed', kind: 'bool', doc: '20 §6.1 story.porch1 = armed: inside an outfitter after night one' },
+  { key: 'return.greeted', kind: 'bool', doc: '20 §5.2 the return\'s opener said (the keeper by manner, the first time inside after night one)' },
   { key: 'tauno.porch.warm', kind: 'bool', doc: '20 T3 porch1.warm: the Swede test corrected' },
   { key: 'tauno.porch.toldBook', kind: 'bool', doc: '20 T3 porch1.toldBook: "I found a notebook in his tent."' },
   { key: 'tauno.talk', kind: 'bool', doc: '§12 an engagement atom: the player talked with Tauno' },

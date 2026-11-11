@@ -21,6 +21,9 @@ export const CAST = {
     noPorch: 'truck',
     where: [
       { id: 'porch', at: 'walkout', when: 'f:tauno.armed & !f:tauno.porch.declined1 & !f:tauno.porch.done & daylight', push: 'tauno.porch', scene: 'T1', bark: '20:T1.1', walk: true },
+      // walked off after T3 ("That's enough for today."): once, a trip on, at a daylight walk-out, he picks up at the hub
+      // (20 §6.2: what's been said stays; §6.5 "Where was I.")
+      { id: 'again', at: 'walkout', when: 'f:tauno.porch.done & !f:tauno.said.t5 & !f:door.crews.declined & !f:rehook.again & trips.since(tauno.porch.done)>=1 & daylight', push: 'again', scene: 'T4', bark: '20:6.5.2', fact: 'rehook.again' },
       { id: 'R3', at: 'walkout', when: 'f:tauno.porch.declined1 & !f:tauno.porch.declined2 & !f:tauno.porch.done & !f:rehook.R3 & trips.since(tauno.porch.declined1)>=1 & daylight', push: 'R3', scene: 'R3', bark: '20:9.2#R3.0', fact: 'rehook.R3', walk: true },
       { id: 'R4', at: 'walkout', when: 'f:door.crews.taken & !f:rehook.R4 & !f:tauno.turn & trips.since(door.crews.taken)>=3 & home & daylight', push: 'R4', scene: 'R4', bark: '20:9.2#R4.0', fact: 'rehook.R4' },
       { id: 'R5', at: 'walkout', when: 'f:door.crews.declined & !f:door.crews.taken & !f:rehook.R5 & trips.since(door.crews.declined)>=3 & home & daylight', push: 'R5', scene: 'R5', bark: '20:9.2#R5.0', fact: 'rehook.R5' },

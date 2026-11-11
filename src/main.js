@@ -1236,8 +1236,10 @@ async function main() {
       journal.map.attachPencil({ pencil, leads, story, layer: seams.layer || null, player });
       leads.attach({ story, pencil, hud });
       if (story.ui && typeof story.ui.provide === 'function') story.ui.provide('pickLake', (o) => journal.map.pickLake(o));
-      let firstLead = 0;
-      leads.on('first', () => { firstLead = performance.now(); });
+      // ("Tauno's door" names him: on the cold path the moment waits for his name, said at the turn: chk-c1a 3)
+      let firstLead = 0, leadWaits = false;
+      leads.on('first', () => { if (story.has('knows.tauno')) firstLead = performance.now(); else leadWaits = true; });
+      story.on('fact', ({ key }) => { if (leadWaits && key === 'knows.tauno') { leadWaits = false; firstLead = performance.now(); } });
       const pm = new Map([
         ['pencil', { id: 'pencil', prio: 1, recur: 'once', text: 'Drag a name from his page onto a lake to pencil it in.', // (20:7.2.w1)
           due: () => journal.open && journal.side === 'map' && pencil.unmatched().some((n) => !n.matched) }],
@@ -1281,7 +1283,7 @@ async function main() {
         import('./topics.js'), import('./cast.js'), import('./beats.js'), import('./ambient.js'), import('./story-data/topics-act1.js'),
         import('./story-data/rules-talk.js'), import('./feed-talk.js'), import('./story-data/words.js')]);
       const W = await loadWords(['opening', 'world', 'mining']), w70 = { default: W.world };
-      texts.add(W.opening); texts.add(W.world); texts.add(W.mining); // (mining: Tauno's seat reads Two Stump and V.'s water, 30 §4.1)
+      texts.add(W.opening); texts.add(W.world); texts.add(W.mining); texts.add(A1.TEXT); // (A1.TEXT: the doc's prose lines with no anchor yet, 20 §5.2 W.H.) // (mining: Tauno's seat reads Two Stump and V.'s water, 30 §4.1)
       const seams = window.__game.storySeams || {};
       beats.attach(story);
       void RULES_TALK; // (st-t: in the story from its construction, story-data/all-rules.js; never added after attach (chk-coop C2). cast.js still plays t.armed on its own store:enter, guarded by the fact)
@@ -1296,6 +1298,13 @@ async function main() {
       npcs.addPool('word', (c) => { const l = ambient.pick('rumour', { seed: `${c.ep}:${wk()}`, ep: c.ep }); return l ? { id: l.id, text: l.text } : null; });
       npcs.addPool('remark', (c) => { const l = ambient.pick('bark', { ep: c.ep }); return l ? { id: l.id, text: l.text } : null; });
       { const kByeT = npcs.kBye.bind(npcs); npcs.kBye = (v, op) => { cast.josieClose(v); return kByeT(v, op); }; }
+      // 20 §5.2 the return's opener: the keeper's hello, the first time inside after night one, is the manner's line (said as
+      // the doc's words: not weighed against the weather as a hello is, it asks after a night already had)
+      { const kST = npcs.keeperSays.bind(npcs); npcs.keeperSays = (ep, words, moment = 'hello') => {
+        const r = moment !== 'goodbye' ? cast.returnHello(ep) : null; if (!r) return kST(ep, words, moment);
+        const own = Object.prototype.hasOwnProperty.call(npcs, 'grounded'), g = npcs.grounded; npcs.grounded = () => true;
+        try { return kST(ep, r, 'return'); } finally { if (own) npcs.grounded = g; else delete npcs.grounded; }
+      }; }
       talk.pickLake = (o) => (story.ui && typeof story.ui.pickLake === 'function' ? story.ui.pickLake(o) : Promise.resolve(null));
       rides.roadLine = ({ from, to, way = [], roads = [] }) => ambient.roadLine({ roads, towns: way, eps: [from, to], seed: `${from}:${to}:${day.year}:${day.doy}` });
       onboarding.p1 = (ep, landing) => cast.p1(ep, landing);

@@ -110,7 +110,7 @@ export class SceneRun {
     for (const l of list || []) {
       const x = one(l); if (!x) continue;
       let w = x.text != null ? x.text : T(x.id, this.ctx.vars);
-      if (w && x.strip) w = w.replace(x.strip, '').trim();
+      if (w && x.strip) w = w.replace(x.strip, '').replace(/\s{2,}/g, ' ').trim();
       if (w) out.push({ text: w, by: x.by || null });
     }
     return out;
@@ -304,7 +304,7 @@ export class Topics {
     this.newTalk(v);
     const ids = this.sayFor(t, K);
     const vars = { ...K, outfitter: K.keeper };
-    const lines = ids.map((id) => T(id, vars)).filter(Boolean);
+    const lines = ids.map((id) => T(id, vars)).map((w) => (w ? w.replace(/[^.?!]*\{\w+\}[^.?!]*[.?!]\s*/g, '').trim() : w)).filter(Boolean); // (a sentence whose {blank} has no value here goes: the warm "since {year}")
     if (K.home && t.josie) { const j = T(t.josie, vars); if (j) lines.push({ by: 'Josie', text: j }); }
     if (t.extra) for (const x of t.extra) if (this.when(x.when, K.args)) { const w = T(x.id, vars); if (w) lines.push(w); }
     if (t.once) this.run([`f:asked.walt.${t.id}`], K.args, `topic:${t.id}`);

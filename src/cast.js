@@ -20,6 +20,7 @@ import { SceneRun, T, MANNERS } from './topics.js';
 import { storeLayout, storeLayouts } from './props.js';
 import { castPorch } from './grounding.js';
 import { RULES_TALK } from './story-data/rules-talk.js';
+import { RETURN } from './story-data/topics-act1.js';
 
 const NEAR = 120;            // m: stores this near have their seats kept (npcs settles a roster within 70)
 const BARK_R = 9;            // m: the staged person's first word as you come this near
@@ -27,6 +28,8 @@ const WALK_PAST = 12;        // m: the porch's "[Keep walking]": T1b
 const WALK_OFF = 26;         // m: walked off: X1 (declined), or the stop is over
 const GONE_R = 32;           // m: after the scene, he goes once you are this far, or back inside
 const TICK = 0.5;            // s between schedule checks
+const TRUCK_NEAR = 10;       // m: his pickup only where the store's truck stands this near the door (chk-c1a 1: at 16, 67 and
+                             // 38 it stands behind the building, 19–23 m off, and a player walking out never met him)
 
 // a spot by the store: the porch foot (beside the steps, looking out), the bench, beside the counter
 export function SPOT_OF(L, kind) {
@@ -96,7 +99,9 @@ export class Cast {
     let spot = null, truck = null;
     if (kind === 'counter') spot = SPOT_OF(L, 'counter');
     else if (porch) spot = SPOT_OF(L, kind === 'bench' ? 'bench' : 'foot') || SPOT_OF(L, 'foot');
-    if (!spot && R.noPorch === 'truck' && kind !== 'counter') { truck = this.truckAt(ep); spot = truck ? truck.stand : SPOT_OF(L, 'foot'); }
+    // no porch: his pickup's tailgate where the lot's truck stands near the door (20 §6.1 "the edge of the lot"), else the
+    // foot of the steps, where the player walking out meets him (T1 said as you come out)
+    if (!spot && R.noPorch === 'truck' && kind !== 'counter') { const foot = SPOT_OF(L, 'foot'); truck = this.truckAt(ep, foot); spot = truck ? truck.stand : foot; }
     if (!spot) return null;
     const rec = { key: `cast:${who}:${ep}`, name: this.nameOf(who), role: R.role || '', look: R.look, talk: () => (this.talk(who) ? true : null) };
     let h = null;
@@ -119,12 +124,13 @@ export class Cast {
   }
   // his pickup in the lot (a store with no porch, 20 §6.6): his own truck where the store's truck would stand, which
   // keeps away from that store while his is there
-  truckAt(ep) {
+  truckAt(ep, near = null) {
     const RT = this.c.ridesTruck, make = this.c.truck;
     if (!RT || typeof RT.spot !== 'function' || typeof make !== 'function') return null;
     let S = null;
     try { S = RT.spot(ep); } catch { S = null; }
     if (!S || !Number.isFinite(S.x)) return null;
+    if (near && Math.hypot(S.x - near.x, S.z - near.z) > TRUCK_NEAR) return null; // (behind the store: out of sight of the door)
     try { RT.hide(); RT.gone = String(ep); } catch { /* the store's truck */ }
     const T = this.ownTruck || (this.ownTruck = make());
     if (!T || typeof T.pose !== 'function') return null;
@@ -166,6 +172,10 @@ export class Cast {
     if (!this.on) return;
     this.t += dt;
     for (const st of this.live.values()) this.watch(st, dt);
+    if (this.josieAfter && (this.josieAfter.t -= dt) <= 0) { // (Josie's line a moment after the keeper's opener)
+      const st = this.live.get(this.key('josie', this.josieAfter.ep)); this.josieAfter = null;
+      const j = T(RETURN.josie); if (st && j) { this.say(st, j); const n = this.c.npcs; if (n && n.mark) n.mark(j); }
+    }
     if (this.t < TICK) return;
     this.t = 0;
     const p = this.c.player; if (!p) return;
@@ -213,7 +223,7 @@ export class Cast {
     if (talking) return;
     const slot = st.slot || {};
     if (!st.barked && slot.bark && d < BARK_R && !st.done) { st.barked = true; this.say(st, T(slot.bark)); }
-    if (slot.walk && !st.talked && !st.done && st.barked) {
+    if (slot.walk && !st.talked && !st.done && st.barked && !this.story.has('tauno.porch.done')) {
       if (!st.past && d > WALK_PAST) { st.past = true; this.say(st, T('20:T1b.1')); }
       else if (st.past && d > WALK_OFF) { this.decline(); st.done = true; this.say(st, T('20:X1.1')); }
     }
@@ -224,6 +234,7 @@ export class Cast {
   say(st, text) { if (!text || !st.h) return; try { st.h.say(text); } catch { /* not drawn */ } }
   decline() {
     const s = this.story;
+    if (s.has('tauno.porch.done')) return; // (walked with him already: a walk-off after T3 is "That's enough for today.", never a decline: chk-c1a 2)
     s.rules.apply({ id: 'cast:decline', then: [s.has('tauno.porch.declined1') ? 'f:tauno.porch.declined2' : 'f:tauno.porch.declined1'] }, {});
   }
 
@@ -269,14 +280,14 @@ export class Cast {
     const run = st.run; if (!run || st.done) return null;
     if (PRE_T3.has(run.at)) { this.decline(); st.done = true; return T('20:X1.1'); }
     if (/^R[457]$/.test(run.at) || run.at === 'seat') { st.done = true; return null; }
+    st.done = true; // (he goes once you are away; E on him before that picks up where it was: porchEntry 'resume', "Where was I.")
     return T(WALK_AWAY);
   }
   // Josie at the home counter: R1, R1b, then the topic that stays; else a word of hers by stage (70 §4.4)
   josieTalk(st) {
     const dlg = this.c.talk, s = this.story, slot = st.slot || {}, n = this.c.npcs, amb = this.c.ambient;
     const take = () => { const ob = this.c.onboarding; if (ob && typeof ob.takeLater === 'function') ob.takeLater(); s.rules.apply({ id: 'josie:take', then: ['f:bundle.later', 'f:bundle.taken'] }, {}); };
-    let start = slot.scene;
-    if (!start && s.has('bundle.shelf') && !s.has('bundle.later') && s.has('rehook.R1b')) start = 'still';
+    const start = slot.scene; // (after R1b: her word, and "That old pack still in back?" among the choices, asked or not: chk-c1a 6)
     const run = new SceneRun(this.c.topics, JOSIE, { who: 'josie', args: this.args(st.ep), mark: n && n.mark ? (t) => n.mark(t) : null, hooks: { take } });
     st.run = run; st.talked = true;
     if (slot.scene) st.slot = (CAST.josie.where.find((w) => w.id === 'counter')) || slot; // (a re-hook said is said)
@@ -311,12 +322,29 @@ export class Cast {
         keeper: () => ({ id: P1.keeper[Math.max(0, MANNERS.indexOf(manner))], by: keeper || 'The keeper' }),
         week: () => (W.third && week % 3 === 0 ? W.third : W.id),
         // "…on the high shelf behind the {back-room thing}." with this store's (1.3): its words without the "…"
-        bundle: () => { const t = T('20:1.2.14'); if (!t) return null; const b = back ? back.replace(/^…\s*/, '').replace(/\.$/, '') : null; return { text: b ? t.replace(/behind the \{[^}]*\}/, b) : t.replace(/ behind the \{[^}]*\}/, '') }; },
+        // (a row that isn't "behind the …" (16's boathouse, 69's shed, 25's box) takes the whole place: "This was under a tarp
+        // in the boathouse, …", never "on the high shelf under a tarp": chk-c1a 8)
+        bundle: () => { const t = T('20:1.2.14'); if (!t) return null; const b = back ? back.replace(/^…\s*/, '').replace(/\.$/, '') : null; return { text: b ? (/^behind /.test(b) ? t.replace(/behind the \{[^}]*\}/, b) : t.replace(/on the high shelf behind the \{[^}]*\}/, b)) : t.replace(/ behind the \{[^}]*\}/, '') }; },
         extra: () => P1.extra[ep] || null,
         take: () => { ob.give(); set('bundle.taken'); },
         shelf: () => { if (typeof ob.shelf === 'function') ob.shelf(); set('bundle.shelf'); },
       } });
     return run.node('open');
+  }
+  // the return's opener (20 §5.2): the first time inside any outfitter after night one, the keeper by manner in place of
+  // the hello (main.js wraps npcs.keeperSays), and at home Josie's after it ("You actually took the old stuff."). Once.
+  returnHello(ep) {
+    if (!this.on) return null;
+    const s = this.story, n = this.c.npcs;
+    if (!s.when('f:nb.found & !f:return.greeted')) return null;
+    ep = Number(ep);
+    s.rules.apply({ id: 'cast:return', then: ['f:return.greeted'] }, {});
+    const ch = n && typeof n.charOf === 'function' ? n.charOf(ep) : null, manner = ch ? ch.manner : 'warm';
+    const last = n && n.mem && typeof n.mem.lastTrip === 'function' ? n.mem.lastTrip() : null, nights = last && last.nights ? last.nights : null;
+    let t = T(RETURN.opener[Math.max(0, MANNERS.indexOf(manner))], nights ? { n: nights } : null);
+    if (t) t = t.replace(/[^.?!]*\{\w+\}[^.?!]*[.?!]\s*/g, '').trim(); // (no count of nights: "Welcome back. The canvas held?")
+    if (ep === this.home()) this.josieAfter = { ep, t: 2.2 };
+    return t || null;
   }
   // the return's close (20 §5.2), at home, by day, before the porch: Josie, as you turn to go (once a day)
   josieClose(v) {

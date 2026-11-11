@@ -45,6 +45,8 @@ export const WALT_LINES = [
   { id: '20:T4.w9', section: 'odd' },
   { id: '20:T4.w10', section: 'odd' },
   { id: '20:7.2.w1', section: 'names' },
+  // 20 §7.1: "Tauno's on the porch at Farm most mornings." is under Leads (chk-c1a 3: it sat under Things that don't add up)
+  { id: '20:7.1.lead.tauno', section: 'leads' },
   // (the join) 20 §7.3: "Walt page, Leads: the line gets *(ringed)*": a note on the crews' lead line, not a line of its own
   { id: '20:7.3.w1', section: 'leads', annotates: '20:11.2.w1' },
   // /st-b

@@ -56,8 +56,10 @@ export const LEADS = [
   { id: 'crews', born: 'f:door.crews.taken | f:door.crews.declined', subject: { place: 'crews.landing' },
     ring: { by: null, ask: 'keeper:any', r: 850 }, walt: '20:11.2.w1',
     followed: 'near:crews.landing/300', closes: 'f:crews.seen', after: '20:11.2.w2' },
-  // "I'm on the porch at Farm most mornings." (T5.6, X2.1): a person lead with its where
-  { id: 'tauno', born: 'f:tauno.porch.done | f:door.crews.declined', subject: { person: 'tauno', where: { store: 31, hours: '6-11', words: 'mornings, on the porch at Farm' } },
+  // "I'm on the porch at Farm most mornings." (T5.6, X2.1): a person lead with its where. Born when he has said Farm (the
+  // door, taken or declined: tauno.said.t5), and only once his name is said (20 §6.3: "Otherwise he stays 'the old man on
+  // the porch' until 1.3"; the line names him): on the cold path the turn names him and U5's mining door says Farm
+  { id: 'tauno', born: 'f:tauno.said.t5 & f:knows.tauno', subject: { person: 'tauno', where: { store: 31, hours: '6-11', words: 'mornings, on the porch at Farm' } },
     ring: { by: null, ask: 'keeper:any' }, walt: '20:7.1.lead.tauno', closes: 'f:tauno.turn' },
   // U5, the four doors (20 §12.3); each closes when its room opens (Round 2 on)
   { id: 'guiding', born: 'f:door.guiding.named', subject: { person: 'marlys', where: { store: 25, words: 'at Moose Lake, a couple of days a week' } },

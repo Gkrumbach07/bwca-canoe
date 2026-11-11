@@ -60,7 +60,7 @@ export const PORCH = {
       { ask: '20:T5.c1', once: 't5.crib', say: ['20:T5.3'] },
       { ask: '20:T5.c2', once: 't5.why', say: ['20:T5.4'] },
       { ask: '20:T5.c3', once: 't5.mark', say: ['20:T5.5'] },
-      { ask: '20:T5.c4', say: ['20:T5.6'], then: ['f:door.crews.taken', 'f:tauno.said.t5'], to: 'T6' },
+      { ask: '20:T5.c4', say: [{ first: [{ id: '20:T5.6', when: 'farm', strip: 'I\'m on the porch at Farm most mornings.' }, '20:T5.6'] }], then: ['f:door.crews.taken', 'f:tauno.said.t5'], to: 'T6' },
       { ask: '20:T5.c5', to: 'X2' }] },
     // T6 — the close
     T6: { say: ['20:T6.1', { id: '20:T6.2', when: 'raining' }, { id: '20:T6.3', when: 'snowing' }], end: true, then: ['do:done'] },
@@ -149,6 +149,9 @@ export const PRE_T3 = new Set(['T1', 'T1b', 'T2', 'R3', 'changed']);
 export function porchEntry(s, scene = 'auto') {
   let e = scene || 'auto';
   if (e === 'R4' && s.has('crews.seen')) e = 'auto';
+  // the porch's own openers once he's been walked with: a walk-off after T3 and E on him again picks up ("Where was I."),
+  // never the patch again (chk-c1a 2: it replayed T1, and [Keep walking] from there declined on top of porch.done)
+  if ((e === 'T1' || e === 'R3' || e === 'changed') && s.has('tauno.porch.done')) e = 'auto';
   if (e !== 'auto') return e;
   if (!s.has('tauno.porch.done')) return s.has('tauno.porch.declined2') ? 'changed' : 'T1';
   if (!s.has('door.crews.taken') && !s.has('door.crews.declined')) return 'resume';
