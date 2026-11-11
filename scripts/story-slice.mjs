@@ -160,6 +160,24 @@ async function keeperE(page, ep) {
   for (let k = 0; k < 40 && !key; k++) { key = await page.evaluate((e) => { window.__L.step(5); return window.__t.keeperKey(e); }, ep); if (!key) await page.waitForTimeout(80); }
   return key ? talkE(page, key) : { ok: false, why: 'no keeper in the roster' };
 }
+// "Ask about…" shows three story topics, the newest part of the story first (topics.js): the topics above the one wanted
+// are asked first, as a player would, each by its number; → { ok, asked: [texts] }
+async function dig(page, want, max = 10) {
+  const asked = [], EXIT = /^(That’s all\.|That's all\.|Goodbye\.|…)$/;
+  for (let k = 0; k < max; k++) {
+    const c = await page.evaluate(() => window.__t.convo());
+    if (!c) return { ok: false, why: 'no conversation', asked };
+    const i = c.choices.findIndex((t) => t.startsWith(want));
+    if (i >= 0) { await page.keyboard.press(`Digit${i + 1}`); await page.waitForTimeout(60); return { ok: true, asked }; }
+    const ask = c.choices.findIndex((t) => /^Ask about/.test(t));
+    if (ask >= 0) { await page.keyboard.press(`Digit${ask + 1}`); await page.waitForTimeout(60); continue; }
+    if (c.choices.length === 1 && c.choices[0] === '…') { await page.keyboard.press('Digit1'); await page.waitForTimeout(60); continue; }
+    const j = c.choices.findIndex((t) => !EXIT.test(t) && !asked.includes(t) && !/^Lake One, Two/.test(t));
+    if (j < 0) return { ok: false, why: `no "${want}" in [${c.choices.join(' | ')}]`, asked };
+    asked.push(c.choices[j]); await page.keyboard.press(`Digit${j + 1}`); await page.waitForTimeout(60); await hear(page, 6);
+  }
+  return { ok: false, why: 'too many topics', asked };
+}
 async function picks(page, list) {
   const out = [];
   for (const p of list) { const r = await choose(page, p); out.push(r); if (!r.ok) return { ok: false, at: p, r, out }; }
@@ -421,7 +439,7 @@ async function slice() {
     await closeBook(A);
     const inn = await walkDoor(A, 31, 'in');
     const k2 = await keeperE(A, 31);
-    const r = await picks(A, ['Ask about', 'Ever hear of the Front Porch?']);
+    const r = await dig(A, 'Ever hear of the Front Porch?');
     await hear(A, 3); await endTalk(A);
     const ink = await A.evaluate(() => ({ ink: window.__game.story.get('ink.frontporch'), und: window.__game.story.nbHas('und', 'NB01'), line: window.__game.story.walt().includes('20:5.2.w2') }));
     result('7c the chip clicked, Lake One clicked: the Front Porch pencilled; a keeper asked "Ever hear of the Front Porch?" rings Lake One: inked, NB01 understood', chip.chip && !!spot.cx && pen.names.some(([n]) => n === 'frontporch') && k2.ok && r.ok && ink.ink === 'lakeone' && ink.und && ink.line, { chip, spot, pen, inn, k2, r: r.ok ? 'ok' : r, ink });
