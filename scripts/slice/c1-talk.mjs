@@ -12,6 +12,7 @@ export const HELPERS_T = () => {
   const g = window.__game, T = window.__t = {};
   T.step = (frames = 30, dt = 1 / 30) => { for (let left = frames; left > 0; left -= 200) g.step(dt, Math.min(200, left)); };
   T.wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  T.tp = async (x, z) => { const ok = await g.player.teleport(x, z); if (ok && g.chase && g.chase.snap) g.chase.snap(); return ok; }; // (the chase snapped, as main.js's teleport: c1-layer's L.tp)
   T.settle = async (ms = 40000) => { const t0 = performance.now(); while (g.player.teleporting && performance.now() - t0 < ms) { T.step(10); await T.wait(30); } T.step(20); };
   T.standAt = (x, z, heading = 0) => {
     const p = g.player;
@@ -186,7 +187,7 @@ export const r1 = { id: 'r1', step: 1, title: 'R1: Josie, the bundle off the she
   const back = await page.evaluate(async (e) => {
     const g = window.__game, T = window.__t, s = g.story, n = s.tripN(); s.ctx.tripN = () => n + 2;
     const l = g.outfitter.landing(e);
-    if (Math.hypot(g.player.x - l.x, g.player.z - l.z) > 150) { await g.player.teleport(l.x, l.z); await T.settle(); }
+    if (Math.hypot(g.player.x - l.x, g.player.z - l.z) > 150) { await T.tp(l.x, l.z); await T.settle(); }
     for (let k = 0; k < 120 && !g.outfitter.layout(e); k++) { T.step(10); await T.wait(60); }
     T.walkIn(e); T.walkOut(e); T.walkIn(e); T.step(40);
     return T.staged();
@@ -239,7 +240,7 @@ export const declines = { id: 'declines', step: 4, title: 'the declines and the 
     const g = window.__game, T = window.__t;
     g.day.setClock(g.day.year, g.day.doy + 1, 8);
     const l = g.outfitter.landing(31);
-    await g.player.teleport(l.x, l.z); await T.settle();
+    await T.tp(l.x, l.z); await T.settle();
     for (let k = 0; k < 120 && !g.outfitter.layout(31); k++) { T.step(10); await T.wait(60); }
     const L = g.outfitter.layout(31); if (!L) return { why: 'no Farm store' };
     T.standAt(L.stepsFoot.x + L.axes.b.x * 3, L.stepsFoot.z + L.axes.b.z * 3); T.step(40);

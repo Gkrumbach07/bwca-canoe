@@ -19,6 +19,9 @@ export const HELPERS = () => {
   const g = window.__game, L = window.__L = {};
   L.step = (frames = 30, dt = 1 / 30) => { for (let left = frames; left > 0; left -= 200) g.step(dt, Math.min(200, left)); };
   L.wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  // a jump as the game's own makes it (main.js teleport): the chase snapped after, else the camera lerps in from where it
+  // was (km off: each frame's sight line walks every rock and trunk along it, seconds a frame; home 67's step 2 timed out)
+  L.tp = async (x, z) => { const ok = await g.player.teleport(x, z); if (ok && g.chase && g.chase.snap) g.chase.snap(); return ok; };
   L.settle = async (ms = 60000) => { const t0 = performance.now(); while (g.player.teleporting && performance.now() - t0 < ms) { L.step(10); await L.wait(30); } L.step(20); };
   L.look = (yaw, pitch = 0.05) => { const ch = g.chase; if (g.player.mode === 'paddle') { g.player.heading = yaw; g.player.yawRate = 0; } if (ch) { ch.viewYaw = yaw; ch.forwardYaw = yaw; ch.viewPitch = pitch; if (ch.snap) ch.snap(); } };
   L.standAt = (x, z, heading = 0) => {
@@ -64,7 +67,7 @@ export const HELPERS = () => {
   L.target = () => { const t = g.pointer && g.pointer.target; return t ? { kind: t.kind, label: t.label || '', verb: t.e ? t.e.verb : null, ref: t.ref || null } : null; };
   L.layer = () => g.storyLayer;
   L.prop = (id) => { const q = g.storyLayer.prop(id); const b = g.storyLayer.builtList().find((r) => r.prop === id); return q ? { x: q.prop.x, z: q.prop.z, y: b ? b.y : g.tiles.groundAt(q.prop.x, q.prop.z) } : null; };
-  L.near = async (x, z) => { await g.player.teleport(x, z); await L.settle(); for (let k = 0; k < 40 && !g.tiles.readyAt(x, z); k++) { L.step(5); await L.wait(50); } g.storyLayer.poll(); L.step(5); g.storyLayer.poll(); };
+  L.near = async (x, z) => { await L.tp(x, z); await L.settle(); for (let k = 0; k < 40 && !g.tiles.readyAt(x, z); k++) { L.step(5); await L.wait(50); } g.storyLayer.poll(); L.step(5); g.storyLayer.poll(); };
 };
 
 // press a key in the page, then let the game read it (the frame loop is stepped by hand in the rigs)
@@ -110,9 +113,9 @@ export const section = {
         const start = await page.evaluate(async ([C, q]) => {
           const g = window.__game, L = window.__L;
           if (g.wind) { g.wind.override = 1; g.wind.speed = 1; } // (a light air: the line in is the rig's, not the day's wind; 11.4's drift is not this stream's)
-          await g.player.teleport(C.x - C.n[0] * 60, C.z - C.n[1] * 60); await L.settle(); // (the tiles round it in, for isWater)
+          await L.tp(C.x - C.n[0] * 60, C.z - C.n[1] * 60); await L.settle(); // (the tiles round it in, for isWater)
           const o = L.waterOut(q.x, q.z, 215, q.x, q.z);
-          if (o) { await g.player.teleport(o.x, o.z); await L.settle(); }
+          if (o) { await L.tp(o.x, o.z); await L.settle(); }
           return { mode: g.player.mode, d: Math.round(Math.hypot(g.player.x - C.x, g.player.z - C.z)), out: o };
         }, [C, aimAt]);
         // which way A turns the canoe: held a moment, the heading's change read (then the line in is steered with it)

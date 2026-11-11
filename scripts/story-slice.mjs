@@ -224,7 +224,7 @@ const clockTo = (page, h, dd = 0) => page.evaluate(([h, dd]) => { const g = wind
 async function goStore(page, ep) {
   await page.evaluate(async (ep) => {
     const g = window.__game, L = window.__L, l = g.outfitter.landing(ep);
-    if (Math.hypot(g.player.x - l.x, g.player.z - l.z) > 120) { await g.player.teleport(l.x, l.z); await L.settle(); }
+    if (Math.hypot(g.player.x - l.x, g.player.z - l.z) > 120) { await window.__L.tp(l.x, l.z); await L.settle(); }
     for (let k = 0; k < 150 && !g.outfitter.layout(ep); k++) { L.step(10); await L.wait(60); }
     const S = g.outfitter.layout(ep); // (the store's own tiles in, its steps and porch collidable, before anyone walks them)
     if (S && g.tiles.ensure) { try { await g.tiles.ensure(S.door.x, S.door.z, 120); } catch { /* */ } }
@@ -287,7 +287,7 @@ async function slice() {
       const near = g.world.campsites.map((c) => ({ c, d: Math.hypot(c.x - home.x, c.z - home.z) })).filter((q) => q.d > 400).sort((a, b) => a.d - b.d).slice(0, 10);
       for (const { c } of near) {
         if (!g.campsites.isFree(g.campsites.key(c))) continue;
-        await g.player.teleport(c.x, c.z);
+        await window.__L.tp(c.x, c.z);
         for (let i = 0; i < 40 && !c.layout; i++) { g.step(1 / 30, 10); await new Promise((r) => setTimeout(r, 100)); }
         if (c.layout && c.layout.pad && g.campsites.isFree(g.campsites.key(c))) return { i: g.world.campsites.indexOf(c) };
       }
@@ -517,7 +517,7 @@ async function slice() {
     for (const s of LAYER.steps.filter((q) => q.guest)) await s.run({ page: B, result, shots: SHOTS });
     const g = await B.evaluate(async () => {
       const g = window.__game, home = g.profile.home, T = window.__t;
-      const l = g.outfitter.landing(home); await g.player.teleport(l.x, l.z); await window.__L.settle();
+      const l = g.outfitter.landing(home); await window.__L.tp(l.x, l.z); await window.__L.settle();
       for (let k = 0; k < 120 && !g.outfitter.layout(home); k++) { window.__L.step(10); await window.__L.wait(60); }
       g.day.setClock(g.day.year, g.day.doy, 10); T.walkIn(home); T.walkOut(home); window.__L.step(40);
       return { mode: g.story.mode, staged: T.staged().filter((x) => x.who === 'tauno').length, tab: (() => { const t = document.querySelector('#journal .book-tab.w'); return t ? !t.hidden : false; })(), walt: g.story.walt().length };
@@ -559,7 +559,7 @@ async function ignore() {
   const night = await A.evaluate(async () => {
     const g = window.__game, home = g.outfitter.landing(g.profile.home);
     const c = g.world.campsites.map((q) => ({ q, d: Math.hypot(q.x - home.x, q.z - home.z) })).filter((x) => x.d > 400 && g.campsites.isFree(g.campsites.key(x.q))).sort((a, b) => a.d - b.d)[0].q;
-    await g.player.teleport(c.x, c.z); for (let i = 0; i < 60 && (!c.layout || g.player.teleporting); i++) { g.step(1 / 30, 10); await new Promise((r) => setTimeout(r, 100)); }
+    await window.__L.tp(c.x, c.z); for (let i = 0; i < 60 && (!c.layout || g.player.teleporting); i++) { g.step(1 / 30, 10); await new Promise((r) => setTimeout(r, 100)); }
     const L = c.layout, pad = L.pad, camp = g.camp, inv = g.profile.inventory;
     g.player.standAt({ x: pad.x + pad.fdx * 2.2, z: pad.z + pad.fdz * 2.2, heading: 0, drop: { x: L.fire.x + 1.5, z: L.fire.z + 1.5, heading: 0 } });
     const pack = inv.containers.find((k) => k.item === 'waltpack'); if (pack) { pack.where = 'ground'; pack.at = { x: pad.x + pad.fdx * 1.6, z: pad.z + pad.fdz * 1.6 }; inv.emit('containers'); }
