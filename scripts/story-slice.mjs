@@ -159,7 +159,19 @@ async function walkDoor(page, ep, dir) {
   return { ok: false, via: 'api (the walk stuck)', tries };
 }
 // E on a person (the dot on them); the talk opened as E opens it, else through npcs.talkTo: → { ok, via }
+// the trip card (record.js), up as a trip ends (the walk back in after night one, Farm's porch): a talk under a paper is
+// closed the frame it opens (dialogue.before), so it is closed first as a player would, with E ("E or Esc closes"); by
+// its own close if that key went elsewhere
+async function dismissCard(page) {
+  for (let k = 0; k < 2; k++) {
+    if (!(await page.evaluate(() => { const h = window.__game.hud; return !!(h && h.paper === 'tripcard'); }))) return;
+    if (k === 0) await page.keyboard.press('e');
+    else await page.evaluate(() => { const r = window.__game.record; if (r && r.close) r.close(); });
+    await page.evaluate(() => window.__L.step(3));
+  }
+}
 async function talkE(page, key) {
+  await dismissCard(page);
   const f = await page.evaluate((key) => { const f = window.__t.figure(key); if (!f) return null; window.__L.face({ x: f.x, z: f.z }, 1.7, f.y + 1.45); window.__L.step(4); return f; }, key);
   if (!f) return { ok: false, why: `no figure ${key}` };
   const want = await page.evaluate((key) => { const n = window.__game.npcs, v = n && typeof n.find === 'function' ? n.find(key) : null; return v ? v.name || null : null; }, key);
@@ -171,6 +183,7 @@ async function talkE(page, key) {
     await page.waitForTimeout(60);
   }
   if (other) await endTalk(page); // (the dot was on someone else: a visitor stood between)
+  await dismissCard(page); // (the card can come up a moment after the door)
   await page.evaluate((k) => window.__t.talkTo(k), key);
   for (let k = 0; k < 25; k++) { if (await page.evaluate(() => { window.__L.step(2); return !!window.__t.convo(); })) return { ok: true, via: other ? `api (E found ${other} in the way)` : 'api (E did not open it)' }; await page.waitForTimeout(100); }
   return { ok: false, via: 'neither E nor the API opened it' };
