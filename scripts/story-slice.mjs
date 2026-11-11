@@ -378,7 +378,7 @@ async function slice() {
     const pre = await A.evaluate(() => { const g = window.__game, p = g.player, inv = g.profile.inventory; return { hours: +g.day.hours.toFixed(2), mode: p.mode, carry: p.carry ? { drop: !!p.carry.drop, trail: !!p.carry.trail } : null, canoe: (inv.long || []).filter((l) => /canoe|boat/i.test(l.id)).map((l) => [l.id, l.where]), trip: g.trip ? { active: !!g.trip.active, adventure: !!g.trip.adventure } : null, energy: +g.energy.value.toFixed(2), boat: p.boat ? Object.keys(p.boat).slice(0, 6) : null, papers: g.hud && g.hud.papers ? [...(g.hud.papers.keys ? g.hud.papers.keys() : g.hud.papers)].slice(0, 6) : null, paused: !!(g.pause && (g.pause.open || g.pause.shown)), focus: document.activeElement ? `${document.activeElement.tagName}#${document.activeElement.id || ''}` : null, journal: g.journal.open, talk: !!window.__t.convo(), dock: !!(g.outfitter && g.outfitter.docking) }; });
     log('before the landing', JSON.stringify(pre));
     // the hands free for the paddle: a rod left up (a digit pressed as a talk closed picks it up) idles the hands
-    const hands = await A.evaluate(() => { const g = window.__game, p = g.player, f = p.fishing, c = g.canoe || p.canoe; const was = { rodUp: !!(f && f.rodUp), climb: c && c.state ? c.state.climb : null, held: g.inventory && g.inventory.hands ? g.inventory.hands() : null }; if (f && f.rodUp) f.stow(true); return was; });
+    const hands = await A.evaluate(() => { const g = window.__game, p = g.player, f = p.fishing, c = g.canoe || p.canoe; const was = { rodUp: !!(f && f.rodUp), climb: c && c.state ? c.state.climb : null, held: g.inventory && typeof g.inventory.hands === 'function' ? g.inventory.hands() : null }; if (f && f.rodUp) f.stow(true); return was; });
     log('the hands before the paddle', JSON.stringify(hands));
     for (const s of LAYER.steps.filter((q) => q.step === 5)) await s.run({ page: A, result, shots: SHOTS });
     const post = await A.evaluate(() => { const g = window.__game, p = g.player; return { hours: +g.day.hours.toFixed(2), mode: p.mode, speed: p.speed, energy: +g.energy.value.toFixed(2), bilge: g.canoe && g.canoe.bilge, low: g.energy.low || null }; });
@@ -393,7 +393,8 @@ async function slice() {
     await goStore(A, 31);
     const sat = await A.evaluate(() => { const g = window.__game, S = g.outfitter.layout(31), b = S.axes.b, f = S.stepsFoot || S.door; window.__L.standAt(f.x + b.x * 4, f.z + b.z * 4, 0); window.__L.step(60); return window.__t.staged(); });
     const t = await A.evaluate(() => window.__t.tauno());
-    const k = t ? await talkE(A, `cast:tauno:${t.ep}`) : { ok: false };
+    let k = t ? await talkE(A, `cast:tauno:${t.ep}`) : { ok: false };
+    if (t && !k.ok) { await A.evaluate(() => window.__L.step(90)); k = await talkE(A, `cast:tauno:${t.ep}`); k.again = true; } // (under load his seat settles a moment later)
     const u1 = await A.evaluate(() => window.__t.convo());
     const r = await picks(A, ['The crib\'s still there.', 'Somebody\'s flagged the grade.', 'Pink. New.', 'Measuring for who?', 'Away from the west shore', 'Somebody killed him.', 'Marlys?', 'I\'ll go.']);
     await hear(A, 4); await endTalk(A);
