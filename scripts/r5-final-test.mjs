@@ -301,7 +301,7 @@ try {
         }
         // the truck posed along it, its tyres read off its matrix against the ground there (as chk-r5's TR reads them)
         const sinks = [];
-        for (let s = S.s0; s < Math.min(P.len, S.s0 + Number(process.env.B_LEN || 600)); s += 0.25) {
+        for (let s = S.s0; s < Math.min(P.len, S.s0 + 600); s += 0.25) {
           T.pose(P, s);
           const e = T.mesh.matrix.elements, Q = (lx, lz) => [e[0] * lx + e[8] * lz + e[12], e[1] * lx + e[9] * lz + e[13], e[2] * lx + e[10] * lz + e[14]];
           const gaps = []; for (const a of [1.72, -1.63]) for (const sd of [-0.93, 0.93]) { const [x, y, z] = Q(sd, a); const gr = g.tiles.groundAt(x, z), dk = R.deckAt(g.world, x, z); gaps.push(+(y - (Number.isFinite(gr) ? Math.max(gr, dk) : dk)).toFixed(2)); }
