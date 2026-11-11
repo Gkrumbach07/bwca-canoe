@@ -28,3 +28,45 @@ Merged from main 1057fb6, `--no-ff`: claude/r5-roads (ba87eee), claude/r5-cabins
 ## Rig
 
 `scripts/r5-fixes-test.mjs` (7 checks; `--files` runs 1-3 in plain node).
+
+## Final pass (after chk-r5)
+
+The checker (chk-r5, on 94daf62) found two of the owner's five still standing: the parked truck floating behind a store,
+and four store docks with no way out to open water. Fixed here, with the minors that were cheap.
+
+- **The truck set on this frame's ground** (`truck.js settle`, called by main.js after the tiles' update each frame,
+  while it is in view). `park()` posed the truck once on the 10 m ground at 320 m; the 2 m ground comes in at 300 m and
+  nothing set it down again, so it stood 0.3–2.3 m over the LiDAR ground (Pitcher Plant 2.1–2.3 m) or sank into it. And a
+  ride's truck was posed in the people's update, before the frame's tiles and 2 m chunks landed, so for that frame it
+  stood on the ground of the frame before (the checker's 2.6 m sink frames on the EP 80 ride, by its bridge over the
+  creek). Now it is posed again on the frame's own ground after the tiles' update: four ground reads and four deck reads
+  a frame while it is in view.
+- **Every home dock paddles out.** Measured in the page with the hull's own test (player.js: the middle 1.2 m from the
+  shore, the ends 0.5 m, afloat), a 2 m lattice from the canoe at the dock, paddled along by W (r5-final-test D). The
+  checker's way-finding hugged the shores (0.3–1.5 m), so its stuck spots were partly the rig's; the static
+  `cabins-water-check --stores` holds to a 10 m grid and a level step, which no creek passes.
+  - **Pitcher Plant (67)** really had no way out: the hull never got off Bush Creek (228 lattice cells, the creek under
+    2.4 m across for 640 m). The store goes up the creek to **Bog Lake's east shore**, 690 m from its round 4 spot and 110 m
+    clear of the Bog Lake Portage's landing (ep-fixes SPEC `store.put`), its made two-track carried on from the old road
+    end (562 m to the map's edge). Its starter route is now Bog Lake #4, 1.28 km, no carry. `storeWas`: a trip saved at
+    the round 4 spot carries on at the new door (outfitters.js `fromMovedStore` reads every spot a store has stood at).
+  - **Thimbleberry (6)**: the dock stood in a 7-cell pond behind a stony bar off Burntside's North Arm (0.6 m from the
+    shore); the hull got round the bar in 80 m, but straight out ran aground. The landing now walks to the shore from
+    Burntside's open water east of the bar (landings.json `from`): the dock 4.7 m out on Burntside, the store 45 m
+    over, open water 40 m out. Starter route: Burntside's bay site, 4.83 km.
+  - **Hog Creek (36)** and **Moose River North (16)** stay: they are the real creek and river starts, and the hull
+    paddles them (36: 1.27 km up Hog Creek to Bill Lake, no stuck stop, no rapids; 16: the Moose River 1.5 km, no stuck
+    stop, no rapids). Nothing within 2.5 km of either reaches open water by a road, so moving them would mean another
+    entry point's lake (36 to Kawishiwi Lake, 3.2 km; 16 to Big Lake, 7.7 km). The owner's call (below).
+  - Old Mill (69) on Little John: 131 m to open water, passes.
+- **The trip card waits for the truck** (record.js `free`): after a ride the logbook card holds while the truck is
+  leaving or coming within 150 m, so it no longer covers the truck pulling away.
+- The tables rebuilt for the two moved stores on ben: ep-fixes.json, outfitter-places.json, roads.json/roads.bin,
+  edge.bin/map-roads.bin (the doorstep round 67 moved with it; r5-fixes-test 3 now checks the zones are main's
+  everywhere but within 2.6 km of those two), starter-routes.json (6, 67). landing-check: 67 passes on both grounds;
+  6's "landing 835 m from the put-in" and 36's collision note are main's own (804 m there).
+
+Left (low): the road ribbon 0.26–0.39 m over the ground at a crown or shoulder in places (chk-r5 6; no float visible in
+the close-ups); roads drawn to about 2.5 km (chk-r5 7, a draw-distance cost); "can't stand on a cabin dock" (chk-r5 8)
+is the rig's: cabins.json's `dock.end` is the water 4 m past the deck's end, so standing 1.5 m short of it is in the
+water. "Get in" from the water (chk-r5 5) did not reproduce: the Sandbox runs at 6 and 67 boarded on the first E.
