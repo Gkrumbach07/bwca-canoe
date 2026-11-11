@@ -97,11 +97,19 @@ const facts = (page, keys) => page.evaluate((ks) => Object.fromEntries(ks.map((k
 const HELPERS_J = () => {
   const g = window.__game, J = window.__J = {}, L = window.__L, T = window.__t;
   // a store's door as waypoints: from outside (in front of the steps) to the door to inside, or the reverse
-  J.route = (ep, dir) => {
+  J.route = (ep, dir, side = 0) => {
     const S = g.outfitter.layout(ep); if (!S) return null;
-    const b = S.axes.b, d = S.door, foot = S.stepsFoot || { x: d.x + b.x * 2, z: d.z + b.z * 2 };
+    const a = S.axes.a, b = S.axes.b, d = S.door, f0 = S.stepsFoot || { x: d.x + b.x * 2, z: d.z + b.z * 2 };
+    const foot = { x: f0.x + a.x * side, z: f0.z + a.z * side }; // (a step to one side: someone standing at the foot)
     const outside = { x: foot.x + b.x * 2.5, z: foot.z + b.z * 2.5 }, inside = { x: d.x - b.x * 3, z: d.z - b.z * 3 };
     return dir === 'in' ? [outside, foot, d, inside] : [inside, d, foot, { x: foot.x + b.x * 4, z: foot.z + b.z * 4 }];
+  };
+  // the player as the slice wants them between places: the pack on, fed and watered, rested (the rig skips the meals)
+  J.refresh = () => {
+    const inv = g.profile.inventory, pack = inv.containers.find((k) => k.item === 'waltpack');
+    if (pack && pack.where === 'ground') { pack.where = 'back'; delete pack.at; inv.emit('containers'); }
+    g.energy.value = 1; if (g.energy.needs) { g.energy.needs.food = 1; g.energy.needs.water = 1; g.energy.needs.warmth = 1; }
+    return { pack: pack && pack.where };
   };
   J.at = () => ({ x: g.player.x, z: g.player.z, inside: !!(g.outfitter.visit && g.outfitter.visit.inside), mode: g.player.mode });
   J.face = (q) => { const yaw = L.yawTo(q); L.look(yaw); g.player.heading = yaw; };
@@ -110,23 +118,31 @@ const HELPERS_J = () => {
 };
 // walk a store's door by the keys (W held, steered at each waypoint): → { ok, inside, via }
 async function walkDoor(page, ep, dir) {
-  const route = await page.evaluate(([ep, dir]) => window.__J.route(ep, dir), [ep, dir]);
-  if (!route) return { ok: false, why: 'no store layout' };
-  await page.evaluate((p) => { window.__L.standAt(p.x, p.z, 0); window.__J.face(p); window.__L.step(4); }, route[0]);
-  let st = null;
-  for (let w = 1; w < route.length; w++) {
-    await page.keyboard.down('w');
-    for (let k = 0; k < 90; k++) {
-      st = await page.evaluate((q) => { window.__J.face(q); window.__L.step(3); const a = window.__J.at(); return { ...a, d: Math.hypot(q.x - a.x, q.z - a.z) }; }, route[w]);
-      if (st.d < 0.7) break;
+  await page.evaluate(() => { const j = window.__game.journal; if (j.open) j.close(); window.__J.refresh(); window.__L.step(2); });
+  const tries = [];
+  for (const side of [0, 1.3, -1.3]) {
+    const route = await page.evaluate(([ep, dir, side]) => window.__J.route(ep, dir, side), [ep, dir, side]);
+    if (!route) return { ok: false, why: 'no store layout' };
+    await page.evaluate((p) => { window.__L.standAt(p.x, p.z, 0); window.__J.face(p); window.__L.step(4); }, route[0]);
+    let st = null, stuck = null;
+    for (let w = 1; w < route.length && !stuck; w++) {
+      await page.keyboard.down('w');
+      let best = Infinity, still = 0;
+      for (let k = 0; k < 90; k++) {
+        st = await page.evaluate((q) => { window.__J.face(q); window.__L.step(3); const a = window.__J.at(); return { ...a, d: Math.hypot(q.x - a.x, q.z - a.z) }; }, route[w]);
+        if (st.d < 0.7) break;
+        if (st.d < best - 0.05) { best = st.d; still = 0; } else if (++still > 12) { stuck = { w, d: +st.d.toFixed(2) }; break; }
+      }
+      await page.keyboard.up('w');
     }
-    await page.keyboard.up('w');
+    await page.evaluate(() => window.__L.step(10));
+    st = await page.evaluate(() => window.__J.at());
+    const ok = dir === 'in' ? st.inside : !st.inside;
+    tries.push({ side, stuck, inside: st.inside });
+    if (ok) return { ok: true, inside: st.inside, via: side ? `keys (a step to the side: ${side} m)` : 'keys', tries };
   }
-  await page.evaluate(() => window.__L.step(10));
-  st = await page.evaluate(() => window.__J.at());
-  const ok = dir === 'in' ? st.inside : !st.inside;
-  if (!ok) { await page.evaluate(([ep, dir]) => (dir === 'in' ? window.__t.walkIn(ep) : window.__t.walkOut(ep)), [ep, dir]); }
-  return { ok, inside: st.inside, via: ok ? 'keys' : 'api (the walk stuck)', at: st };
+  await page.evaluate(([ep, dir]) => (dir === 'in' ? window.__t.walkIn(ep) : window.__t.walkOut(ep)), [ep, dir]);
+  return { ok: false, via: 'api (the walk stuck)', tries };
 }
 // E on a person (the dot on them); the talk opened as E opens it, else through npcs.talkTo: → { ok, via }
 async function talkE(page, key) {
@@ -235,6 +251,7 @@ async function slice() {
     hB.state.site = site.i;
     for (const s of BOOK.filter((q) => q.id === 'B2')) await s.run(hB);
     await closeBook(A);
+    await A.evaluate(() => window.__J.refresh()); // (the morning: the pack picked up off the ground, breakfast)
   });
 
   // step 3 (join L + B, K1b + B): NB45 read (its dot goes); NB01 read at C837 by E; the stone; P289's 64 ------------------
@@ -316,7 +333,9 @@ async function slice() {
     await shot(A, 'slice-5-marked');
     await closeBook(A);
     result(`5a E on the keeper; "Can you ring Little Gabbro for me?", "And Bald Eagle's west shore?": two rings, ${name} beside them in Marked; the lead open`, inn.ok && k.ok && r.ok && r2.ok && m.ep33 && m.west && m.ep33.by.includes(name) && m.text.includes(name) && m.lead === 'open' && m.ringed, { inn, k, r: r.ok ? 'ok' : r, r2: r2.ok ? 'ok' : r2, m, name });
-    // the landing: L's section (the last 200 m paddled, E ashore, E Look on the crib, the tree, the grade)
+    // the landing: L's section (the last 200 m paddled, E ashore, E Look on the crib, the tree, the grade); a day trip from
+    // Little Gabbro (day use needs no permit), fed and rested
+    await A.evaluate(() => window.__J.refresh());
     for (const s of LAYER.steps.filter((q) => q.step === 5)) await s.run({ page: A, result, shots: SHOTS });
     const c = await A.evaluate(() => { const g = window.__game, rg = g.pencil.ringFor('crews'); return { lead: g.leads.state('crews'), closed: !!(rg && rg.closed), seen: g.story.has('crews.seen'), line: g.story.walt().includes('20:11.2.w2') }; });
     result('5b the lead closes at the crib: its rings ticked and faint, the line under it', c.lead === 'closed' && c.closed && c.seen && c.line, c);
@@ -346,7 +365,7 @@ async function slice() {
 
   // step 7 (P, B): NB20 and NB31 understood through Tauno; the Front Porch inked from a keeper's ring; the Walt page -------
   await run('7', async () => {
-    const r20 = await readSpread(A, 'NB20'), r31 = await readSpread(A, 'NB31');
+    const r20 = await readSpread(A, 'NB20'), r31 = await readSpread(A, 'NB31'), r01 = await readSpread(A, 'NB01');
     await closeBook(A);
     await clockTo(A, 8, 1);
     await goStore(A, 31);
@@ -359,7 +378,7 @@ async function slice() {
     const s = await picks(A, ['Two Stump', 'It\'s in a notebook.']);
     const ss = await hear(A, 4); await endTalk(A);
     const u = await A.evaluate(() => { const s = window.__game.story; return { und20: s.nbHas('und', 'NB20'), und31: s.nbHas('und', 'NB31'), v: s.has('knows.vwater'), t: s.has('knows.twostump') }; });
-    result('7a NB20 and NB31 read; at Farm\'s porch E on Tauno: "V.\'s water", "Two Stump" → "It\'s in a notebook." by number: both understood', r20 && r31 && t && k.ok && v.ok && s.ok && u.und20 && u.und31, { r20, r31, t, k, c0, v: v.ok ? 'ok' : v, vs, s: s.ok ? 'ok' : s, ss, u });
+    result('7a NB20, NB31 (and NB01) read; at Farm\'s porch E on Tauno: "V.\'s water", "Two Stump" → "It\'s in a notebook." by number: both understood', r20 && r31 && r01 && t && k.ok && v.ok && s.ok && u.und20 && u.und31, { r20, r31, t, k, c0, v: v.ok ? 'ok' : v, vs, s: s.ok ? 'ok' : s, ss, u });
     // the margin notes on the page (B's reader)
     await A.evaluate(() => { const g = window.__game, b = g.book; g.journal.show('pack'); g.journal.setSide('walt'); b.view = 'nb'; b.debug.spread(b.debug.spreadOf('NB20')); window.__L.step(4); });
     const pg = await A.evaluate(() => { const el = document.querySelector('#journal .side.w'); return { margin: [...el.querySelectorAll('.nbw-margin')].map((n) => n.textContent), dec: [...el.querySelectorAll('u.dec')].map((n) => n.textContent) }; });
@@ -433,7 +452,9 @@ async function slice() {
     const D = await openGame('declines');
     await newSeason(D, ep, 175);
     const ctx = { home: ep };
-    for (const s of [T_SHELF, T_R1, T_DECLINES]) await s.run({ page: D, result, log, ctx });
+    for (const s of [T_SHELF, T_R1]) await s.run({ page: D, result, log, ctx });
+    await newSeason(D, ep, 176); // (the declines on a season of their own: R1 was this trip's one push, as T's rig plays them)
+    await T_DECLINES.run({ page: D, result, log, ctx });
     await D.context().browser().close();
   });
 }
