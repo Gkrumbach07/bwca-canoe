@@ -28,7 +28,8 @@ export class Casebook {
   vars() {
     const t = this.book.t, o = t.outfitter, ts = t.tasks;
     let name = null;
-    try { const ep = o && o.profile ? o.profile.home : null; const L = ep != null && ts && ts.landing ? ts.landing(ep) : null; name = L ? L.name : null; } catch { name = null; }
+    try { const g = this.story && this.story.get ? Number(this.story.get('walt.gear')) : NaN; const ep = Number.isFinite(g) && g > 0 ? g : o && o.profile ? o.profile.home : null; // (the store asked: T's walt.gear=<ep>)
+      const L = ep != null && ts && ts.landing ? ts.landing(ep) : null; name = L ? L.name : null; } catch { name = null; }
     return { outfitter: name || 'the outfitter', I: 'I' };
   }
   // the lines in the order earned, each with its section and words; a replaced line moves above the one that turned it
@@ -58,11 +59,13 @@ export class Casebook {
       return seen ? { ...n, matched, note: matched && u ? u.note : null } : null;
     }).filter(Boolean);
   }
+  // a chip only where the pencil has the nickname's lake (pencil.js INK): a chip that does nothing is not shown
+  inkable(nick) { const P = this.book.t.pencil; return !!(P && typeof P.row === 'function' && P.row(nick)); }
   chip(nick) {
     const n = NICKS.find((q) => q.nick === nick), P = this.book.t.pencil, j = this.book.t.journal;
     if (!n || n.kind !== 'place' || !P || typeof P.pick !== 'function') return false; // (P's pencil mode: nothing until it takes it)
     let ok = false;
-    try { ok = !!P.pick({ nick: n.nick, word: n.word }); } catch (e) { console.warn('casebook: pencil.pick', e); }
+    try { ok = !!P.pick(n.nick); } catch (e) { console.warn('casebook: pencil.pick', e); } // (the join: pencil.pick(nick))
     if (ok && j && typeof j.setSide === 'function') j.setSide('map');
     return ok;
   }
@@ -82,7 +85,7 @@ export class Casebook {
     const nicks = this.nicks();
     const strip = `<div class="nbw-sc">Nicknames</div>${nicks.length ? nicks.map((n) => n.matched
       ? `<div class="cb-nick matched"><span class="w">${esc(n.word)}</span>${n.note ? ` <span class="nbw-mine">${esc(n.note)}</span>` : ''}</div>`
-      : n.kind === 'place' ? `<button type="button" class="cb-nick chip" data-nbchip="${esc(n.nick)}">${esc(n.word)}</button>` : `<div class="cb-nick">${esc(n.word)}</div>`).join('') : ''}`;
+      : n.kind === 'place' && this.inkable(n.nick) ? `<button type="button" class="cb-nick chip" data-nbchip="${esc(n.nick)}">${esc(n.word)}</button>` : `<div class="cb-nick">${esc(n.word)}</div>`).join('') : ''}`;
     return { strip, stripLabel: 'Nicknames', left, right };
   }
 }

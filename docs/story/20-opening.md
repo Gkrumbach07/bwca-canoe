@@ -764,6 +764,7 @@ run, with the notebook mentioned, reads like this:
 > *Leads*
 > - The old crews' landing on Bald Eagle, west shore. Is the crib still there? A day trip from Little Gabbro. Look up
 >   for orange on the blazes.
+> <!-- id: 20:7.1.lead.tauno page -->
 > - Tauno's on the porch at Farm most mornings.
 
 **Rules for the page in this stretch:**

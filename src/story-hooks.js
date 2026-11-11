@@ -102,7 +102,7 @@ export let story = STORY_ON ? null : new Story();
 export async function loadStory() {
   if (STORY_ON && !story) {
     const { StoryV2 } = await import('./story.js');
-    story = new StoryV2({ io: save }); // (every stream's rules from the start: story-data/rules-all.js, so the data stamp is the same every boot)
+    story = new StoryV2({ io: save }); // (every stream's rules from the start: story-data/all-rules.js, so the data stamp is the same every boot)
   }
   return story;
 }

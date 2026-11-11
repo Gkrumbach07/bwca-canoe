@@ -150,11 +150,13 @@ export class Book {
     const nbs = (this.data.spreads[this.at] || []).filter((l) => l && l.kind === 'nb').map((l) => l.nb);
     for (const nb of nbs) {
       let hit = null;
-      if (L && typeof L.readHere === 'function') { try { hit = L.readHere({ nb, x: p.x, z: p.z }) || null; } catch (e) { console.warn('book: layer.readHere', e); } }
+      const was = s.nbHas('here', nb), byLayer = !!(L && typeof L.readHere === 'function');
+      if (byLayer) { try { hit = L.readHere(nb, { x: p.x, z: p.z }) || null; } catch (e) { console.warn('book: layer.readHere', e); } } // (the join: L's is readHere(nb, at); it marks the page and fires its readHere, feed-place.js)
       else hit = placeFor(L, nb, p.x, p.z);
       if (!hit) continue;
-      const fresh = s.readHere(nb, `place:${hit.id || '?'}`);
-      s.ingest('readHere', { nb, place: hit.id || null });
+      s.readHere(nb, `place:${hit.id || '?'}`);
+      const fresh = !was;
+      if (!byLayer) s.ingest('readHere', { nb, place: hit.id || null });
       if (fresh) this.here = { nb, t: performance.now() };
       this.render(true);
       return hit;
@@ -365,6 +367,14 @@ export async function installBook(t = {}) {
   if (story) {
     story.on('carry', (e) => book.onCarry(e));
     story.on('carrypair', (e) => book.onPair(e));
+    // the join: a nickname the Walt page shows (the cutscene's, a page read) is one the pencil and the keepers see too
+    // (pencil.js nickseen:, read by the keepers' "Ever hear a lake called …?" and Tauno's seat)
+    const P = t.pencil, sync = () => {
+      if (!P || typeof P.seeNick !== 'function' || story.mode === 'mirror' || !story.has('nb.found')) return;
+      for (const n of book.case.nicks()) if (n.kind === 'place' && typeof P.row === 'function' && P.row(n.nick) && !P.nickSeen(n.nick)) P.seeNick(n.nick);
+    };
+    story.on('read', sync); story.on('notebook:found', sync); story.on('walt:line', sync);
+    sync();
     // a 'give:page.<id>' action (a person's page: the talk streams' rules), chained to any give: handler another stream has
     const prev = story.actions && story.actions.get('give');
     story.handle('give', (arg, meta, s) => (/^page\./.test(String(arg)) ? book.givePage(String(arg).slice(5), { by: meta && meta.args && meta.args.who }) : prev ? prev(arg, meta, s) : false));

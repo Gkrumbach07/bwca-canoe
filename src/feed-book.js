@@ -2,17 +2,14 @@
 // (notebook.js) writes its own marks into the story (read, read here, the back cover); what comes from elsewhere in the
 // game, in the story's words, comes through here:
 //
-//   the story layer's 'readHere' { place, nb }  → readHere { nb, place }   (stream L's trigger, when L fires one itself;
-//                                                 the book marks the page from the story's 'readHere')
+//   (the story layer's 'readHere' is feed-place.js's: one event, not two)
 //   a story page or Walt's thing into the inventory → got { item }          (kind 'page', and WALT_IDS: once each, the
 //                                                 first time it is seen in the inventory this session)
 import { feed } from './story-feed.js';
-import { layer } from './story-layer.js';
 import { itemDef, WALT_IDS } from './items.js';
 
 export function bookAdapter(api) {
   const offs = [];
-  offs.push(api.on(layer, 'readHere', (d) => { if (d && d.nb) api.emit('readHere', { nb: d.nb, place: d.place ?? null }); }));
   const inv = api.mods.inventory;
   if (inv && typeof inv.onChange === 'function') {
     const seen = new Set();

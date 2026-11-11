@@ -105,7 +105,7 @@ function fresh() {
   ok(leads.asks({ ep: 25 }).every((a) => !a.id.startsWith('ring.')), 'leads: no rings before the porch');
   story.set('tauno.porch.done'); story.set('door.crews.taken');
   ok(leads.state('crews') === 'open' && story.walt().includes('20:11.2.w1') && pencil.rings().length === 0, 'lead crews: born, its Walt line, no ring (Tauno marks nothing)');
-  ok(leads.state('tauno') === 'open' && story.walt().includes('w.lead.tauno'), 'lead tauno: Farm mornings');
+  ok(leads.state('tauno') === 'open' && story.walt().includes('20:7.1.lead.tauno'), 'lead tauno: Farm mornings');
   let a = leads.asks({ ep: 25 }).map((q) => q.id);
   ok(a.includes('ring.ep33') && a.includes('ring.farm') && !a.includes('ring.baldeagle'), 'asks: Little Gabbro and Farm, not yet the west shore', a.join());
   ok(!leads.asks({ ep: 31 }).some((q) => q.id === 'ring.farm'), 'asks: no "Where\'s Farm?" at Farm');
@@ -126,7 +126,7 @@ function fresh() {
   story.set('tauno.turn');
   ok(leads.state('tauno') === 'closed', 'lead tauno: closed at the turn');
   for (const d of ['guiding', 'boys', 'family', 'mining']) story.set(`door.${d}.named`);
-  ok(['guiding', 'boys', 'family', 'mining'].every((d) => leads.state(d) === 'open') && story.walt().includes('w.lead.guiding'), 'doors: four leads open, their lines');
+  ok(['guiding', 'boys', 'family', 'mining'].every((d) => leads.state(d) === 'open') && story.walt().includes('w.door.guiding'), 'doors: four leads open, their lines');
   a = leads.asks({ ep: 64 }).map((q) => q.id);
   ok(['ring.moose', 'ring.sawbill', 'ring.lv', 'ring.farm'].every((x) => a.includes(x)) && !a.some((x) => x.startsWith('where.')), 'asks: the four doors rung when asked (no duplicate "Where would I find")', a.join());
   for (const id of ['ring.moose', 'ring.sawbill']) leads.ask(id, { by: 'Carol', ep: 64, talk: 'd1' });

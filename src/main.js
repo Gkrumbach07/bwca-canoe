@@ -1280,11 +1280,11 @@ async function main() {
       const [{ topics, texts }, { cast }, { beats }, { ambient }, A1, { RULES_TALK }, { connect }, { loadWords }] = await Promise.all([
         import('./topics.js'), import('./cast.js'), import('./beats.js'), import('./ambient.js'), import('./story-data/topics-act1.js'),
         import('./story-data/rules-talk.js'), import('./feed-talk.js'), import('./story-data/words.js')]);
-      const W = await loadWords(['opening', 'world']), w70 = { default: W.world };
-      texts.add(W.opening); texts.add(W.world);
+      const W = await loadWords(['opening', 'world', 'mining']), w70 = { default: W.world };
+      texts.add(W.opening); texts.add(W.world); texts.add(W.mining); // (mining: Tauno's seat reads Two Stump and V.'s water, 30 §4.1)
       const seams = window.__game.storySeams || {};
       beats.attach(story);
-      void RULES_TALK; // (st-t: in the story from its construction, story-data/rules-all.js; never added after attach (chk-coop C2). cast.js still plays t.armed on its own store:enter, guarded by the fact)
+      void RULES_TALK; // (st-t: in the story from its construction, story-data/all-rules.js; never added after attach (chk-coop C2). cast.js still plays t.armed on its own store:enter, guarded by the fact)
       ambient.use(w70.default).attach({ story, grounded: (t) => npcs.grounded(t) });
       topics.use({ keeper: A1.KEEPER_TOPICS, floor: A1.FLOOR }).attach({ story, npcs, talk, pencil: seams.pencil || null, outfitter, world, day, profile, hud, beats, ambient });
       cast.attach({ story, npcs, talk, topics, beats, outfitter, profile, day, world, player, hud, onboarding, inventory, ambient, ridesTruck: truck,

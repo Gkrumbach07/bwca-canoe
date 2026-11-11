@@ -45,18 +45,10 @@ export const PLACES = {
   'lake.fourtown': { lake: 'fourtown', r: 1200, label: 'Fourtown' },
 };
 
-export const LINES = {
-  'w.lead.tauno': { text: 'Tauno\'s on the porch at Farm most mornings.', doc: '20 §7.1 Leads' },
-  'w.lead.guiding': { text: 'Marlys, at Moose Lake. She ran the bunkhouse. Walt guided out of there longest.', doc: '20 §12.3 U5 Gives' },
-  'w.lead.boys': { text: 'The fellas he tripped with. In at Sawbill every August. Ask at Baker.', doc: '20 §12.3 U5 Gives' },
-  'w.lead.family': { text: 'His sister Aili, at Crane Lake. "She won\'t talk to you."', doc: '20 §12.3 U5 Gives' },
-  'w.lead.mining': { text: 'Tauno, at Farm, mornings.', doc: '20 §12.3 U5 Gives' },
-  // the easy nicknames matched at a counter: the doc gives the Front Porch's line (20:5.2.w2) and "the other easy
-  // nicknames" by the same pattern, in the keeper's sense (20 §5.2); writers' pass to confirm
-  'w.nick.kek': { text: 'The Kek is Kekekabic. "Long way in. Middle of everything."', doc: '20 §5.2 (pattern of 20:5.2.w2)' },
-  'w.nick.littlesag': { text: 'Little Sag is Little Saganaga. Up the Sawbill side.', doc: '20 §5.2 (pattern of 20:5.2.w2)' },
-  'w.nick.fourtowns': { text: 'Four Towns is Fourtown. Out the Echo, off Mudro.', doc: '20 §5.2 (pattern of 20:5.2.w2)' },
-};
+// (the join: every lead's Walt line is now the docs' own words by id: 20:11.2.w1, 20:7.1.lead.tauno, and T's U5 lines
+// w.door.<arc> (walt-lines.js refs 20:U5.w.*), so a door's line is written once whoever writes it first. The easy
+// nicknames other than the Front Porch have no Walt line in the docs: none is invented here, a writers' leftover)
+export const LINES = {};
 
 export const LEADS = [
   // T5: "Go look at the old crews' landing on Bald Eagle. West shore. Is the crib still there?" (taken or declined at
@@ -66,16 +58,16 @@ export const LEADS = [
     followed: 'near:crews.landing/300', closes: 'f:crews.seen', after: '20:11.2.w2' },
   // "I'm on the porch at Farm most mornings." (T5.6, X2.1): a person lead with its where
   { id: 'tauno', born: 'f:tauno.porch.done | f:door.crews.declined', subject: { person: 'tauno', where: { store: 31, hours: '6-11', words: 'mornings, on the porch at Farm' } },
-    ring: { by: null, ask: 'keeper:any' }, walt: 'w.lead.tauno', closes: 'f:tauno.turn' },
+    ring: { by: null, ask: 'keeper:any' }, walt: '20:7.1.lead.tauno', closes: 'f:tauno.turn' },
   // U5, the four doors (20 §12.3); each closes when its room opens (Round 2 on)
   { id: 'guiding', born: 'f:door.guiding.named', subject: { person: 'marlys', where: { store: 25, words: 'at Moose Lake, a couple of days a week' } },
-    ring: { by: null, ask: 'keeper:any' }, walt: 'w.lead.guiding', closes: 'f:door.guiding.open' },
+    ring: { by: null, ask: 'keeper:any' }, walt: 'w.door.guiding', closes: 'f:door.guiding.open' },
   { id: 'boys', born: 'f:door.boys.named', subject: { place: 'sawbill38' },
-    ring: { by: null, ask: 'keeper:any' }, walt: 'w.lead.boys', closes: 'f:door.boys.open' },
+    ring: { by: null, ask: 'keeper:any' }, walt: 'w.door.boys', closes: 'f:door.boys.open' },
   { id: 'family', born: 'f:door.family.named', subject: { person: 'aili', where: { store: 12, words: 'at Crane Lake, the motel next to the Little Vermilion store' } },
-    ring: { by: null, ask: 'keeper:any' }, walt: 'w.lead.family', closes: 'f:door.family.open' },
+    ring: { by: null, ask: 'keeper:any' }, walt: 'w.door.family', closes: 'f:door.family.open' },
   { id: 'mining', born: 'f:door.mining.named', subject: { person: 'tauno', where: { store: 31, hours: '6-11', words: 'mornings, on the porch at Farm' } },
-    ring: { by: null, ask: 'keeper:any' }, walt: 'w.lead.mining', closes: 'f:door.mining.open' },
+    ring: { by: null, ask: 'keeper:any' }, walt: 'w.door.mining', closes: 'f:door.mining.open' },
 ];
 
 // the keepers' rings, asked for (20 §7.3, §12.4, §5.2). `if` is read with the counter's args ({ ep }); `once` per season.
@@ -99,13 +91,13 @@ export const INK = [
   { nick: 'frontporch', label: 'the Front Porch', lake: 'lakeone', nb: 'NB01', seen: ['NB01', 'NB68'], when: 'ringon:lakeone | nbphoto:P3',
     match: { when: 'ringon:lakeone', then: ['und:NB01', 'walt:20:5.2.w2'] } },
   { nick: 'kek', label: 'the Kek', lake: 'kek', nb: 'NB29', seen: ['NB29', 'NB78'], when: 'ringon:kek | nbphoto:P9',
-    match: { when: 'ringon:kek', then: ['und:NB29', 'walt:w.nick.kek'] } },
+    match: { when: 'ringon:kek', then: ['und:NB29'] } },
   { nick: 'littlesag', label: 'Little Sag', lake: 'littlesag', nb: 'NB16', seen: ['NB16', 'NB07'], when: 'ringon:littlesag | nbphoto:P8',
-    match: { when: 'ringon:littlesag', then: ['und:NB16', 'walt:w.nick.littlesag'] } },
+    match: { when: 'ringon:littlesag', then: ['und:NB16'] } },
   { nick: 'fourtowns', label: 'Four Towns', lake: 'fourtown', nb: 'NB22', seen: ['NB22', 'NB26'], when: 'ringon:fourtown',
-    match: { when: 'ringon:fourtown', then: ['und:NB22', 'walt:w.nick.fourtowns'] } },
+    match: { when: 'ringon:fourtown', then: ['und:NB22'] } },
   // decoded by Tauno (10 §7): the pencil inks once the entry is understood and the lake confirms it
-  { nick: 'vswater', label: 'V.\'s water', lake: 'baldeagle', nb: 'NB20', seen: ['NB20', 'NB39'], when: 'und:NB20 & (ringon:baldeagle | onlake:baldeagle)' },
+  { nick: 'vwater', label: 'V.\'s water', lake: 'baldeagle', nb: 'NB20', seen: ['NB20', 'NB39'], when: 'und:NB20 & (ringon:baldeagle | onlake:baldeagle)' },
   { nick: 'twostump', label: 'Two Stump', lake: 'gabbro', nb: 'NB31', seen: ['NB31'], when: 'und:NB31 & (ringon:gabbro | onlake:gabbro)' },
   // the far end: nobody rings it; inked by the world only (lock 2), on Gull with any L2 key, pencil or not
   { nick: 'farend', label: 'the far end', lake: 'gull', nb: 'NB21', seen: ['NB21', 'NB27', 'NB32', 'NB39', 'NB46'], when: 'any(key.L2*) & onlake:gull', auto: true, walt: 'walt.nb.und.5' },

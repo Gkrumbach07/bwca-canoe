@@ -3,9 +3,9 @@
 // topics.js SceneRun's. Node only: no game imports, so story-lint.mjs and scripts/c1-talk-unit.mjs read it.
 //
 // The crews' landing (stream L's place, 20 §11.2) is read through these facts; L's verbs write them:
-//   crews.seen (any of the three looked at), crews.crib, crews.grade, crews.blaze, crews.pink, crews.nwdrift (the canoe
-//   off the rock in a north-west wind, 11.4), crews.nb20 (NB20 read there, 11.3: stream B)
-export const LANDING = { seen: 'crews.seen', crib: 'crews.crib', grade: 'crews.grade', blaze: 'crews.blaze', pink: 'crews.pink', nwdrift: 'crews.nwdrift', nb20: 'crews.nb20' };
+//   crews.seen (any of the three looked at), landing.crib, landing.grade, landing.blaze, landing.pink, landing.nwDrift (the
+//   canoe off the rock in a north-west wind, 11.4: not built yet), landing.nb20 (NB20 read there, 11.3; rules-layer.js)
+export const LANDING = { seen: 'crews.seen', crib: 'landing.crib', grade: 'landing.grade', blaze: 'landing.blaze', pink: 'landing.pink', nwdrift: 'landing.nwDrift', nb20: 'landing.nb20' }; // (the join: stream L's names, story-places.json)
 const L = LANDING;
 // the notebook pages the scenes read (stream B's marks): NB45 has a Finnish word (the Swede test, slice step 4); NB88
 // is the last page
@@ -84,8 +84,15 @@ export const PORCH = {
     R7: { say: ['20:9.2#R7.0', '20:9.2#R7.1'], then: ['f:rehook.R7'], go: [
       { ask: '20:9.2#R7.2', say: ['20:9.2#R7.3', { id: '20:9.2#R7.4', when: 'f:door.crews.taken & !f:crews.seen' }], end: true },
       { ask: '20:9.2#R7.5', say: ['20:9.2#R7.6'], end: true }] },
-    // after the turn, his morning seat: a word, and the doors again if asked
-    seat: { say: [{ first: [{ id: '20:6.6.1', when: 'farm' }, '20:U5.2'] }], end: true },
+    // after the turn, his morning seat: a word, and the doors again if asked. The join (slice step 7, 10 §7, 30 §4.1):
+    // Walt's two mining-years nicknames, asked while on the Walt page and not yet inked, are his to read (NB31, NB20)
+    seat: { say: [{ first: [{ id: '20:6.6.1', when: 'farm' }, '20:U5.2'] }], go: [
+      { ask: '30:4.1.c6', once: 'seat.twostump', when: 'nickseen:twostump & !f:ink.twostump & !und:NB31', to: 'twostump' },
+      { ask: '30:4.1.c9', once: 'seat.vwater', when: 'nickseen:vwater & !f:ink.vwater & !und:NB20', say: ['30:4.1.17'], then: ['f:knows.vwater'] }] },
+    twostump: { say: ['30:4.1.14'], go: [
+      { ask: '30:4.1.c7', say: ['30:4.1.15'], then: ['f:knows.twostump'], to: 'seat2' },
+      { ask: '30:4.1.c8', say: ['30:4.1.16', '30:4.1.15'], then: ['f:knows.twostump'], to: 'seat2' }] }, // ("the same answer, shorter")
+    seat2: { hub: 'seat', go: [] },
 
     // --- 1.3 The turn (U1–U6) -------------------------------------------------------------------------------------------
     U1: { say: [{ first: [{ id: '20:U1.2', when: 'farm & first' }, '20:U1.1'] }], go: [
@@ -135,6 +142,22 @@ export const PORCH = {
 };
 // "That's enough for today." (20 §6.2, §12.2): walking away mid-scene; what's been said stays
 export const WALK_AWAY = '20:U6.2';
+// the nodes before T3: walking off there is "[Keep walking]", a decline (X1); after T3 the scene is kept for later
+export const PRE_T3 = new Set(['T1', 'T1b', 'T2', 'R3', 'changed']);
+// where Tauno's scene starts, from where the story stands (cast.js entry; scripts/story-solve.mjs reads the same).
+// s: { has(k), keys(prefix) }; scene: the slot's own (CAST where[].scene) or 'auto'
+export function porchEntry(s, scene = 'auto') {
+  let e = scene || 'auto';
+  if (e === 'R4' && s.has('crews.seen')) e = 'auto';
+  if (e !== 'auto') return e;
+  if (!s.has('tauno.porch.done')) return s.has('tauno.porch.declined2') ? 'changed' : 'T1';
+  if (!s.has('door.crews.taken') && !s.has('door.crews.declined')) return 'resume';
+  if (s.has('crews.seen') && !s.has('tauno.turn')) return s.keys('tauno.said.u1.').length ? 'resumeU1' : 'U1';
+  if (s.has('tauno.turn') && !s.has('tauno.killed')) return 'resumeU4';
+  if (s.has('tauno.killed') && !s.has('tauno.doors')) return 'resumeU5';
+  if (s.has('door.crews.declined') && !s.has('door.crews.taken') && !s.has('crews.seen')) return 'R5';
+  return 'seat';
+}
 // T4 "What are you doing here?" (20 §6.6): why he's on this porch, by outfitter (Farm's replaces the topic: his opener)
 export const HERE = { 31: '20:6.6.1', 25: '20:6.6.2', 36: '20:6.6.3', 38: '20:6.6.4', 40: '20:6.6.5', 67: '20:6.6.6', 6: '20:6.6.7', 16: '20:6.6.8', 1: '20:6.6.9', 12: '20:6.6.10', 51: '20:6.6.11', 64: '20:6.6.12', 49: '20:6.6.13', 69: '20:6.6.14' };
 

@@ -139,7 +139,7 @@ export const steps = [
   { id: 'turn', step: 6, title: 'the turn on a porch', run: async ({ page, result, ctx }) => {
     const ep = ctx.home;
     // the crews' landing seen (stream L's place: its facts, as its verbs write them)
-    await page.evaluate(() => { const s = window.__game.story; for (const f of ['crews.seen', 'crews.crib', 'crews.pink', 'crews.blaze']) s.debug.set(f); });
+    await page.evaluate(() => { const s = window.__game.story; for (const f of ['crews.seen', 'landing.crib', 'landing.pink', 'landing.blaze']) s.debug.set(f); });
     await page.evaluate(() => { const g = window.__game; g.day.setClock(g.day.year, g.day.doy + 1, 8); window.__t.step(10); });
     const staged = await page.evaluate((e) => window.__game.storyTalk.cast.debug.stage('tauno', e, 'home', 'bench'), ep);
     await page.evaluate((k) => window.__t.talkTo(k), `cast:tauno:${ep}`);

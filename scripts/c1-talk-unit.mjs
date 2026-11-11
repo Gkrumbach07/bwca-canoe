@@ -9,21 +9,23 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { texts, T, SceneRun, Topics, textIds, askText, TALK_SENSORS } from '../src/topics.js';
-import { PORCH, P1, JOSIE, HERE, WALK_AWAY } from '../src/story-data/porch-act1.js';
+import { PORCH, P1, JOSIE, HERE, WALK_AWAY, LANDING } from '../src/story-data/porch-act1.js';
 import { KEEPER_TOPICS, FLOOR, NICKS } from '../src/story-data/topics-act1.js';
 import { CAST } from '../src/story-data/cast.js';
 import { RULES_TALK } from '../src/story-data/rules-talk.js';
 import { WALT_LINES } from '../src/story-data/walt-lines.js';
 import { factRow } from '../src/story-data/facts.js';
-import { compile } from '../src/story-cond.js';
+import { compile, registerSensor } from '../src/story-cond.js';
+import { PENCIL_SENSORS } from '../src/pencil.js';
+for (const [k, v] of Object.entries(PENCIL_SENSORS)) registerSensor(k, v); // (the join: the keepers read P's nickseen:)
 import { StoryV2 } from '../src/story.js';
 import { Beats } from '../src/beats.js';
 import { Ambient, BANNED, WALT_LORE, RESERVED } from '../src/ambient.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const J = (f) => JSON.parse(readFileSync(path.join(ROOT, 'src/story-data/text', f), 'utf8'));
-const opening = J('opening.json'), world = J('world.json');
-texts.add(opening); texts.add(world);
+const opening = J('opening.json'), world = J('world.json'), mining = J('mining.json');
+texts.add(opening); texts.add(world); texts.add(mining); // (mining: Tauno's seat, 30 §4.1)
 const PAGE = new Set([...WALT_LINES.map((w) => w.id), ...Object.entries(opening.text).filter(([, e]) => e.k === 'page').map(([id]) => id)]);
 
 // --- every condition, action and line id in the data ------------------------------------------------------------------
@@ -150,7 +152,7 @@ test('the declines: keep walking twice → X1 (declined1); R3 "You again." → n
 test('the turn: U1 reports, U2 pink, U3 Eino (tauno.turn: S3), U4 the word, U5 the four doors named', () => {
   const { s, t } = fresh();
   s.set('nb.found', true);
-  for (const f of ['tauno.porch.done', 'door.crews.taken', 'crews.seen', 'crews.crib', 'crews.pink', 'crews.blaze', 'crews.nwdrift']) s.set(f, true);
+  for (const f of ['tauno.porch.done', 'door.crews.taken', LANDING.seen, LANDING.crib, LANDING.pink, LANDING.blaze, LANDING.nwdrift]) s.set(f, true); // (L's names: landing.*)
   const run = new SceneRun(t, PORCH, { who: 'tauno', args: { ep: 31, farm: true, first: true } });
   const r = play(run, 'U1', ["The crib's still there.", 'There\'s an old blaze', 'The wind took', 'North-west.', 'Somebody\'s flagged', 'Pink. New.', 'Measuring for who?', 'Away from the west shore', 'Who\'s Ollie?', 'Somebody killed him.', 'Marlys?', 'His sister?', "I'll go."]);
   assert.ok(r.said.includes(T('20:U1.2')), 'Farm, the first time');
@@ -239,8 +241,9 @@ test('the doors\' rings after the turn; at Moose Lake itself, "You\'re standing 
 test('nicknames: a keeper rings an easy one only once it is on the Walt page and not inked', () => {
   const { s, t, v } = keeperRig();
   s.set('nb.found', true);
+  let seen = false; s.sensor('nickseen', (n) => seen && n === 'frontporch'); // (P's sensor: the Walt page shows it)
   assert.ok(!t.items(v).some((i) => /Front Porch/.test(i.text)));
-  s.set('walt.nick.frontporch', true);
+  seen = true;
   assert.ok(t.items(v).some((i) => /Front Porch/.test(i.text)));
   assert.equal(NICKS.length, 4);
 });

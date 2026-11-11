@@ -15,7 +15,7 @@
 //   cast.staged() → [{ who, ep, slot, at, x, z, talked, done }]   cast.debug.stage(who, ep, slotId) (rigs)
 //   SPOT_OF(L, kind) → { x, z, heading }   the porch foot / the bench / the counter, in world metres
 import { CAST } from './story-data/cast.js';
-import { PORCH, JOSIE, P1, HERE, WALK_AWAY } from './story-data/porch-act1.js';
+import { PORCH, JOSIE, P1, HERE, WALK_AWAY, porchEntry, PRE_T3 } from './story-data/porch-act1.js';
 import { SceneRun, T, MANNERS } from './topics.js';
 import { storeLayout, storeLayouts } from './props.js';
 import { castPorch } from './grounding.js';
@@ -27,7 +27,6 @@ const WALK_PAST = 12;        // m: the porch's "[Keep walking]": T1b
 const WALK_OFF = 26;         // m: walked off: X1 (declined), or the stop is over
 const GONE_R = 32;           // m: after the scene, he goes once you are this far, or back inside
 const TICK = 0.5;            // s between schedule checks
-const PRE_T3 = new Set(['T1', 'T1b', 'T2', 'R3', 'changed']);
 
 // a spot by the store: the porch foot (beside the steps, looking out), the bench, beside the counter
 export function SPOT_OF(L, kind) {
@@ -235,16 +234,7 @@ export class Cast {
       if (slot.scene) return slot.scene;
       return null;
     }
-    let e = slot.scene || 'auto';
-    if (e === 'R4' && s.has('crews.seen')) e = 'auto';
-    if (e !== 'auto') return e;
-    if (!s.has('tauno.porch.done')) return s.has('tauno.porch.declined2') ? 'changed' : 'T1';
-    if (!s.has('door.crews.taken') && !s.has('door.crews.declined')) return 'resume';
-    if (s.has('crews.seen') && !s.has('tauno.turn')) return s.keys('tauno.said.u1.').length ? 'resumeU1' : 'U1';
-    if (s.has('tauno.turn') && !s.has('tauno.killed')) return 'resumeU4';
-    if (s.has('tauno.killed') && !s.has('tauno.doors')) return 'resumeU5';
-    if (s.has('door.crews.declined') && !s.has('door.crews.taken') && !s.has('crews.seen')) return 'R5';
-    return 'seat';
+    return porchEntry(s, slot.scene); // (porch-act1.js: one table for the game and the solver, scripts/story-solve.mjs)
   }
   talk(who) {
     if (!this.on) return false;

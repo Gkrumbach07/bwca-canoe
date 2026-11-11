@@ -352,9 +352,10 @@ export class Topics {
     }
     if (target.lake && w && Array.isArray(w.lakes)) {
       let best = null;
-      for (const l of w.lakes) if (l && (l.name === target.lake || l.displayName === target.lake) && Number.isFinite(l.x) && (!best || (l.cells || 0) > (best.cells || 0))) best = l;
+      const lx = (l) => (Number.isFinite(l.x) ? l.x : l.cx), lz = (l) => (Number.isFinite(l.z) ? l.z : l.cz); // (the world's lakes carry cx/cz)
+      for (const l of w.lakes) if (l && (l.name === target.lake || l.displayName === target.lake) && Number.isFinite(lx(l)) && (!best || (l.cells || 0) > (best.cells || 0))) best = l;
       if (!best) return null;
-      return { x: best.x, z: best.z, r: Math.round(Math.max(500, Math.sqrt(((best.cells || 3000) * 100) / Math.PI) * 1.2 + 250)), lake: best.id };
+      return { x: lx(best), z: lz(best), r: Math.round(Math.max(500, Math.sqrt(((best.cells || 3000) * 100) / Math.PI) * 1.2 + 250)), lake: best.id };
     }
     return null;
   }
@@ -364,7 +365,7 @@ export class Topics {
     if (!P || typeof P.ring !== 'function' || !at) return null;
     if (this.ringsThisTalk >= 2) return null;
     this.ringsThisTalk++;
-    const ring = P.ring({ x: Math.round(at.x), z: Math.round(at.z), r: at.r, label: label || target.label || target.lake || '', by, lead, lake: at.lake });
+    const ring = P.ring({ x: Math.round(at.x), z: Math.round(at.z), r: at.r, label: label || target.label || target.lake || '', by, lead, lake: at.lake, place: target.place || null }); // (place: leads-act1.js PLACES, so ringed:<place> and the leads see it)
     if (fact) this.run([`f:${fact}=${String(by || 'keeper').replace(/[\s:]/g, '_')}`], {}, 'topic:ring');
     const hud = this.c.hud;
     if (ring && hud && typeof hud.note === 'function' && by) hud.note(`${by} pencils it on your map.`, 4);

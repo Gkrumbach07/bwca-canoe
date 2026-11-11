@@ -1,4 +1,4 @@
-{"$doc":"docs/story/20-opening.md","$hash":"e4002084b70f","$body":"66b0e402b384","$v":1,"text":{"20:0.1":{"k":"line","text":"Before my time.","when":"Beat: The return"},
+{"$doc":"docs/story/20-opening.md","$hash":"b7990d15d1de","$body":"fc8039feac84","$v":1,"text":{"20:0.1":{"k":"line","text":"Before my time.","when":"Beat: The return"},
 "20:1.2.1":{"k":"line","who":"Keeper","text":"Now. You'll want a pack and a tent. Oh, look at that. Josie? Have we got anything left at all?","when":"Manner: warm"},
 "20:1.2.2":{"k":"line","who":"Keeper","text":"Pack and tent. Normally I'd point at that wall. Josie, tell them why I can't.","when":"Manner: dry"},
 "20:1.2.3":{"k":"line","who":"Keeper","text":"Rentals are out. Josie.","when":"Manner: gruff"},
@@ -183,6 +183,7 @@
 "20:6.6.12":{"k":"line","who":"Tauno","text":"Coffee's better on the Trail. Don't tell Farm.","when":"Outfitter: East Bearskin 64"},
 "20:6.6.13":{"k":"line","who":"Tauno","text":"My knees like the drive. They don't like anything else.","when":"Outfitter: Skipper & Portage 49"},
 "20:6.6.14":{"k":"line","who":"Tauno","text":"End of the earth. I like the end of the earth. Nobody follows you there.","when":"Outfitter: John 69"},
+"20:7.1.lead.tauno":{"k":"page","text":"Tauno's on the porch at Farm most mornings."},
 "20:7.2.w1":{"k":"page","text":"Drag a name from his page onto a lake to pencil it in."},
 "20:7.3.c1":{"k":"choice","text":"Can you ring Little Gabbro for me?","if":"If: `story.door1` is 'taken' or 'declined'."},
 "20:7.3.lg.1":{"k":"block","text":"Little Gabbro. There. Lovely little landing. Bald Eagle's just past it, one tiny carry."},
