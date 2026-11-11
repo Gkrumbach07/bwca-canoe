@@ -91,7 +91,7 @@ const harnessB = (page, state = {}) => ({
   shot: async (name) => { if (!SHOTS) return; if (!/^b-cut/.test(name)) await settleShot(page); try { await page.screenshot({ path: path.join(SHOTS, `${name}.png`) }); } catch { /* a nicety */ } },
 });
 // (a moment for the book's fade-in and the pencil's hand to finish: the shots were taken mid-fade)
-const settleShot = async (page) => { try { await page.evaluate(() => { if (window.__L) window.__L.step(20); }); await page.waitForTimeout(900); } catch { /* a nicety */ } };
+const settleShot = async (page) => { try { await page.evaluate(() => { if (window.__L) window.__L.step(20); }); await page.waitForTimeout(1600); } catch { /* a nicety */ } };
 const shot = async (page, name) => { if (SHOTS) { await settleShot(page); try { await page.screenshot({ path: path.join(SHOTS, `${name}.png`) }); } catch { /* a nicety */ } } };
 const facts = (page, keys) => page.evaluate((ks) => Object.fromEntries(ks.map((k) => [k, window.__game.story.has(k)])), keys);
 // hear(), with a shot (the contact sheet, --shots) when a line matching `re` is on screen
@@ -491,7 +491,7 @@ async function slice() {
     await hear(A, 3); await endTalk(A);
     const ink = await A.evaluate(() => ({ ink: window.__game.story.get('ink.frontporch'), und: window.__game.story.nbHas('und', 'NB01'), line: window.__game.story.walt().includes('20:5.2.w2') }));
     if (SHOTS) { // the contact sheet: Lake One on the map with the Front Porch inked
-      await A.evaluate(() => { const g = window.__game, P = g.pencil, h = g.hud, id = P.debug.lakeOfKey('lakeone'), L = g.world.lakes[id - 1]; g.journal.showMap(); h.lookAt(L.cx, L.cz, 3500, 0); h.drawMap(g.player); window.__L.step(3); });
+      await A.evaluate(() => { const g = window.__game, P = g.pencil, h = g.hud, id = P.debug.lakeOfKey('lakeone'), L = g.world.lakes[id - 1]; g.journal.showMap(); h.lookAt(L.cx, L.cz, 1800, 0); h.drawMap(g.player); window.__L.step(3); });
       await shot(A, 'c1-11-inked'); await closeBook(A);
     }
     result('7c the chip clicked, Lake One clicked: the Front Porch pencilled; a keeper asked "Ever hear a lake called the Front Porch?" rings Lake One: inked, NB01 understood', chip.chip && !!spot.cx && pen.names.some(([n]) => n === 'frontporch') && k2.ok && r.ok && ink.ink === 'lakeone' && ink.und && ink.line, { chip, spot, pen, inn, k2, r: r.ok ? 'ok' : r, ink });
