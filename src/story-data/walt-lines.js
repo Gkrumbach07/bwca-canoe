@@ -8,6 +8,7 @@
 //
 //   section   one of WALT_SECTIONS: where on the page it sits (a section shows only once it has a line, 10 §11.3)
 //   replaces  the id of a line it turns: the old one is drawn crossed out above it ("drowned" → "went north")
+//   annotates the id of the line it is a note on: its words go after that line's ("(ringed)"), not on a line of their own
 //
 // Ids are never reused (story-data/retired.js). Each stream adds its rows in its own marked block.
 
@@ -44,6 +45,8 @@ export const WALT_LINES = [
   { id: '20:T4.w9', section: 'odd' },
   { id: '20:T4.w10', section: 'odd' },
   { id: '20:7.2.w1', section: 'names' },
+  // (the join) 20 §7.3: "Walt page, Leads: the line gets *(ringed)*": a note on the crews' lead line, not a line of its own
+  { id: '20:7.3.w1', section: 'leads', annotates: '20:11.2.w1' },
   // /st-b
   // st-t: the turn's Walt-page lines (docs/story/20-opening.md §12.3 U3's and U5's Gives; the join anchored the U3 People
   // and Years lines and U5's Leads, 20:U3.wp / .wy / 20:U5.w; U3's Things that don't add up came out as .c6–.c10).

@@ -43,8 +43,11 @@ export class Casebook {
       if (!t) continue;
       const line = { id, section: sectionOf(id), text: t };
       if (r && r.replaces && have.has(r.replaces)) line.struck = say(waltRow(r.replaces) && waltRow(r.replaces).ref || r.replaces, v);
+      if (r && r.annotates) { const host = out.find((q) => q.id === r.annotates); if (host) { host.text = `${host.text} ${t}`; continue; } if (have.has(r.annotates)) { line.after = r.annotates; } }
       out.push(line);
     }
+    // (the join) a note written before the line it belongs to joins it once that line is there
+    for (const l of out.filter((q) => q.after)) { const host = out.find((q) => q.id === l.after); if (host) { host.text = `${host.text} ${l.text}`; out.splice(out.indexOf(l), 1); } }
     return out;
   }
   // the nicknames seen so far: those the cutscene showed (night one), and those on any page read; matched once their
