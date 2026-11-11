@@ -148,10 +148,17 @@ async function walkDoor(page, ep, dir) {
 async function talkE(page, key) {
   const f = await page.evaluate((key) => { const f = window.__t.figure(key); if (!f) return null; window.__L.face({ x: f.x, z: f.z }, 1.7, f.y + 1.45); window.__L.step(4); return f; }, key);
   if (!f) return { ok: false, why: `no figure ${key}` };
+  const want = await page.evaluate((key) => { const n = window.__game.npcs, v = n && typeof n.find === 'function' ? n.find(key) : null; return v ? v.name || null : null; }, key);
   await page.keyboard.press('e');
-  for (let k = 0; k < 10; k++) { if (await page.evaluate(() => { window.__L.step(2); return !!window.__t.convo(); })) return { ok: true, via: 'E' }; await page.waitForTimeout(60); }
+  let other = null;
+  for (let k = 0; k < 10; k++) {
+    const c = await page.evaluate(() => { window.__L.step(2); return window.__t.convo(); });
+    if (c) { if (!want || !c.who || c.who === want || /old man|Tauno/.test(c.who) === /tauno/.test(key)) return { ok: true, via: 'E' }; other = c.who; break; }
+    await page.waitForTimeout(60);
+  }
+  if (other) await endTalk(page); // (the dot was on someone else: a visitor stood between)
   await page.evaluate((k) => window.__t.talkTo(k), key);
-  for (let k = 0; k < 25; k++) { if (await page.evaluate(() => { window.__L.step(2); return !!window.__t.convo(); })) return { ok: true, via: 'api (E did not open it)' }; await page.waitForTimeout(100); }
+  for (let k = 0; k < 25; k++) { if (await page.evaluate(() => { window.__L.step(2); return !!window.__t.convo(); })) return { ok: true, via: other ? `api (E found ${other} in the way)` : 'api (E did not open it)' }; await page.waitForTimeout(100); }
   return { ok: false, via: 'neither E nor the API opened it' };
 }
 // the store's keeper, once the roster has settled (E on them)
