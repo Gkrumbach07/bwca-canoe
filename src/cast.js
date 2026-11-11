@@ -154,6 +154,9 @@ export class Cast {
         const st = this.stage(who, ep, slot, { kind: 'foot' });
         if (!st) continue;
         if (slot.push && B) B.push(slot.push);
+        // Josie's "There's been an old guy out on the porch" still waiting to be said is let go: he's out there now (it
+        // played after the porch, chk-c1a's A transcript)
+        const D = this.c.talk; if (D && Array.isArray(D.queue)) D.queue = D.queue.filter((q) => !(q.sp && q.sp.key === `cast:josie:${ep}`));
         return st;
       }
     }
