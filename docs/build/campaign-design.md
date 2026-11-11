@@ -1292,12 +1292,180 @@ compiler against the slice data, so it has real data to prove from its first run
 
 ### Round 2: Slice 2, "The mining crew", the director and the runner
 
-- **A2 · Mining arc** (Farm 31: Tauno, Len, Mary, Tasha, Brekke; the Kettle pad; the crew map page; Tauno's ride;
-  the Pietro dig): L1 A/B/C, L2 A (Mary) and C, L6 B/C.
-- **D · Director**: the full `beats.js`, `beats-by-outfitter.js`, climax spacing, stall relief, `record.js` story trip
-  line, S2–S3 pools.
-- **E · Episodes**: `episodes.js`, `minigames.js`, the flyer hook, the Stories pages; S9 (`snag`) and S7 (lilacs, show
-  a print) as reference episodes.
+(Parallel, after the Round 1 join. Written 2026-11-11 from Part 2 §10 and §12, the tables of Part 2, Part 3 (which
+wins over Part 2), `30-mining-years.md`, `60-side-stories.md` S7 and S9, `90-game-needs.md` and
+`00-owner-decisions.md`. Defaults taken where the docs leave a choice open are listed under "Owner calls" below.)
+
+| Stream | Owns | Delivers |
+|---|---|---|
+| **A2 · Mining arc** | NEW `story-data/mining.js` (the Farm scenes in `porch-act1.js`'s shape: Tauno's porch hub and its topics 30 §4.1, Len and Mary's first meetings §4.2, Tasha at the creek §4.3, the back table §4.4, the crew map §4.5, the wrong hill's lines §4.7, the clean book and "On the record" §4.9, Tasha's second meeting and the coda §4.10, the lies of §5), `story-data/rules-mining.js` (+ its line in `all-rules.js`), `story-data/leads-mining.js`, `story-data/episodes/arc-mining.js` (the arc's record on E's runner: `kind: 'arc'`, `slot: false`, `climax`, `yield`), `kettle.js` (the sampling day: the rain notice's timing from `weather.js` `forecast`, the bottles and Fill at the three stations, the Secchi at the beaver dam with the Kettle water's own low clarity, the creek's orange stain and its after-rain run), `mining-items.js` (sample bottles, Leo's lid with its stamp, `page:crewmap` and its drawing, the broken shovel blade), `task-kinds-mining.js` (Len's favour: two place-matched photos, $40, 10 days), `feed-weather.js` (the rain days, + its import line in `story-seams.js`); marked blocks `// a2:` in `story-data/cast.js` (Len, Mary, Tasha, Brekke; Tauno's Farm hub slot), `facts.js`, `walt-lines.js`, `locks.js` (L1B, below), `story-data/notebook.js` (the `backdoor` nickname), `leads.js` (merge the mining leads), `story-places.json` (`westpads`, `kettle`, `twostump`, `pietro.dig`, the EP 33 landing rock), `story-props.js` (casing, core-box rack, box lid, trench, stockpile, station stake, survey lath, survey tag, shovel blade, café table), `props.js` / `grounding.js` (a café at Farm 31: Mary's window table, the corner table, the urn), `rides.js` (the companion ride: Tauno in the cab, the fade, the fee his), `npcs.js` (Len's favour offered in talk) | 90 §5 the Farm cast and schedules (Tauno, Len, Mary, Tasha, Brekke); §4 the west pads, the Kettle pad, Two Stump, the Pietro dig; §3 the Kettle notice, the café, riding with a person; §11 the crew map, Leo's lid, the shovel blade; §1 the arc's yield (`door.mining.yield`). Keys: **L1 A, B, C; L2 A (Mary) and C; L5 B; L6 B, C** (30 §6.1) |
+| **D · Director** | `beats.js` (Round 1's push budget kept; adds the day's beat, climax spacing, stall relief, the set-piece cap), NEW `beats-by-outfitter.js` (bible 6.1's table, 14 outfitters × 3, as data: each beat's place, entry or prop and its reach check), NEW `story-data/rules-beats.js` (+ its line in `all-rules.js`), NEW `feed-beats.js` (the trip's days and its evening, + its line in `story-seams.js`); marked blocks `// d:` in `record.js` (`story.tripLine`, `story.tripBeats`, `story.tallyLines`; the `pay:` handler, paid at the trip-end tally with its line), `party-camps.js` (the fallback lore line from the scheduled party at the next site), `ambient.js` (the `party` pool from 70 §7.1–7.2 and the `history` pool from 70 §2 and §6.1; the S2–S3 lines of 70 §6.3 reaching parties and counters), `talk-rumours.js` (the stall-relief rumour at the next counter) | 90 §1 the day's beat, beats by outfitter, climax spacing, re-hooks inside the budget (kept), the trip-end story line; campaign-design §12 in full. Gives no key (§12: "A beat never carries a key") |
+| **E · Episodes** | NEW `episodes.js` (the runner: records, doors, the explicit yes, windows at day turn, binding, steps as rules scoped by `ep.<id>.`, ends, the page, `first`), NEW `minigames.js` + `minigames/snag.js` (the snag target and the dead-weight fight), NEW `stories.js` (the Stories pages), NEW `show.js` ("Look at this": a print or an item shown or given to a person), `story-data/episodes/s7-mummos.js`, `story-data/episodes/s9-coffee.js`, NEW `feed-episodes.js` (fishing, photos and the day turn, + its line in `story-seams.js`); every episode's steps compiled into the rules at construction (its line in `all-rules.js`, so the data hash holds: chk-coop C2); marked blocks `// e:` in `tasks.js` and `props.js` (the flyer hook in `board()` and `setStoreNotices`: `episodes.flyers(ep)`, outside `tasks.LIMIT`, no deadline, never paid at the tally; and the `boardFilter` pass-through stub N fills in Round 3), `journal.js` (the Stories side), `topics.js` (the "Look at this…" choice), `fishing.js` (the snag target in the cast and the slow fight on the existing tension bar), `season.js` (the lilac bloom window, about 1–20 June seeded ±5 days), `uniques.js` / `cook.js` (June's pot: two cups), `photo.js` targets via the layer (S7's "the lilacs at the old camp", "the stone step"), `story-data/cast.js` (Rose Gornik), `story-places.json` / `story-props.js` (Mummo's: lilacs, step, foundation, bed frame, footing, swimming rock, Toivo's cobble, cribs under water; Alice's beach rock and the pot half in sand), `parties.js` (the family at C593 and C1690 on some days); the `give:item.*` handler | 90 §10 the runner, the page, S7, S9; §7 the snag and dead-weight fight, lilac bloom, cribs under water; §5 "Look at this"; §3 the flyer kinds; §11 June's pot. Part 3 #4: **no slots** |
+
+**The second playable slice, exactly.** From a save that has finished chapter 1's slice (the turn played, the four
+doors named, Farm 31 rung): the season the Round 1 `--slice` run ends with, exported with the save's own .json export
+(ra D), or `story.debug.fixture('turn')` where no export is kept. Each step names the stream that owns its assertion
+in the `--slice` rig; steps owned by two streams are join items. Travel between places is a teleport (`L.tp`/`T.tp`),
+except where a step says real input.
+
+1. **(A2)** Farm 31's porch, a morning (7–10, June–October): Tauno on the bench under the window, never the step. E on
+   him: the first Farm morning (30:4.1.1; Sit on the bench), then the hub, its opener by state (30:4.1.2–). "The outfit" → "Where, exactly?":
+   **L1A** (`tauno.drilled`, 30:4.1.w1). "BRM-14" while carrying the pack: `knows.brm14` (**L1B**). "The pads" (the
+   crews' landing seen): a lead; the Farm keeper rings "the old grade" and "the west pads" when asked. Choices by
+   their number.
+2. **(A2)** The café and the dock: Len at the dock's end (any morning but Thursday): "The crews" → three rings in
+   Len's voice (the landing, the grade, the west pads: `len.westpads.rings`, a second L1A producer); "Walt" →
+   `asked.len.walt` (tier 1, the Round 0 rule) and the lie heard (`said.len.walt`); "What do you do now?" → Len's
+   favour in the journal. Mary at the window (Tuesday or Friday, 9–11): "Leo" → "Are any of his boxes…" → "A lid for
+   Mary" in the journal (no pay).
+3. **(join: A2 + E)** The rig sets a forecast two-day rain: that evening the Kettle notice (30 §4.3) is on Farm's
+   board as a flyer through E's hook: outside the board's count, no deadline, up until 5 game days after the rain.
+   E reads it; taking it rings the pad. Before Tauno's "The pads" there is no notice.
+4. **(A2)** The Kettle day (a weekday, the morning after the rain), by real input from the crews' landing: Little
+   Gabbro on a free day permit, Gabbro, the 6 r carry, Bald Eagle's west shore; up the grade on foot ("Casing", the
+   fallen rack, "Old blaze. Orange." where Tauno's blaze line is known, else "Blaze"); the bushwhack where it fades;
+   over the rise into the hollow: `westpads.seen` (**L1C**) and `kettle.visited`. Tasha at the tailgate (30:4.3.1):
+   three bottles and the Secchi disk on loan; Fill at "Up top", "The trench", "The pond", and nowhere else; the
+   Secchi gone under a metre; "What's background?" → `heard.background` (30:4.3.w1). "Box lid" → Take: Leo's lid
+   (its stamp read off the item, `item.leolid.stamp`). The bottles go back at the tailgate; the creek runs orange
+   (30:4.3.w2). Photos of the crib and a casing on the way.
+5. **(join: A2 + D)** The trip's end: the tally pays $35 with the line "Field help, Kettle creek" (A2's `pay:`
+   through D's handler), and Len's favour pays $40 when the photos are handed in. The trip card's story line names
+   the Kettle pad; "story beats found this trip" counts the day.
+6. **(A2)** Mary, Tuesday or Friday, with the lid carried: the dot on her offers Give (E's `show.js`, A2's want).
+   The back table (30:4.4.1–7): what the papers are, the typewriter's tell (30:4.4.w1), "L.P." (30:4.4.w2); the
+   choice by number (`mary.promised` on the first); then Far End: `mary.farend` (**L2A**, 30:4.4.w3). The lid stays on
+   her table, stamp outward, every later visit.
+7. **(A2)** Tauno's porch: "Well? Kettle pad. That's up by the river, north of Gabbro, isn't it." The rig answers
+   "North of Gabbro, yes." once (the scene ends, "Go again."), then on the next visit corrects him ("No. South-west of
+   Bald Eagle.") and "It still runs orange." The crew map from the glovebox: `page:crewmap` into the book's Pages
+   (B's `givePage`), `door.mining.yield`, L6B (`tauno.e7sketch`). On the porch then: "The stations"
+   (`stations.known`, 30:4.5.w1), "chkd T.K." (the lie bends), "E-7" → "What does an old test pit look like?"
+   (**L5B** `tauno.blazes`, **L6C** `tauno.pit`, 30:4.5.w2); the dot names "Old blaze. Orange." and "Core chips"
+   wherever they stand from then on.
+8. **(A2)** Pietro's north-east shore at about (−21455, 25235), landed by real input: the faint path, the dig, a Look
+   at it: `pietro.dig.seen`. With the crew map the Walt page gets the "sketch doesn't fit" line; with NB70 read, "the
+   back door" inks as Pietro if pencilled; with both, **L2C**. The shovel blade can be carried. Back on the porch:
+   "Eino's sketch" → "turn your head" (30:4.5.w3).
+9. **(A2)** The clean book: the next porch visit after the map, the ask (30:4.9.1). "Not today." once (30:4.9.2;
+   asked again on the next visit, the same words), then "Let's go.": Tauno's ride to the EP 33 road end (the cab, the
+   fade, the fee his: "Gas, Tauno" on the next tally through D's `pay:`). If Tasha's truck is in the lot he stays in
+   the pickup until it goes (30:4.9.3–4). Look at the pole, the slab and the landing rock, then the five questions in
+   any order, each appearing after the first answer; the choice by number: the first is `tauno.record`
+   (30:4.9.w1). The five Walt-page lines in every branch; home: "Same bench tomorrow." A second season-slot variant
+   takes "You don't owe anybody this." and later asks "On the record" on the porch: `tauno.record` the same.
+   `door.mining.climax` and `door.mining.done`; the openers change ("I slept…", one in three).
+10. **(D)** The day's beat on the same season: a trip day in Farm's reach with no story fact by 19:00 offers one
+    beat, in §12's order (a Walt place in the day's travel, Farm's beats from `beats-by-outfitter.js`: Two Stump
+    (NB31), Bald Eagle C902 (NB20), the Clear Lake carry; an open episode's place; else the next site's party says a
+    line from the Walt pool, or the history pool on the declined variant). A fallback line never two trip days
+    running; a beat never carries a key; at most one set piece a trip.
+11. **(D)** Climax spacing and stall relief, on a test arc the rig registers beside mining: two climaxes ready on one
+    trip, the second waits one trip and the day's beat names its person in a rumour; a climax whose window closes
+    within 14 days goes ahead. Engaged (stage ≥ S3) with no new fact for four trips: one rumour at the next counter
+    names the least-explored lock's people-key person, once per lock.
+12. **(E)** S9, on a calm bright day: the rumour at Moose Lake 25, or the kid at C1690, or NB06; reading NB06 at the
+    beach rock shows the dark shape on the sand. A bottom jig cast toward the 8 ft sand and worked back snags the
+    bail about half the passes (a spinner goes over); the dead weight on the existing tension bar: no run, give and
+    stick; reeling too hard breaks the line and the pot stays. It comes up by its bail into the hand: June's pot
+    (two cups of coffee, nothing says so). The Stories page holds what's known; the trip card stamps its `first`;
+    Gus's line the first time the player walks into 25 with it (S9.conv.1–2).
+13. **(E)** S7, in the lilacs' window: Rose's notice on Gus's board at Moose Lake 25 (a flyer: S7.notice); taking it
+    is the yes. Rose on a Tuesday by the window (S7.conv): "Where are the lilacs?" rings Inlet Bay, and inks
+    "Mummo's" if pencilled. Moose–Newfound–Sucker–P194, then about 1 km along the US shore (never landing on the
+    Canadian side); the lilacs from the water; ashore the step, the foundation, the frame, the footing, the swimming
+    rock; NB35 read at the step gives "The swimming rock." on the dot (S7.the-place.w1). A June print matched as "the
+    lilacs at the old camp"; back to Rose, "Look at this" (E's `show.js`): S7.conv.7–9, $25. Out of the window the
+    place is there and no print matches.
+14. **(join: E + D)** The runner's rules on both: meeting Rose, hearing a rumour or reading NB06 or NB35 elsewhere
+    starts nothing; S7 and S9 open at once (no slots); an open episode's place in reach is the day's beat (D reads
+    `episodes.places()`); neither ends without you.
+15. **(K1a)** Co-op: a guest's engine stays off: no story flyers, no Farm cast beyond the ordinary, no snag on the pot,
+    the Stories side absent; nothing breaks for either player. The mirror is still Round 3.
+16. **Green**: the lint (episodes: `started` an explicit-yes atom, `feeds` with another source; the push-budget and
+    stall lints with D's new stops; no gate reads one key of a multi-key lock); at the join, the solver on the slice-2
+    subgraph (every slice-2 fact reachable from the end of slice 1; L1, L2, L5 and L6 each with their Round 2 keys
+    and no articulation point among them, reported as a warning where a lock still has one key; re-entry from "Not
+    today.", "North of Gabbro, yes.", the lid kept, no rain; both `tauno.record` branches); `--slice` (steps 1–15,
+    real input where marked); `--ignore` across two seasons (no Kettle notice without the pads topic, no Farm cast
+    stop beyond Round 1's, side-story notices like any notice, fallback lore within its rate, no Walt lore before
+    `nb.found`, tier 0); `--plan slice2`; unchanged: `gl-c-test`, `gl-join-test`, the c1-* rigs, Round 1's
+    `--slice`/`--ignore`/`--plan slice`, `chk-fp` (flag off equals main), `chk-save`, `chk-coop`.
+
+**Not in Round 2** (each named where it lands): Brekke's conversation and its choice, the open house, Dan and the lid
+sold to him, Len's leak and the dock, the canary's results (Rounds 5–6; Part 4 Round 3 says the Brekke choice has no
+producer until then); Tauno's call (§4.8: Maggie, Round 6); Brekke's launch arriving (the motorboat actor, Round 4 M);
+Ollie's lead and ring (S1, Round 4); Aili's hand-ins for S7 and S9 (33 6.4 A/B, Round 6), so lock 4 key A stays
+Round 6; tiers 2+ in the world (watchers, Round 6); the endings' prop states at the Kettle pad (Round 3 N reads the
+facts A2 leaves).
+
+**What each stream builds on (Round 1) and leaves for Round 3.**
+
+| Stream | Builds on | Stubs it adds for Round 3 |
+|---|---|---|
+| A2 | `topics.scene/add/run/ring`, `cast.js` CAST slots and `SPOT_OF`, `npcs.standAt/extraAt` (T); `pencil.ring`, nicknames and ink, `leads` (P); layer places, props, `at:`/`near:`/`prop:`, `layer.on('photo')`, the kit registry, `story-places.mjs` (L); `givePage` and `page:` items, the Walt-page sections, `words.js` (B); locks, rules, `story.handle` (K1a); `beats.push` (T); `story.ui.pickLake` (P) for Len's "Where are you headed next?", which records `told.len` and leaks nothing yet | `tauno.record`, `mary.promised`, `tasha.metTauno`, `stations.known`, `door.mining.done` as facts N reads for the endings; the pit-look dot vocabulary (`knows.pit` → "Core chips", the square slump) as a kit option F reuses on the camp ridge; the `kettle` place's `show` states by `end:` (empty until N) |
+| D | Round 1's `beats.js` (PACE, `push`, `can`, `engage`), `story.tripN`, `stage`, `ambient.pick`, `layer.places/readHere`, `walt-sites.js`, the notebook's read marks, `leads`, the game's `party-camps.js` and `record.js` trip card | `beats.quiet(reason)` (R's run: no beats at S6), `beats.setPiece(id)` (the one-a-trip cap R and F use), `beats.climax(arc)` for every later arc's record |
+| E | the rule engine with `ep.<id>.` facts, `story.handle` (`give:`, `pay:`, `queue:`), the layer (places, photo targets), `cast.js` and `topics.add` (Rose, Gus), `notebook.js`'s pages, `tasks.js` `board()`, `flyers.js`, `hints.js` moments, `photo.js`, `fishing.js`, `parties.js` | `minigames.register(kind)` for R's `tieoff` and Round 4's `loadedCarry`; `episodes.hold(reason)` (no side story moves during the run, 60 §0.5); `tasks.boardFilter` (pass-through for N); a guest no-op everywhere for C's mirror |
+
+**Owner calls (defaults taken).**
+1. Tier 1 stays Round 0's rule (asking Len about Walt counts; meeting him does not), over 30 §4.2's "meeting Len
+   starts tier 1" (the review's C3-12).
+2. The clean book (§4.9) and Tauno's ride are Round 2's (A2), so Round 3's "Tauno on record ×2" has a producer.
+   `tauno.record` is a plain fact, never an exclusive choice: the porch's "On the record" can always set it later
+   (§3.1's rule for a state declined and later taken).
+3. Brekke is placed on Thursdays (11:45–13:30, the corner table with Len) and shakes hands with the below-tier-2
+   line; his conversation and `choice.brekke` wait for Round 6.
+4. Until Round 4's motorboat actor, Brekke's launch is a still prop at Farm's dock on Thursdays; the Walt-page line
+   "Thursday, 11:45…" comes from seeing the two men at the table.
+5. Leo's lid can't be sold this round (Dan is Round 6); Mary's cold variant (30:4.4.11) waits for that producer.
+6. Tauno's "Who found him?" gives its Walt-page line (30:4.1.w2) now; the lead and the ring to the Stuart Portage
+   wait for S1 (Round 4), so no ring points at a person who isn't there.
+7. S7 and S9 end with Rose and with the pot kept this round; Aili's hand-ins come in Round 6.
+8. Rose's "café table by the window" at Moose Lake 25 is a table by the store's window (A2's café kit).
+9. S9 starts on the hook-up at the beach rock or on NB06 read there (the thing done at its place, 60 §0.2), not on
+   the rumour.
+10. The Kettle notice is a flyer (outside the board's count, no deadline, up from the first evening of a forecast
+    two-day rain until 5 days after); its $35 is Tasha's `pay:` at the day's end. No rain: no notice and no Tasha,
+    the stain only (30 §4.3).
+11. The Kettle pad stays at its provisional (−26950, 30600) until 90 §13 check 1 passes; no Kettle prop goes in
+    before it does.
+12. Big findings: `story.bigCount` counts one yield per arc (the crew map); 30 §4.8 and §6.1 count Mary's far end as
+    a second. Round 2 writes both facts and leaves the count; Tauno's call (Round 6) settles it.
+
+**Doc gaps** (anchors to add as HTML comments in `docs/story/`, prose unchanged, unless a line is marked as needing
+words):
+- 30 §4.3: the Kettle notice block and the keeper's two lines about it have no id.
+- 30 §4.2.1: Len's wrong-photo line ("That's a nice rock…") and the board caption have no id.
+- 30 §4.7: the three Walt-page lines have no id (the section has no speaker lines).
+- 30 §4.9: the five "Gives" Walt-page lines are extracted as choices (30:4.9.c11–c15); they need a `page` list
+  anchor. The "On the record" topic's line has no id.
+- 30 §4.5: the crew map's labels (BRM, CONFIDENTIAL, E-1–E-9, the inset, "chkd T.K. 9/76", stations 1–12) need an
+  `item.crewmap` anchor; the inset's label is mis-extracted as choice 30:4.5.c5.
+- 30 §4.1: the first Farm morning and its "[If the player sits:]" half are one id (30:4.1.1); A2 splits it with
+  `strip`, as Round 1 does, or the anchor pass splits it.
+- 30 §4.9 and §4.3: the tally lines "Gas, Tauno" and "Field help, Kettle creek" have no id.
+- 30 §4.1 "The pads": the lead has no Walt-page line (*needs words*, or the lead uses Tauno's 30:4.1 line as its
+  subject).
+- `locks.js` L1B reads `ink.twostump | ink.vwater | knows.brm14`, but Round 1's Farm seat writes `knows.twostump` and
+  `knows.vwater`, and 30 §4.1 gives L1B for Tauno's telling: A2 widens L1B to include them.
+- `story-data/notebook.js` has no `backdoor` nickname ("the back door" = Pietro: NB66, NB68, NB70, NB73; 10 §7).
+- 60 S9: the rumour, the kid's three lines ("There's a pot down there…", "You got a big one!…", "YOU GOT IT…"), the
+  pot's dot name, its identity line and the `first` ("Brought up June's pot.") have no id.
+- 60 S7: the `first` ("Lilacs at Mummo's.") and the page's last line ("Lilacs every June. Rose has the picture.") have
+  no id.
+- 60 §0.3: S7's and S9's page lines are not written (only S1's example) (*needs words*; until then the page holds the
+  anchored lines above and the stamps).
+- Stall relief: no per-lock rumour is written (§12's one example) (*needs words*; until then D picks only existing
+  lines that name the person: 30 §9's Farm lines, 70 §8).
+- Bible 6.1's beats: most are a stone, an entry, a lure or a second-ink line with no prop or id yet; D lists all 42
+  and offers only those whose place exists in the layer (the lint names the rest as waiting).
+- Data checks still open before their props: 90 §13 check 1 (the Kettle and west pads against the real deposits) and
+  check 8 (Pietro's hill and pond 3732); 60 §14 checks 8 (Mummo's on the US side in v9), 10 (Alice's beach rock) and
+  13 (lilac dates).
+- Stores: Farm 31 has no café in `storeLayout` (90 §3, Mary's window table and the corner table), nor Moose Lake 25 a
+  window table.
+- Bog 67 (moved onto Bog Lake in main 3e17424): D's three Bog beats (Isabella's stone, Quadga, the Isabella River)
+  need their reach rechecked from the new door.
 
 ### Round 3: Slice 3, "Finishable": the far end, the run, both endings
 
