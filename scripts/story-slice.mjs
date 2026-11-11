@@ -88,9 +88,11 @@ const harnessB = (page, state = {}) => ({
   page, log, result, state,
   step: (n) => page.evaluate((n) => window.__L.step(Math.round(n)), n),
   until: (fn, a, ms = 120000) => page.waitForFunction(fn, a, { timeout: ms, polling: 250 }),
-  shot: async (name) => { if (!SHOTS) return; try { await page.screenshot({ path: path.join(SHOTS, `${name}.png`) }); } catch { /* a nicety */ } },
+  shot: async (name) => { if (!SHOTS) return; if (!/^b-cut/.test(name)) await settleShot(page); try { await page.screenshot({ path: path.join(SHOTS, `${name}.png`) }); } catch { /* a nicety */ } },
 });
-const shot = async (page, name) => { if (SHOTS) { try { await page.screenshot({ path: path.join(SHOTS, `${name}.png`) }); } catch { /* a nicety */ } } };
+// (a moment for the book's fade-in and the pencil's hand to finish: the shots were taken mid-fade)
+const settleShot = async (page) => { try { await page.evaluate(() => { if (window.__L) window.__L.step(20); }); await page.waitForTimeout(900); } catch { /* a nicety */ } };
+const shot = async (page, name) => { if (SHOTS) { await settleShot(page); try { await page.screenshot({ path: path.join(SHOTS, `${name}.png`) }); } catch { /* a nicety */ } } };
 const facts = (page, keys) => page.evaluate((ks) => Object.fromEntries(ks.map((k) => [k, window.__game.story.has(k)])), keys);
 // hear(), with a shot (the contact sheet, --shots) when a line matching `re` is on screen
 async function hearShot(page, re, name, n = 14) {
