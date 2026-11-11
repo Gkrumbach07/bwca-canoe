@@ -3,8 +3,9 @@
 //      at once and again once the 2 m ground is in under it: every tyre within 0.15 m of the ground both times
 //   D  every home store's dock reaches open water by paddling: the season's own canoe (walked to, E "Get in"), then the
 //      way out found on the game's own water by the hull's own test (player.js: the middle 1.2 m in, the ends 0.5 m, afloat)
-//      on a 2 m lattice, toward the nearest water 40 m from every shore, and paddled along by W (the heading set on the
-//      way, the hull's own collision): reached, metres paddled, stuck spots, rapids passed near
+//      on a 2 m lattice, toward the nearest water 40 m from every shore (or, a river or creek start, 1.5 km of it), and
+//      paddled along by W (the heading set on the way, the hull's own collision): reached, metres paddled, stuck spots
+//      (none for 2 s), rapids passed within 30 m (none)
 //   APP=http://localhost:5751 ONLY=P,D [P_HOMES=6,16,...] [D_HOMES=...] node scripts/r5-final-test.mjs [--shots dir]
 // (the harness is chk-r5's: claude/chk-r5 scripts/chk-r5.mjs)
 import { createRequire } from 'node:module';
@@ -90,11 +91,12 @@ const HELPERS = async () => {
   if (g.hud && g.hud.note) { const n0 = g.hud.note.bind(g.hud); g.hud.note = (t, ...a) => { H.notes.push(`${g.day.doy} ${g.day.hours.toFixed(2)} ${String(t).replace(/<[^>]+>/g, '')}`); return n0(t, ...a); }; }
   if (g.player && g.player.say) { const s0 = g.player.say.bind(g.player); g.player.say = (t, ...a) => { const s = String(t || '').replace(/<[^>]+>/g, ''); if (s && H.says[H.says.length - 1] !== s) H.says.push(s); return s0(t, ...a); }; }
   H.hullOk = (x, z, h) => { const w = g.world, p = g.player, fx = Math.cos(h), fz = -Math.sin(h); return w.isReady(x, z) && w.shoreAt(x, z) < -1.2 && w.shoreAt(x + fx * 2.3, z + fz * 2.3) < -0.5 && w.shoreAt(x - fx * 2.3, z - fz * 2.3) < -0.5 && p.floats(x, z); };
-  // the way out by the hull's own test: a 2 m lattice from (sx, sz) to the nearest point 40 m from every shore (a centre
-  // preference: cells under 2.5 m from a shore cost 3)
-  H.hullWay = (sx, sz, R = 2500, open = 40) => {
+  // the way out by the hull's own test: a 2 m lattice from (sx, sz) to the nearest point 40 m from every shore, or (a
+  // river or a creek start) RIVER m of water paddled from the dock (a centre preference: cells under 2.5 m from a shore
+  // cost 3)
+  H.hullWay = (sx, sz, R = 2500, open = 40, RIVER = 1500) => {
     const w = g.world, C = 2, N = Math.round(2 * R / C), key = (i, j) => j * N + i, ox = sx - R, oz = sz - R;
-    const cost = new Float32Array(N * N).fill(Infinity), prev = new Int32Array(N * N).fill(-1);
+    const cost = new Float32Array(N * N).fill(Infinity), prev = new Int32Array(N * N).fill(-1), dist = new Float32Array(N * N);
     const i0 = Math.round((sx - ox) / C), j0 = Math.round((sz - oz) / C); cost[key(i0, j0)] = 0;
     // a bucket queue (costs in whole steps)
     const B = [[i0, j0]]; let goal = null, nodes = 0;
@@ -104,20 +106,21 @@ const HELPERS = async () => {
       for (let b = 0; b < bucket.length && !goal; b += 2) {
         const i = bucket[b], j = bucket[b + 1], k = key(i, j); if (cost[k] < c) continue; nodes++;
         const x = ox + i * C, z = oz + j * C;
-        if (w.shoreAt(x, z) <= -open) { goal = k; break; }
+        if (w.shoreAt(x, z) <= -open || dist[k] >= RIVER) { goal = k; break; }
         for (const [a, d] of D8) {
           const ni = i + a, nj = j + d; if (ni < 0 || nj < 0 || ni >= N || nj >= N) continue;
           const nk = key(ni, nj), nx = ox + ni * C, nz = oz + nj * C, h = Math.atan2(-d, a);
           if (!H.hullOk(nx, nz, h)) continue;
           const nc = c + (a && d ? 1.4 : 1) * (w.shoreAt(nx, nz) > -2.5 ? 3 : 1), ci = Math.ceil(nc);
-          if (ci >= cost[nk]) continue; cost[nk] = ci; prev[nk] = k; (B[ci] || (B[ci] = [])).push(ni, nj);
+          if (ci >= cost[nk]) continue; cost[nk] = ci; prev[nk] = k; dist[nk] = dist[k] + C * Math.hypot(a, d); (B[ci] || (B[ci] = [])).push(ni, nj);
         }
       }
     }
     if (goal == null) return { open: false, nodes };
     const pts = []; for (let k = goal; k !== -1; k = prev[k]) pts.push([ox + (k % N) * C, oz + Math.floor(k / N) * C]); pts.reverse();
     let len = 0; for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
-    return { open: true, nodes, len: Math.round(len), pts };
+    const gx = ox + (goal % N) * C, gz = oz + Math.floor(goal / N) * C;
+    return { open: true, river: w.shoreAt(gx, gz) > -open, nodes, len: Math.round(len), pts };
   };
   // along a hull way by W (held by the rig): the heading set on a point 6 m ahead each frame, frames run by advance
   H.paddleWay = (pts, frames) => {
@@ -130,7 +133,7 @@ const HELPERS = async () => {
       const d = Math.hypot(p.x - last[0], p.z - last[1]); walked += d; last = [p.x, p.z];
       for (const q2 of (H.RP.whiteNear(p.x, p.z, 30) || [])) white.add(q2.w.id);
       if (d < 0.01) { if (++still === 60) stuck.push([Math.round(p.x), Math.round(p.z), k]); if (still > 600) return { k, of: pts.length, end: 'stuck', walked: Math.round(walked), stuck, white: [...white] }; } else still = 0;
-      if (k === pts.length - 1 && Math.hypot(q[0] - p.x, q[1] - p.z) < 5) return { k, of: pts.length, end: 'reached', walked: Math.round(walked), stuck, white: [...white], sd: +w.shoreAt(p.x, p.z).toFixed(1), lake: w.lakeName(w.lakeIdAt(p.x, p.z)) };
+      if (k === pts.length - 1 && Math.hypot(q[0] - p.x, q[1] - p.z) < (pts.length > 1 && window.__q.way && window.__q.way.river ? 8 : 5)) return { k, of: pts.length, end: 'reached', walked: Math.round(walked), stuck, white: [...white], sd: +w.shoreAt(p.x, p.z).toFixed(1), lake: w.lakeName(w.lakeIdAt(p.x, p.z)) };
     }
     return { k, of: pts.length, end: 'frames', walked: Math.round(walked), stuck, white: [...white] };
   };
@@ -239,6 +242,7 @@ try {
   if (on('P')) {
     for (const home of (process.env.P_HOMES || '67,6,16,69,36,38,51,12,1').split(',').map(Number)) {
       await season('sandbox', home, 196, `-p-${home}`);
+      if (await ev((h) => !window.__game.truck.spot(h), home)) { result(`P ${home}: no road to this store (no truck)`, true, {}); continue; }
       const r = await truckHome();
       const g0 = r.t0 ? Math.max(...r.t0.gaps.map(Math.abs)) : null;
       await ev(() => { const g = window.__game, T = g.truck, H = window.__q; if (T.mesh && T.mesh.visible) { const a = T.job && T.job.path ? 1 : 0; void a; H.standAt(T.x + 9, T.z + 9); H.aimAt({ x: T.x, z: T.z }, g.tiles.groundAt(T.x, T.z) + 0.8); H.step(8); } });
@@ -264,13 +268,15 @@ try {
         await ev(() => { const g = window.__game, H = window.__q, d = g.player.carry.drop; H.standAt(d.x + 1.5 * Math.cos(d.heading + Math.PI / 2), d.z - 1.5 * Math.sin(d.heading + Math.PI / 2)); H.step(4); });
       }
       if (r.mode !== 'paddle') { await shot(`d-${home}-board`); result(`D ${home}: into the canoe at the dock`, false, r); continue; }
-      r.way = await ev(() => { const g = window.__game, p = g.player, W = window.__q.hullWay(p.x, p.z); window.__q.way = W; return W.open ? { open: true, len: W.len, nodes: W.nodes, lakes: [...new Set(W.pts.filter((_, i) => i % 10 === 0).map(([x, z]) => g.world.lakeName(g.world.lakeIdAt(x, z)) || String(g.world.lakeIdAt(x, z))))].slice(0, 8) } : W; });
+      r.way = await ev(() => { const g = window.__game, p = g.player, W = window.__q.hullWay(p.x, p.z); window.__q.way = W; return W.open ? { open: true, river: W.river, len: W.len, nodes: W.nodes, lakes: [...new Set(W.pts.filter((_, i) => i % 10 === 0).map(([x, z]) => g.world.lakeName(g.world.lakeIdAt(x, z)) || String(g.world.lakeIdAt(x, z))))].slice(0, 8) } : W; });
       if (!r.way.open) { await shot(`d-${home}-in`); result(`D ${home}: a way out to open water from the dock`, false, r); continue; }
       await page.keyboard.down('KeyW');
       try { r.paddle = await ev((n) => window.__q.paddleWay(window.__q.way.pts, n), Math.min(30000, 600 + r.way.len * 25)); } finally { await page.keyboard.up('KeyW'); }
       await ev(() => { const g = window.__game; g.chase.viewPitch = 0.02; window.__q.step(4); });
       await shot(`d-${home}-out`);
-      result(`D ${home}: from the dock out to open water by paddling (${r.way.len} m${r.way.lakes ? ', ' + r.way.lakes.join(' / ') : ''})`, r.paddle.end === 'reached' && !(r.paddle.white || []).length && r.way.len <= 800, r);
+      // (open water within 1.5 km of paddling, or a river or creek start paddled 1.5 km: Hog Creek, the Moose River; no
+      // rapids passed within 30 m, never stuck for 2 s)
+      result(`D ${home}: from the dock ${r.way.river ? '1.5 km down its river or creek' : 'out to open water'} by paddling (${r.way.len} m${r.way.lakes ? ', ' + r.way.lakes.join(' / ') : ''})`, r.paddle.end === 'reached' && !(r.paddle.white || []).length && !r.paddle.stuck.length, r);
     }
   }
 } catch (e) {

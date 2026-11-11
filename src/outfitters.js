@@ -142,8 +142,9 @@ export const MOVED_REACH = 120;
 export function fromMovedStore(world, t) {
   if (!t || !world || !world.entryPoints) return null;
   for (const e of world.entryPoints) {
-    const o = e.storeMoved;
-    if (!o || Math.hypot(t.x - o.x, t.z - o.z) > MOVED_REACH) continue;
+    // (round 5: storeWas, the spots a store has stood at since its first move: a trip saved at any of them)
+    const o = [e.storeMoved, ...(e.storeWas || [])].find((q) => q && Math.hypot(t.x - q.x, t.z - q.z) <= MOVED_REACH);
+    if (!o) continue;
     const pl = placeOf(e.ep, world);
     if (!pl || !pl.door || !pl.dock) continue;
     const walk = t.mode === 'walk', at = walk ? pl.door : pl.dock;

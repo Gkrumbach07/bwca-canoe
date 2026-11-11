@@ -29,7 +29,8 @@
 //             their road ends") the store's own landing moved to the road end: { put: [lat, lon], lake } the water its
 //             dock stands on, or { nearLot: lake } the water of `lake` nearest the head's lot (a lot clipped at the edge);
 //             written as the row's x, z, lake (world.js applyEpFixes: the spot the store is built from, props.js
-//             landingPlan), `storeMoved` the store's old spot (the saves standing there are moved: outfitters.js)
+//             landingPlan), `storeMoved` the store's old spot (the saves standing there are moved: outfitters.js); `was`
+//             [[x, z], ...] the spots it has stood at since (round 5), written as the row's storeWas
 // PORTAGES: renames and posted rods. LAKES: names the release has wrong.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -92,8 +93,11 @@ export const SPEC = {
   64: { name: 'East Bearskin Lake', start: 'lake' },
   66: { name: 'Crocodile River', start: 'paddle', shares: 64 },
   // round 4: the store at the road end (the real lot is 1.2 km off the map's south edge): by the head's lot near the edge,
-  // its dock on Bush Creek, the road in from the edge
-  67: { name: 'Bog Lake', start: 'portage', clipped: true, store: { nearLot: 18148 }, head: { lot: [47.7724, -91.387], open: { i: 1173, mode: 'new', to: 310, posted: 232, name: 'Bog Lake Portage' } } },
+  // its dock on Bush Creek, the road in from the edge. Round 5 (chk-r5; the owner 2026-11-10: "no way for you to actually
+  // paddle out without portaging right away"): no hull reaches open water from Bush Creek there (the creek under 2.4 m
+  // across for 640 m), so the store goes 650 m up the creek to Bog Lake's south-east shore, its dock on the lake, its
+  // two-track on from the old road end (roads.mjs); `was` the round 4 spot (a trip saved there carries on here)
+  67: { name: 'Bog Lake', start: 'portage', clipped: true, store: { put: [47.78337, -91.38085], lake: 310, was: [[-11773, 34392]] }, head: { lot: [47.7724, -91.387], open: { i: 1173, mode: 'new', to: 310, posted: 232, name: 'Bog Lake Portage' } } },
   68: { name: 'Pine Lake', start: 'paddle', put: [48.05056, -90.05722], lake: 228 },
   69: { name: 'John Lake', start: 'paddle' },
   70: { name: 'North Fowl Lake', start: 'paddle', shares: 69 },
@@ -225,6 +229,7 @@ for (const e of I.entryPoints) {
       }
       if (!w) throw new Error(`EP ${e.ep}: no water for the store at its road end`);
       Object.assign(row, { x: w.x, z: w.z, lake: w.lake, storeMoved: { x: e.x, z: e.z } });
+      if (S.store.was) row.storeWas = S.store.was.map(([x, z]) => ({ x, z })); // (round 5: the spots it stood at since)
     }
   } else if (S.lot || S.put) {
     const R = trailhead(e.ep, S);
