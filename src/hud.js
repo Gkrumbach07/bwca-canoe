@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { clamp } from './rng.js';
 import { MONTHS, monthDay } from './astro.js';
 import { FRESH } from './wind.js';
-import { sheets, sheetAt, sheetById, SHEETS } from './sheets.js'; // hubs 2D, fb2 D: the map sheets, owned, and what the map may show
+import { sheets, sheetAt, sheetById, SHEETS, publicPortages } from './sheets.js'; // (st-p: publicPortages, the hidden carry left out) hubs 2D, fb2 D: the map sheets, owned, and what the map may show
 import { explored, INK_WATER, INK_RIM } from './explored.js'; // round A-B: the map filling in (the lakes paddled inked)
 import { lifeKmh } from './pace.js';
 import { miles, fmtDepth, fmtFtIn, fmtIn, fmtLbOz, fmtF, fmtMphMs, fmtMphKmh, fmtDist, scaleBar } from './units.js'; // imperial on screen; the game itself stays metric
@@ -317,6 +317,7 @@ export class Hud {
         this.mKey.timer = setTimeout(() => { if (this.mKey.held && this.mode !== 'sheet') this.setMode('glance'); }, PRESS);
       } else if (e.code === 'Escape') {
         if (this.pin) { this.clearPin(); e.mapPin = true; } // (the book leaves its Esc to the pin: journal.js)
+        else if (typeof this.storyEsc === 'function' && this.storyEsc()) e.mapPin = true; // st-p: the pencil put away first (the book stays open)
         else if (this.mode === 'sheet' && this.host !== 'book') this.setMode(this.settings && this.settings.cornerSheet ? 'corner' : 'hidden');
       } else if (e.code === 'Enter' && this.pin) this.confirm();
     });
@@ -376,12 +377,29 @@ export class Hud {
       const [px, py] = rectPx(e);
       const [x, z] = this.worldAt(px, py);
       if (this.table) { this.table.pick(x, z); return; } // fb2 D: at the map table a click picks a sheet
+      if (typeof this.storyClick === 'function' && this.storyClick(x, z)) return; // st-p: the story's pencil or a lake pick (map-book.js; STORY_ON only)
       // a notice's tag or ring, a seal on a dock, a pencilled word: the book's map side takes it (map-book.js)
       const hit = this.hitAt(px, py);
       if (hit && typeof this.onMarkClick === 'function' && this.onMarkClick(hit)) return;
       this.propose(x, z, false);
     };
     c.addEventListener('pointerleave', () => { this.hoverOff(); c.style.cursor = ''; });
+    // st-p: the story's pencil (map-book.js sets these under STORY_ON; unset, nothing here does anything): right-click
+    // rubs a pencilled name out, a nickname dragged from the Walt page is pencilled where it is dropped
+    c.addEventListener('contextmenu', (e) => {
+      if (typeof this.storyRub !== 'function' || this.mode !== 'sheet') return;
+      const [px, py] = rectPx(e), [x, z] = this.worldAt(px, py);
+      if (this.storyRub(x, z, (this.view.span / c.width) * 16)) e.preventDefault();
+    });
+    c.addEventListener('dragover', (e) => { if (typeof this.storyDrop === 'function' && e.dataTransfer && [...e.dataTransfer.types].includes('text/x-walt-nick')) e.preventDefault(); });
+    c.addEventListener('drop', (e) => {
+      if (typeof this.storyDrop !== 'function' || !e.dataTransfer) return;
+      const nick = e.dataTransfer.getData('text/x-walt-nick'); if (!nick) return;
+      e.preventDefault();
+      const [px, py] = rectPx(e), [x, z] = this.worldAt(px, py);
+      this.storyDrop(nick, x, z);
+    });
+    // /st-p
     // a lake's page straight from the sheet (map-book.js)
     c.addEventListener('dblclick', (e) => {
       if (this.mode !== 'sheet' || this.table || typeof this.onLakePage !== 'function') return;
@@ -445,7 +463,8 @@ export class Hud {
       else if ((h.kind === 'store' || h.kind === 'ep' || h.kind === 'dock') && d < 10 * k) take(h, d, h.kind === 'store' ? 3.9 : 4);
       else if (h.kind === 'site' && d < 8 * k) take(h, d, 3);
       else if (h.kind === 'dam' && d < 7 * k) take(h, d, 4.5); // the wetlands round
-      else if ((h.kind === 'task' || h.kind === 'note') && d < Math.max(h.r / mPerPx, 9 * k)) take(h, 40 + d / 8, h.kind === 'task' ? 0 : 6);
+      else if (h.kind === 'pname' && d < 14 * k) take(h, d, 5.5); // st-p: a pencilled nickname
+      else if ((h.kind === 'task' || h.kind === 'note' || h.kind === 'pring') && d < Math.max(h.r / mPerPx, 9 * k)) take(h, 40 + d / 8, h.kind === 'task' ? 0 : 6); // (st-p: pring, a story ring)
       else if (h.kind === 'portage') {
         const p = w.portages[h.i]; if (!p) continue;
         let m = Infinity;
@@ -466,7 +485,7 @@ export class Hud {
   // put while the pointer keeps to that spot (no tip chasing the cursor) and goes as soon as it leaves it.
   hoverMove(px, py, e) {
     const hit = this.hitAt(px, py), click = !!(hit && (hit.kind === 'task' || hit.kind === 'claim') && typeof this.onMarkClick === 'function');
-    this.canvas.style.cursor = click ? 'pointer' : '';
+    this.canvas.style.cursor = click ? 'pointer' : (typeof this.storyCursor === 'function' && this.storyCursor()) || ''; // (st-p: the pencil out)
     const w = this.hoverWait, far = (q) => !q || Math.hypot(e.clientX - q.cx, e.clientY - q.cy) > HOVER_STILL;
     if (this.hoverShown && !far(this.hoverShown)) return;
     if (this.hoverShown) this.hoverOff();
@@ -1718,8 +1737,8 @@ export class Hud {
       const dp = sheet ? mPerPx / k : 0, close = mPerPx < 16, mid = mPerPx < 60 && dp < 72;
       ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       ctx.font = `italic 600 ${13 * k}px ${SERIF}`;
-      if (lay.portages && mPerPx < 40 && dp < 48) for (let pi = 0; pi < w.portages.length; pi++) { // (further out the red dashes were all you saw)
-        const p = w.portages[pi], [bx0, bz0, bx1, bz1] = p.bbox;
+      if (lay.portages && mPerPx < 40 && dp < 48) for (const { p, i: pi } of publicPortages(w)) { // (further out the red dashes were all you saw; st-p: the public ones)
+        const [bx0, bz0, bx1, bz1] = p.bbox;
         if (!inView(bx0, bz0, bx1, bz1) || !onMine(bx0, bz0, bx1, bz1)) continue;
         ctx.beginPath();
         p.pts.forEach(([x, z], n) => { const [a, b] = toPx(x, z); if (n) ctx.lineTo(a, b); else ctx.moveTo(a, b); });
@@ -1854,6 +1873,7 @@ export class Hud {
         if (h.who && mPerPx < 30) { ctx.font = `600 ${13 * k}px ${PENCIL}`; ctx.fillStyle = 'rgba(74, 64, 54, 0.7)'; ctx.fillText(`— ${h.who}`, tx, y + 14 * k); placed.push({ x0: tx - 50 * k, x1: tx + 50 * k, y0: y + 4 * k, y1: y + 18 * k }); }
       }
     }
+    if (!blank && told.story && told.story.length) this.drawPencil(ctx, told.story, { toPx, inView, mPerPx, k, hits, place, W, H, mid }); // st-p
     // The notices (the owner, 2026-10-31: "we need to be able to see which tasks we need to go claim and which ones are
     // open"). Open: the keeper's red pencil round where it sends you, a wobbly ring not quite closed (no numbered disc:
     // the owner, of those, "look out of place"), and what for in the pencil hand. Done: a "$" pencilled and ringed on the
@@ -1884,6 +1904,61 @@ export class Hud {
     if (look === 'whole' || this.table) this.drawSheetGrid(ctx, sh, toPx, inView, k);
     return ready;
   }
+
+  // st-p: the story's pencil (pencil.js marks, through map-book.js; STORY_ON only): rings in the keepers' own grey pencil
+  // (no new colour) with what for and who said so, a small dot once followed, faint and ticked once closed; the player's
+  // nicknames in pencil, inked once the world confirms them; *he was here* ticks; bearing lines; the walked carry
+  drawPencil(ctx, list, { toPx, inView, mPerPx, k, hits, place, W, H, mid }) {
+    const G = (a) => `rgba(74, 64, 54, ${a})`;
+    ctx.save();
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (const q of list) {
+      if (q.kind === 'ring') {
+        if (!inView(q.x - q.r, q.z - q.r, q.x + q.r, q.z + q.r)) continue;
+        const [a, b] = toPx(q.x, q.z), r = Math.max(q.r / mPerPx, 9 * k), f = q.closed ? 0.45 : 1;
+        ctx.beginPath(); ctx.ellipse(a, b, r * 1.03, r * 0.98, 0.5, 0, 6.28);
+        ctx.fillStyle = G(0.06 * f); ctx.fill();
+        ctx.strokeStyle = G(0.62 * f); ctx.lineWidth = 1.7 * k; ctx.stroke();
+        ctx.beginPath(); ctx.ellipse(a - 1.2 * k, b + 1 * k, r * 1.0, r * 1.01, 1.1, 0.5, 5.8);
+        ctx.strokeStyle = G(0.28 * f); ctx.lineWidth = 1.1 * k; ctx.stroke();
+        const ex = a + r * 0.72, ey = b - r * 0.72;
+        if (q.followed && !q.closed) { ctx.beginPath(); ctx.arc(ex, ey, 2.6 * k, 0, 6.28); ctx.fillStyle = G(0.85); ctx.fill(); } // been there
+        if (q.closed) { ctx.beginPath(); ctx.moveTo(ex - 5 * k, ey); ctx.lineTo(ex - 1.5 * k, ey + 4 * k); ctx.lineTo(ex + 6 * k, ey - 6 * k); ctx.strokeStyle = G(0.8); ctx.lineWidth = 1.8 * k; ctx.stroke(); } // ticked
+        hits.push({ kind: 'pring', ring: q, x: q.x, z: q.z, r: q.r, px: 10 });
+        if (mid || r > 30 * k) {
+          ctx.font = `600 ${17 * k}px ${PENCIL}`; ctx.fillStyle = G(0.9 * f); ctx.textAlign = 'center';
+          const ty = clamp(r > 26 * k ? b - r + 21 * k : b - r - 6 * k, 24 * k, H - 12 * k), tx = clamp(a, 70 * k, W - 70 * k);
+          const y = place(q.label || '', tx, ty, 'center', 19 * k);
+          ctx.fillText(q.label || '', tx, y);
+          if (q.who && mPerPx < 30) { ctx.font = `600 ${13 * k}px ${PENCIL}`; ctx.fillStyle = G(0.7 * f); ctx.fillText(`— ${q.who}`, tx, y + 14 * k); }
+        }
+      } else if (q.kind === 'name') {
+        if (!inView(q.x, q.z, q.x, q.z)) continue;
+        const [a, b] = toPx(q.x, q.z);
+        ctx.textAlign = 'center';
+        if (q.inked) { ctx.font = `italic 700 ${15 * k}px Alegreya, Georgia, serif`; ctx.fillStyle = 'rgba(28, 36, 52, 0.92)'; }
+        else { ctx.font = `600 ${16 * k}px ${PENCIL}`; ctx.fillStyle = G(0.72); }
+        const y = place(q.label, a, b + (q.inked ? 20 : 14) * k, 'center', 18 * k); // (under the point: the printed name sits on it)
+        ctx.fillText(q.label, a, y);
+        hits.push({ kind: 'pname', name: q, x: q.x, z: q.z, px: 12 });
+      } else if (q.kind === 'tick') {
+        if (!inView(q.x, q.z, q.x, q.z)) continue;
+        const [a, b] = toPx(q.x, q.z);
+        ctx.beginPath(); ctx.moveTo(a - 4 * k, b - 1 * k); ctx.lineTo(a - 1 * k, b + 3 * k); ctx.lineTo(a + 5 * k, b - 5 * k);
+        ctx.strokeStyle = G(0.85); ctx.lineWidth = 1.6 * k; ctx.stroke();
+      } else if (q.kind === 'bearing') {
+        const L = 8000, t = (q.deg * Math.PI) / 180, bx = q.x + Math.sin(t) * L, bz = q.z - Math.cos(t) * L;
+        const [a, b] = toPx(q.x, q.z), [c2, d2] = toPx(bx, bz);
+        ctx.setLineDash([6 * k, 4 * k]); ctx.beginPath(); ctx.moveTo(a, b); ctx.lineTo(c2, d2); ctx.strokeStyle = G(0.6); ctx.lineWidth = 1.4 * k; ctx.stroke(); ctx.setLineDash([]);
+      } else if (q.kind === 'walked' && Array.isArray(q.pts) && q.pts.length > 1) {
+        ctx.setLineDash(q.inked ? [] : [2 * k, 4 * k]); ctx.beginPath();
+        q.pts.forEach(([x, z], n) => { const [a, b] = toPx(x, z); if (n) ctx.lineTo(a, b); else ctx.moveTo(a, b); });
+        ctx.strokeStyle = q.inked ? 'rgba(28, 36, 52, 0.85)' : G(0.7); ctx.lineWidth = 1.8 * k; ctx.stroke(); ctx.setLineDash([]);
+      }
+    }
+    ctx.restore();
+  }
+  // /st-p
 
   // what moves over the base: the paper's grain is laid by drawMap; here the words on blank paper, the canoe where it
   // was left, you, the pin and its pencil line, a found place's ring, the north arrow and (on the glance) the scale

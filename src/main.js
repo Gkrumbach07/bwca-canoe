@@ -1217,6 +1217,33 @@ async function main() {
         .catch((e) => console.warn('story K1b: the feed', e));
     } catch (e) { console.warn('story K1b: the seams', e); }
   }
+  // st-p: the story's pencil and leads (story Round 1, stream P; campaign-design §4), only under STORY_ON (with the flag
+  // off neither module is fetched and the map is main's): pencil.js on the story (rings with their voices, nicknames,
+  // the inking), leads.js (born, followed, closed), the map's pencil and lake-pick modes (map-book.js attachPencil),
+  // story.ui.pickLake, and two TEACH moments: the pencil's gesture (an unmatched nickname and the map side open, 20 §7.2)
+  // and the first lead ever (§4)
+  if (STORY_ON && story.v === 2) {
+    try {
+      const [{ pencil }, { leads }] = await Promise.all([import('./pencil.js'), import('./leads.js')]);
+      const seams = window.__game.storySeams || {};
+      journal.map.attachPencil({ pencil, leads, story, layer: seams.layer || null, player });
+      leads.attach({ story, pencil, hud });
+      if (story.ui && typeof story.ui.provide === 'function') story.ui.provide('pickLake', (o) => journal.map.pickLake(o));
+      let firstLead = 0;
+      leads.on('first', () => { firstLead = performance.now(); });
+      const pm = new Map([
+        ['pencil', { id: 'pencil', prio: 1, recur: 'once', text: 'Drag a name from his page onto a lake to pencil it in.', // (20:7.2.w1)
+          due: () => journal.open && journal.side === 'map' && pencil.unmatched().some((n) => !n.matched) }],
+        ['firstlead', { id: 'firstlead', prio: 1, recur: 'once', text: 'Tauno’s door, in your book.', // (campaign-design §4)
+          due: () => firstLead > 0 && performance.now() - firstLead < 120000 }],
+      ]);
+      for (const m of pm.values()) if (!MOMENTS.some((q) => q.id === m.id)) { const { due, ...rest } = m; void due; MOMENTS.push(rest); }
+      const dueSP = hints.due.bind(hints);
+      hints.due = (id, rec) => (pm.has(id) ? pm.get(id).due(rec) : dueSP(id, rec));
+      Object.assign(window.__game, { pencil, leads });
+      if (window.__game.storySeams) Object.assign(window.__game.storySeams, { pencil, leads });
+    } catch (e) { console.warn('story P: the pencil', e); }
+  }
   // st-b: the book's Walt side (docs/build/campaign-design.md §6, Round 1 stream B; notebook.js, casebook.js), only under
   // STORY_ON: the notebook reader, the Walt page and pages given as the book's fourth side (journal.addSide), the back
   // cover ticked from the story's carries, the book's rules and its two moments (waltpage, readhere). walt.js's Read opens
