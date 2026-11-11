@@ -154,6 +154,12 @@ async function talkE(page, key) {
   await page.evaluate((k) => window.__t.talkTo(k), key); await page.waitForTimeout(120);
   return { ok: await page.evaluate(() => !!window.__t.convo()), via: 'api (E did not open it)' };
 }
+// the store's keeper, once the roster has settled (E on them)
+async function keeperE(page, ep) {
+  let key = null;
+  for (let k = 0; k < 40 && !key; k++) { key = await page.evaluate((e) => { window.__L.step(5); return window.__t.keeperKey(e); }, ep); if (!key) await page.waitForTimeout(80); }
+  return key ? talkE(page, key) : { ok: false, why: 'no keeper in the roster' };
+}
 async function picks(page, list) {
   const out = [];
   for (const p of list) { const r = await choose(page, p); out.push(r); if (!r.ok) return { ok: false, at: p, r, out }; }
@@ -172,6 +178,10 @@ async function goStore(page, ep) {
     const g = window.__game, L = window.__L, l = g.outfitter.landing(ep);
     if (Math.hypot(g.player.x - l.x, g.player.z - l.z) > 120) { await g.player.teleport(l.x, l.z); await L.settle(); }
     for (let k = 0; k < 150 && !g.outfitter.layout(ep); k++) { L.step(10); await L.wait(60); }
+    const S = g.outfitter.layout(ep); // (the store's own tiles in, its steps and porch collidable, before anyone walks them)
+    if (S && g.tiles.ensure) { try { await g.tiles.ensure(S.door.x, S.door.z, 120); } catch { /* */ } }
+    for (let k = 0; k < 60 && S && g.tiles.readyAt && !g.tiles.readyAt(S.door.x, S.door.z); k++) { L.step(5); await L.wait(60); }
+    L.step(20);
   }, ep);
 }
 async function taunoWalkout(page, ep) {
@@ -296,14 +306,14 @@ async function slice() {
     await goStore(A, ep);
     const inn = await walkDoor(A, ep, 'in');
     const armed = await facts(A, ['tauno.armed']);
-    const key = await A.evaluate((e) => window.__t.keeperKey(e), ep);
-    const k1 = await talkE(A, key);
+    const k1 = await keeperE(A, ep);
     const gold = await A.evaluate(() => window.__t.convo());
     const g1 = await choose(A, 'Whose gear was this?');
     const gearSaid = await hear(A, 4);
     await endTalk(A);
     const gearF = await A.evaluate(() => ({ gear: window.__game.story.get('walt.gear'), line: window.__game.story.walt().includes('20:5.2.w1') }));
-    result('4a the door walked in after night one arms the porch; E on the keeper: "Whose gear was this?" first, in gold; its Walt line', inn.ok && armed['tauno.armed'] && k1.ok && gold && gold.choices[0] === 'Whose gear was this?' && g1.ok && gearF.line, { inn, armed, k1, gold, gearSaid, gearF });
+    // (the door by the keys is 1a's, 4b's and 5a's assertion; here a stuck walk goes in by the API and says so)
+    result('4a in by the door after night one arms the porch; E on the keeper: "Whose gear was this?" first, in gold; its Walt line', armed['tauno.armed'] && k1.ok && gold && gold.choices[0] === 'Whose gear was this?' && g1.ok && gearF.line, { inn, armed, k1, gold, gearSaid, gearF });
     const w = await taunoWalkout(A, ep);
     const fig = w.t ? await A.evaluate((k) => window.__t.figure(k), `cast:tauno:${w.t.ep}`) : null;
     result('4b out of the door by daylight (W): Tauno at the porch foot (his truck where there is no porch), on the ground, drawn', w.out.ok && w.t && w.t.slot === 'porch' && fig && Math.abs(fig.y - fig.ground) < 0.35 && fig.drawn, { w, fig });
@@ -320,9 +330,8 @@ async function slice() {
   // step 5 (join T + P + L): a keeper rings the crews' landing, her name in Marked; the landing paddled to; the lead closes --
   await run('5', async () => {
     const inn = await walkDoor(A, ep, 'in');
-    const key = await A.evaluate((e) => window.__t.keeperKey(e), ep);
+    const k = await keeperE(A, ep);
     const name = await A.evaluate((e) => { const v = (window.__game.npcs.at(e) || []).find((x) => x.keeper); return v ? v.name.split(' ')[0] : null; }, ep);
-    const k = await talkE(A, key);
     const r = await picks(A, ['Ask about', 'Can you ring Little Gabbro for me?']);
     await hear(A, 4);
     const r2 = await picks(A, ['And Bald Eagle\'s west shore?']);
@@ -358,12 +367,11 @@ async function slice() {
     const stage = await A.evaluate(() => window.__game.story.stage);
     result('6a Farm\'s porch of a morning, E on him: U1–U6 by number (the crib, pink, Eino, upwind, the word, the doors); S3', t && t.ep === 31 && k.ok && u1 && r.ok && Object.values(f).every(Boolean) && stage === 'S3', { sat: sat.length, t, k, u1, r: r.ok ? 'ok' : r, f, stage });
     const inn = await walkDoor(A, 31, 'in');
-    const key = await A.evaluate(() => window.__t.keeperKey(31));
-    const k2 = await talkE(A, key);
+    const k2 = await keeperE(A, 31);
     const r2 = await picks(A, ['Ask about', 'Walt\'s sister\'s at Crane Lake?']);
     await hear(A, 3); await endTalk(A);
     const d = await A.evaluate(() => ({ ringed: window.__game.story.has('door.family.ringed'), ring: window.__game.pencil.ringFor('lv12'), lead: window.__game.leads.state('family') }));
-    result('6b at Farm\'s counter a keeper rings a door when asked (Crane Lake: Little Vermilion), the door ringed', inn.ok && k2.ok && r2.ok && d.ringed && !!d.ring, { inn, k2, r2: r2.ok ? 'ok' : r2, d });
+    result('6b at Farm\'s counter a keeper rings a door when asked (Crane Lake: Little Vermilion), the door ringed', k2.ok && r2.ok && d.ringed && !!d.ring, { inn, k2, r2: r2.ok ? 'ok' : r2, d });
   });
 
   // step 7 (P, B): NB20 and NB31 understood through Tauno; the Front Porch inked from a keeper's ring; the Walt page -------
@@ -412,12 +420,11 @@ async function slice() {
     const pen = await A.evaluate(() => ({ names: window.__game.pencil.marks().filter((m) => m.kind === 'name').map((n) => [n.nick, n.inked]), ink: window.__game.story.get('ink.frontporch') }));
     await closeBook(A);
     const inn = await walkDoor(A, 31, 'in');
-    const key = await A.evaluate(() => window.__t.keeperKey(31));
-    const k2 = await talkE(A, key);
+    const k2 = await keeperE(A, 31);
     const r = await picks(A, ['Ask about', 'Ever hear of the Front Porch?']);
     await hear(A, 3); await endTalk(A);
     const ink = await A.evaluate(() => ({ ink: window.__game.story.get('ink.frontporch'), und: window.__game.story.nbHas('und', 'NB01'), line: window.__game.story.walt().includes('20:5.2.w2') }));
-    result('7c the chip clicked, Lake One clicked: the Front Porch pencilled; a keeper asked "Ever hear of the Front Porch?" rings Lake One: inked, NB01 understood', chip.chip && !!spot.cx && pen.names.some(([n]) => n === 'frontporch') && inn.ok && k2.ok && r.ok && ink.ink === 'lakeone' && ink.und && ink.line, { chip, spot, pen, k2, r: r.ok ? 'ok' : r, ink });
+    result('7c the chip clicked, Lake One clicked: the Front Porch pencilled; a keeper asked "Ever hear of the Front Porch?" rings Lake One: inked, NB01 understood', chip.chip && !!spot.cx && pen.names.some(([n]) => n === 'frontporch') && k2.ok && r.ok && ink.ink === 'lakeone' && ink.und && ink.line, { chip, spot, pen, inn, k2, r: r.ok ? 'ok' : r, ink });
     const wp = await A.evaluate(() => {
       const g = window.__game, b = g.book; g.journal.show('pack'); g.journal.setSide('walt'); b.view = 'walt'; b.render(true);
       const el = document.querySelector('#journal .side.w');
