@@ -357,13 +357,14 @@ export class Onboarding {
     return given;
   }
   // st-t (20 §1.2 "I'll wait for a rental."): the loan and the rest of the kit, the bundle (the old pack and tent) left
-  // on the shelf; the pot, the stove, a canister and the life jacket kept for you at the counter, your own things in the
-  // crate (no pack to put them in). → the item ids given
+  // on the shelf; the pot and the life jacket kept for you at the counter, your own things in the crate (no pack to put
+  // them in). Walt's dented stove and its canister stay with the bundle (takeLater): a Walt thing carried is night one,
+  // and the notebook is in his tent (chk-c1b D1: the shelf path found it through the stove). → the item ids given
   shelf() {
     const inv = this.t.inventory, st = this.state;
     if (!STORY_ON || !inv || !st || st.step === 'gear' || st.done) return [];
     const given = [];
-    for (const id of ['pot', 'waltstove', 'fuel', ...(st.path ? LOAN.pack : [])]) { try { if (inv.place(id, 1, { crate: true, all: true, quiet: true })) given.push(id); } catch { /* kept nowhere */ } }
+    for (const id of ['pot', ...(st.path ? LOAN.pack : [])]) { try { if (inv.place(id, 1, { crate: true, all: true, quiet: true })) given.push(id); } catch { /* kept nowhere */ } }
     if (st.path) { given.push(...this.lend(inv)); st.loan = true; }
     st.step = 'gear'; st.shelf = true; this.write();
     this.hull();
@@ -375,7 +376,7 @@ export class Onboarding {
   takeLater() {
     const inv = this.t.inventory, st = this.state;
     if (!STORY_ON || !inv || !st || !st.shelf) return [];
-    const given = packGear(inv, { pack: 'waltpack', gift: ['walttent'], order: ORDER_R3, food: 0 });
+    const given = packGear(inv, { pack: 'waltpack', gift: ['walttent', 'waltstove', 'fuel'], order: ORDER_R3, food: 0 }); // (the stove and canister left with the bundle: shelf)
     st.shelf = false; this.write();
     const s = this.t.story;
     if (s && typeof s.emit === 'function') s.emit('gear:given', { items: given, ep: this.home, abs: this.abs });
