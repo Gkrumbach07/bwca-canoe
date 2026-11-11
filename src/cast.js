@@ -228,7 +228,7 @@ export class Cast {
       else if (st.past && d > WALK_OFF) { this.decline(); st.done = true; this.say(st, T('20:X1.1')); }
     }
     const o = this.c.outfitter, inside = !!(o && o.visit && o.visit.ep === st.ep && o.visit.inside);
-    if (st.at === 'foot' && (st.done || (st.barked && !slot.walk && d > WALK_OFF)) && (d > GONE_R || inside)) this.unstage(this.key(st.who, st.ep));
+    if (st.at === 'foot' && (st.done || (st.barked && (!slot.walk || st.talked) && d > WALK_OFF)) && (d > GONE_R || inside)) this.unstage(this.key(st.who, st.ep)); // (talked with and walked off from: he goes once you're in or out of sight, 20 §6.3 T6)
   }
   talkingTo(st) { const t = this.c.talk; return !!(t && t.convo && t.convo.speaker && t.convo.speaker.key === `cast:${st.who}:${st.ep}`); }
   say(st, text) { if (!text || !st.h) return; try { st.h.say(text); } catch { /* not drawn */ } }
@@ -280,8 +280,7 @@ export class Cast {
     const run = st.run; if (!run || st.done) return null;
     if (PRE_T3.has(run.at)) { this.decline(); st.done = true; return T('20:X1.1'); }
     if (/^R[457]$/.test(run.at) || run.at === 'seat') { st.done = true; return null; }
-    st.done = true; // (he goes once you are away; E on him before that picks up where it was: porchEntry 'resume', "Where was I.")
-    return T(WALK_AWAY);
+    return T(WALK_AWAY); // (he stays till you're gone in or out of sight (watch); E on him again picks up: porchEntry 'resume', "Where was I.")
   }
   // Josie at the home counter: R1, R1b, then the topic that stays; else a word of hers by stage (70 §4.4)
   josieTalk(st) {
