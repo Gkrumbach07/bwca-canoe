@@ -291,7 +291,8 @@ async function slice() {
     hB.state.site = site.i;
     for (const s of BOOK.filter((q) => q.id === 'B2')) await s.run(hB);
     await closeBook(A);
-    await A.evaluate(() => window.__J.refresh()); // (the morning: breakfast)
+    const struck = await A.evaluate(() => { const g = window.__game, had = !!g.camp.camp; if (had) g.camp.leave({ quiet: true }); window.__J.refresh(); return { had, now: !!g.camp.camp }; }); // (the morning: breakfast, the camp packed up as a tripper leaves a site)
+    log('the camp packed', JSON.stringify(struck));
   });
 
   // step 3 (join L + B, K1b + B): NB45 read (its dot goes); NB01 read at C837 by E; the stone; P289's 64 ------------------
