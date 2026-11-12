@@ -18,6 +18,8 @@ import { SceneRun, T } from './topics.js';
 import { kit, rngFor } from './story-props.js';
 import { propMaterial } from './prop-kit.js';
 import { rain } from './feed-weather.js';
+import { dress } from './npcs.js';
+import { mulberry32 } from './rng.js';
 import { TASHA, tashaEntry, STATIONS, KETTLE, TASHA_LID, KEEPER_NOTICE, WORDS } from './story-data/mining.js';
 import { CAST } from './story-data/cast.js';
 import { ITEM, giveItem, takeItem, has } from './mining-items.js';
@@ -34,7 +36,10 @@ export class FieldPerson {
   constructor(c, who, { x, z, heading = 0, name = null } = {}) {
     this.c = c; this.who = who; this.R = CAST[who] || {};
     this.name = name || this.R.first || who;
-    this.a = c.actors ? c.actors.person({ key: `field:${who}`, look: this.R.look ? { ...this.R.look } : null, name: this.name }) : null;
+    // their look dressed as the store people's are (npcs.js dress: the palette plus what they wear), seeded by who
+    let h = 0; for (const ch of String(who)) h = Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0;
+    const look = dress(mulberry32(h ^ 0x5ea), { female: false, hatChance: 0.2, ...(this.R.look || {}) });
+    this.a = c.actors ? c.actors.person({ key: `field:${who}`, look, name: this.name }) : null;
     this.x = x; this.z = z; this.heading = heading;
     if (this.a) this.a.standAt({ x, z, heading });
     this.speaker = { key: `field:${who}`, person: `field:${who}`, name: this.name, role: this.R.role || '',

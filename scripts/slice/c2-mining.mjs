@@ -177,6 +177,7 @@ export const steps = [
     const route = [[W.w.x - 8, W.w.z + 2], [W.w.x - 200, W.w.z + 95], [W.w.x - 380, W.w.z + 230], [W.k.x + 250, W.k.z - 120], [W.k.x + 90, W.k.z - 30], [W.k.x + 10, W.k.z + 10]];
     const legs0 = await walkRoute(page, [[W.w.x + 9, W.w.z - 3]], { r: 3, log }); // (the landing to the casing, up the grade)
     const casing = await eOn(page, 'westpads.casing', 1.2, 0.1);
+    if (!casing) log('  casing faceTo', JSON.stringify(await page.evaluate(() => ({ face: window.__L.lastFace, built: window.__game.storyLayer.builtList().filter((b) => b.place === 'westpads') }))).slice(0, 1500));
     await shot(page, shots, 'A2-4-casing');
     const cas = await page.evaluate(() => { const g = window.__game, q = g.storyLayer.prop('westpads.casing').prop, p = g.player, dx = q.x - p.x, dz = q.z - p.z, n = Math.hypot(dx, dz) || 1; g.storyLayer.shot({ eye: { x: p.x, y: 446, z: p.z }, dir: { x: dx / n, y: 0, z: dz / n } }); return window.__a2.task('lenphotos'); });
     const pine = await page.evaluate(() => window.__L.faceTo('crews.pine2', 1.8, 1.3));
