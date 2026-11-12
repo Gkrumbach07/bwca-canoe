@@ -758,6 +758,318 @@
           "then": []
         }
       ]
+    },
+    {
+      "id": "s7.mummos",
+      "name": "Mummo's: the Haapala fish camp, Inlet Bay, Basswood (US shore)",
+      "doc": "docs/story/60-side-stories.md S7 (The place; checks 8 and 13: scripts/c2-episodes-data.mjs)",
+      "x": -17480,
+      "z": 3730,
+      "lake": "Basswood Lake",
+      "shore": true,
+      "clear": 7,
+      "search": 140,
+      "ep": "S7",
+      "props": [
+        {
+          "id": "s7.lilacs",
+          "kit": "lilacs",
+          "at": [
+            -6,
+            9
+          ],
+          "opts": {
+            "bloom": true
+          },
+          "show": "window:lilac",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Lilacs"
+            }
+          ]
+        },
+        {
+          "id": "s7.lilacs.green",
+          "kit": "lilacs",
+          "at": [
+            -6,
+            9
+          ],
+          "show": "!window:lilac",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Lilacs"
+            }
+          ]
+        },
+        {
+          "id": "s7.lilacs2",
+          "kit": "lilacs",
+          "at": [
+            5,
+            11
+          ],
+          "opts": {
+            "bloom": true
+          },
+          "show": "window:lilac",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Lilacs"
+            }
+          ]
+        },
+        {
+          "id": "s7.lilacs2.green",
+          "kit": "lilacs",
+          "at": [
+            5,
+            11
+          ],
+          "show": "!window:lilac",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Lilacs"
+            }
+          ]
+        },
+        {
+          "id": "s7.step",
+          "kit": "stoneStep",
+          "at": [
+            0,
+            1.2
+          ],
+          "wet": "edge",
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Stone step"
+            }
+          ]
+        },
+        {
+          "id": "s7.cobble",
+          "kit": "quartzCobble",
+          "at": [
+            0,
+            1.2
+          ],
+          "on": "s7.step",
+          "wet": "edge",
+          "show": "true"
+        },
+        {
+          "id": "s7.foundation",
+          "kit": "foundation",
+          "at": [
+            0,
+            13
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Foundation"
+            }
+          ]
+        },
+        {
+          "id": "s7.bed",
+          "kit": "bedFrame",
+          "at": [
+            9,
+            15
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Bed frame"
+            }
+          ]
+        },
+        {
+          "id": "s7.footing",
+          "kit": "stoneRing",
+          "at": [
+            -10,
+            2.2
+          ],
+          "wet": "edge",
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Footing"
+            }
+          ]
+        },
+        {
+          "id": "s7.rock",
+          "kit": "swimRock",
+          "at": [
+            -10,
+            -2.5
+          ],
+          "wet": true,
+          "show": "true",
+          "dot": [
+            {
+              "when": "here:NB35",
+              "name": "The swimming rock."
+            },
+            {
+              "when": "true",
+              "name": "Flat rock"
+            }
+          ]
+        },
+        {
+          "id": "s7.crib",
+          "kit": "crib",
+          "at": [
+            3,
+            -4
+          ],
+          "opts": {
+            "under": 1
+          },
+          "wet": true,
+          "show": "wind<3 & hour:10-15"
+        },
+        {
+          "id": "s7.crib2",
+          "kit": "crib",
+          "at": [
+            6.5,
+            -4.5
+          ],
+          "opts": {
+            "under": 1
+          },
+          "wet": true,
+          "show": "wind<3 & hour:10-15"
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "s7.step",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:ep.S7.step"
+          ]
+        },
+        {
+          "prop": "s7.foundation",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:ep.S7.ashore"
+          ]
+        },
+        {
+          "prop": "s7.bed",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:ep.S7.ashore"
+          ]
+        },
+        {
+          "prop": "s7.footing",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:ep.S7.ashore"
+          ]
+        },
+        {
+          "prop": "s7.rock",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:ep.S7.rock"
+          ]
+        }
+      ],
+      "triggers": [
+        {
+          "on": "enter",
+          "r": 80,
+          "when": "true",
+          "then": [
+            "f:ep.S7.found"
+          ]
+        },
+        {
+          "on": "readHere",
+          "nb": "NB35",
+          "r": 45,
+          "when": "f:nb.found",
+          "then": []
+        }
+      ]
+    },
+    {
+      "id": "s9.beach",
+      "name": "Alice Lake, the beach site C1690 (Site 1175): the beach rock and June's pot off it",
+      "doc": "docs/story/60-side-stories.md S9 (The place; check 10: scripts/c2-episodes-data.mjs)",
+      "x": -233.4,
+      "z": 15091.2,
+      "lake": "Alice Lake",
+      "shore": true,
+      "clear": 0,
+      "search": 40,
+      "ep": "S9",
+      "props": [
+        {
+          "id": "s9.rock",
+          "kit": "landingRock",
+          "at": [
+            1.5,
+            -0.4
+          ],
+          "wet": "edge",
+          "show": "true"
+        },
+        {
+          "id": "s9.pot",
+          "kit": "enamelPot",
+          "at": [
+            0,
+            -12
+          ],
+          "wet": true,
+          "show": "!f:ep.S9.pot"
+        },
+        {
+          "id": "s9.shape",
+          "kit": "sandShape",
+          "at": [
+            0,
+            -12
+          ],
+          "wet": true,
+          "show": "here:NB06 & wind<3 & hour:10-15 & !f:ep.S9.pot"
+        }
+      ],
+      "verbs": [],
+      "triggers": [
+        {
+          "on": "readHere",
+          "nb": "NB06",
+          "r": 30,
+          "when": "f:nb.found",
+          "then": []
+        }
+      ]
     }
   ],
   "portages": [
@@ -1129,6 +1441,147 @@
         "lakeId": 101,
         "off": 69,
         "tried": 24
+      },
+      "s7.mummos": {
+        "props": {
+          "s7.lilacs": {
+            "x": -17483,
+            "z": 3734.3,
+            "heading": 2.5165,
+            "sd": 7.9,
+            "y": 397.9
+          },
+          "s7.lilacs.green": {
+            "x": -17483,
+            "z": 3734.3,
+            "heading": 2.5165,
+            "sd": 7.9,
+            "y": 397.9
+          },
+          "s7.lilacs2": {
+            "x": -17493.1,
+            "z": 3729.5,
+            "heading": 2.5165,
+            "sd": 8.9,
+            "y": 397.5
+          },
+          "s7.lilacs2.green": {
+            "x": -17493.1,
+            "z": 3729.5,
+            "heading": 2.5165,
+            "sd": 8.9,
+            "y": 397.5
+          },
+          "s7.step": {
+            "x": -17483.3,
+            "z": 3724.5,
+            "heading": 2.5165,
+            "sd": 1.2,
+            "y": 397.4
+          },
+          "s7.cobble": {
+            "x": -17483.3,
+            "z": 3724.5,
+            "heading": 2.5165,
+            "sd": 1.2,
+            "y": 397.4
+          },
+          "s7.foundation": {
+            "x": -17490.2,
+            "z": 3734,
+            "heading": 2.5165,
+            "sd": 11.3,
+            "y": 398.4
+          },
+          "s7.bed": {
+            "x": -17498.7,
+            "z": 3730.4,
+            "heading": 2.5165,
+            "sd": 11.9,
+            "y": 398.4
+          },
+          "s7.footing": {
+            "x": -17475.8,
+            "z": 3731.1,
+            "heading": 2.5165,
+            "sd": 1.3,
+            "y": 397.4
+          },
+          "s7.rock": {
+            "x": -17473,
+            "z": 3727.3,
+            "heading": 2.5165,
+            "sd": -3.3,
+            "y": 395.7
+          },
+          "s7.crib": {
+            "x": -17482.7,
+            "z": 3718.5,
+            "heading": 2.5165,
+            "sd": -4,
+            "y": 395.5
+          },
+          "s7.crib2": {
+            "x": -17485.2,
+            "z": 3716,
+            "heading": 2.5165,
+            "sd": -4.8,
+            "y": 395.5
+          }
+        },
+        "lanes": [],
+        "x": -17482.6,
+        "z": 3723.5,
+        "n": [
+          -0.5852,
+          0.8109
+        ],
+        "u": [
+          -0.8109,
+          -0.5852
+        ],
+        "lakeId": 4,
+        "off": 7,
+        "tried": 26
+      },
+      "s9.beach": {
+        "props": {
+          "s9.rock": {
+            "x": -231.7,
+            "z": 15091.4,
+            "heading": 0.3098,
+            "sd": -0.1,
+            "y": 460.8
+          },
+          "s9.pot": {
+            "x": -229.6,
+            "z": 15102.9,
+            "heading": 0.3098,
+            "sd": -10.1,
+            "y": 460.1
+          },
+          "s9.shape": {
+            "x": -229.6,
+            "z": 15102.9,
+            "heading": 0.3098,
+            "sd": -10.1,
+            "y": 460.1
+          }
+        },
+        "lanes": [],
+        "x": -233.3,
+        "z": 15091.5,
+        "n": [
+          -0.3049,
+          -0.9524
+        ],
+        "u": [
+          0.9524,
+          -0.3049
+        ],
+        "lakeId": 61,
+        "off": 0,
+        "tried": 6
       }
     },
     "portages": {

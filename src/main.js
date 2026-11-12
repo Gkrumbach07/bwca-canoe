@@ -1344,6 +1344,22 @@ async function main() {
     } catch (e) { console.warn('story A2: the mining years', e); }
   }
   // /a2
+  // e: the episodes (docs/build/campaign-design.md §10, Part 4 Round 2 stream E), only under STORY_ON: the one runner
+  // (episodes.js) with S7 and S9 (and A2's arc at the join), the flyers on the boards (outside the count), the snag on
+  // June's pot (fishing.snags), Rose at Moose Lake 25's window, "Look at this" (show.js), the Stories side of the book,
+  // the families at C1690 and C593 (parties.pinnedFn). With the flag off none of it is fetched or hung
+  if (STORY_ON && story.v === 2) {
+    try {
+      const [{ connect }, { T, SceneRun, texts }, { loadWords }] = await Promise.all([import('./feed-episodes.js'), import('./topics.js'), import('./story-data/words.js')]);
+      const st = window.__game.storyTalk || {};
+      const sm = window.__game.storySeams || {};
+      const E = await connect({ story, layer: sm.layer || window.__game.storyLayer || null, topics: st.topics || null, texts: st.texts || texts, T, SceneRun, loadWords, talk, npcs, scene, fishing, photo, inventory, kit, journal, hud, record, tasks, profile, day, pointer, player, outfitter, parties, wind, world,
+        guest: () => !!(window.__game.coop && window.__game.coop.guest) });
+      window.__game.storyEpisodes = { ...E, on: true };
+      console.log('story E: episodes');
+    } catch (e) { console.warn('story E: episodes', e); }
+  }
+  // /e
   // gl-d: the trip-end tally and the board (the game-loop round, stream D; docs/build/game-loop-brief.md). Pay lands on
   // the trip's card as it counts up (record.js ended → tasks.settle), never at the board; no cap on notices held
   // (the owner's call 2026-11-05), each with a deadline that fits it; the new kinds (task-kinds-2.js: creel, campsite, beaver, iceout, colour,

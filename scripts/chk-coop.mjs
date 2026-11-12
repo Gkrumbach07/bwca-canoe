@@ -57,9 +57,16 @@ try {
     return { mode: s.mode, facts: Object.keys(s.facts()), sleep, tr, ev: [...new Set(ev)], stats: f.stats(), book, stage: s.stage, flush: s.flush(), stored: g.store.getItem('bwca-canoe:story2') };
   });
   result('C1 the guest\'s story in the room: mirror, no facts, walt.onSleep refuses, nothing flushed', g1.mode === 'mirror' && !g1.facts.length && !g1.sleep && g1.flush === false, { pre, g1: { ...g1, stored: g1.stored && g1.stored.slice(0, 200) } });
-  result('C2 the guest\'s own story2 untouched while visiting', g1.stored === own0, { same: g1.stored === own0 });
+  const diff2 = (() => { try { const a = JSON.parse(own0), b = JSON.parse(g1.stored); return Object.keys({ ...a, ...b }).filter((k) => JSON.stringify(a[k]) !== JSON.stringify(b[k])).map((k) => ({ k, a: JSON.stringify(a[k]).slice(0, 300), b: JSON.stringify(b[k]).slice(0, 300) })); } catch (e) { return String(e); } })(); // (e: what moved, when it did)
+  result('C2 the guest\'s own story2 untouched while visiting', g1.stored === own0, { same: g1.stored === own0, diff: g1.stored === own0 ? null : diff2 });
   const host = await A.evaluate(() => ({ mode: window.__game.story.mode, facts: Object.keys(window.__game.story.facts()) }));
   result('C3 the host stays live (its own facts only)', host.mode === 'live' && !host.facts.includes('crews.seen'), host);
+  // e: Round 2 stream E (episodes.js): a guest's engine is off: no story flyers on the board, no snag on June's pot, no
+  // Stories side, no minigame; the host's flyer still up (nothing breaks for either player)
+  const ge = await B.evaluate(() => { const g = window.__game, E = g.storyEpisodes; if (!E) return { none: true }; const side = g.journal.extra && g.journal.extra.get('stories'); return { flyers: E.episodes.flyers(25).length, board: g.tasks.flyers ? g.tasks.flyers(25).length : 0, snag: g.fishing.snags ? g.fishing.snags.targets().length : 0, side: side ? !!side.visible() : false, mg: E.minigames.start('snag', { target: { id: 'x', x: 0, z: 0, r: 1, chance: 1 } }) === null, pages: E.episodes.pages().length }; });
+  const he = await A.evaluate(() => { const g = window.__game, E = g.storyEpisodes; return E ? { flyers: E.episodes.flyers(25).length, board: g.tasks.board(25).length } : { none: true }; });
+  result('C5 (e) the guest: no story flyers, no snag on the pot, no Stories side, no minigame; the host\'s notice up, its four pins', !ge.none && ge.flyers === 0 && ge.board === 0 && ge.snag === 0 && !ge.side && ge.mg && ge.pages === 0 && he.flyers === 1 && he.board === 4, { ge, he });
+  // /e
   // the guest leaves: the reload into their own season, its story as it was
   const nav = B.waitForNavigation({ timeout: 120000 }).catch(() => null);
   await B.evaluate(() => window.__game.coop.leave()); await nav; await booted(B);

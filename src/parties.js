@@ -458,13 +458,21 @@ export class Parties {
   // the stays at a site at (abs day, hour of the day): [{ stay, party, i, site, key }]
   campsAt(T, h) {
     const blk = this.block(T), w = this.world, out = [];
+    // e: the story's pinned stays (Round 2 stream E: the family at C593 and C1690 on some days, 60 S7/S9): pinnedFn(T)
+    // → [{ stay, party, i }] (feed-episodes.js under STORY_ON; null with the flag off, so this is the schedule exactly).
+    // A pinned stay holds its site: a scheduled one there that night camps nowhere
+    const pin = this.pinnedFn ? (() => { try { return this.pinnedFn(T) || []; } catch { return []; } })() : null;
+    const held = pin && pin.length ? new Set(pin.map((q) => q.i)) : null;
+    // /e
     for (const s of blk.stays) {
       if (s.start > T || s.end < T) continue;
       if (s.start === T && h < s.land) continue;
       if (s.end === T && h >= s.leave) continue;
       const i = blk.site.get(s); if (i == null || i < 0) continue;
+      if (held && held.has(i)) continue; // e:
       out.push({ stay: s, party: s.party, i, site: w.campsites[i], key: this.keyOf[i] });
     }
+    if (held) for (const q of pin) { const s = q.stay; if (s.start > T || s.end < T || (s.start === T && h < s.land) || (s.end === T && h >= s.leave)) continue; out.push({ stay: s, party: q.party, i: q.i, site: w.campsites[q.i], key: this.keyOf[q.i] }); } // e:
     return out;
   }
   // the sites someone lands at later today (the dusk note leaves them be: CampRegistry.spoken)

@@ -94,6 +94,10 @@ export const FACTS = [
   { key: 'twostump.', kind: 'any', doc: '30 §3, 10 NB31 Two Stump on Gabbro\'s south shore: twostump.seen' },
   { key: 'photo.', kind: 'any', doc: '30 §4.2.1 a picture that matched a story place\'s target (photo.crib, photo.casing: Len\'s favour)' },
   // /a2
+  // e: Round 2 stream E (episodes.js; 60 S7, S9): Rose Gornik's own facts (her scene's said.*), the minigames' results
+  { key: 'rose.', kind: 'any', doc: '60 S7 Rose Gornik: her scene (rose.said.<choice>)' },
+  { key: 'mg.snag.', kind: 'bool', doc: '§10 the snag minigame: mg.snag.hooked | landed | snapped (minigames/snag.js through episodes)' },
+  // /e
 ];
 
 // the arcs whose yields are the big findings (§3.3 story.big), and the doors the player can be offered
