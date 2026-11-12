@@ -32,6 +32,13 @@ try {
   const B = await fresh('guest');
   await go(B, 'story=1'); await newSeason(B, 31, 190);
   await B.evaluate(async () => { const g = window.__game; g.walt.find({ key: 1, lake: 'Guest Own Lake' }); await new Promise((r) => setTimeout(r, 200)); g.story.debug.set('crews.seen'); g.story.flush(); g.slots.flush(); await new Promise((r) => setTimeout(r, 500)); });
+  // (c2-fix: the guest's own game paused before its story is read, as a player leaves it for a friend's link. Left
+  // running while the host boots, the guest standing at Farm's door is nudged by the store's comings and goings and,
+  // on a slow host boot, over the threshold (probe-c2coop, stepped: at 9:47 game time, a metre, visit 31:in):
+  // store:enter in their own live game arms Tauno (rule t.armed on nb.found), as it should, after own0 was read. That
+  // was C2's tauno.armed, not the visit: before the join link no frame updates the outfitter (the title is up) and
+  // enterAsGuest makes the story a mirror before it closes the title)
+  await B.evaluate(async () => { const g = window.__game; g.title.open('pause'); g.story.flush(); g.slots.flush(); await new Promise((r) => setTimeout(r, 300)); });
   const own0 = await raw2(B);
   const ownSeason = await B.evaluate(() => window.__game.profile.seasonId);
   log('guest own0', JSON.stringify(await B.evaluate(() => { const g = window.__game, o = g.outfitter; return { title: g.title.state, visit: o.visit ? { ep: o.visit.ep, inside: !!o.visit.inside } : null, at: [Math.round(g.player.x), Math.round(g.player.z)], hours: +g.day.hours.toFixed(2) }; })));
