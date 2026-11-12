@@ -36,12 +36,19 @@ export const HELPERS_A2 = () => {
   // a thing at your feet: stand d m off, face it, look down until the dot is on it (camera.js slides the look point in to
   // the ground at the walker's feet as the view comes down, so the middle of the view finds it)
   A.faceLow = (id, d = 1.3) => {
-    const q = L.prop(id), w = g.world; if (!q) return null; let t = null; const tried = [];
-    for (let k = 0; k < 8; k++) {
-      const a = (k / 8) * Math.PI * 2, x = q.x + Math.cos(a) * d, z = q.z + Math.sin(a) * d;
+    const q = L.prop(id), w = g.world; if (!q) return null; const tried = [];
+    const B = g.storyLayer.builtList().find((b) => b.prop === id), y = (B ? B.y : q.y) + 0.15;
+    for (const dd of [1.6, 2.2, 2.8]) for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2, x = q.x + Math.cos(a) * dd, z = q.z + Math.sin(a) * dd;
       if (w.isWater(x, z)) continue;
-      const yaw = Math.atan2(-(q.z - z), q.x - x); L.standAt(x, z, yaw); L.step(4);
-      for (const pitch of [-0.5, -0.7, -0.9, -1.1, -1.3]) { g.chase.viewYaw = yaw; g.chase.forwardYaw = yaw; g.chase.viewPitch = pitch; L.step(3); t = L.target(); tried.push([k, pitch, t && t.ref]); if (t && t.ref === `story:${id}`) return t; }
+      L.standAt(x, z, Math.atan2(-(q.z - z), q.x - x)); L.step(4);
+      // the view's yaw and pitch from the camera itself (its shoulder offset and its orbit move with the pitch)
+      for (let it = 0; it < 14; it++) {
+        const c = g.camera.position, yaw = Math.atan2(-(q.z - c.z), q.x - c.x), hd = Math.hypot(q.x - c.x, q.z - c.z);
+        g.chase.viewYaw = yaw; g.chase.forwardYaw = yaw; g.chase.viewPitch = Math.atan2(y - c.y, hd); L.step(2);
+        const t = L.target(); if (t && t.ref === `story:${id}`) return t;
+      }
+      tried.push([dd, k, (L.target() || {}).ref || null]);
     }
     A.lastLow = tried; return null;
   };
@@ -83,7 +90,7 @@ const facts = (page, ks) => page.evaluate((ks) => window.__a2.facts(ks), ks);
 async function talk(page, key) {
   await page.evaluate((k) => window.__t.talkTo(k), key); await page.waitForTimeout(120);
   const c = await page.evaluate(() => window.__t.convo());
-  if (!c && LOG) LOG(`  talk ${key}: no conversation ${JSON.stringify(await page.evaluate(() => { const g = window.__game, S = g.outfitter.layout(31); return { staged: window.__a2.staged(), at: [Math.round(g.player.x), Math.round(g.player.z)], store: S ? Math.round(Math.hypot(S.centre.x - g.player.x, S.centre.z - g.player.z)) : null, clock: [g.day.doy, +g.day.hours.toFixed(2), window.__a2.dow(g.day.doy)], convo: !!(g.dialogue && g.dialogue.convo), visit: g.outfitter.visit, mode: g.player.mode, warned: !!window.__a2.M().miningCast.warned }; })).slice(0, 1500)}`);
+  if (!c && LOG) LOG(`  talk ${key}: no conversation ${JSON.stringify(await page.evaluate(() => { const g = window.__game, S = g.outfitter.layout(31); return { staged: window.__a2.staged(), at: [Math.round(g.player.x), Math.round(g.player.z)], store: S ? Math.round(Math.hypot(S.centre.x - g.player.x, S.centre.z - g.player.z)) : null, clock: [g.day.doy, +g.day.hours.toFixed(2), window.__a2.dow(g.day.doy)], convo: !!(g.dialogue && g.dialogue.convo), visit: g.outfitter.visit ? { ep: g.outfitter.visit.ep, inside: !!g.outfitter.visit.inside } : null, mode: g.player.mode, warned: !!window.__a2.M().miningCast.warned }; })).slice(0, 1500)}`);
   return c;
 }
 async function picks(page, list) { const out = []; for (const p of list) { const r = await choose(page, p); out.push(r); if (!r.ok) return { ok: false, at: p, r, out }; } return { ok: true, out }; }
@@ -91,7 +98,7 @@ async function picks(page, list) { const out = []; for (const p of list) { const
 let LOG = null;
 async function eOn(page, id, d = 1.8, dy = 0.4) {
   let t = await page.evaluate(([id, d, dy]) => window.__L.faceTo(id, d, dy), [id, d, dy]);
-  if (!t || t.ref !== `story:${id}`) { const t3 = await page.evaluate((id) => window.__a2.faceLow(id), id); if (t3) t = t3; }
+  if (!t || t.ref !== `story:${id}`) { const t3 = await page.evaluate((id) => window.__a2.faceLow(id), id); if (t3) t = t3; else if (LOG) LOG(`  faceLow ${id}: ${JSON.stringify(await page.evaluate(() => window.__a2.lastLow)).slice(0, 600)}`); }
   if (!t || t.ref !== `story:${id}`) { // (once more from further off, the view less steep)
     const t2 = await page.evaluate(([id, d, dy]) => window.__L.faceTo(id, d, dy), [id, d + 1.2, dy + 0.3]);
     if (t2 && t2.ref === `story:${id}`) t = t2; else if (LOG) LOG(`  eOn ${id}: ${JSON.stringify({ t, t2, face: await page.evaluate(() => window.__L.lastFace) }).slice(0, 1200)}`);
