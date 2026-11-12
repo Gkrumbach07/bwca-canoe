@@ -156,13 +156,9 @@ export const FARM = {
 const spaced = (s) => !(s.sensors instanceof Map && s.sensors.has('climax')) || s.readSensor('climax', 'mining') !== false;
 // where Tauno's Farm scene starts (cast.js, the solver): ctx { asked: the ask already made this visit, porchVisit:
 // a porch visit since the map (a later day), lovelyBook: Brekke's "lovely book" heard }
-// chk-c2b fix: "Let's go." taken but the slab never reached (the road end lives in the cast's memory, not the save: a tab
-// closed in the cab or in the lot before his talk, or a ride that could not start): the ask comes again, the same words,
-// so the climax stays reachable. ctx.riding: the drive and the slab are under way now (mining-cast.js)
-const rideOwed = (s, ctx) => !s.has('tauno.ride') || (!s.has('door.mining.climax') && !ctx.riding);
 export function farmEntry(s, ctx = {}) {
   if (!s.has('tauno.farm.met')) return 'first';
-  if (s.has('door.mining.yield') && rideOwed(s, ctx) && !ctx.asked && (ctx.porchVisit || s.has('brekke.lovelybook')) && spaced(s)) return 'ask';
+  if (s.has('door.mining.yield') && !s.has('tauno.ride') && !ctx.asked && (ctx.porchVisit || s.has('brekke.lovelybook')) && spaced(s)) return 'ask';
   if (s.has('kettle.visited') && !s.has('door.mining.yield')) return 'well';
   return 'morning';
 }
