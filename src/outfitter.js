@@ -416,6 +416,7 @@ export class Outfitter {
     this.setDown(T, e);
     if (a.why === 'ride' && this.truck) this.truck.leave(e.ep); // stream E3: the truck in the lot, then off down the road (truck.js)
     // (round 2: a portage-first start: the canoe off the roof in the lot, the carry from its edge; a boat drop at a portage)
+    if (a.with) return; // (a2: a ride with a person, rides.rideWith: their scene says the rest, not the truck's note)
     const o = T.open, carry = o ? `the ${o.posted || o.rods}-rod portage` : 'the portage', far = o && o.i != null && this.world.portages[o.i] ? this.world.portages[o.i].launch[o.end] : null, toLake = far ? this.world.lakeName(far.lake) : null;
     if (a.why === 'ride' && T.water && T.water.dry && T.drop === 'boat') this.hud.note(`The outfitter's boat leaves you at the start of ${carry}${toLake ? ` to ${toLake}` : ''}. The canoe is on the shore: Q on it to shoulder it.`, 7);
     else if (a.why === 'ride' && T.water && T.water.dry) this.hud.note(`The truck leaves you in the lot at ${e.name}: the canoe off the roof. ${carry[0].toUpperCase() + carry.slice(1)}${toLake ? ` to ${toLake}` : ''} starts at the sign.`, 7);

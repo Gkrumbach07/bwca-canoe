@@ -156,7 +156,7 @@ export class Rides {
     const card = {
       kicker: `${a.name} → ${b.name}${who ? ` · with ${who}` : ''}`, text: '', sub: `${kmWords(r.km)} miles to ${r.lake}, ${rideTime(r.hours)}.`,
       fadeIn: this.sandbox ? 0.6 : 1.2, hold: this.sandbox ? 0.4 : 3.2, fadeOut: this.sandbox ? 0.8 : 1.8,
-      onDark: () => this.arrive(a, b, r, toP),
+      onDark: () => this.arrive(a, b, r, toP, { with: who || 'someone' }), // (the final pass: the lot's set-down note is not said on a ride with a person)
     };
     let ok = false;
     const done = (v) => { this.busy = false; ok = v !== false; return { ok, price: r.price, km: r.km, hours: r.hours }; };
@@ -195,7 +195,7 @@ export class Rides {
     if (ok && p.chase) p.chase.snap();
     return ok || this.teleport(to.x, to.z);
   }
-  async arrive(from, to, r, toP) {
+  async arrive(from, to, r, toP, ride = null) {
     void toP;
     const o = this.outfitter, pr = this.profile, core = this.core, d = this.day;
     const ok = to.lot ? await this.toLot(to) : await this.teleport(to.x, to.z); // (round 2: a portage-first start's lot is on land)
@@ -219,7 +219,7 @@ export class Rides {
       o.lineKind = night ? 'morning' : 'welcome'; o.arrivedBy = night ? 'bunk' : 'ride';
       if (typeof o.layout === 'function' && typeof o.updateArrival === 'function') o.arrival = { why: 'ride', ep: to.ep, t: 0, pending: true };
       else o.pendingShow = true;
-    } else o.arrival = { why: 'ride', ep: to.ep, t: 0 }; // into the lot (outfitter.js updateTrailArrival)
+    } else { o.arrival = { why: 'ride', ep: to.ep, t: 0 }; if (ride && ride.with) o.arrival.with = ride.with; } // into the lot (outfitter.js updateTrailArrival; a2: `with` only from rideWith)
     if (typeof o.save === 'function') o.save();
     return true;
   }
