@@ -117,6 +117,7 @@ async function dismiss(page) {
 }
 async function talk(page, key) {
   await dismiss(page);
+  await page.evaluate(async () => { const g = window.__game, L = window.__L; for (let k = 0; k < 100 && g.player.teleporting; k++) { L.step(10); await L.wait(100); } }); // (a talk while a jump is still settling closes at once: dialogue.js)
   await page.evaluate((k) => window.__t.talkTo(k), key); await page.waitForTimeout(120);
   const c = await page.evaluate(() => window.__t.convo());
   if (!c && LOG) LOG(`  talk ${key}: no conversation ${JSON.stringify(await page.evaluate(() => { const g = window.__game, S = g.outfitter.layout(31); return { staged: window.__a2.staged(), at: [Math.round(g.player.x), Math.round(g.player.z)], store: S ? Math.round(Math.hypot(S.centre.x - g.player.x, S.centre.z - g.player.z)) : null, clock: [g.day.doy, +g.day.hours.toFixed(2), window.__a2.dow(g.day.doy)], convo: !!(g.dialogue && g.dialogue.convo), visit: g.outfitter.visit ? { ep: g.outfitter.visit.ep, inside: !!g.outfitter.visit.inside } : null, mode: g.player.mode, warned: !!window.__a2.M().miningCast.warned }; })).slice(0, 1500)}`);
@@ -340,6 +341,7 @@ export const steps = [
     const start = await page.evaluate(async (P) => {
       const g = window.__game, L = window.__L;
       if (g.wind) { g.wind.override = 1; g.wind.speed = 1; }
+      g.outfitter.arrival = null; g.outfitter.pendingShow = false; // (a door's arrival still pending from the porch would carry the player back to it: outfitter.js updateArrival)
       await L.tp(P.x - P.n[0] * 60, P.z - P.n[1] * 60); await L.settle();
       const o = L.waterOut(P.x - P.n[0] * 3, P.z - P.n[1] * 3, 140, P.x - P.n[0] * 3, P.z - P.n[1] * 3);
       if (o) { await L.tp(o.x, o.z); await L.settle(); }
@@ -368,8 +370,8 @@ export const steps = [
     await page.evaluate(() => { const L = window.__L, p = window.__game.player; for (let k = 0; k < 40 && !p.onFoot; k++) L.step(15); L.step(30); });
     const landed = await page.evaluate((P) => { const p = window.__game.player; return { onFoot: p.onFoot, d: Math.round(Math.hypot(p.x - P.x, p.z - P.z)) }; }, P);
     if (!landed.onFoot || landed.d > 60) {
-      log(`  pietro: not ashore at the landing ${JSON.stringify(await page.evaluate(() => { const g = window.__game; return { notes: [...document.querySelectorAll('.note, .hud-note, #note')].map((e) => e.innerText).filter(Boolean).slice(-3), trip: g.trip ? { active: !!g.trip.active } : null, visit: g.outfitter.visit ? g.outfitter.visit.ep : null, last: g.rides && g.rides.last ? g.rides.last.to : null, mode: g.player.mode }; }))}`);
-      await page.evaluate(async (P) => { const L = window.__L; await L.tp(P.x - P.n[0] * 30, P.z - P.n[1] * 30); await L.settle(); L.standAt(P.x + P.n[0] * 3, P.z + P.n[1] * 3, 0); L.step(20); }, P); // (ashore by the API: said in the result)
+      log(`  pietro: not ashore at the landing ${JSON.stringify(await page.evaluate(() => { const g = window.__game; return { notes: [...document.querySelectorAll('.note, .hud-note, #note')].map((e) => e.innerText).filter(Boolean).slice(-3), trip: g.trip ? { active: !!g.trip.active } : null, visit: g.outfitter.visit ? g.outfitter.visit.ep : null, last: g.rides && g.rides.last ? g.rides.last.to : null, mode: g.player.mode, arrival: g.outfitter.arrival ? { why: g.outfitter.arrival.why, ep: g.outfitter.arrival.ep } : null, energy: g.energy ? +g.energy.value.toFixed(2) : null, tele: !!g.player.teleporting, log: g.trip && g.trip.log ? g.trip.log.slice(-4).map((e) => e.t || e.k || e.type) : null }; }))}`);
+      await page.evaluate(async (P) => { const L = window.__L, g = window.__game; for (let k = 0; k < 100 && g.player.teleporting; k++) { L.step(10); await L.wait(100); } await L.near(P.x + P.n[0] * 3, P.z + P.n[1] * 3); L.standAt(P.x + P.n[0] * 3, P.z + P.n[1] * 3, 0); L.step(20); }, P); // (ashore by the API: said in the result)
     }
     // the faint path up: walked by the keys along the lane to the dig
     const ln = P.lanes[0];
