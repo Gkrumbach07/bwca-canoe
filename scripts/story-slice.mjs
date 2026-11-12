@@ -26,11 +26,12 @@ import { fileURLToPath } from 'node:url';
 import { steps as BOOK } from './slice/c1-book.mjs';
 import { section as LAYER, HELPERS as HELPERS_L } from './slice/c1-layer.mjs';
 import { HELPERS_T, choose, hear, shelf as T_SHELF, r1 as T_R1, declines as T_DECLINES } from './slice/c1-talk.mjs';
+import { HELPERS_D, steps as D_STEPS, ignoreDays as D_IGNORE } from './slice/c2-director.mjs'; // d: Round 2's director (--slice2, --ignore)
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const argv = process.argv.slice(2);
 const arg = (k, d) => { const i = argv.indexOf(`--${k}`); return i >= 0 ? (argv[i + 1] && !argv[i + 1].startsWith('--') ? argv[i + 1] : true) : d; };
-const MODE = arg('plan', null) ? 'plan' : arg('ignore', false) ? 'ignore' : 'slice';
+const MODE = arg('plan', null) ? 'plan' : arg('ignore', false) ? 'ignore' : arg('slice2', false) ? 'slice2' : 'slice'; // (d: --slice2, Round 2's slice: the join assembles its sections; D's here)
 const HOME = Number(arg('home', 25));
 const OUT = path.resolve(String(arg('out', path.join(process.env.TMPDIR || '/tmp', 'story-slice-out'))));
 const SHOTS = arg('shots', null) ? path.resolve(String(arg('shots'))) : null;
@@ -620,11 +621,39 @@ async function ignore() {
     return { out, pushes: g.story.beats && g.story.beats.state ? g.story.beats.state() : null };
   });
   result('I4 two more nights: the days go on, no cutscene again, no book or talk opened by the story', days.out.every((d) => !d.cut && !d.journal && !d.talk && d.hours < 12), days);
+  // d: the director on the season ignored (Round 2, stream D): six trip days, each evening's beat said by the next site's
+  // party when one is armed; then a second season (the bundle never taken: no notebook), six more. Fallback lore within
+  // its rate, no Walt lore before nb.found, the watchers' tier 0
+  await D_IGNORE(A, { result, log, days: 6, tag: 'A' });
+  const t1 = await A.evaluate(() => window.__game.story.tier);
+  await A.evaluate(() => { const g = window.__game; if (g.trip.active) g.trip.close('completed', 'came in', g.profile.home); if (g.record && g.record.shown) g.record.close(); });
+  await newSeason(A, ep, 165);
+  const fresh = await A.evaluate(() => { const g = window.__game, o = g.outfitter; if (o.open) o.hide(); return { found: g.story.has('nb.found'), dir: Object.keys(g.story.doc.dir || {}).length, tripDays: (g.story.doc.dir.tripDays || []).length }; });
+  await D_IGNORE(A, { result, log, days: 6, tag: 'B' });
+  const t2 = await A.evaluate(() => ({ tier: window.__game.story.tier, found: window.__game.story.has('nb.found') }));
+  result('I-D the second season starts the director fresh (no trip days carried over), and an ignoring player stays at tier 0 in both', fresh.tripDays === 0 && t1 === 0 && t2.tier === 0, { fresh, t1, t2 });
+  // /d
 }
+
+// d: --slice2 (Round 2, "The second playable slice"): the sections of the streams, in the slice's order; the join puts
+// A2's and E's in. From the end of chapter 1 (the turn played: story.debug.fixture('turn') where the join provides it,
+// else its facts, HELPERS_D turn())
+async function slice2() {
+  const A = await openGame('slice2');
+  const home = Number(arg('home', 31));
+  await newSeason(A, home, 180);
+  await A.evaluate(HELPERS_D);
+  const ctx = { home };
+  for (const s of D_STEPS) {
+    log(`-- step ${s.step} ${s.id}: ${s.title}`);
+    try { await s.run({ page: A, result, log, ctx }); } catch (e) { result(`${s.step} ${s.id}: threw`, false, { e: String(e && e.stack || e).slice(0, 900) }); }
+  }
+}
+// /d
 
 // =====================================================================================================================
 try {
-  if (MODE === 'slice') await slice(); else await ignore();
+  if (MODE === 'slice') await slice(); else if (MODE === 'slice2') await slice2(); else await ignore(); // (d: --slice2)
 } catch (e) { result('the rig ran to its end', false, { error: String(e && e.stack || e).slice(0, 1500) }); }
 finally { for (const b of browsers) { try { await b.close(); } catch { /* */ } } }
 result('no page errors', errors.length === 0, { errors: errors.slice(0, 10) });
