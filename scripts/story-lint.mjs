@@ -116,9 +116,11 @@ export const IN_EVENTS = new Set([
   'notebook:found', 'notebook:read', 'gear:given', 'season', 'fact', 'stage', 'tier', 'lead:open', 'lead:close', 'lead:overtaken',
   'walt:line', 'nb:understood', 'nb:here', 'rod', 'ink', 'prop:reveal', 'scene', 'episode:start', 'episode:end',
   'run:start', 'run:checkpoint', 'run:caught', 'run:reset', 'run:end', 'ending', 'postcard',
+  // d: the director (stream D, Round 2): the trip's evening and days (feed-beats.js), and its own out-events
+  'trip:evening', 'trip:day', 'beat:armed', 'beat:said', 'beat:stall',
 ]);
 const eventOk = (e) => IN_EVENTS.has(e) || /^mg:[\w-]+$/.test(e);
-export const ACTIONS = ['f', 'ppl', 'lead', 'walt', 'und', 'ring', 'scene', 'line', 'give', 'pay', 'queue', 'emit'];
+export const ACTIONS = ['f', 'ppl', 'lead', 'walt', 'und', 'ring', 'scene', 'line', 'give', 'pay', 'queue', 'emit', 'beat', 'card']; // (d: beat: the director's moments, card: the trip card's story line)
 
 {
   // the adapters emit only the vocabulary
@@ -515,6 +517,89 @@ if (!dataFiles.length) {
       if (m[1] !== 'do' && !ACTIONS.includes(m[1])) errs.push(`talk: unknown action '${a}'`);
     }
     result('talk: the Act I scenes and topics (lines, conditions, facts, Walt lines)', errs.length === 0, { files, conds: new Set(conds).size, actions: acts.length, errs: errs.slice(0, 30) });
+  }
+}
+
+// --- 7 the director (stream D, Round 2; campaign-design §12, bible 6.1) ------------------------------------------------
+// beats-by-outfitter.js: 14 outfitters × 3, each beat a place in the layer (story-places.json or walt-sites.js, placed in
+// the release) and a line of the docs, in its outfitter's reach (REACH_M from the door; Bog 67 from its moved door), on
+// the US side; the rest waiting, each with its reason (named here). No beat carries a key. The fallback's pools: no Walt
+// lore in the history pool; every line of the director's (STALL, CLIMAX, FARM_LORE, the place lines) resolves.
+// Stall relief: each lock with a people key has a row whose lines exist, name its person and can hold at S3.
+{
+  const bf = path.join(SRC, 'beats-by-outfitter.js'), bj = path.join(SRC, 'beats.js');
+  if (!existsSync(bf) || !existsSync(bj)) { result('director: beats by outfitter, the pools and stall relief', null, { why: 'no beats-by-outfitter.js (stream D, Round 2)' }); result('director: the push budget (every story-initiated stop pushes, or carries an engagement atom)', null, { why: 'no stream D data' }); }
+  else {
+    const errs = [], waiting = [];
+    const B = await import(pathToFileURL(bf).href), D = await import(pathToFileURL(bj).href);
+    const tp = await import(pathToFileURL(path.join(SRC, 'topics.js')).href);
+    for (const f of readdirSync(path.join(DATA, 'text')).filter((x) => x.endsWith('.json'))) tp.texts.add(JSON.parse(readFileSync(path.join(DATA, 'text', f), 'utf8')));
+    const am = await import(pathToFileURL(path.join(SRC, 'ambient.js')).href);
+    const ws = await import(pathToFileURL(path.join(SRC, 'walt-sites.js')).href);
+    const sites = new Map(ws.waltSites().map((q) => [q.id, q]));
+    let SP = {}; try { const j = JSON.parse(readFileSync(path.join(SRC, 'story-places.json'), 'utf8')); for (const pl of j.places || []) SP[pl.id] = { ...pl, ...((j.resolved && j.resolved.places && j.resolved.places[pl.id]) || {}) }; } catch { SP = {}; }
+    const byEp = new Map();
+    for (const b of B.BEATS) {
+      const at = `beat ${b.id}`;
+      byEp.set(b.ep, (byEp.get(b.ep) || 0) + 1);
+      if (b.then || b.key || b.fact) errs.push(`${at}: a beat never carries a key or a fact`);
+      if (!B.DOORS[b.ep]) errs.push(`${at}: no door for outfitter ${b.ep}`);
+      if (!b.place || b.wait) { if (!b.wait) errs.push(`${at}: no place and no reason it waits`); waiting.push(`${b.id}: ${b.wait || 'no place'}`); continue; }
+      if (!b.line || tp.T(b.line) == null) errs.push(`${at}: no line '${b.line}'`);
+      const q = sites.get(b.place) || SP[b.place] || null;
+      if (!q) { waiting.push(`${b.id}: its place '${b.place}' is not in the layer yet (another stream's: offered once it is)`); continue; }
+      if (sites.has(b.place) && sites.get(b.place).reach !== b.ep) errs.push(`${at}: ${b.place} is in outfitter ${sites.get(b.place).reach}'s reach (walt-sites.js), not ${b.ep}'s`);
+      const door = B.DOORS[b.ep];
+      if (door && Number.isFinite(q.x)) { const d = Math.hypot(q.x - door.x, q.z - door.z); if (d > B.REACH_M) errs.push(`${at}: ${b.place} is ${Math.round(d)} m from outfitter ${b.ep}'s door (> ${B.REACH_M})`); }
+      if (/Quetico|Canadian side|Ontario/i.test(`${b.what} ${b.line}`)) errs.push(`${at}: names the Canadian side (Quetico is DLC)`);
+    }
+    for (const [ep, n] of byEp) if (n !== 3) errs.push(`outfitter ${ep}: ${n} beats (the bible's table has 3)`);
+    if (byEp.size !== 14) errs.push(`${byEp.size} outfitters (the bible's table has 14)`);
+    // the pools: every id resolves; the history pool never says Walt lore
+    am.ambient.use(JSON.parse(readFileSync(path.join(DATA, 'text', 'world.json'), 'utf8')));
+    for (const l of am.ambient.all('history')) if (am.WALT_LORE.test(l.text) && am.POOLS.history.test(l.raw, { kind: 'pair', host: 25 }, l)) errs.push(`history pool: '${l.id}' is Walt lore`);
+    for (const r of D.FARM_LORE) { const t = tp.T(r.id); if (!t) errs.push(`FARM_LORE: no text '${r.id}'`); else if (am.WALT_LORE.test(t)) errs.push(`FARM_LORE: '${r.id}' is Walt lore (the history side)`); }
+    for (const [arc, r] of Object.entries(D.CLIMAX)) for (const row of r.rumour || []) { const id = typeof row === 'string' ? row : row.id; if (tp.T(id) == null) errs.push(`CLIMAX ${arc}: no text '${id}'`); }
+    for (const id of ['70.9.1', '70.9.2', '70.9.5']) if (tp.T(id) == null) errs.push(`the place lines: no text '${id}'`);
+    // stall relief: a row for each lock with a people key; its lines exist, name the person, carry no banned word, hold at S3
+    const lk = await import(pathToFileURL(path.join(DATA, 'locks.js')).href);
+    for (const L of lk.LOCKS.filter((x) => x.keys.some((k) => k.kind === 'people'))) {
+      const row = D.STALL[L.id];
+      if (!row) { waiting.push(`stall ${L.id}: no line names its people-key person yet`); continue; }
+      const people = new Set(L.keys.filter((k) => k.kind === 'people').flatMap((k) => (k.support && k.support.person) || []));
+      if (!people.has(row.person)) errs.push(`stall ${L.id}: ${row.person} is not its people key's person (${[...people].join(', ')})`);
+      for (const ln of row.lines) {
+        const t = tp.T(ln.id), e = tp.texts.entry(ln.id);
+        if (!t) { errs.push(`stall ${L.id}: no text '${ln.id}'`); continue; }
+        if (!row.name.test(t)) errs.push(`stall ${L.id}: '${ln.id}' does not name ${row.person}`);
+        if (am.BANNED.test(t)) errs.push(`stall ${L.id}: '${ln.id}' says a banned word`);
+        if (e && e.cond) { const r = checkCond(e.cond, `stall ${L.id} ${ln.id}`); const es = Array.isArray(r) ? r : r.errs; errs.push(...es); if (/stage>=S[4-7]|end:/.test(e.cond)) errs.push(`stall ${L.id}: '${ln.id}' cannot hold at S3 ('${e.cond}')`); }
+      }
+    }
+    result('director: beats by outfitter, the pools and stall relief', errs.length === 0, { beats: B.BEATS.length, offered: B.BEATS.filter((b) => b.place && !b.wait).length, waiting: waiting.length, errs: errs.slice(0, 30), waitingList: waiting });
+    // --- the push budget (§12 lint): every rule or cast slot that stages a person, a note or a scene is a pull (the player
+    // walks to it: a seat, a counter they asked at) or a push through beats.push, or carries an engagement atom
+    const PE = [];
+    const ENG = /(^|[\s(&|!])(f:door\.[\w*]+\.taken|f:asked\.|f:[a-z]+\.talk\b|read:NB|und:NB|f:knows\.|f:tauno\.porch\.done|any\(door\.)/;
+    const cast = await import(pathToFileURL(path.join(DATA, 'cast.js')).href);
+    for (const [who, R] of Object.entries(cast.CAST || {})) for (const w of R.where || []) {
+      const stages = !!(w.scene || w.bark);
+      if (!stages) continue;
+      const pull = /^(porch|counter):/.test(w.at || '') && !w.push; // (a seat or a counter: the player walks to it)
+      if (w.push || pull || ENG.test(` ${w.when || ''}`)) continue;
+      PE.push(`cast ${who}.${w.id} (at ${w.at}): stages ${w.scene || w.bark} with no push and no engagement atom`);
+    }
+    for (const n of dataFiles.filter((f) => /^rules/.test(f))) for (const r of arrays(await load(n))) {
+      const stages = (r.then || []).some((a) => /^(scene|line|queue):/.test(a) || /^beat:stall$/.test(a));
+      if (!stages || r.push || ENG.test(` ${r.when || ''}`) || /^beat:stall$/.test((r.then || []).find((a) => /^beat:/.test(a)) || '') && D.STOPS.some((x) => x.id === 'stall')) continue;
+      PE.push(`${n}:${r.id}: stages (${(r.then || []).join(', ')}) with no push and no engagement atom`);
+    }
+    for (const st of D.STOPS) {
+      if (!st.push) PE.push(`beats.js STOPS ${st.id}: not through beats.push`);
+      if (!ENG.test(` ${st.when || ''}`)) PE.push(`beats.js STOPS ${st.id}: '${st.when}' carries no engagement atom`);
+      const c = checkCond(st.when, `STOPS ${st.id}`); PE.push(...(Array.isArray(c) ? c : c.errs));
+    }
+    result('director: the push budget (every story-initiated stop pushes, or carries an engagement atom)', PE.length === 0, { errs: PE.slice(0, 30), stops: D.STOPS.map((x) => x.id) });
   }
 }
 
