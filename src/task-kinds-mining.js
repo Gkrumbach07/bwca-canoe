@@ -19,14 +19,16 @@ function register() {
   if (registered || KINDS.lenphotos) { registered = true; return; }
   registered = true;
   // (no make: never on a board; weight 0 everywhere)
+  // (the final pass: a favour asked in talk, `story` on its kind, is the journal's, not the board's: never in a counter's
+  // pile "Taken from this board", never thanked in the keeper's hello as a board job; tasks.js / npcs.js read KINDS[k].story)
   registerKind(LEN_TASK.kind, {
-    label: 'a favour', weight: { local: 0, medium: 0, far: 0 },
+    label: 'a favour', story: true, weight: { local: 0, medium: 0, far: 0 },
     pay() { return LEN_TASK.pay; },
     progress(t) { const n = (t.got || []).length; return n >= 2 ? 'both pictures, for Len' : n === 1 ? `the ${t.got.includes('crib') ? 'casing' : 'crib'} still wanted` : 'the crib and a casing'; },
     fraction(t) { return t.status === 'done' ? 1 : ((t.got || []).length) / 2; },
   });
   registerKind(MARY_TASK.kind, {
-    label: 'a favour', weight: { local: 0, medium: 0, far: 0 },
+    label: 'a favour', story: true, weight: { local: 0, medium: 0, far: 0 },
     pay() { return 0; },
     progress(t) { return t.status === 'done' ? 'given' : 'a lid, with his letters on it'; },
   });

@@ -1142,14 +1142,16 @@ export class Tasks {
     const onPins = new Set(slots.filter(Boolean).map((t) => t.id));
     // the pile: every notice on the go that this counter pays, torn off its pins or asked of you here in person
     // (npcs.js: theirs to pay, or this counter's); the finished ones on top, then the oldest taken first
-    const pile = this.active.filter((t) => t.from === ep)
+    const pile = this.active.filter((t) => t.from === ep && !(KINDS[t.kind] && KINDS[t.kind].story)) // (the story's favours asked in talk: the journal's only)
       .sort((a, b) => (a.status === 'done' ? 0 : 1) - (b.status === 'done' ? 0 : 1) || (a.taken || 0) - (b.taken || 0) || a.id - b.id);
     const ready = pile.filter((t) => t.status === 'done'), offered = slots.filter((t) => t && t.status === 'offered').length;
     const full = slots.every((t) => t && t.status !== 'offered'); // (every pin a torn scrap of yours: nothing new goes up until one is paid, the playthrough)
     const sum = offered ? `${word(offered)} on offer · a new notice each morning` : writing ? 'the keeper is pinning up notices' : full ? 'every notice taken · new ones once these are paid' : 'a new notice each morning';
     const pileSum = pile.length ? [pile.length - ready.length ? `${word(pile.length - ready.length)} on the go` : '', ready.length ? `${word(ready.length)} done` : ''].filter(Boolean).join(' · ') : '';
     // (gl-d: no Claim all: a notice done is paid when you come in, on the trip's tally)
-    const pins = slots.map((t, i) => this.notice(t, i, ep, writing, where)).join('') + this.flyers(ep).map((f) => this.flyerPin(f, where, ep)).join(''); // (e: a story flyer: outside the count)
+    // (e: a story flyer: outside the count. The final pass: one up goes first, above the fold, a torn one after the pins)
+    const fl = this.flyers(ep), flyer = (f) => this.flyerPin(f, where, ep);
+    const pins = fl.filter((f) => !f.taken).map(flyer).join('') + slots.map((t, i) => this.notice(t, i, ep, writing, where)).join('') + fl.filter((f) => f.taken).map(flyer).join('');
     const cards = pile.map((t, i) => this.pileCard(t, i, ep, where, onPins.has(t.id))).join('');
     return `<section class="board cork two" aria-label="The board">
       <div class="bd-cork"><div class="top"><h3 id="board-h">The board</h3><span class="sum">${sum}</span></div>

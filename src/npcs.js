@@ -2893,7 +2893,7 @@ export class People {
     const t = M.lastTrip(), ti = m.trips.length;
     // (the content join: a job paid here since the last hello is thanked first: you come in from a trip nearly every
     // time, and with the trip's line first the thanks in a job's own words were never heard)
-    const task = m.tasks.filter((x) => x.from === ep && x.day >= (last ?? -1e9) && x.day > (heard.task ?? -1e9)).pop();
+    const task = m.tasks.filter((x) => x.from === ep && x.day >= (last ?? -1e9) && x.day > (heard.task ?? -1e9) && !(KINDS[x.kind] && KINDS[x.kind].story)).pop(); // (a story favour asked in talk is not thanked as a board job)
     if (task) {
       heard.task = task.day; if (t && t.to === ep) heard.trip = ti;
       line = this.fresh((man !== 'gruff' && TASK_THANKS[task.kind]) || W('task').map((s) => fillC(s, { title: task.title }))); // (stream A's new kinds in their own words)
