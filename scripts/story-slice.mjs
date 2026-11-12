@@ -713,7 +713,9 @@ async function slice2() {
     return before;
   });
   log('slice2: the player between A2\'s section and D\'s', JSON.stringify(was));
-  for (const id of ['day-beat', 'episode-beat', 'climax', 'stall']) await run(A, d(id), 'D');
+  // (stall relief before the climax test: in the joined slice the least-explored lock is L3, whose person is the test arc's
+  // own, Bob's bunch, and the test arc's rumour would have said L3's only Sawbill line first)
+  for (const id of ['day-beat', 'episode-beat', 'stall', 'climax']) await run(A, d(id), 'D');
   // --- season B: Moose Lake 25, 9 June (the lilacs' window), from the end of chapter 1 too ---------------------------------
   const B = await openGame('slice2-B');
   await newSeason(B, 25, 160);
