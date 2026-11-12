@@ -11,7 +11,21 @@
 //   for (const s of steps) await s.run({ page, result, log, ctx, shots })
 //   await variant.run(...)                      a second season: "You don't owe anybody this.", then On the record
 // ctx: { home: 31, year, d0 (the Tuesday the slice starts), shots }
-import { choose, hear, steps as T_STEPS } from './c1-talk.mjs';
+import { choose as chooseT, hear, steps as T_STEPS } from './c1-talk.mjs';
+
+// a choice by its number on the keyboard (c1-talk's choose); past nine, or when the key does not take, by the dialogue's
+// own choose(i) (what a click on the line does), and said so in the result
+async function choose(page, prefix, o) {
+  const c = await page.evaluate(() => window.__t.convo());
+  const i = c ? c.choices.findIndex((t) => t.startsWith(prefix)) : -1;
+  if (i >= 9) { const ok = await page.evaluate((i) => { const D = window.__game.dialogue; const r = D.choose(i); window.__L.step(3); return r; }, i); await page.waitForTimeout(60); return { ok: !!ok, said: c.say, by: 'click' }; }
+  const r = await chooseT(page, prefix, o);
+  if (r.ok && i >= 0) {
+    const after = await page.evaluate(() => window.__t.convo());
+    if (after && c && after.say === c.say && JSON.stringify(after.choices) === JSON.stringify(c.choices)) { const ok = await page.evaluate((i) => { const D = window.__game.dialogue; const x = D.choose(i); window.__L.step(3); return x; }, i); return { ok: !!ok, said: c.say, by: 'click (the key did not take)' }; }
+  }
+  return r;
+}
 
 export const HELPERS_A2 = () => {
   const g = window.__game, A = window.__a2 = {}, L = window.__L, T = window.__t;
@@ -19,7 +33,9 @@ export const HELPERS_A2 = () => {
   A.s = () => g.story;
   A.dow = (doy) => new Date(Date.UTC(g.day.year, 0, doy)).getUTCDay();
   A.abs = (doy) => Math.round(Date.UTC(g.day.year, 0, doy) / 86400000);
-  A.at = (doy, h) => { g.day.setClock(g.day.year, doy, h); L.step(6); g.story.update(); L.step(4); };
+  // the clock to a day and hour; the player fed and rested (the slice's days are the story's: a week of them with no food
+  // bought ends in an evacuation home, energy.js's, which is not what is under test here)
+  A.at = (doy, h) => { g.day.setClock(g.day.year, doy, h); const e = g.energy; if (e) { e.value = 1; try { if (e.needs) { e.needs.food = 1; e.needs.water = 1; e.needs.warmth = 1; } if ('lastMealAbs' in e) e.lastMealAbs = e.now; } catch { /* energy.js's own */ } } L.step(6); g.story.update(); L.step(4); };
   A.facts = (ks) => Object.fromEntries(ks.map((k) => [k, g.story.has(k)]));
   A.store = () => g.outfitter.layout(31);
   // to Farm's porch, a little off the steps (the cast seats him on the bench once you are this near)
