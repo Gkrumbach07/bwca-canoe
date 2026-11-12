@@ -13,6 +13,8 @@
 //   --changed REF   CHANGED=REF only the rigs a change touches (below): REF against the working tree, or A..B
 //   --record        RECORD=1    record each rig's dependencies (scripts/rig-deps-hook.mjs) and write scripts/rig-deps.json
 //   --dry                       print what would run (and why, with --changed) and stop
+//   --merge-deps                write scripts/rig-deps.json from rig-logs/deps/*.json as they are (a recording cut short,
+//                               or rigs recorded in several runs) and stop
 //   --minfree MB    MINFREE=MB  a rig starts only while the host has this much memory available (default 5000; one
 //                               rig's Chromium takes 3-4 GB on fedora's GPU; on ben's CPU r4-final-test alone passed 20 GB)
 //   --retry         RETRY=1     a rig that failed in the pool is run once more alone; its line says "retried"
@@ -255,6 +257,7 @@ async function main() {
   const changedSpec = opt('changed') || env.CHANGED;
   const soloArg = opt('solo');
   const minFree = Number(opt('minfree') || env.MINFREE || 5000);
+  if (flag('merge-deps')) { writeDeps(argv.length ? argv : env.RIGS ? env.RIGS.trim().split(/\s+/) : ALL, 'rig-logs/deps'); return; }
   const full = flag('full') || on(env.FULL), record = flag('record') || on(env.RECORD), dry = flag('dry'), retry = flag('retry') || on(env.RETRY);
   let rigs = argv.length ? argv : env.RIGS ? env.RIGS.trim().split(/\s+/) : ALL;
   const missing = rigs.filter((r) => !existsSync(`scripts/${r}.mjs`));
