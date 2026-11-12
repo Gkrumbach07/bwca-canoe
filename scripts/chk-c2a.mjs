@@ -98,7 +98,7 @@ const STATE = () => {
     if (!rc) return p.groundAt(x, z);
     rc.set(new TH.Vector3(x, y + 1.2, z), new TH.Vector3(0, -1, 0)); rc.far = 4; rc.camera = g.camera; // (sprites want the camera)
     const own = (o) => { for (let q = o; q; q = q.parent) if (q === self) return true; return false; };
-    const hits = rc.intersectObjects(g.scene.children, true).filter((h) => h.object.visible && !own(h.object) && !h.object.isSkinnedMesh && !(h.object.material && h.object.material.transparent && h.object.material.opacity < 0.5));
+    const hits = rc.intersectObjects(g.scene.children, true).filter((h) => h.object.visible && !own(h.object) && !h.object.isSkinnedMesh && h.object.isMesh && !(h.object.material && (h.object.material.visible === false || h.object.material.colorWrite === false)) && !(h.object.material && h.object.material.transparent && h.object.material.opacity < 0.5));
     const gy = p.groundAt(x, z);
     return hits.length ? Math.max(hits[0].point.y, gy) : gy;
   };
@@ -367,7 +367,10 @@ async function seasonA() {
   const ride = await A.evaluate(() => { const g = window.__game, l = g.rides.last, lot = g.rides.landing(33), pl = g.storyLayer.place('ep33.crewcamp'), sl = g.storyLayer.prop('ep33.slab'), e33 = g.world.entryPoints.find((e) => e.ep === 33); return { last: l && { from: l.from, to: l.to, price: l.price }, landing33: lot && { x: Math.round(lot.x), z: Math.round(lot.z), name: lot.name }, crewcamp: pl && [Math.round(pl.x), Math.round(pl.z)], slab: sl && [Math.round(sl.prop.x), Math.round(sl.prop.z)], ep33: e33 && { x: Math.round(e33.x), z: Math.round(e33.z), name: e33.name }, km: lot && pl ? +(Math.hypot(lot.x - pl.x, lot.z - pl.z) / 1000).toFixed(2) : null }; });
   log('the ride', JSON.stringify({ ride, m9, m9b }));
   log('the moves over the clean book', JSON.stringify(await A.evaluate(() => window.__W)).slice(0, 4000));
-  if (ride.km != null && ride.km > 0.5) note('broken', 'A9 clean book', `Tauno's ride sets the player down at EP 33's landing (${ride.landing33 && ride.landing33.name}), ${ride.km} km from the road end where he and the slab are`, ride);
+  const arr = await A.evaluate(() => (window.__W || []).find((w) => w.k === 'arrive' && w.to === 33) || null);
+  const dSlab = arr && ride.slab ? Math.round(Math.hypot(arr.at[0] - ride.slab[0], arr.at[1] - ride.slab[1])) : null;
+  log('the ride set down', JSON.stringify({ arr, dSlab }));
+  if (dSlab == null || dSlab > 80) note('broken', 'A9 clean book', `Tauno's ride does not set the player down at the road end by the slab (${dSlab} m off)`, { arr, ride });
   await look(A, 'A9-home', { book: ['walt', 'journal'] });
   // between A2's section and D's (story-slice's own block): up, no paper, rested
   await A.evaluate(async () => { const g = window.__game, p = g.player, o = g.outfitter; if (g.title.state === 'pause') g.title.resume(); if (g.dialogue && g.dialogue.convo) g.dialogue.close(false); if (p.seat && typeof p.stand === 'function') p.stand(); p.seat = null; if (g.record && g.record.shown) g.record.close(); if (o.open) o.hide(); for (let k = 0; k < 100 && p.teleporting; k++) { window.__L.step(10); await window.__L.wait(50); } const e = g.energy; e.fresh(); e.bunk(); e.value = 1; window.__L.step(10); });
