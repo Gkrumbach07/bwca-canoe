@@ -57,7 +57,7 @@ if (MODE === 'plan' && String(arg('plan')) === 'slice2') { // (join c2: slice 2'
   const r = spawnSync(process.execPath, ['--max-old-space-size=3000', path.join(ROOT, 'scripts/story-solve.mjs'), '--plan-only2'], { encoding: 'utf8', maxBuffer: 1 << 24 });
   const lines = (r.stdout || '').split('\n').filter((l) => /^\s*\d+\. /.test(l)).map((l) => l.replace(/^\s*\d+\.\s*/, ''));
   if (r.status !== 0 || !lines.length) { console.log(r.stdout, r.stderr); console.log('story-slice --plan slice2: the solver found no plan'); process.exit(1); }
-  const how = (m) => (/^tauno \(farmhub\)/.test(m) ? [/: (well|ask)$/.test(m) ? (/ask$/.test(m) ? 9 : 7) : 1, 'Farm\'s porch of a morning: E on him (cast:tauno:31)']
+  const how = (m) => (/^walk off:/.test(m) ? [({ farm: 1, len: 2, mary: 2, tasha: 4, slab: 9 })[m.split(':')[1]] || 0, 'walked away (or Escape)'] : /^tauno \(farmhub\)/.test(m) ? [/: (well|ask)$/.test(m) ? (/ask$/.test(m) ? 9 : 7) : 1, 'Farm\'s porch of a morning: E on him (cast:tauno:31)']
     : /^say:farm:(ask)/.test(m) ? [9, 'the choice by its number'] : /^say:farm:(well|well2|map)/.test(m) ? [7, 'the choice by its number'] : /^say:farm:hub:30:4\.5|^say:farm:(e7|stations)/.test(m) ? [7, 'the choice by its number'] : /^say:farm/.test(m) ? [1, 'the choice by its number']
     : /^ask the keeper at 31/.test(m) ? [1, 'E on the keeper; "Ask about…", the place by its number'] : /^len|^say:len/.test(m) ? [2, 'E on Len at the dock\'s end; the choice by its number']
     : /^give Mary/.test(m) ? [6, 'the dot on her: Q Give (show.js)'] : /^mary|^say:mary:(hub|leo)/.test(m) ? [2, 'E on Mary at the window'] : /^say:mary/.test(m) ? [6, 'the choice by its number']
