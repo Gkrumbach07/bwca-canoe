@@ -151,7 +151,7 @@ function casing({ rng }) {
   const b = new PropBuilder(), h = 0.14 + rng() * 0.06;
   b.cyl(V(0, -0.3, 0), V(0, h, 0), 0.055, 0.055, 10, TILE.METAL, COLA.rust, { cap1: true, capTile: TILE.METAL, capCol: COLA.steel });
   b.cyl(V(0, -0.02, 0), V(0, 0.02, 0), 0.16, 0.14, 9, TILE.FIBRE, COLA.moss); // (the moss round its foot)
-  return { geo: b.build(), dots: [{ y: 0.12, r: 0.5 }] };
+  return { geo: b.build(), dots: [{ y: 0.45, r: 0.6 }] };
 }
 // a core-box rack: two trestles and slats, fallen (opts.fallen: on its side, the slats split); opts.lid: one box end
 // still has its lid (Leo's: 30 §4.3), drawn while it is there (show: !f:kettle.lid)
@@ -173,7 +173,7 @@ function boxLid() {
   const b = new PropBuilder();
   b.box(V(0, 0.04, 0), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), 0.36, 0.012, 0.13, TILE.WOOD, COLA.slat);
   b.box(V(0, 0.015, 0), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), 0.34, 0.015, 0.12, TILE.WOOD, COLA.slatOld);
-  return { geo: b.build(), dots: [{ y: 0.12, r: 0.45 }] };
+  return { geo: b.build(), dots: [{ y: 0.45, r: 0.6 }] };
 }
 // the 1976 trench: a long scar full of brown water (the water a flat face a hand under the lip), its spoil either side
 function trench({ rng }) {
@@ -245,7 +245,7 @@ function shovelBlade() {
   const b = new PropBuilder();
   b.quad(V(-0.11, 0.02, -0.14), V(0.11, 0.02, -0.14), V(0.1, 0.05, 0.12), V(-0.1, 0.05, 0.12), TILE.METAL, COLA.rust);
   b.cyl(V(0, 0.05, 0.12), V(0, 0.07, 0.2), 0.018, 0.018, 5, TILE.METAL, COLA.rust);
-  return { geo: b.build(), dots: [{ y: 0.12, r: 0.45 }] };
+  return { geo: b.build(), dots: [{ y: 0.45, r: 0.6 }] };
 }
 // two square-cut stumps a sledge-width apart (Two Stump, 1975), birch growing out of the clearing
 function twoStumps({ rng }) {
