@@ -1,7 +1,7 @@
 // The dependency recorder for scripts/rigs.mjs --record: preloaded into a rig's node process (NODE_OPTIONS="--import
-// <this file>"), it patches playwright-core's chromium.launch so every page the rig opens runs with V8 JS coverage, and
+// <this file>"), it patches playwright-core's chromium.launch so every page the rig opens runs with V8 function coverage, and
 // every request the page makes is noted. When a page, a context or the browser is closed (and at exit) it writes what the
-// rig touched to $RIG_DEPS_OUT:
+// rig touched to $RIG_DEPS_OUT (coverage: a CDP session's Profiler, see collect below):
 //   { files: ["src/main.js", ...]                    every /src/ file the pages requested (modules, workers, data)
 //     fetched: ["src/player.js", ...]                /src/ files read as text by fetch (a rig reading the source)
 //     fns: { "src/truck.js": { all: [[s, e], ...],   every function V8 reported in the file, in the file's own lines
@@ -19,7 +19,7 @@ if (OUT) {
   let pw = null;
   try { pw = req(process.env.PW || 'playwright-core'); } catch (e) { console.error('rig-deps-hook: no playwright-core', e.message); }
   const files = new Set(), fetched = new Set(), fns = new Map(); // fns: path -> { all: Map(key -> [s, e]), hit: Set(key) }
-  const live = new Set(); // pages with coverage running
+  const live = new Map(); // page -> { cdp, timer } while its coverage runs
   const srcOf = (u) => { try { const p = new URL(u).pathname; return p.startsWith('/src/') ? decodeURIComponent(p.slice(1)) : null; } catch { return null; } };
 
   // Vite's served text against the file on disk: served line index -> file line index (0-based)
@@ -40,17 +40,31 @@ if (OUT) {
   const lineStarts = (t) => { const a = [0]; for (let k = 0; k < t.length; k++) if (t.charCodeAt(k) === 10) a.push(k + 1); return a; };
   const lineOf = (starts, off) => { let lo = 0, hi = starts.length - 1; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (starts[m] <= off) lo = m; else hi = m - 1; } return lo; };
 
-  const take = (entries) => {
-    for (const e of entries) {
-      const p = srcOf(e.url); if (!p || !/\.(m?js)$/.test(p) || !e.source) continue;
+  // V8 precise coverage through a CDP session of our own, binary (ran or not) and per function: no Debugger domain (with
+  // Playwright's page.coverage, which turns it on, a long rig's browser and renderer grew past 12 GB each on ben), taken
+  // every 20 s and at the end and OR-ed together; Vite's served text is fetched by URL to turn offsets into lines
+  const raw = new Map(); // url -> Map("start,end" offsets -> ran)
+  const collect = async (cdp) => {
+    const { result } = await cdp.send('Profiler.takePreciseCoverage');
+    for (const sc of result) {
+      const p = srcOf(sc.url); if (!p || !/\.(m?js)$/.test(p)) continue;
+      let R = raw.get(sc.url); if (!R) raw.set(sc.url, (R = new Map()));
+      for (const f of sc.functions) { const r = f.ranges[0]; if (!r) continue; const k = r.startOffset + ',' + r.endOffset; R.set(k, R.get(k) || r.count > 0); }
+    }
+  };
+  const served = new Map();
+  const convert = async () => {
+    for (const [url, R] of raw) {
+      const p = srcOf(url);
+      if (!served.has(url)) { let t = null; try { const r = await fetch(url); if (r.ok) t = await r.text(); } catch { /* the server is gone */ } served.set(url, t); }
+      const text = served.get(url); if (!text) continue;
       let orig; try { orig = readFileSync(path.join(process.cwd(), p), 'utf8'); } catch { continue; }
-      const map = align(e.source, orig), starts = lineStarts(e.source);
+      const map = align(text, orig), starts = lineStarts(text);
       let F = fns.get(p); if (!F) fns.set(p, (F = { all: new Map(), hit: new Set() }));
-      for (const f of e.functions) {
-        const r = f.ranges[0]; if (!r) continue;
-        const s = map[lineOf(starts, r.startOffset)] + 1, en = map[lineOf(starts, Math.max(r.startOffset, r.endOffset - 1))] + 1;
-        const key = s + ',' + en; F.all.set(key, [s, en]);
-        if (r.count > 0) F.hit.add(key);
+      for (const [k, ran] of R) {
+        const [so, eo] = k.split(',').map(Number);
+        const s = map[lineOf(starts, so)] + 1, en = map[lineOf(starts, Math.max(so, eo - 1))] + 1, key = s + ',' + en;
+        F.all.set(key, [s, en]); if (ran) F.hit.add(key);
       }
     }
   };
@@ -60,14 +74,20 @@ if (OUT) {
     try { mkdirSync(path.dirname(OUT), { recursive: true }); writeFileSync(OUT, JSON.stringify(o)); } catch (e) { console.error('rig-deps-hook: write', e.message); }
   };
   const stop = async (page) => {
-    if (!live.has(page)) return; live.delete(page);
-    try { take(await page.coverage.stopJSCoverage()); } catch { /* the page is gone */ }
-    write();
+    const L = live.get(page); if (!L) return; live.delete(page); clearInterval(L.timer);
+    try { await collect(L.cdp); } catch { /* the page is gone */ }
+    await convert(); write();
   };
   const watch = async (page) => {
     page.on('request', (r) => { const p = srcOf(r.url()); if (!p) return; files.add(p); const t = r.resourceType(); if (t === 'fetch' || t === 'xhr') fetched.add(p); });
     page.on('worker', (w) => { const p = srcOf(w.url()); if (p) files.add(p); });
-    try { await page.coverage.startJSCoverage({ resetOnNavigation: false }); live.add(page); } catch (e) { console.error('rig-deps-hook: coverage', e.message); }
+    try {
+      const cdp = await page.context().newCDPSession(page);
+      await cdp.send('Profiler.enable');
+      await cdp.send('Profiler.startPreciseCoverage', { callCount: false, detailed: false });
+      const timer = setInterval(() => { collect(cdp).then(convert).then(write).catch(() => {}); }, 20000); timer.unref(); // (written as it goes: a rig that exits with its pages open keeps all but the last 20 s)
+      live.set(page, { cdp, timer });
+    } catch (e) { console.error('rig-deps-hook: coverage', e.message); }
     const close = page.close.bind(page);
     page.close = async (...a) => { await stop(page); return close(...a); };
   };
