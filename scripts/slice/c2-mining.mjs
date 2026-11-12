@@ -23,7 +23,7 @@ export const HELPERS_A2 = () => {
   A.facts = (ks) => Object.fromEntries(ks.map((k) => [k, g.story.has(k)]));
   A.store = () => g.outfitter.layout(31);
   // to Farm's porch, a little off the steps (the cast seats him on the bench once you are this near)
-  A.toFarm = async () => { const S = A.store(); if (!S) { const l = g.outfitter.landings.find((x) => x.ep === 31); await L.tp(l.x, l.z); await L.settle(); } const S2 = A.store(); const f = S2.stepsFoot || S2.door, b = S2.axes.b; L.standAt(f.x + b.x * 4, f.z + b.z * 4, 0); L.step(40); return !!S2; };
+  A.toFarm = async () => { let S = A.store(); if (!S || Math.hypot(S.centre.x - g.player.x, S.centre.z - g.player.z) > 300) { const l = g.outfitter.landings.find((x) => x.ep === 31); await L.tp(l.x, l.z); await L.settle(); for (let k = 0; k < 120 && !(S = A.store()); k++) { L.step(5); await L.wait(60); } } if (!S) return false; const f = S.stepsFoot || S.door, b = S.axes.b; L.standAt(f.x + b.x * 4, f.z + b.z * 4, 0); L.step(40); return true; };
   A.inside = () => { const S = A.store(); L.standAt(S.centre.x, S.centre.z); L.step(12); return !!(g.outfitter.visit && g.outfitter.visit.inside); };
   A.staged = () => ({ cast: g.storyTalk.cast.staged(), mining: A.M().miningCast.staged() });
   A.endTalk = () => { const D = g.dialogue; if (D && D.convo) D.close(false); L.step(4); };
@@ -88,7 +88,7 @@ export const steps = [
   { id: 'porch', step: 1, title: 'Farm\'s porch: the first morning, the hub (L1A, L1B, the pads lead)', run: async ({ page, result, ctx }) => {
     // the rig's forecast two-day rain: Monday and Tuesday (the notice's window open from Monday 18:00): no notice yet, no pads
     const pre = await page.evaluate((d0) => { const A = window.__a2, M = A.M(); M.kettle.rain.force({ from: A.abs(d0) - 1, days: 2 }); A.at(d0, 7.6); return { flyers: M.kettle.flyers(31).length, window: M.kettle.day() }; }, ctx.d0);
-    await page.evaluate(() => window.__a2.toFarm());
+    await page.evaluate(async () => { await window.__a2.toFarm(); });
     const t = await page.evaluate(() => window.__t.tauno());
     const fig = t ? await page.evaluate((k) => window.__t.figure(k), `cast:tauno:${t.ep}`) : null;
     result('1a Farm\'s porch, 7:36 on a Tuesday in July: Tauno on the bench under the window (the farmhub slot), never the step; no Kettle notice before "The pads" (3)', t && t.ep === 31 && t.slot === 'farmhub' && t.at === 'bench' && pre.flyers === 0, { t, fig, pre });
@@ -131,7 +131,7 @@ export const steps = [
     const cafe = await page.evaluate(() => { const g = window.__game, S = window.__a2.store(); return { cafe: !!S.cafe, meshes: g.scene.children.filter((m) => /^a2 cafe/.test(m.name)).length }; });
     result('2a Mary at the window table (Tuesday 9:30; the café drawn): "Leo" → "Are any of his boxes still out there?": "A lid for Mary" in the journal, no pay',
       c0 && st.mining.some((m) => m.who === 'mary' && m.at === 'a2:window') && r.ok && lid && lid.title === 'A lid for Mary' && lid.pay === 0 && cafe.cafe && cafe.meshes >= 3, { c0, st: st.mining, lid, cafe, r: r.ok ? 'ok' : r });
-    await page.evaluate((d0) => { window.__a2.at(d0, 10.5); window.__a2.toFarm(); }, ctx.d0);
+    await page.evaluate(async (d0) => { window.__a2.at(d0, 10.5); await window.__a2.toFarm(); }, ctx.d0);
     const dock = await page.evaluate(() => { const S = window.__a2.store(); window.__L.standAt(S.dockFoot.x, S.dockFoot.z, 0); window.__L.step(40); return window.__a2.staged().mining.find((m) => m.who === 'len') || null; });
     const before = await page.evaluate(() => window.__a2.rings().length);
     const l0 = await talk(page, 'cast:len:31');
@@ -164,7 +164,7 @@ export const steps = [
   } },
   // step 4: the Kettle day (Thursday, the morning after the rain): the crews' landing on foot to the hollow; Tasha; the stations
   { id: 'kettle', step: 4, title: 'the Kettle day: the grade and the bushwhack walked, the hollow, Tasha, the stations, the Secchi, the lid', run: async ({ page, result, ctx, shots, log }) => {
-    if (ctx.kettleDay == null) ctx.kettleDay = await page.evaluate(() => { const A = window.__a2, g = window.__game, s = g.story, M = A.M(); let d = g.day.doy + 2; while (A.dow(d) !== 3) d++; M.kettle.rain.force({ from: A.abs(d) - 2, days: 2 }); s.set('tauno.said.pads', true, 'rig'); s.set('kettle.notice', true, 'rig'); return d; }); // (--from kettle: the notice taken as step 3 leaves it)
+    if (ctx.kettleDay == null) ctx.kettleDay = await page.evaluate(() => { const A = window.__a2, g = window.__game, s = g.story, M = A.M(); let d = g.day.doy + 2; while (A.dow(d) !== 3) d++; M.kettle.rain.force({ from: A.abs(d) - 2, days: 2 }); s.set('tauno.said.pads', true, 'rig'); s.set('kettle.notice', true, 'rig'); A.at(d - 1, 19); const k = M.kettle.day(); return k.day - (k.today - (d - 1)); }); // (the Kettle day as the forecast has it: a real rain day after the forced two moves it on) // (--from kettle: the notice taken as step 3 leaves it)
     const day = await page.evaluate((d) => { const A = window.__a2; A.at(d, 8); return { doy: d, dow: A.dow(d), here: A.M().kettle.day() }; }, ctx.kettleDay);
     const C = await page.evaluate(() => window.__a2.place('crews.landing'));
     const t00 = Date.now();
@@ -176,7 +176,7 @@ export const steps = [
     const W = await page.evaluate(() => { const A = window.__a2, w = A.place('westpads'), k = A.place('kettle'); return { w, k }; });
     const route = [[W.w.x - 8, W.w.z + 2], [W.w.x - 200, W.w.z + 95], [W.w.x - 380, W.w.z + 230], [W.k.x + 250, W.k.z - 120], [W.k.x + 90, W.k.z - 30], [W.k.x + 10, W.k.z + 10]];
     const legs0 = await walkRoute(page, [[W.w.x + 9, W.w.z - 3]], { r: 3, log }); // (the landing to the casing, up the grade)
-    const casing = await eOn(page, 'westpads.casing', 1.6, 0.15);
+    const casing = await eOn(page, 'westpads.casing', 1.2, 0.1);
     await shot(page, shots, 'A2-4-casing');
     const cas = await page.evaluate(() => { const g = window.__game, q = g.storyLayer.prop('westpads.casing').prop, p = g.player, dx = q.x - p.x, dz = q.z - p.z, n = Math.hypot(dx, dz) || 1; g.storyLayer.shot({ eye: { x: p.x, y: 446, z: p.z }, dir: { x: dx / n, y: 0, z: dz / n } }); return window.__a2.task('lenphotos'); });
     const pine = await page.evaluate(() => window.__L.faceTo('crews.pine2', 1.8, 1.3));
@@ -220,7 +220,7 @@ export const steps = [
   // step 5 (A2's half): Len's favour handed in (done: paid at the tally by tasks.settle); the queued lines pay at the trip's end
   { id: 'tally', step: 5, title: 'the trip\'s end (A2\'s half): Len\'s pictures handed in, the pay: lines at the tally', run: async ({ page, result, ctx }) => {
     await page.evaluate((d) => { const A = window.__a2; let x = d + 1; while (A.dow(x) === 4) x++; A.at(x, 9); }, ctx.kettleDay);
-    await page.evaluate(() => { window.__a2.toFarm(); const S = window.__a2.store(); window.__L.standAt(S.dockFoot.x, S.dockFoot.z, 0); window.__L.step(40); });
+    await page.evaluate(async () => { await window.__a2.toFarm(); const S = window.__a2.store(); window.__L.standAt(S.dockFoot.x, S.dockFoot.z, 0); window.__L.step(40); });
     await talk(page, 'cast:len:31'); await hear(page, 2); await page.evaluate(() => window.__a2.endTalk());
     const r = await page.evaluate(() => { const A = window.__a2, before = window.__game.profile.s.money, paid = A.M().miningCast.debug.payNow(); return { task: A.task('lenphotos'), paid, money: window.__game.profile.s.money - before, photos: A.facts(['len.photos', 'photo.crib', 'photo.casing']) }; });
     result('5 (A2) Len takes the two pictures (the favour done: $40 at the tally, tasks.settle); the pay: stand-in pays "Field help, Kettle creek" $35 at the trip\'s end (D\'s handler and its trip-card line at the join)',
@@ -229,7 +229,7 @@ export const steps = [
   // step 6: Mary, Tuesday or Friday, the lid carried: Give (A2's want; E's show.js at the join), the back table, Far End (L2A)
   { id: 'table', step: 6, title: 'the back table: the lid given, the papers, the typewriter, L.P., the promise, Far End (L2A)', run: async ({ page, result, ctx }) => {
     await page.evaluate((d) => { const A = window.__a2; let x = d + 1; while (![2, 5].includes(A.dow(x))) x++; A.at(x, 9.5); }, ctx.kettleDay);
-    await page.evaluate(() => { window.__a2.toFarm(); window.__a2.inside(); window.__L.step(30); });
+    await page.evaluate(async () => { await window.__a2.toFarm(); window.__a2.inside(); window.__L.step(30); });
     const c0 = await talk(page, 'cast:mary:31');
     const give = await choose(page, 'Give: Box lid');
     const said = await hear(page, 3);
@@ -244,7 +244,7 @@ export const steps = [
   } },
   // step 7: the porch: "North of Gabbro, yes." once (it ends), then corrected the next visit; the crew map; the topics after it
   { id: 'map', step: 7, title: 'the test, the crew map (the yield, L6B), the stations, chkd T.K., E-7 (L5B, L6C)', run: async ({ page, result, ctx }) => {
-    const day = await page.evaluate((d) => { const A = window.__a2; A.at(d + 1, 8); A.toFarm(); window.__L.step(30); return d + 1; }, ctx.kettleDay + 2);
+    const day = await page.evaluate(async (d) => { const A = window.__a2; A.at(d + 1, 8); await A.toFarm(); window.__L.step(30); return d + 1; }, ctx.kettleDay + 2);
     const c1 = await talk(page, 'cast:tauno:31');
     const w1 = await choose(page, 'North of Gabbro, yes.');
     const end1 = await hear(page, 3);
@@ -252,7 +252,7 @@ export const steps = [
     const after1 = await facts(page, ['tauno.kettle.wrong', 'door.mining.yield']);
     result('7a "Well? Kettle pad. That\'s up by the river, north of Gabbro, isn\'t it." → "North of Gabbro, yes.": "Huh. Go again." and the scene ends; no map',
       c1 && /Kettle pad\. That's up by the river/.test(c1.say) && w1.ok && end1.some((x) => /Go again/.test(x || '')) && after1['tauno.kettle.wrong'] && !after1['door.mining.yield'], { c1, end1, after1 });
-    await page.evaluate((d) => { const A = window.__a2; A.at(d + 1, 8); A.toFarm(); window.__L.step(30); }, day);
+    await page.evaluate(async (d) => { const A = window.__a2; A.at(d + 1, 8); await A.toFarm(); window.__L.step(30); }, day);
     const c2 = await talk(page, 'cast:tauno:31');
     const r = await picks(page, ['No. South-west of Bald Eagle.', 'It still runs orange.']);
     const mapSaid = await hear(page, 4);
@@ -317,7 +317,7 @@ export const steps = [
     result('8a Pietro\'s north-east shore landed by the keys (W, A/D, E ashore); the faint path walked up; the dig (E Look): pietro.dig.seen; with the crew map "the sketch doesn\'t fit"; with NB70 the back door; with both the wrong hill (L2C); the blade carried',
       landed.onFoot && dig && dig.label === 'Dig' && w1 && Object.values(f).every(Boolean) && w.length === 3 && blade && blade.label === 'Shovel blade, broken' && inv === 1, { start, landed, legs, dig, f, w, blade, inv });
     // back on the porch: "Eino's sketch" → "turn your head" (30:4.5.w3)
-    await page.evaluate((d) => { const A = window.__a2; A.at(d, 8); A.toFarm(); window.__L.step(30); }, ctx.mapDay + 2);
+    await page.evaluate(async (d) => { const A = window.__a2; A.at(d, 8); await A.toFarm(); window.__L.step(30); }, ctx.mapDay + 2);
     // (the first porch visit after the map's day opens with the clean book's ask: 9a "Not today." here, then E again)
     const a1 = await talk(page, 'cast:tauno:31');
     const n1 = await choose(page, 'Not today.');
@@ -337,7 +337,7 @@ export const steps = [
   { id: 'clean', step: 9, title: 'the clean book: the ask, the ride, the slab, the five questions, the choice (tauno.record), home', run: async ({ page, result, ctx, shots }) => {
     // (the ask is the opener on the first porch visit after the map's day: step 8b's visit may have had it)
     const a1 = { say: ctx.askSay };
-    await page.evaluate((d) => { const A = window.__a2; A.at(d, 8); A.toFarm(); window.__L.step(30); }, ctx.askDay + 1);
+    await page.evaluate(async (d) => { const A = window.__a2; A.at(d, 8); await A.toFarm(); window.__L.step(30); }, ctx.askDay + 1);
     const a2 = await talk(page, 'cast:tauno:31');
     const money0 = await page.evaluate(() => window.__game.profile.s.money);
     const go = await choose(page, 'Let\'s go.');
@@ -367,7 +367,7 @@ export const steps = [
     result('9c at the road end: (Tasha in the lot: "We\'ll sit.") the core shed (30:4.9.5), the pole, the slab and the landing rock looked at (E), the five questions in any order ("Why now?" last), "When it comes to it…": tauno.record (30:4.9.w1); the five Walt-page lines; door.mining.climax, door.mining.done; the ride home',
       tf && core && /^Core shed\./.test(core.say) && Object.values(looks).every((t) => t && t.verb === 'Look') && q && qr.ok && Object.values(f).every(Boolean) && w === 6 && home.last === 31, { tf, waited, core, coreSaid, looks, f, w, home, qr: qr.ok ? 'ok' : qr });
     // the porch afterwards: the closers are "Same bench tomorrow."; one opener in three "I slept."
-    await page.evaluate((d) => { const A = window.__a2; A.at(d, 8); A.toFarm(); window.__L.step(30); }, ctx.askDay + 2);
+    await page.evaluate(async (d) => { const A = window.__a2; A.at(d, 8); await A.toFarm(); window.__L.step(30); }, ctx.askDay + 2);
     const o = await page.evaluate(() => { const M = window.__a2.M(), s = window.__game.story; return { opener: M.miningCast.lastOpener }; });
     result('9d the openers change for good (one in three "I slept. Can you believe that. Eight hours."); the closer "Same bench tomorrow."', true, o);
   } },
@@ -377,7 +377,7 @@ export const steps = [
 // record" asked on a later porch visit: tauno.record the same. The way there is the facts a played season leaves (the
 // map given, the climax's ask), so this section plays only the ask, the slab and the porch
 export const variant = { id: 'variant', step: 9, title: 'the variant: "You don\'t owe anybody this.", then "On the record" on the porch', run: async ({ page, result }) => {
-  const d = await page.evaluate(() => { const g = window.__game, s = g.story, A = window.__a2; s.debug.fixture('turn'); for (const k of ['tauno.farm.met', 'tauno.said.pads', 'kettle.visited', 'door.mining.yield', 'tauno.e7sketch', 'tauno.crewmap']) s.set(k, true, 'rig:variant'); let x = g.day.doy + 2; while (A.dow(x) !== 6) x++; A.at(x, 8); A.toFarm(); window.__L.step(30); return x; });
+  const d = await page.evaluate(() => { const g = window.__game, s = g.story, A = window.__a2; s.debug.fixture('turn'); for (const k of ['tauno.farm.met', 'tauno.said.pads', 'kettle.visited', 'door.mining.yield', 'tauno.e7sketch', 'tauno.crewmap']) s.set(k, true, 'rig:variant'); let x = g.day.doy + 2; while (A.dow(x) !== 6) x++; A.at(x, 8); return x; }); await page.evaluate(async () => { await window.__a2.toFarm(); window.__L.step(30); });
   const a = await talk(page, 'cast:tauno:31');
   const go = await choose(page, 'Let\'s go.');
   await page.evaluate(async () => { const L = window.__L, g = window.__game; for (let k = 0; k < 80 && !(g.rides && !g.rides.busy && g.rides.last && g.rides.last.to === 33); k++) { L.step(10); await L.wait(120); } const M = window.__a2.M().miningCast; for (let k = 0; k < 40 && !(M.slab && M.slab.tauno); k++) { L.step(10); await L.wait(60); } if (M.slab && M.slab.tasha) { M.slab.tasha.remove(); M.slab.tasha = null; } });
@@ -388,7 +388,7 @@ export const variant = { id: 'variant', step: 9, title: 'the variant: "You don\'
   await hear(page, 4);
   await page.evaluate(async () => { const L = window.__L, g = window.__game; for (let k = 0; k < 80 && !(g.rides && !g.rides.busy && g.rides.last && g.rides.last.to === 31); k++) { L.step(10); await L.wait(120); } });
   const before = await facts(page, ['door.mining.done', 'tauno.record']);
-  await page.evaluate((x) => { const A = window.__a2; A.at(x + 1, 8); A.toFarm(); window.__L.step(30); }, d);
+  await page.evaluate(async (x) => { const A = window.__a2; A.at(x + 1, 8); await A.toFarm(); window.__L.step(30); }, d);
   await talk(page, 'cast:tauno:31');
   const rec = await choose(page, 'On the record');
   await hear(page, 3); await page.evaluate(() => window.__a2.endTalk());

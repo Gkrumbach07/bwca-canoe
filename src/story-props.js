@@ -151,7 +151,7 @@ function casing({ rng }) {
   const b = new PropBuilder(), h = 0.14 + rng() * 0.06;
   b.cyl(V(0, -0.3, 0), V(0, h, 0), 0.055, 0.055, 10, TILE.METAL, COLA.rust, { cap1: true, capTile: TILE.METAL, capCol: COLA.steel });
   b.cyl(V(0, -0.02, 0), V(0, 0.02, 0), 0.16, 0.14, 9, TILE.FIBRE, COLA.moss); // (the moss round its foot)
-  return { geo: b.build(), dots: [{ y: 0.1, r: 0.35 }] };
+  return { geo: b.build(), dots: [{ y: 0.12, r: 0.5 }] };
 }
 // a core-box rack: two trestles and slats, fallen (opts.fallen: on its side, the slats split); opts.lid: one box end
 // still has its lid (Leo's: 30 §4.3), drawn while it is there (show: !f:kettle.lid)
