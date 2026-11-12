@@ -723,8 +723,9 @@ async function slice2() {
   const B = await openGame('slice2-B');
   await newSeason(B, 25, 160);
   await B.evaluate(HELPERS_E);
-  const fx = await B.evaluate(() => { const g = window.__game; if (g.outfitter.open) g.outfitter.hide(); const r = g.story.debug.fixture('turn'); window.__L.step(20); return { r, stage: g.story.stage }; });
-  result('slice2 B0 the second season from the end of chapter 1 (the turn fixture), S3', fx.stage === 'S3', fx);
+  const noFx = argv.includes('--b-no-fixture'); // (season B as E's own rig starts it, for a comparison)
+  const fx = await B.evaluate((noFx) => { const g = window.__game; if (g.outfitter.open) g.outfitter.hide(); const r = noFx ? null : g.story.debug.fixture('turn'); window.__L.step(20); return { r, stage: g.story.stage }; }, noFx);
+  if (!noFx) result('slice2 B0 the second season from the end of chapter 1 (the turn fixture), S3', fx.stage === 'S3', fx);
   for (const s2 of E_STEPS) await run(B, s2, 'E');
 }
 // /d
