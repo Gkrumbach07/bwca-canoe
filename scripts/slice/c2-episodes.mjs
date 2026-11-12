@@ -22,6 +22,13 @@ export const HELPERS_E = () => {
   E.place = (id) => g.storyLayer.place(id);
   E.built = (id) => g.storyLayer.builtList().some((b) => b.prop === id);
   // stand on dry ground `d` m inland of a place's anchor (its resolved n), facing out over the water
+  // to a store's yard (its tiles in and its layout built), the player standing outside the door
+  E.toStore = async (ep) => {
+    const e = g.world.entryPoints.find((q) => q.ep === ep);
+    if (!g.outfitter.layout(ep)) { await L.near(e.x, e.z); for (let k = 0; k < 80 && !g.outfitter.layout(ep); k++) { L.step(5); await L.wait(100); } }
+    const S = g.outfitter.layout(ep); if (!S) return false;
+    await L.near(S.centre.x, S.centre.z); window.__t.walkOut(ep); L.step(6); return true;
+  };
   E.ashore = async (placeId, d = 2) => {
     const pl = g.storyLayer.place(placeId), n = pl.n || [0, 1];
     let x = pl.x + n[0] * d, z = pl.z + n[1] * d;
@@ -33,7 +40,7 @@ export const HELPERS_E = () => {
   E.kitUp = () => {
     const inv = g.inventory;
     if (!(inv.long || []).some((l) => l.where === 'hands' && /^rod/.test(l.id))) { const l = (inv.long || []).find((q) => /^rod/.test(q.id)); if (l) l.where = 'hands'; else inv.addLong('rod', 'hands'); }
-    if (!inv.count('lure:jig', { reachable: true })) inv.toHandNew('lure:jig');
+    if (!inv.count('lure:jig', { reachable: true })) { const r = inv.place('lure:jig', 1, {}); if (!(r && r.ok)) inv.toHandNew('lure:jig'); }
     inv.emit('items');
     return g.fishing.rodInHand();
   };
@@ -104,7 +111,7 @@ export const steps = [
         const g = window.__game, s = g.story, E = window.__e;
         if (!s.has('nb.found')) s.debug.do('found', { abs: s.time().abs, key: 1, lake: 'Moose Lake' });
         E.at(2026, 160, 10); // (9 June 2026, a Tuesday, 10:00)
-        await window.__L.near(g.outfitter.layout(25).centre.x, g.outfitter.layout(25).centre.z);
+        await E.toStore(25);
         window.__t.walkIn(25); window.__L.step(20);
         const rose = !!E.ep().rose();
         // E on Rose before the notice: her close, nothing more (talk opened as E opens it: npcs.talkTo)
@@ -184,10 +191,10 @@ export const steps = [
       for (let k = 0; k < 14 && !h2; k++) { const c = await castAndWork(page); if (c.st && c.st.snag) h2 = c.st; else await page.evaluate(() => { const F = window.__game.fishing; if (F.state === 'inwater') { F.state = 'ready'; F.lineOut = 0; } window.__L.step(20); }); }
       const t0 = await page.evaluate(() => window.__game.day.hours);
       const g2 = h2 ? await fight(page) : null;
-      const r = await page.evaluate((t0) => { const g = window.__game, E = window.__e; return { pot: g.story.has('ep.S9.pot'), end: g.story.get('ep.S9.end'), inHand: E.holding('junespot'), msg: E.fish().msg, built: E.built('s9.pot'), firsts: E.firsts(), page: E.page('S9'), mins: +((g.day.hours - t0) * 60).toFixed(1), ink: g.story.has('ink.coffeelake') }; }, t0);
+      const r = await page.evaluate((t0) => { const g = window.__game, E = window.__e; g.storyLayer.poll(); window.__L.step(4); return { pot: g.story.has('ep.S9.pot'), end: g.story.get('ep.S9.end'), inHand: E.holding('junespot'), msg: E.fish().msg, built: E.built('s9.pot'), firsts: E.firsts(), page: E.page('S9'), mins: +((g.day.hours - t0) * 60).toFixed(1), ink: g.story.has('ink.coffeelake') }; }, t0);
       result('12c (E) easing off and reeling again: it comes up by its bail into the hand: June\'s pot (its dot words, the trip card\'s first, the Stories page)', !!g2 && r.pot && r.end === 'pot' && r.inHand > 0 && !r.built && /Blue enamel coffee pot/.test(r.msg || '') && r.firsts.includes('Brought up June\'s pot.') && r.page && r.page.first, { g2: g2 && { red: g2.red }, r });
       // Gus's line, walking into 25 with it (S9.conv.1–2)
-      const gus = await page.evaluate(async () => { const g = window.__game; await window.__L.tp(g.outfitter.layout(25).centre.x, g.outfitter.layout(25).centre.z + 30); await window.__L.settle(); window.__t.walkOut(25); window.__L.step(10); window.__t.walkIn(25); for (let k = 0; k < 30; k++) { window.__L.step(10); await window.__L.wait(100); if (g.story.has('ep.S9.gus')) break; } return g.story.has('ep.S9.gus'); });
+      const gus = await page.evaluate(async () => { const g = window.__game; await window.__e.toStore(25); window.__L.step(10); window.__t.walkIn(25); for (let k = 0; k < 30; k++) { window.__L.step(10); await window.__L.wait(100); if (g.story.has('ep.S9.gus')) break; } return g.story.has('ep.S9.gus'); });
       result('12d (E) Gus\'s line the first time you walk into 25 with the pot (S9.conv.1–2)', gus, { gus });
     },
   },
@@ -196,7 +203,7 @@ export const steps = [
     run: async ({ page, result, ctx }) => {
       const r = await page.evaluate(async () => {
         const g = window.__game, E = window.__e;
-        window.__t.walkOut(25); E.at(2026, 160, 11);
+        E.at(2026, 160, 11);
         const a = await E.ashore('s7.mummos', 4);
         for (let k = 0; k < 10; k++) { g.storyLayer.poll(); window.__L.step(5); await window.__L.wait(50); }
         const built = ['s7.lilacs', 's7.lilacs.green', 's7.step', 's7.foundation', 's7.bed', 's7.footing', 's7.rock', 's7.cobble'].filter((id) => E.built(id));
@@ -213,7 +220,7 @@ export const steps = [
       await shot(page, ctx, 'e13-mummos');
       result('13b (E) Mummo\'s in June: the lilacs in bloom, the step, the foundation, the frame, the footing, the rock; NB35 read at the step: "The swimming rock."; a print matched as the lilacs at the old camp', r.lilac && r.built.includes('s7.lilacs') && !r.built.includes('s7.lilacs.green') && ['s7.step', 's7.foundation', 's7.bed', 's7.footing', 's7.rock'].every((id) => r.built.includes(id)) && r.dot === 'The swimming rock.' && (r.matches || []).includes('s7.lilacs.camp'), r);
       // back to Rose: "Look at this…", the print, S7.conv.7–9 and $25
-      const m0 = await page.evaluate(async () => { const g = window.__game; await window.__L.near(g.outfitter.layout(25).centre.x, g.outfitter.layout(25).centre.z); window.__t.walkIn(25); window.__e.at(2026, 160, 13); window.__L.step(20); return window.__e.money(); });
+      const m0 = await page.evaluate(async () => { await window.__e.toStore(25); window.__t.walkIn(25); window.__e.at(2026, 160, 13); window.__L.step(20); return window.__e.money(); });
       await page.evaluate(() => { window.__t.talkTo('cast:rose:25'); window.__L.step(4); });
       const c1 = await choose(page, 'Look at this');
       const pick = await page.evaluate(() => { const c = window.__t.convo(); return c ? c.choices : null; });
@@ -229,7 +236,7 @@ export const steps = [
     run: async ({ page, result }) => {
       const r = await page.evaluate(async () => {
         const g = window.__game, E = window.__e;
-        window.__t.walkOut(25); E.at(2026, 215, 11); // (3 August)
+        if (g.outfitter.layout(25)) window.__t.walkOut(25); E.at(2026, 215, 11); // (3 August)
         const flyers = E.R().flyers(25).length;
         await E.ashore('s7.mummos', 4);
         for (let k = 0; k < 10; k++) { g.storyLayer.poll(); window.__L.step(5); await window.__L.wait(50); }

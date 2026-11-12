@@ -972,7 +972,7 @@ export class Fishing {
       for (const m of this.lureMeshes) m.visible = false;
       this.message = { text: 'The line parted. Tying on another…', t: 3.5 };
       if (this.audio) this.audio.snap();
-      if (this.onSnap) this.onSnap(this.lureDef, f);
+      if (this.onSnap) { this.onSnap(this.lureDef, f); if (this.message && /^The line parted and the fish kept/.test(this.message.text)) this.message = { ...this.message, text: this.message.text.replace(/^The line parted and the fish kept the [^.]*\./, 'The line parted.') }; } // (no fish kept it)
       try { this.snags.snapped(T); } catch (e) { console.warn('fishing: snag', e); }
       this.state = 'ready'; this.lineOut = 0; this.cooldown = 2;
       return;

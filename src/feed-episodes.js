@@ -93,6 +93,7 @@ export async function connect(t) {
     if (!m) return give0 ? give0(arg, meta, s) : false;
     if (!inventory || !itemDef(m[1])) return false;
     let r = typeof inventory.toHandNew === 'function' ? inventory.toHandNew(m[1]) : null;
+    if (!(r && r.ok) && typeof inventory.place === 'function') r = inventory.place(m[1], 1, {}); // (both hands full: into a pack with you, as a kept fish goes)
     if (!(r && r.ok) && typeof inventory.place === 'function') r = inventory.place(m[1], 1, { crate: true });
     return !!(r && r.ok);
   });
