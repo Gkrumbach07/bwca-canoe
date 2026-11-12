@@ -18,6 +18,20 @@
 //   leads.line(id) → text | null                        a lead's own Walt-page words (LINES, until the K2 anchors)
 //   leads.on('born' | 'followed' | 'closed' | 'overtaken' | 'first', fn) → off
 import { LEADS, ASKS, LINES, PLACES } from './story-data/leads-act1.js';
+// a2: the mining years' leads, rings and nickname (story-data/leads-mining.js), merged into the tables every reader holds
+// (pencil.js imports the same LAKES, PLACES and INK objects): once, at load, ids already there kept
+import * as LM from './story-data/leads-mining.js';
+import { LAKES as LAKES1, INK as INK1 } from './story-data/leads-act1.js';
+mergeLeads(LM);
+export function mergeLeads(M) {
+  for (const [k, v] of Object.entries(M.LAKES || {})) if (!(k in LAKES1)) LAKES1[k] = v;
+  for (const [k, v] of Object.entries(M.PLACES || {})) if (!(k in PLACES)) PLACES[k] = v;
+  for (const [k, v] of Object.entries(M.LINES || {})) if (!(k in LINES)) LINES[k] = v;
+  for (const L of M.LEADS || []) if (!LEADS.some((x) => x.id === L.id)) LEADS.push(L);
+  for (const A of M.ASKS || []) if (!ASKS.some((x) => x.id === A.id)) ASKS.push(A);
+  for (const R of M.INK || []) if (!INK1.some((x) => x.nick === R.nick)) INK1.push(R);
+}
+// /a2
 
 const ASKED = 'lead.asked.';
 const DOOR_LEADS = new Set(['guiding', 'boys', 'family', 'mining']); // fact prefix: an ask answered (lead.asked.<id>), once a season

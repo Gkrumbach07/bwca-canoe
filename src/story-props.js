@@ -12,6 +12,8 @@
 // Round 1's kits: stumpCut, quartzCobble (10 §9, every starred site), crib, landingRock, redPine (blaze and flagging),
 // gradeMouth (the old road's mouth: a dot only), slab, pole (20 §11.1 the EP 33 lot), drillRod (Round 3's canoe rest).
 // The camp and the pit (`waltcamp`, `pit`) are Round 3's modelling work.
+// Round 2 (a2, the mining years): casing, coreRack, boxLid, trench, stockpile, stationStake, creekRun, beaverDam, digPit,
+// surveyLath, surveyTag, shovelBlade, twoStumps, cafeTable, urn, coolers, launch.
 import * as THREE from 'three';
 import { PropBuilder, TILE, chunkStone } from './prop-kit.js';
 
@@ -134,7 +136,161 @@ function drillRod({ rng }) {
   return { geo: b.build(), dots: [{ y: 0.05, r: 0.9 }] };
 }
 
-const REGISTRY = { stumpCut, quartzCobble, crib, landingRock, redPine, gradeMouth, slab, pole, drillRod };
+
+// a2: the mining years' kits (story Round 2, stream A2; docs/story/30-mining-years.md §3, §4.3, §4.7, §4.9; 90 §4, §11).
+// Each in the kit's own frame (the foot on the ground, -z toward the water or the way it faces), all in the props'
+// one material. The café's are drawn inside Farm 31 by kettle.js / cast.js (props.js L.cafe gives their spots).
+const COLA = {
+  steel: C(0x6d5a4a), rust: C(0x8a4a26), rustRed: C(0xa0482a), slat: C(0x8b7a60), slatOld: C(0x6c604c), moss: C(0x56663a),
+  water: C(0x4a3b24), tea: C(0x7a4a1c), stain: C(0xb5642a), mud: C(0x5e4a36), lath: C(0x9a948a), flagPink: C(0xc46a8a),
+  flagOrange: C(0xc0703a), alu: C(0xc8ccd0), table: C(0x8a6440), top: C(0xb08a5e), urn: C(0xb7b9bb), cooler: C(0x2f6aa0),
+  coolerLid: C(0xe8e8e2), varnish: C(0x9a5a2a), deck: C(0xc49a62), stake: C(0xb59a6e), tape: C(0xff5fa8),
+};
+// a drill casing: a steel pipe a hand's height out of the moss, its cap rusted on (30 §4.3 "Casing")
+function casing({ rng }) {
+  const b = new PropBuilder(), h = 0.14 + rng() * 0.06;
+  b.cyl(V(0, -0.3, 0), V(0, h, 0), 0.055, 0.055, 10, TILE.METAL, COLA.rust, { cap1: true, capTile: TILE.METAL, capCol: COLA.steel });
+  b.cyl(V(0, -0.02, 0), V(0, 0.02, 0), 0.16, 0.14, 9, TILE.FIBRE, COLA.moss); // (the moss round its foot)
+  return { geo: b.build(), dots: [{ y: 0.1, r: 0.35 }] };
+}
+// a core-box rack: two trestles and slats, fallen (opts.fallen: on its side, the slats split); opts.lid: one box end
+// still has its lid (Leo's: 30 §4.3), drawn while it is there (show: !f:kettle.lid)
+function coreRack({ rng, opts = {} }) {
+  const b = new PropBuilder(), fallen = !!opts.fallen, tilt = fallen ? 1.15 : 0;
+  const R = new THREE.Matrix4().makeRotationZ(tilt), P = (x, y, z) => V(x, y, z).applyMatrix4(R).add(V(0, fallen ? 0.12 : 0, 0));
+  for (const x of [-0.8, 0.8]) for (const z of [-0.25, 0.25]) b.cyl(P(x, 0, z), P(x, 0.7, z), 0.04, 0.035, 5, TILE.WOOD, COLA.slatOld);
+  for (let k = 0; k < 5; k++) {
+    const y = 0.2 + k * 0.12, broke = rng() < 0.4;
+    b.box(P(broke ? -0.4 : 0, y, 0), V(1, 0, 0).applyMatrix4(R), V(0, 1, 0).applyMatrix4(R), V(0, 0, 1), broke ? 0.45 : 0.9, 0.012, 0.28, TILE.WOOD, k % 2 ? COLA.slat : COLA.slatOld);
+  }
+  // the box ends spilled at its foot: rotten core boxes, one with its lid
+  for (let k = 0; k < 3; k++) { const x = -0.5 + k * 0.5 + (rng() - 0.5) * 0.1; b.box(V(x, 0.05, -0.55 - rng() * 0.1), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), 0.22, 0.05, 0.12, TILE.WOOD, COLA.slatOld); }
+  const dots = [{ y: 0.35, r: 0.9 }];
+  return { geo: b.build(), dots };
+}
+// the lid on its box end, alone (its own prop so it goes when taken): a slat with a punched stamp on its end
+function boxLid() {
+  const b = new PropBuilder();
+  b.box(V(0, 0.04, 0), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), 0.36, 0.012, 0.13, TILE.WOOD, COLA.slat);
+  b.box(V(0, 0.015, 0), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), 0.34, 0.015, 0.12, TILE.WOOD, COLA.slatOld);
+  return { geo: b.build(), dots: [{ y: 0.05, r: 0.3 }] };
+}
+// the 1976 trench: a long scar full of brown water (the water a flat face a hand under the lip), its spoil either side
+function trench({ rng }) {
+  const b = new PropBuilder(), L = 9, W = 0.9;
+  b.quad(V(-W, 0.02, -L), V(W, 0.02, -L), V(W, 0.02, L), V(-W, 0.02, L), TILE.PLAIN, COLA.water);
+  for (const s of [-1, 1]) for (let k = 0; k < 7; k++) { const z = -L + (k + 0.5) * (2 * L / 7), r = 0.4 + rng() * 0.3; chunkStone(b, new THREE.Matrix4().compose(V(s * (W + r * 0.8), -0.05, z), new THREE.Quaternion(), V(r, 0.35 + rng() * 0.2, r * 1.3)), rng, COLA.mud); }
+  return { geo: b.build(), dots: [{ y: 0.1, r: 1.6 }] };
+}
+// the stockpile: a grown-over mound with rust-red rock showing where frost has heaved it
+function stockpile({ rng }) {
+  const b = new PropBuilder();
+  chunkStone(b, new THREE.Matrix4().compose(V(0, -0.6, 0), new THREE.Quaternion(), V(5.5, 1.6, 4.2)), rng, COLA.moss);
+  for (let k = 0; k < 9; k++) { const a = rng() * 6.28, r = 1.5 + rng() * 3; chunkStone(b, new THREE.Matrix4().compose(V(Math.cos(a) * r, 0.1 + rng() * 0.6, Math.sin(a) * r * 0.75), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rng() * 6, 0)), V(0.25 + rng() * 0.2, 0.2, 0.22)), rng, COLA.rustRed); }
+  return { geo: b.build(), dots: [{ y: 0.6, r: 2.4 }] };
+}
+// a sampling station: a stake with a strip of tape (30 §4.3: the dot offers Fill here and nowhere else)
+function stationStake() {
+  const b = new PropBuilder();
+  b.box(V(0, 0.45, 0), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), 0.025, 0.55, 0.025, TILE.WOOD, COLA.stake);
+  b.cyl(V(0, 0.86, 0), V(0, 0.9, 0), 0.04, 0.04, 6, TILE.CANVAS, COLA.tape);
+  return { geo: b.build(), dots: [{ y: 0.5, r: 0.6 }] };
+}
+// the creek below the pad: a ribbon of tea-coloured water, orange at its edges (opts.run: running orange after rain;
+// else the stain on its stones only), laid along opts.pts ([[x, z] in the kit's frame])
+function creekRun({ rng, opts = {} }) {
+  const b = new PropBuilder(), pts = opts.pts || [[0, 0], [0, -20]], w = opts.w || 0.7;
+  for (let i = 0; i + 1 < pts.length; i++) {
+    const [ax, az] = pts[i], [bx, bz] = pts[i + 1], dx = bx - ax, dz = bz - az, L = Math.hypot(dx, dz) || 1, nx = -dz / L * w, nz = dx / L * w;
+    if (opts.run) b.quad(V(ax - nx, 0.03, az - nz), V(bx - nx, 0.03, bz - nz), V(bx + nx, 0.03, bz + nz), V(ax + nx, 0.03, az + nz), TILE.PLAIN, COLA.tea);
+    const n = Math.max(2, Math.round(L / 1.6));
+    for (let k = 0; k < n; k++) { const t = (k + rng()) / n, x = ax + dx * t, z = az + dz * t, s = rng() < 0.5 ? -1 : 1, r = 0.1 + rng() * 0.12; chunkStone(b, new THREE.Matrix4().compose(V(x + nx * s * 1.2, -0.02, z + nz * s * 1.2), new THREE.Quaternion(), V(r, r * 0.6, r)), rng, COLA.stain); }
+  }
+  return { geo: b.build(), dots: [] };
+}
+// the beaver pond's dam and the pond behind it (the Secchi from the crest: 30 §4.3)
+function beaverDam({ rng }) {
+  const b = new PropBuilder(), R = 7;
+  const ring = []; for (let k = 0; k < 18; k++) { const a = (k / 18) * Math.PI * 2; ring.push(V(Math.cos(a) * R, 0.06, -R - 1 + Math.sin(a) * R * 0.7)); }
+  b.face(ring, TILE.PLAIN, COLA.water);
+  for (let k = 0; k < 22; k++) { const x = -3 + (k / 21) * 6 + (rng() - 0.5) * 0.3; b.cyl(V(x, 0.05, 0.1 + (rng() - 0.5) * 0.4), V(x + (rng() - 0.5) * 0.8, 0.35 + rng() * 0.3, -0.6 + rng() * 0.5), 0.04, 0.025, 4, TILE.BARK, COLA.mud); }
+  return { geo: b.build(), dots: [{ y: 0.35, r: 1.4 }] };
+}
+// the dig on Pietro's hill (30 §4.7): a rectangle of turned ground grassed over and sunk, spoil heaped on two sides
+function digPit({ rng }) {
+  const b = new PropBuilder(), hx = 1.6, hz = 1.1;
+  b.quad(V(-hx, -0.12, -hz), V(hx, -0.12, -hz), V(hx, -0.12, hz), V(-hx, -0.12, hz), TILE.FIBRE, COLA.moss);
+  for (const s of [-1, 1]) chunkStone(b, new THREE.Matrix4().compose(V(s * (hx + 0.9), -0.1, 0), new THREE.Quaternion(), V(0.8, 0.45, hz + 0.3)), rng, COLA.mud);
+  return { geo: b.build(), dots: [{ y: 0.05, r: 1.9 }] };
+}
+// rotten survey flags on lath stakes, the lath grey and split
+function surveyLath({ rng }) {
+  const b = new PropBuilder();
+  for (let k = 0; k < 4; k++) {
+    const a = k * 1.57 + rng() * 0.4, r = 1.9 + rng() * 0.5, x = Math.cos(a) * r, z = Math.sin(a) * r, h = 0.6 + rng() * 0.4, lean = (rng() - 0.5) * 0.25;
+    b.box(V(x + lean * h * 0.5, h / 2, z), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), 0.02, h / 2, 0.006, TILE.WOOD, COLA.lath);
+    b.quad(V(x + lean * h, h - 0.02, z), V(x + lean * h + 0.03, h - 0.02, z), V(x + lean * h + 0.06, h - 0.25, z + 0.02), V(x + lean * h + 0.03, h - 0.25, z + 0.02), TILE.CANVAS, k % 2 ? COLA.flagPink : COLA.flagOrange);
+  }
+  return { geo: b.build(), dots: [{ y: 0.5, r: 0.8 }] };
+}
+// a numbered aluminium survey tag on a dead snag beside the dig, no company name
+function surveyTag() {
+  const b = new PropBuilder();
+  b.cyl(V(0, -0.1, 0), V(0, 3.2, 0), 0.12, 0.07, 7, TILE.BARK, COL.cutOld);
+  b.box(V(0, 1.45, -0.125), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), 0.035, 0.025, 0.003, TILE.METAL, COLA.alu);
+  return { geo: b.build(), dots: [{ y: 1.45, r: 0.3 }] };
+}
+// the snapped shovel blade, half-buried at the dig's edge
+function shovelBlade() {
+  const b = new PropBuilder();
+  b.quad(V(-0.11, 0.02, -0.14), V(0.11, 0.02, -0.14), V(0.1, 0.05, 0.12), V(-0.1, 0.05, 0.12), TILE.METAL, COLA.rust);
+  b.cyl(V(0, 0.05, 0.12), V(0, 0.07, 0.2), 0.018, 0.018, 5, TILE.METAL, COLA.rust);
+  return { geo: b.build(), dots: [{ y: 0.05, r: 0.28 }] };
+}
+// two square-cut stumps a sledge-width apart (Two Stump, 1975), birch growing out of the clearing
+function twoStumps({ rng }) {
+  const b = new PropBuilder();
+  for (const x of [-1.1, 1.1]) b.box(V(x, 0.45, 0), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), 0.2, 0.55, 0.2, TILE.BARK, COL.bark, { grain: 'y', endTile: TILE.END, endCol: COL.cutOld });
+  for (let k = 0; k < 3; k++) { const x = (rng() - 0.5) * 5, z = 2 + rng() * 2, H = 4 + rng() * 2; b.cyl(V(x, -0.1, z), V(x, H, z), 0.06, 0.03, 6, TILE.BARK, C(0xe8e4da)); }
+  return { geo: b.build(), dots: [{ y: 0.6, r: 1.6 }] };
+}
+// the café: a small table with two chairs (Mary's by the window, the corner table), and the coffee urn on the counter
+function cafeTable() {
+  const b = new PropBuilder();
+  b.cyl(V(0, 0.73, 0), V(0, 0.76, 0), 0.42, 0.42, 12, TILE.WOOD, COLA.top, { cap1: true, capTile: TILE.WOOD, capCol: COLA.top });
+  b.cyl(V(0, 0, 0), V(0, 0.73, 0), 0.05, 0.05, 6, TILE.WOOD, COLA.table);
+  for (const s of [-1, 1]) {
+    const z = s * 0.62;
+    for (const [dx, dz] of [[-0.18, -0.18], [0.18, -0.18], [-0.18, 0.18], [0.18, 0.18]]) b.cyl(V(dx, 0, z + dz), V(dx, 0.45, z + dz), 0.02, 0.02, 4, TILE.WOOD, COLA.table);
+    b.box(V(0, 0.46, z), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), 0.21, 0.02, 0.21, TILE.WOOD, COLA.top);
+    b.box(V(0, 0.75, z + s * 0.2), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), 0.21, 0.28, 0.015, TILE.WOOD, COLA.table);
+  }
+  return { geo: b.build(), dots: [] };
+}
+function urn() {
+  const b = new PropBuilder();
+  b.cyl(V(0, 0, 0), V(0, 0.42, 0), 0.13, 0.12, 10, TILE.METAL, COLA.urn, { cap1: true, capTile: TILE.METAL, capCol: COLA.urn });
+  b.cyl(V(0, 0.08, -0.13), V(0, 0.08, -0.19), 0.012, 0.012, 5, TILE.METAL, COLA.steel);
+  return { geo: b.build(), dots: [] };
+}
+// Tasha's coolers at the tailgate, and her orange-covered book's place on top (the turnaround, 30 §4.3)
+function coolers() {
+  const b = new PropBuilder();
+  for (const [x, z] of [[-0.45, 0], [0.45, 0.1]]) { b.box(V(x, 0.2, z), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), 0.34, 0.2, 0.22, TILE.PAINT, COLA.cooler); b.box(V(x, 0.42, z), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), 0.35, 0.025, 0.23, TILE.PAINT, COLA.coolerLid); }
+  return { geo: b.build(), dots: [] };
+}
+// Brekke's launch, a still prop at Farm's dock on Thursdays (owner call 4, until Round 4's motorboat actor): varnished
+function launch() {
+  const b = new PropBuilder(), L = 3.4, W = 0.95;
+  const hull = []; for (let k = 0; k <= 12; k++) { const t = k / 12, z = -L + t * 2 * L, w = W * Math.sin(Math.PI * Math.min(1, t * 1.15)) ** 0.6; hull.push([z, w]); }
+  for (let k = 0; k + 1 < hull.length; k++) { const [z0, w0] = hull[k], [z1, w1] = hull[k + 1]; for (const s of [-1, 1]) b.quad(V(s * w0, 0.55, z0), V(s * w1, 0.55, z1), V(s * w1 * 0.6, -0.1, z1), V(s * w0 * 0.6, -0.1, z0), TILE.WOOD, COLA.varnish); b.quad(V(-w0, 0.5, z0), V(w0, 0.5, z0), V(w1, 0.5, z1), V(-w1, 0.5, z1), TILE.WOOD, COLA.deck); }
+  b.box(V(0, 0.85, 0.6), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), 0.6, 0.3, 0.5, TILE.GLASS, C(0x88a0a8));
+  return { geo: b.build(), dots: [{ y: 0.6, r: 1.6 }] };
+}
+// /a2
+
+const REGISTRY = { stumpCut, quartzCobble, crib, landingRock, redPine, gradeMouth, slab, pole, drillRod,
+  casing, coreRack, boxLid, trench, stockpile, stationStake, creekRun, beaverDam, digPit, surveyLath, surveyTag, shovelBlade, twoStumps, cafeTable, urn, coolers, launch }; // (a2: the mining years' kits)
 export const KITS = Object.freeze(Object.keys(REGISTRY));
 export function kit(name) { const f = REGISTRY[name]; return f ? { build: (ctx = {}) => f({ rng: Math.random, opts: {}, ...ctx }) } : null; }
 // a seeded rng for a prop (the same stump every load)

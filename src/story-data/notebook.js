@@ -114,11 +114,15 @@ export const NICKS = [
   { nick: 'teach', word: 'Teach', match: 'Teach', kind: 'person' },
   { nick: 'sparky', word: 'Sparky', match: 'Sparky', kind: 'person' },
   { nick: 'whiskey', word: 'Whiskey', match: 'Whiskey', kind: 'person' },
+  // a2: "the back door" is Pietro (10 §7; NB66, NB68, NB70, NB73): its words break across a line on NB66 and start a
+  // sentence on NB68, so it is matched by `re` (nicksIn below) as well as `match` (the cutscene's)
+  { nick: 'backdoor', word: 'the back door', match: 'back door', re: /\b[Bb]ack\s+door\b/, kind: 'place' },
+  // /a2
 ];
 // the entries each nickname is on (buildBook(text).nicks, written out so the rules load in Node without the words;
 // scripts/book-unit.mjs fails when the text moves away from it)
-export const NICK_PAGES = {"frontporch":["NB01","NB68"],"kitchen":["NB03","NB06"],"coffeelake":["NB06"],"littlesag":["NB07","NB16"],"deacon":["NB16","NB25","NB48"],"teach":["NB16","NB48","NB80"],"sparky":["NB16","NB25","NB48","NB64","NB76","NB78"],"whiskey":["NB16","NB48","NB78"],"vwater":["NB20","NB27","NB39","NB46","NB53","NB63","NB72"],"farend":["NB21","NB27","NB32","NB33","NB39","NB46","NB56","NB72","NB77"],"fourtowns":["NB22","NB26"],"longroom":["NB24"],"twostump":["NB31"],"frontroom":["NB35","NB65","NB75","NB85"],"mummos":["NB35","NB45"],"genes":["NB60"],"kek":["NB78","NB79"]};
-export const nicksIn = (text) => NICKS.filter((n) => String(text || '').includes(n.match)).map((n) => n.nick);
+export const NICK_PAGES = {"frontporch":["NB01","NB68"],"kitchen":["NB03","NB06"],"coffeelake":["NB06"],"littlesag":["NB07","NB16"],"deacon":["NB16","NB25","NB48"],"teach":["NB16","NB48","NB80"],"sparky":["NB16","NB25","NB48","NB64","NB76","NB78"],"whiskey":["NB16","NB48","NB78"],"vwater":["NB20","NB27","NB39","NB46","NB53","NB63","NB72"],"farend":["NB21","NB27","NB32","NB33","NB39","NB46","NB56","NB72","NB77"],"fourtowns":["NB22","NB26"],"longroom":["NB24"],"twostump":["NB31"],"frontroom":["NB35","NB65","NB75","NB85"],"mummos":["NB35","NB45"],"genes":["NB60"],"backdoor":["NB66","NB68","NB70","NB73"],"kek":["NB78","NB79"]};
+export const nicksIn = (text) => NICKS.filter((n) => (n.re ? n.re.test(String(text || '')) : String(text || '').includes(n.match))).map((n) => n.nick); // (a2: a row's `re`)
 
 // --- the cutscene (10 §10.2) ----------------------------------------------------------------------------------------------
 // the beats in order: cut.1 … cut.13. `hold` beats wait for a key (the last page). The legible text is nb.json's cut.<n>;

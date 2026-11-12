@@ -330,6 +330,38 @@ const OUT = { for: FOR, v: 'v9', places: {}, portages: {} }, SITES = { for: FOR,
   }
 }
 
+
+// a2: the mining years' open data checks (90 §13 checks 1 and 8; story Round 2, stream A2)
+//   check 8   Pietro's hill: the pond up behind the landing (v3 3732) landlocked, no beaver mark, no other water within
+//             250 m of the dig; 600 m south-west of the dig is Pietro's open water, not a ridge (30 §4.7)
+//   check 1   the Kettle pad (provisional, owner call 11): the deposits are off-map facts (the report names them, scripts/
+//             c2-mining-unit.mjs keeps the distances); here, in the data: no named water within 300 m of the pad, and the
+//             creek reach below it is not a named creek (WARN: an owner's and writers' call, not a data fault)
+{
+  const D = OUT.places['pietro.dig'], dig = D && D.props && D.props['pietro.dig'];
+  if (dig) {
+    const why = [];
+    const ponds = v9.lakes.filter((l) => l && Math.hypot(l.cx - dig.x, l.cz - dig.z) < 450 && l.id !== lakeIds('Pietro Lake')[0]);
+    const pond = ponds.sort((a, b) => Math.hypot(a.cx - dig.x, a.cz - dig.z) - Math.hypot(b.cx - dig.x, b.cz - dig.z))[0];
+    if (!pond) why.push('no pond within 450 m of the dig');
+    else { if (pond.flow !== 'landlocked') why.push(`the pond ${pond.id} is ${pond.flow || 'not marked landlocked'}`); if (pond.beaver) why.push(`the pond ${pond.id} is marked beaver`); }
+    const others = ponds.filter((l) => l !== pond && Math.hypot(l.cx - dig.x, l.cz - dig.z) < 250);
+    if (others.length) why.push(`more water near the dig: ${others.map((l) => l.id).join(', ')}`);
+    const L = D.lanes[0], sw = cell(dig.x - 600 / Math.SQRT2, dig.z + 600 / Math.SQRT2);
+    if (!sw || sw.sd >= 0 || lakeName(sw.lake) !== 'Pietro Lake') why.push('600 m south-west of the dig is not Pietro\'s water');
+    result('check 8: Pietro\'s hill, its pond bare (landlocked, no beaver), Pietro\'s water 600 m south-west of the dig', why.length === 0,
+      { dig: [dig.x, dig.z], up: dig.y != null && D.props['pietro.rock'] ? +(dig.y - D.props['pietro.rock'].y).toFixed(1) : null, pond: pond ? { id: pond.id, at: [Math.round(pond.cx), Math.round(pond.cz)], cells: pond.cells, flow: pond.flow, d: Math.round(Math.hypot(pond.cx - dig.x, pond.cz - dig.z)) } : null, lane: L && L.dir, why });
+  }
+  const K = OUT.places.kettle;
+  if (K) {
+    const named = v9.lakes.filter((l) => l && Math.hypot(l.cx - K.x, l.cz - K.z) < 300 && (l.name || l.displayName)).map((l) => `${l.id} ${l.name || l.displayName} ${Math.round(Math.hypot(l.cx - K.x, l.cz - K.z))} m`);
+    const creeks = v9.lakes.filter((l) => l && Math.hypot(l.cx - K.x, l.cz - K.z) < 800 && /Creek|River/.test(l.name || l.displayName || '')).map((l) => `${l.name || l.displayName} (${l.id}, ${Math.round(Math.hypot(l.cx - K.x, l.cz - K.z))} m)`);
+    const dry = Object.values(K.props).every((q) => q.sd > 2);
+    result('check 1 (in the data): the Kettle pad on dry ground with no named water by it; the creek below it unnamed', !dry ? false : named.length || creeks.length ? 'warn' : true, { at: [K.x, K.z], dry, named, creeks });
+  }
+}
+// /a2
+
 PJ.resolved = OUT;
 if (WRITE) {
   fs.writeFileSync(placesF, JSON.stringify(PJ, null, 2) + '\n');
