@@ -434,8 +434,10 @@ green Kevlar asking after a solo on that lake.]
 - **What it does:** Len puts the photographs on the board at the open house (§4.6), and they go into his next Thursday
   report. Brekke now knows the player has walked the belt. If the player is at tier 1, the next Thursday moves them to
   tier 2.
+<!-- id: 30:4.2.1.wrong -->
 - **If the photo is wrong** (a rock, a different landing), Len says: "That's a nice rock. That's not the landing,
   though." He pays nothing, and the task stays open until its deadline (10 game days).
+<!-- id: 30:4.2.1.caption -->
 - **What the player learns:** nothing at first. At the open house they see their own picture on Northmark's board
   with the caption *"The Boreal crews' landing on Bald Eagle today. Photo courtesy of a friend of the project."* That
   is the teaching.
@@ -477,11 +479,13 @@ green Kevlar asking after a solo on that lake.]
 Farm's board on the evening of the first day of a forecast two-day rain. It stays for 5 game days after the rain
 stops.
 
+<!-- id: 30:4.3.notice whole -->
 > **FIELD HELP, ONE DAY.** Water samples on the creek below the old Kettle pad, the morning after the rain quits. Walk in
 > from the crews' landing on Bald Eagle, west shore; follow the grade. Bring boots. Lunch is on us.
 > Ask at the counter for T. Strand. **$35**
 
 The keeper, if the player looks at it:
+<!-- id: 30:4.3.keeper q each -->
 > "Company girl put that up. Tower. Her grandma taught my kids. She's all right." [Beat.] "It's a wet walk. The grade
 > holds water like a gutter."
 
@@ -570,6 +574,7 @@ If Tasha sees the player pick it up:
 > **Tasha:** "If anybody asks, you helped a girl from Tower carry her coolers. Which you did." [Beat.] "Lake side's
 > faster for you. Go before the wind gets up."
 
+<!-- id: 30:4.3.pay q each -->
 *Pay:* $35 on the trip-end screen, with the line "Field help, Kettle creek". *Firsts:* none. *Walt page:* *"The creek
 below the Kettle pad still runs orange after rain. I saw it."*
 
@@ -685,6 +690,7 @@ between them without looking at it.
 > supposed to give it back in '79. I forgot for forty-seven years."
 
 **The item: the crew map** (a book page; it is not a map sheet and cannot be pencilled)
+<!-- id: item.crewmap.map whole -->
 - A 1976 Boreal target map on linen-backed paper, stamped **BRM** and **CONFIDENTIAL**. It shows the claim blocks of
   the Gabbro – Bald Eagle belt, with targets **E-1 to E-9** in red. E-1 to E-6 and E-8 to E-9 are on the west side
   around the pads. **E-7** sits by itself on **Pietro Lake's north-east hill**.
@@ -692,8 +698,10 @@ between them without looking at it.
   and a test pit "~600 m" off to the south-west on a ridge. [The sketch is mirrored east for west (bible 2.2). On the
   true knob at Gull's far end the pond is to the west-north-west and the pit about 600 m south-east (about 126°), so the drawing fits only
   flipped. On Pietro it fits nothing.]
+<!-- id: item.crewmap.stations whole -->
 - Along the Kettle creek below the Kettle pad, twelve small circles numbered **1–12**, in a different hand, with
   **1–6** above the pad and **7–12** below it.
+<!-- id: item.crewmap.corner whole -->
 - In the legend's corner, in pencil: *chkd T.K. 9/76.*
 
 *Gives:*
@@ -801,6 +809,7 @@ If the player sits anywhere in the café, Len waves them over after the soup. Th
 [He does not stand. He offers his right hand without getting up. The ring is heavy and gold, a mining-school ring, and
 it is the first thing the player feels.]
 
+<!-- id: 30:4.6.brekke.hand q -->
 [Below tier 2 he only shakes hands at the open house: "Carl Brekke. Have some cake, it's from the good bakery." The
 conversation waits for tier 2, at the next open house or any Thursday.]
 
@@ -918,6 +927,7 @@ north-east shore**.
   it never reads as beaver water.]
 
 **Walt page lines, by what the player holds:**
+<!-- list: 30:4.7.w page each -->
 - With the crew map: *"E-7's filed spot on Pietro. Somebody dug here, years ago. The sketch doesn't fit the ground. A
   pond, but no creek, no dam, no ridge past it."*
 - With the notebook's N30 ("Somebody's been digging on the back door, NE shore. Wrong hill. Good."): *"Walt: 'the back
@@ -963,6 +973,7 @@ heard Brekke's "lovely book" line. Season: June to October, during Tauno's porch
 - ▸ **"Not today."**
   > "Tomorrow, then. Or some day." [He asks again on each later visit, with the same words.]
 
+<!-- id: 30:4.9.gas q -->
 **The drive.** [A cut. Tauno's brown pickup, the player driving. The fee is the normal drive fee to EP 33, and Tauno
 pays it; it shows on the next trip-end screen as "Gas, Tauno". Inside the cut the radio plays the farm report, and
 Tauno turns it off at the junction. The drive cannot be refused once begun, and nothing goes wrong on the road.]
@@ -1036,6 +1047,7 @@ the slab offers *Sit*.]
   > "Yes." [Beat.] "Yes, all right."
   *No flag.*
 
+<!-- id: 30:4.9.record q each -->
 [Whatever the choice, the player can still ask him on any later porch visit, before the cellar is lifted, with the
 topic **"On the record"**: "Will you say it to someone who'll write it down?" → the same answer and the flag. The
 choice is never lost. After the cellar is lifted, the topic closes, because the dawn lot gathers what was decided
@@ -1045,6 +1057,7 @@ choice is never lost. After the cellar is lifted, the topic closes, because the 
 > **Tauno:** "Same bench tomorrow."
 
 *Gives* (in every branch): Walt page lines, in the player's words:
+<!-- list: 30:4.9.page page -->
 - *"Tauno recopied three days of the 1976 readings into a clean book for Brekke. His hand on their numbers."*
 - *"Tauno reached the landing rock first and saw Eino's jacket folded there. The deputy came at noon, Sorensen
   behind him. With Sorensen at his elbow, Tauno told the deputy only 'He was a careful man.'"*
