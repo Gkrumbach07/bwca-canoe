@@ -15,7 +15,7 @@
 // Travel between places is a teleport (the chase snapped: __L.tp-style), as the slice says; a party is met as the game
 // meets one: the player paddles in from 50 m off and the camp's own greeting says the line (party-camps.js).
 export const STUBS = {
-  episodes: { id: 'S7', place: 'mummos', line: '70.6.1.11' },
+  episodes: { id: 'S5', place: 'kek.plane', line: '70.6.1.9' }, // (a stand-in open episode with no window: S7's own rumour, 70.6.1.11, holds only in May–June)
   a2pay: [{ pay: '35 Field help, Kettle creek', rule: 'a2.kettle.pay(stub)' }, { pay: '0 Gas, Tauno', rule: 'a2.ride.gas(stub)' }],
   testArc: { arc: 'test', person: 'bob', rumour: [{ id: '70.6.3.3', eps: [38] }, { id: '70.8.3.5', ep: 38 }] },
 };
@@ -90,8 +90,18 @@ export const HELPERS_D = () => {
   D.evening = () => { if (g.day.hours >= 19) { g.day.setClock(g.day.year, g.day.doy, 18.8); D.step(4); } g.day.setClock(g.day.year, g.day.doy, 19.05); g.story.lastQ = null; D.step(6); g.story.update(); return D.state().armed; };
   // a keeper's word at a counter (npcs.js wordList: the week's three, the weather, the story's one line at most)
   D.wordAt = (ep) => { const N = g.npcs, v = (N.at(ep) || []).find((q) => q.keeper); if (!v) return null; return N.wordList(v).map((x) => ({ id: x.id, kind: x.kind, text: x.text })); };
-  D.walkIn = (ep) => { const L = g.outfitter.layout(ep), p = g.player; p.mode = 'walk'; p.x = L.centre.x; p.z = L.centre.z; p.foot = { y: p.groundAt(p.x, p.z), vy: 0, air: false, t: 0, land: 0, near: null }; p.placeOnGround(); D.step(14); return !!(g.outfitter.visit && g.outfitter.visit.inside); };
-  D.walkOut = (ep) => { const L = g.outfitter.layout(ep), f = L.stepsFoot || L.door, p = g.player; p.x = f.x + L.axes.b.x * 6; p.z = f.z + L.axes.b.z * 6; p.placeOnGround(); D.step(14); return !(g.outfitter.visit && g.outfitter.visit.inside); };
+  // on foot at (x, z) (c1-talk's standAt: the canoe set down, off the water)
+  D.standAt = (x, z, heading = 0) => {
+    const p = g.player;
+    if (!p.carry || !p.carry.drop) p.carry = { trail: null, drop: { x: p.x, z: p.z, heading: p.heading }, hitCooldown: 0, from: null, choice: false };
+    p.landing = null; p.ashore = null; p.swim = null; p.speed = 0; p.yawRate = 0; p.mode = 'walk';
+    p.x = x; p.z = z; p.heading = heading;
+    p.foot = { y: p.groundAt(x, z), vy: 0, air: false, t: 0, land: 0, near: null };
+    p.placeOnGround();
+  };
+  // through the store's door: in to the middle, out to the foot of the steps (outfitter.updateVisit sees both)
+  D.walkIn = (ep) => { const L = g.outfitter.layout(ep); D.standAt(L.centre.x, L.centre.z); D.step(14); return !!(g.outfitter.visit && g.outfitter.visit.inside); };
+  D.walkOut = (ep) => { const L = g.outfitter.layout(ep), f = L.stepsFoot || L.door; D.standAt(f.x - (L.axes.b.x * 0.5), f.z - (L.axes.b.z * 0.5)); D.step(14); return !(g.outfitter.visit && g.outfitter.visit.inside); };
   return true;
 };
 
@@ -159,7 +169,7 @@ export const steps = [
       if (!real) g.episodes = was;
       return { real, a, active: g.trip.active, f: { abs: f.abs, camp: f.camp.id }, why: d.state().log.slice(-2) };
     }, STUBS.episodes);
-    result('14d an open episode\'s place in reach: its line is the day\'s beat (S7: "There\'s lilacs on Basswood…", 70.6.1.11)' + (r.real ? '' : ' [E stub]'), r.a && r.a.kind === 'episode' && (r.real || r.a.line === '70.6.1.11'), r);
+    result('14d an open episode\'s place in reach: its line is the day\'s beat' + (r.real ? '' : ' [E stub: a stand-in episode, its rumour 70.6.1.9]'), r.a && r.a.kind === 'episode' && (r.real || r.a.line === STUBS.episodes.line), r);
   } },
   // ---- step 11: climax spacing on a test arc beside mining; stall relief -------------------------------------------
   { id: 'climax', step: 11, title: 'climax spacing on a test arc beside mining: the second waits a trip and its person is named; a 14-day window goes ahead', run: async ({ page, result, log }) => {
