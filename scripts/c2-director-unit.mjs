@@ -221,6 +221,13 @@ const party = (id, kind, x, z, lakeId, lake = null) => ({ id, kind, x, z, lakeId
   const { s: s3, b: b3, st: st3 } = make({ trip: 1 });
   s3.set('nb.found', true, 'unit'); st3.n = 9;
   ok('5.5 not engaged (S1): no stall relief, however long', !b3.stallCheck({ ep: 31 }));
+  // (the final pass, chk-c2b) an armed rumour never heard moves to the next counters on its one push: no push per counter
+  const { s: s4, b: b4, st: st4, at: at4 } = make({ trip: 2 });
+  toS3(s4); st4.n = 6; st4.active = false; at4(ABS0 + 60, 10);
+  const a1 = b4.stallCheck({ ep: 31 }), n1 = s4.doc.dir.pushes.length;
+  st4.n = 7; at4(ABS0 + 66, 10);
+  const a2 = b4.stallCheck({ ep: 38 }) || b4.stallCheck({ ep: 25 }) || b4.stallCheck({ ep: 31 }), n2 = s4.doc.dir.pushes.length;
+  ok('5.6 an unheard stall rumour re-armed at a counter the next trip: the same lock, no second push', a1 && a2 && a2.lock === a1.lock && n2 === n1 && s4.doc.dir.pushes.filter((p) => p.id === `stall.${a1.lock}`).length === 1, { a1, a2, pushes: s4.doc.dir.pushes });
 }
 
 // 6 pay:, card:, the tally

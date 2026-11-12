@@ -529,8 +529,16 @@ export class Beats {
     const L = this.leastLock(); if (!L) return null;
     const pick = this.counterPick(STALL[L.id].lines, ep);
     if (!pick) { this.note({ stall: L.id, ep, why: 'no line of its person at this counter: the next one' }); return null; }
-    if (!this.push(`stall.${L.id}`)) return null;
-    S.armed = { lock: L.id, person: STALL[L.id].person, ep: Number(ep), abs, trip: this.trip(), staged: false, ...pick };
+    // (the final pass, chk-c2b: a rumour armed and never heard moves to this counter on the push it was armed on; it is
+    // not pushed again at every counter, which spent a trip's push, and the budget's count, each time. Still one push a
+    // trip: another stop pushed this trip holds it back)
+    const id = `stall.${L.id}`, prev = S.armed && !S.armed.staged && S.armed.lock === L.id ? S.armed : null;
+    if (prev) {
+      const last = D.pushes && D.pushes.length ? D.pushes[D.pushes.length - 1] : null;
+      if (last && last.trip === this.trip() && last.id !== id) { this.note({ stall: L.id, ep, why: `unheard, held: ${last.id} this trip` }); return null; }
+      this.note({ stall: L.id, ep, why: 'unheard: moved to this counter, no new push' });
+    } else if (!this.push(id)) return null;
+    S.armed = { lock: L.id, person: STALL[L.id].person, ep: Number(ep), abs, trip: prev ? prev.trip : this.trip(), staged: false, ...pick };
     this.story.dirty();
     return S.armed;
   }
