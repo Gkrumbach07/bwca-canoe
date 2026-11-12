@@ -115,7 +115,7 @@ class MiningCast {
   clear() { for (const who of [...this.live.keys()]) this.unstage(who); this.dropCafe(); }
   nameOf(who) { const R = CAST[who], s = this.story; if (!R) return who; return !R.known || (s && s.has(R.known)) ? R.first : R.unknown || R.first; }
   talkingTo(st) { const t = this.c.talk; return !!(t && t.convo && t.convo.speaker && st.h && t.convo.speaker.key === (st.h.speaker && st.h.speaker.key)); }
-  staged() { return [...this.live.values()].map((st) => ({ who: st.who, slot: st.slot.id, at: st.slot.at, x: +st.x.toFixed(1), z: +st.z.toFixed(1), talked: st.talked })).concat(this.slab ? [{ who: 'tauno', slot: 'slab', at: 'field', x: +this.slab.tauno.x.toFixed(1), z: +this.slab.tauno.z.toFixed(1), tasha: !!this.slab.tasha }] : []); }
+  staged() { return [...this.live.values()].map((st) => ({ who: st.who, slot: st.slot.id, at: st.slot.at, x: +st.x.toFixed(1), z: +st.z.toFixed(1), talked: st.talked })).concat(this.slab && this.slab.tauno ? [{ who: 'tauno', slot: 'slab', at: 'field', x: +this.slab.tauno.x.toFixed(1), z: +this.slab.tauno.z.toFixed(1), tasha: !!this.slab.tasha }] : []); }
 
   // --- the café -----------------------------------------------------------------------------------------------------
   // Farm 31's café in the store's own frame (props.js's: a across, b toward the front wall and the door; the store's
