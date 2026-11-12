@@ -11,14 +11,20 @@
 
 export const LOCKS = [
   { id: 'L1', name: 'region', keys: [
-    { id: 'L1A', kind: 'people', when: 'f:tauno.drilled | f:len.westpads.rings', support: { person: ['tauno', 'len'] } },
-    { id: 'L1B', kind: 'notebook', when: 'f:ink.twostump | f:ink.vwater | f:knows.brm14', support: { person: ['tauno', 'hap'] } },
+    // a2: the crew map gives L1A in full (30 §4.5 "Gives"); Tauno's telling of Two Stump and V.'s water is L1B (30 §4.1:
+    // Round 1's Farm seat writes knows.twostump and knows.vwater, inked or not)
+    { id: 'L1A', kind: 'people', when: 'f:tauno.drilled | f:len.westpads.rings | f:door.mining.yield', support: { person: ['tauno', 'len'] } },
+    { id: 'L1B', kind: 'notebook', when: 'f:ink.twostump | f:ink.vwater | f:knows.brm14 | f:knows.twostump | f:knows.vwater', support: { person: ['tauno', 'hap'] } },
+    // /a2
     { id: 'L1C', kind: 'world', when: 'f:crews.seen | f:westpads.seen', support: { place: ['crews.landing', 'westpads'] } },
     { id: 'L1D', kind: 'journalist', when: 'f:maggie.kettlemap | f:maggie.ostrander', support: { person: ['maggie'] } } ] },
   { id: 'L2', name: 'lake', solved: 'ink.farend', keys: [
     { id: 'L2A', kind: 'people', when: 'f:hap.farend | f:mary.farend', support: { person: ['hap', 'mary'] } },
     { id: 'L2B', kind: 'notebook', when: 'f:bc.205-50', support: { place: ['P255', 'P256'] } },
-    { id: 'L2C', kind: 'world', when: 'f:pietro.dig.seen', support: { place: ['pietro.dig'] } },
+    // a2: the wrong hill counts with the crew map (or Maggie's E-7 copy) and NB70 both (30 §4.7 "With both"):
+    // rules-mining.js writes pietro.wronghill; pietro.dig.seen alone is the Look (tier 4 reads it)
+    { id: 'L2C', kind: 'world', when: 'f:pietro.wronghill', support: { place: ['pietro.dig'] } },
+    // /a2
     { id: 'L2D', kind: 'side', when: 'f:ep.S5.chart', support: { quest: ['S5'], window: ['S5'] } },
     { id: 'L2E', kind: 'informant', when: 'f:denny.revealed', support: { person: ['denny'], scene: ['32:reveal'] } } ] },
   { id: 'L3', name: 'shore', keys: [

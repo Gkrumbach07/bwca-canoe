@@ -30,6 +30,7 @@ export async function startFeed({ story, mods = {}, guest = () => false } = {}) 
     import('./feed-place.js'),     // st-l: the story layer's verbs, read-here and photos
     import('./feed-talk.js'),      // st-t: who you talk to, what you ask
     import('./feed-beats.js'),     // d: the director: the trip's evening and days, its hooks on the card, the parties, the counter
+    import('./feed-weather.js'),   // a2: the rain days (the Kettle notice, the creek's run)
     // (Round 1 streams: their feed-*.js here, one line each)
   ]);
   return feed.start({ story, mods, guest });

@@ -101,7 +101,7 @@ export class Grounding {
       this.cache = { key, base };
     }
     const W = this.weather, state = W ? W.state : 'fair', prec = W ? W.precipitation : null;
-    const store = at.store ? { porch: !!(at.store.look && at.store.look.porch), stove: true, paddles: true, pictures: false, cafe: at.kind === 'lodge' || at.cafe === true } : null;
+    const store = at.store ? { porch: !!(at.store.look && at.store.look.porch), stove: true, paddles: true, pictures: false, cafe: at.kind === 'lodge' || at.cafe === true || !!(STORY_ON && at.store.cafe) /* a2: Farm 31's café */ } : null;
     return { ...base, hours, weather: state, wet: !!(W && W.wetness > 0.35), raining: prec === 'rain' || /rain|storm/.test(state || ''), snowing: prec === 'snow',
       wind: { now: this.wind && Number.isFinite(this.wind.speed) ? this.wind.speed : 2, today: base.windToday }, dark: !!(this.day && this.day.elevation < -4), store };
   }

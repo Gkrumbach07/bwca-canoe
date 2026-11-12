@@ -256,6 +256,10 @@ export class Cast {
     const dlg = this.c.talk, s = this.story;
     if (!st || !dlg || typeof dlg.open !== 'function') return false;
     if (who === 'josie') return this.josieTalk(st);
+    // a2: after the turn, Farm's porch is the mining years' hub (story-data/cast.js slot 'farmhub', scene 'a2:farm'):
+    // mining-cast.js plays it (attach({ mining }))
+    if (st.slot && st.slot.scene === 'a2:farm' && this.c.mining && typeof this.c.mining.farmTalk === 'function') return this.c.mining.farmTalk(st);
+    // /a2
     const start = this.entry(who, st);
     st.talked = true;
     s.rules.apply({ id: 'cast:talk', then: [`f:${who}.talk`] }, {});

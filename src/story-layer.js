@@ -151,6 +151,9 @@ class StoryLayer {
       const R0 = (L.lot.r || 7) + 2;
       pl.x = L.lot.x + n[0] * R0; pl.z = L.lot.z + n[1] * R0; pl.r = pl.r || LAYER.placeR;
       for (const pr of pl.props || []) { const [a, b] = pr.at || [0, 0]; pr.x = pl.x + u[0] * a + n[0] * b; pr.z = pl.z + u[1] * a + n[1] * b; pr.heading = Math.atan2(-n[0], -n[1]); }
+      // a2: a prop `landing: true` stands at the lot's own landing, at the water (EP 33's landing rock, 30 §4.9)
+      for (const pr of pl.props || []) if (pr.landing && L.landing) { pr.x = L.landing.x + n[0] * 0.6; pr.z = L.landing.z + n[1] * 0.6; }
+      // /a2
       this.bin(pl);
     }
   }

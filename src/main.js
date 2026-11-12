@@ -1317,6 +1317,33 @@ async function main() {
     } catch (e) { console.warn('story T: talk & cast', e); }
   }
   // /st-t
+  // a2: the mining years (story Round 2, stream A2; docs/story/30-mining-years.md), only under STORY_ON: the arc's things
+  // (mining-items.js), its favours (task-kinds-mining.js), the Kettle day (kettle.js: Tasha, the stations, the creek),
+  // the Farm people, the café and Tauno's ride (mining-cast.js; cast.js hands it his Farm porch after the turn), the
+  // give:item.* stand-in (E's handler at the join), and story.debug.fixture('turn') (the end of chapter 1's slice). With
+  // the flag off none of it is fetched
+  if (STORY_ON && story.v === 2 && window.__game.storyTalk) {
+    try {
+      const [MI, { attachMiningTasks }, { kettle }, { miningCast }, { installTurnFixture }] = await Promise.all([
+        import('./mining-items.js'), import('./task-kinds-mining.js'), import('./kettle.js'), import('./mining-cast.js'), import('./story-data/fixtures-a2.js')]);
+      const { topics, cast, texts } = window.__game.storyTalk, sm = window.__game.storySeams || {};
+      const { loadWords } = await import('./story-data/words.js');
+      const Wm = await loadWords(['mining']); texts.add(Wm.mining); // (already in from st-t: adding again keeps the first)
+      MI.defineMiningItems((id) => { const e = texts.entry(id); return e && typeof e.text === 'string' ? e.text : null; });
+      MI.installGive(story, inventory);
+      const mtasks = attachMiningTasks({ tasks, layer: sm.layer || null, story, hud });
+      const common = { story, layer: sm.layer || null, scene, actors, pointer, talk, topics, inventory, hud, world, tiles, player, mtasks };
+      kettle.attach(common);
+      miningCast.attach({ ...common, cast, npcs, outfitter, day, rides, profile, pencil: sm.pencil || null, kettle });
+      cast.c.mining = miningCast; // (not cast.attach again: that would hang its story handlers a second time)
+      installTurnFixture(story, { profile, day });
+      const updA2 = outfitter.update.bind(outfitter);
+      outfitter.update = (dt) => { updA2(dt); try { kettle.update(dt); miningCast.update(dt); } catch (e) { if (!miningCast.warned) { miningCast.warned = true; console.warn('story A2: the mining years', e); } } };
+      window.__game.storyMining = { kettle, miningCast, mtasks, items: MI, on: true };
+      console.log('story A2: the mining years');
+    } catch (e) { console.warn('story A2: the mining years', e); }
+  }
+  // /a2
   // gl-d: the trip-end tally and the board (the game-loop round, stream D; docs/build/game-loop-brief.md). Pay lands on
   // the trip's card as it counts up (record.js ended → tasks.settle), never at the board; no cap on notices held
   // (the owner's call 2026-11-05), each with a deadline that fits it; the new kinds (task-kinds-2.js: creel, campsite, beaver, iceout, colour,

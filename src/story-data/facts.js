@@ -86,6 +86,14 @@ export const FACTS = [
   { key: 'asked.walt.', kind: 'bool', doc: '20 §5.2/§7.3/§12.4 a keeper topic of the opening asked (asked.walt.<topic>)' },
   { key: 'ring.', kind: 'any', doc: '20 §7.3/§12.4 a keeper rang a story place (value: the keeper\'s name)' },
   // /st-t
+  // a2: the mining years (Round 2, stream A2; docs/story/30-mining-years.md §4, §7). The people's own facts are under their
+  // namespaces (tauno. len. mary. tasha. brekke. pietro.); these are the arc's places and what was heard
+  { key: 'kettle.', kind: 'any', doc: '30 §4.3 the Kettle pad: kettle.visited | notice (the flyer taken) | bottles | fill.<station> | secchi | rain (the rain day worked) | done | lid (Leo\'s lid taken)' },
+  { key: 'heard.', kind: 'bool', doc: '30 §4.3 a word heard said, plainly (heard.background: Tasha)' },
+  { key: 'stations.known', kind: 'bool', doc: '30 §4.5 "The stations": seven to twelve became background (Brekke\'s needle, Round 6)' },
+  { key: 'twostump.', kind: 'any', doc: '30 §3, 10 NB31 Two Stump on Gabbro\'s south shore: twostump.seen' },
+  { key: 'photo.', kind: 'any', doc: '30 §4.2.1 a picture that matched a story place\'s target (photo.crib, photo.casing: Len\'s favour)' },
+  // /a2
 ];
 
 // the arcs whose yields are the big findings (§3.3 story.big), and the doors the player can be offered

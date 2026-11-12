@@ -66,6 +66,22 @@ export const WALT_LINES = [
   { id: 'w.door.family', section: 'leads', ref: '20:U5.w.3' },
   { id: 'w.door.mining', section: 'leads', ref: '20:U5.w.4' },
   // /st-t
+  // a2: the mining years (30 §4): the lines whose words are a quote inside a block, and the sections other than 30's
+  // default (people). The Kettle line is the second quote of 30 §4.3's Pay paragraph (30:4.3.w2 is retired by the anchor)
+  { id: 'w.kettle.orange', section: 'places', ref: '30:4.3.pay.2' },
+  { id: 'w.lead.pads', section: 'leads', ref: '30:4.1.30' },
+  { id: '30:4.1.w1', section: 'places' },
+  { id: '30:4.1.w5', section: 'odd' },
+  { id: '30:4.3.w1', section: 'places' },
+  { id: '30:4.5.w1', section: 'odd' },
+  { id: '30:4.7.w.1', section: 'odd' },
+  { id: '30:4.7.w.2.2', section: 'names' },
+  { id: '30:4.7.w.3', section: 'farend' },
+  { id: '30:4.4.w3', section: 'farend' },
+  { id: '30:4.9.page.3', section: 'years' },
+  { id: '30:4.9.page.4', section: 'years' },
+  { id: '30:4.6/the-thursday-lunch-tier.w1', section: 'odd' },
+  // /a2
 ];
 
 // a text id with no row: its section by its id's prefix (the longest that matches), else 'odd'. Leads are a person's or a

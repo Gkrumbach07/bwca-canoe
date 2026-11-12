@@ -32,6 +32,10 @@ export const CAST = {
       { id: 'offseason', at: 'walkout', when: 'f:tauno.porch.done & f:crews.seen & !f:tauno.turn & !month:5-10 & ep:31 & daylight', scene: 'auto' },
       // after two declines: only Farm's porch, mornings (a pull, not a push: the player walks to it)
       { id: 'changed', at: 'porch:31', when: 'f:tauno.porch.declined2 & !f:tauno.porch.done & month:5-10 & hour:7-10', scene: 'changed', bark: '20:9.2#R3.2' },
+      // a2: after the turn, Farm's porch is the mining years' hub (story-data/mining.js FARM: the first Farm morning, the
+      // topics, the Kettle test and the crew map, the clean book's ask): cast.js hands the scene to mining-cast.js
+      { id: 'farmhub', at: 'porch:31', when: 'f:tauno.doors & month:5-10 & hour:7-10 & !end:M', scene: 'a2:farm' },
+      // /a2
       { id: 'farm', at: 'porch:31', when: 'f:tauno.porch.done & month:5-10 & hour:7-10 & !end:M', scene: 'auto' },
       { id: 'home', at: 'porch:home', when: 'f:tauno.porch.done & f:crews.seen & month:5-10 & hour:7-10 & dayhash(tauno,5)=0 & !end:M', scene: 'auto' },
     ],
@@ -46,4 +50,35 @@ export const CAST = {
       { id: 'counter', at: 'counter:home', when: '', scene: null },
     ],
   },
+  // a2: the mining years' people at Farm (story Round 2; docs/story/30-mining-years.md §2, §7 "Schedules"; owner calls 3,
+  // 4). Their `where` is read by mining-cast.js (not cast.js's walkout or seats): at 'a2:dock' (the end of Farm's dock),
+  // 'a2:window' / 'a2:corner' (the café's tables inside Farm 31: props.js L.cafe), 'a2:store' (by the counter), 'field'
+  // (kettle.js: the Kettle turnaround; mining-cast.js: the EP 33 lot). Their scenes are story-data/mining.js's.
+  len: {
+    name: 'Len Saari', first: 'Len', known: 'len.met', unknown: 'An old man', role: '',
+    look: { age: 'old', shirt: 0x4a5f7a, pants: 0x3c3a36, hat: 0x2f3a4a, hair: 0x9a9690, hatChance: 0.7 },
+    where: [
+      { id: 'table', at: 'a2:corner', when: 'month:5-10 & dow:thu & hour:11-14', scene: 'a2:len' },
+      { id: 'dock', at: 'a2:dock', when: 'month:5-10 & hour:7-12 & !dow:thu', scene: 'a2:len' },
+    ],
+  },
+  mary: {
+    name: 'Mary Pelto', first: 'Mary', known: 'mary.met', unknown: 'An old woman', role: '',
+    look: { age: 'old', female: true, shirt: 0x8a6a8a, pants: 0x4a4038, hat: null, hair: 0xb8b4ae, hatChance: 0 },
+    where: [{ id: 'window', at: 'a2:window', when: 'month:5-10 & dow:tue|fri & hour:9-11', scene: 'a2:mary' }],
+  },
+  brekke: {
+    name: 'Carl Brekke', first: 'Carl', known: 'brekke.met', unknown: 'An old man in a good jacket', role: '',
+    look: { age: 'old', shirt: 0x2e3440, pants: 0x2a2a2c, hat: null, hair: 0xd8d6d0, hatChance: 0 },
+    where: [{ id: 'table', at: 'a2:corner', when: 'month:6-10 & dow:thu & hour:11-14', scene: 'a2:brekke' }],
+  },
+  tasha: {
+    name: 'Tasha Strand', first: 'Tasha', known: 'tasha.met', unknown: 'A woman with a tablet', role: '',
+    look: { age: 'young', female: true, shirt: 0x3f6f8f, pants: 0x3a3a34, hat: 0x7a5a3a, hair: 0x5a3a2a, hatChance: 0.5 },
+    where: [
+      { id: 'kettle', at: 'field', when: 'f:kettle.notice & !f:kettle.done', scene: 'a2:tasha' },
+      { id: 'store', at: 'a2:store', when: 'month:6-10 & dow:mon|tue|wed|thu|fri & hour:8-10 & f:kettle.done & days.since(kettle.done)>=1 & dayhash(tasha,3)=0', scene: 'a2:tasha' },
+    ],
+  },
+  // /a2
 };
