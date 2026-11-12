@@ -261,6 +261,8 @@ class MiningCast {
     if (!out || !out.ok) return false;
     s.rules.apply({ id: 'a2:gas', then: [`pay:${paid ? out.price : 0}@30:4.9.gas`] }, {});
     this.slab = { since: performance.now(), tauno: null, tasha: null, waited: false };
+    // (placed as the lot and its tiles come in, whatever the frame's cadence: a quarter second at a time, 30 s at most)
+    let n = 0; const tm = setInterval(() => { try { this.slabTick(); } catch (e) { console.warn('mining: the road end', e); } if (!this.slab || this.slab.tauno || ++n > 120) clearInterval(tm); }, 250);
     return true;
   }
   // at the road end: Tauno by the slab (or in the pickup while Tasha loads her coolers), Tasha in the lot on a weekday
