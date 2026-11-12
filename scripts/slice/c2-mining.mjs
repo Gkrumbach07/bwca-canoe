@@ -452,9 +452,11 @@ steps.push(
       peek('out'); for (let k = 0; k < 30; k++) { L.step(10); await L.wait(60); } peek('end');
       return tr.slice(0, 40);
     });
-    const lot = await page.evaluate(() => { const g = window.__game, l = g.rides.last; return { last: l && { from: l.from, to: l.to, price: l.price }, at: [Math.round(g.player.x), Math.round(g.player.z)], ride: g.story.has('tauno.ride'), staged: window.__a2.M().miningCast.staged(), money: g.profile.s.money, pay: window.__a2.M().miningCast.debug.pays().due.map((p) => `${p.line}:${p.n}`) }; });
+    const lot = await page.evaluate(() => { const g = window.__game, l = g.rides.last; return { last: l && { from: l.from, to: l.to, price: l.price }, at: [Math.round(g.player.x), Math.round(g.player.z)], ride: g.story.has('tauno.ride'), staged: window.__a2.M().miningCast.staged(), money: g.profile.s.money, pay: window.__a2.M().miningCast.debug.pays().due.map((p) => `${p.line}:${p.n}`), paid: window.__a2.M().miningCast.debug.pays().paid.map((p) => `${p.line}:${p.n}`), trip: !!g.trip.active }; });
     result('9b "Let\'s go." (the same words: 30:4.9.1): Tauno\'s ride to the EP 33 road end (the cab, the fade); the fee on the next tally as "Gas, Tauno" (D\'s pay:)',
-      a2 && a2.say === a1.say && go.ok && lot.ride && lot.last && lot.last.to === 33 && lot.pay.some((p) => p.startsWith('30:4.9.gas:')), { lot, money0, go, rest0, rideTrace });
+      a2 && a2.say === a1.say && go.ok && lot.ride && lot.last && lot.last.to === 33 && (lot.pay.some((p) => p.startsWith('30:4.9.gas:')) || lot.paid.some((p) => p.startsWith('30:4.9.gas:'))), { lot, money0, go, rest0, rideTrace });
+    // (c2-fix: a trip under way ends where the truck lets you out (trip.js 'exit' at the road end): that is the next
+    // tally, and it pays the gas there: owed or already paid on it, both are "Gas, Tauno" on the next tally)
     await shot(page, shots, 'A2-9-lot');
     // Tauno in the lot: in the pickup while Tasha loads (30:4.9.3–4), else on the slab; the core shed; the dot free
     const tf = await page.evaluate(async () => { const L = window.__L, M = window.__a2.M().miningCast; for (let k = 0; k < 200 && !(M.slab && M.slab.tauno); k++) { L.step(10); window.__game.storyLayer.poll(); await L.wait(100); } return M.slab && M.slab.tauno ? { x: M.slab.tauno.x, z: M.slab.tauno.z, tasha: !!M.slab.tasha } : null; });
