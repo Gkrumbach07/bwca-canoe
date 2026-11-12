@@ -59,7 +59,7 @@ class MiningCast {
 
   // --- the Farm people by their schedules ---------------------------------------------------------------------------
   update(dt) {
-    if (!this.on) return;
+    if (!this.on) { if (this.live.size || this.cafe || this.slab) { this.clear(); this.slab = null; } return; } // (a co-op guest: whoever was staged before the story turned mirror goes)
     this.t += dt;
     if (this.t < TICK) return;
     this.t = 0;

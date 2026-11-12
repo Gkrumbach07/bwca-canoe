@@ -108,7 +108,7 @@ class Kettle {
 
   // --- each frame ---------------------------------------------------------------------------------------------------------
   update(dt) {
-    if (!this.on) return;
+    if (!this.on) { if (this.field || this.meshes.size) this.clear(); return; }
     this.t += dt;
     if (this.t < 0.5) return;
     this.t = 0;
