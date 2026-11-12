@@ -304,16 +304,23 @@ export const steps = [
     await page.evaluate((d) => { const A = window.__a2; let x = d + 1; while (A.dow(x) === 4) x++; A.at(x, 9); }, ctx.kettleDay);
     await page.evaluate(async () => { await window.__a2.toFarm(); const S = window.__a2.store(); window.__L.standAt(S.dockFoot.x, S.dockFoot.z, 0); window.__L.step(40); });
     await talk(page, 'cast:len:31'); await hear(page, 2); await page.evaluate(() => window.__a2.endTalk());
-    const r = await page.evaluate(() => { const A = window.__a2, before = window.__game.profile.s.money, paid = A.M().miningCast.debug.payNow(); return { task: A.task('lenphotos'), paid, money: window.__game.profile.s.money - before, photos: A.facts(['len.photos', 'photo.crib', 'photo.casing']) }; });
-    result('5 (A2) Len takes the two pictures (the favour done: $40 at the tally, tasks.settle); the pay: stand-in pays "Field help, Kettle creek" $35 at the trip\'s end (D\'s handler and its trip-card line at the join)',
+    const r = await page.evaluate((join) => { const A = window.__a2, before = window.__game.profile.s.money, owed = A.M().miningCast.debug.pays().due, paid = join ? [] : A.M().miningCast.debug.payNow(); return { task: A.task('lenphotos'), owed, paid, money: window.__game.profile.s.money - before, photos: A.facts(['len.photos', 'photo.crib', 'photo.casing']) }; }, !!ctx.join);
+    if (ctx.join) result('5 (A2) Len takes the two pictures (the favour done: $40 at the tally, tasks.settle); "Field help, Kettle creek" $35 owed through D\'s pay: for the trip\'s end (D\'s half pays them)',
+      r.task && r.task.status === 'done' && r.photos['len.photos'] && r.owed.some((p) => p.n === 35 && p.line === '30:4.3.pay.1'), r);
+    else result('5 (A2) Len takes the two pictures (the favour done: $40 at the tally, tasks.settle); D\'s pay: owes "Field help, Kettle creek" $35, paid by the tally (here its pay now)',
       r.task && r.task.status === 'done' && r.photos['len.photos'] && r.paid.some((l) => /^Field help, Kettle creek · \$35/.test(l)) && r.money === 35, r);
   } },
-  // step 6: Mary, Tuesday or Friday, the lid carried: Give (A2's want; E's show.js at the join), the back table, Far End (L2A)
+  // step 6: Mary, Tuesday or Friday, the lid carried: the dot's Give (A2's want, E's show.js: the join), the back table, Far End (L2A)
   { id: 'table', step: 6, title: 'the back table: the lid given, the papers, the typewriter, L.P., the promise, Far End (L2A)', run: async ({ page, result, ctx }) => {
     await page.evaluate((d) => { const A = window.__a2; let x = d + 1; while (![2, 5].includes(A.dow(x))) x++; A.at(x, 9.5); }, ctx.kettleDay);
     await page.evaluate(async () => { await window.__a2.toFarm(); window.__a2.inside(); window.__L.step(30); });
-    const c0 = await talk(page, 'cast:mary:31');
-    const give = await choose(page, 'Give: Box lid');
+    // the dot on her offers Give with the lid carried (E's show.js giveFor, as pointer.setTarget's Q: the join), and Give
+    // opens her back table
+    await dismiss(page);
+    const q = await page.evaluate(() => { const E = window.__game.storyEpisodes, S = E && E.show, g = S && S.giveFor('cast:mary:31'); return g ? { verb: g.verb, ran: !!g.run() } : null; });
+    await page.waitForTimeout(120);
+    const c0 = await page.evaluate(() => window.__t.convo());
+    const give = { ok: !!(q && q.verb === 'Give' && q.ran && c0), by: 'the dot\'s Give (show.giveFor)', q };
     const said = await hear(page, 3);
     const r = await picks(page, ['What was wrong with it?', 'Why tell me now?', 'Would you know something typed in that office?', 'If it comes out, I\'ll make sure they know which L.P.']);
     const tail = await hear(page, 4);

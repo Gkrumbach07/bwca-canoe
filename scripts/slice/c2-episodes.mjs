@@ -253,8 +253,8 @@ export const steps = [
       const ix = (pick || []).findIndex((t) => /lilac|Basswood|Inlet|A print/i.test(t));
       if (ix >= 0) await press(page, `Digit${ix + 1}`); else if (pick && pick.length) await press(page, 'Digit1');
       const said = await hear(page, 6);
-      const r2 = await page.evaluate((m0) => { const g = window.__game, E = window.__e; if (g.dialogue && g.dialogue.close) g.dialogue.close(false); return { shown: g.story.has('ep.S7.shown'), end: g.story.get('ep.S7.end'), paid: (E.money() ?? 0) - (m0 ?? 0), page: E.page('S7'), firsts: E.firsts() }; }, m0);
-      result('13c (E) back to Rose, "Look at this" with the June print: S7.conv.7–9, $25; the page\'s last line; the trip card\'s first', c1.ok && said.some((l) => /^Oh\.?$/.test(l || '')) && said.some((l) => /bottle of pop in 1956/.test(l || '')) && r2.shown && r2.end === 'rose' && r2.paid === 25 && r2.page && /Rose has the picture/.test(r2.page.end || '') && r2.firsts.includes('Lilacs at Mummo\'s.'), { diag, c1, pick, said, r2 });
+      const r2 = await page.evaluate((m0) => { const g = window.__game, E = window.__e; if (g.dialogue && g.dialogue.close) g.dialogue.close(false); return { shown: g.story.has('ep.S7.shown'), end: g.story.get('ep.S7.end'), paid: (E.money() ?? 0) - (m0 ?? 0), owed: ((g.story.doc.dir && g.story.doc.dir.pay) || []).filter((p) => p.line === 'S7.pay' && !p.paid).reduce((n, p) => n + p.amt, 0), page: E.page('S7'), firsts: E.firsts() }; }, m0); // (join c2: D's pay: owes it now, the trip-end tally pays it)
+      result('13c (E) back to Rose, "Look at this" with the June print: S7.conv.7–9, $25 (owed through D\'s pay:, "$25 from Rose." at the trip-end tally); the page\'s last line; the trip card\'s first', c1.ok && said.some((l) => /^Oh\.?$/.test(l || '')) && said.some((l) => /bottle of pop in 1956/.test(l || '')) && r2.shown && r2.end === 'rose' && (r2.paid === 25 || r2.owed === 25) && r2.page && /Rose has the picture/.test(r2.page.end || '') && r2.firsts.includes('Lilacs at Mummo\'s.'), { diag, c1, pick, said, r2 });
     },
   },
   {

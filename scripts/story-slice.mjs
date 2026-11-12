@@ -15,7 +15,14 @@
 //                           the story and nothing breaks
 //   --plan slice            no browser: the solver's plan for the slice (scripts/story-solve.mjs --plan-only), each move
 //                           with the slice step it belongs to and how this rig plays it
-//   APP=http://localhost:5651 RELAY=ws://localhost:8651 node scripts/story-slice.mjs [--slice|--ignore|--plan slice]
+//   --slice2                Round 2's slice (campaign-design Part 4 Round 2, "The second playable slice, exactly"), from
+//                           the end of chapter 1 (story.debug.fixture('turn')), the streams' sections in the slice's
+//                           order (the join): season A at Farm 31 in July: A2's 1–9 with the join items 3 (E's flyer
+//                           hook) and 5 (D's tally), then D's 10, 14 (D's half) and 11; season B at Moose Lake 25 on
+//                           9 June (the lilacs' window): E's 14a, 3, 13a, 14b, 12, 13b, 13c. Step 15 (the guest) is
+//                           chk-coop C5 and c2-mining-test's guest
+//   --plan slice2           no browser: the solver's plan for slice 2 from slice 1's end (story-solve.mjs --plan-only2)
+//   APP=http://localhost:5651 RELAY=ws://localhost:8651 node scripts/story-slice.mjs [--slice|--ignore|--plan slice|--slice2|--plan slice2]
 //     [--home 25] [--out dir] [--shots dir] [--no-coop] [--only a,b]
 import { createRequire } from 'node:module';
 import { mkdirSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
@@ -27,6 +34,8 @@ import { steps as BOOK } from './slice/c1-book.mjs';
 import { section as LAYER, HELPERS as HELPERS_L } from './slice/c1-layer.mjs';
 import { HELPERS_T, choose, hear, shelf as T_SHELF, r1 as T_R1, declines as T_DECLINES } from './slice/c1-talk.mjs';
 import { HELPERS_D, steps as D_STEPS, ignoreDays as D_IGNORE } from './slice/c2-director.mjs'; // d: Round 2's director (--slice2, --ignore)
+import { HELPERS_A2, setup as A2_SETUP, steps as A2_STEPS } from './slice/c2-mining.mjs'; // join c2: A2's mining arc (--slice2)
+import { HELPERS_E, steps as E_STEPS } from './slice/c2-episodes.mjs'; // join c2: E's episodes (--slice2)
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const argv = process.argv.slice(2);
@@ -44,6 +53,23 @@ const results = [], errors = [];
 const result = (name, pass, more = {}) => { results.push({ name, pass: !!pass, more }); log(pass ? 'PASS' : 'FAIL', name, JSON.stringify(more).slice(0, 1400)); };
 
 // --- --plan slice: the solver's plan, mapped to the slice's steps and to how this rig plays each move -------------------
+if (MODE === 'plan' && String(arg('plan')) === 'slice2') { // (join c2: slice 2's plan, from where slice 1's ends)
+  const r = spawnSync(process.execPath, ['--max-old-space-size=3000', path.join(ROOT, 'scripts/story-solve.mjs'), '--plan-only2'], { encoding: 'utf8', maxBuffer: 1 << 24 });
+  const lines = (r.stdout || '').split('\n').filter((l) => /^\s*\d+\. /.test(l)).map((l) => l.replace(/^\s*\d+\.\s*/, ''));
+  if (r.status !== 0 || !lines.length) { console.log(r.stdout, r.stderr); console.log('story-slice --plan slice2: the solver found no plan'); process.exit(1); }
+  const how = (m) => (/^tauno \(farmhub\)/.test(m) ? [/: (well|ask)$/.test(m) ? (/ask$/.test(m) ? 9 : 7) : 1, 'Farm\'s porch of a morning: E on him (cast:tauno:31)']
+    : /^say:farm:(ask)/.test(m) ? [9, 'the choice by its number'] : /^say:farm:(well|well2|map)/.test(m) ? [7, 'the choice by its number'] : /^say:farm:hub:30:4\.5|^say:farm:(e7|stations)/.test(m) ? [7, 'the choice by its number'] : /^say:farm/.test(m) ? [1, 'the choice by its number']
+    : /^ask the keeper at 31/.test(m) ? [1, 'E on the keeper; "Ask about…", the place by its number'] : /^len|^say:len/.test(m) ? [2, 'E on Len at the dock\'s end; the choice by its number']
+    : /^give Mary/.test(m) ? [6, 'the dot on her: Q Give (show.js)'] : /^mary|^say:mary:(hub|leo)/.test(m) ? [2, 'E on Mary at the window'] : /^say:mary/.test(m) ? [6, 'the choice by its number']
+    : /^take the Kettle notice/.test(m) ? [3, 'the board: the flyer taken (tasks.flyerHook)'] : /^stand at kettle/.test(m) ? [4, 'over the rise into the hollow, on foot'] : /^tasha|^say:tasha/.test(m) ? [4, 'E on Tasha at the tailgate; the choice by its number']
+    : /^(Fill|Lower|Take) at kettle/.test(m) ? [4, 'E on the stake / the dam / the lid (the dot)'] : /^Look at westpads/.test(m) ? [4, 'E Look on the casing (the dot)'] : /^hand Len/.test(m) ? [5, 'the two pictures, talking to Len (task-kinds-mining handIn)']
+    : /^Look at pietro|^Take at pietro|^read NB70/.test(m) ? [8, 'landed on Pietro\'s north-east shore; E Look on the dig; the spread open'] : /^tauno at the road end|^say:slab/.test(m) ? [9, 'at the road end: E on him; the questions by their numbers']
+    : /^a trip/.test(m) ? [9, 'a trip (a day on: the next porch visit)'] : /beach rock|^ease off|^reel into|NB06/.test(m) ? [12, 'the cast (F, the jig, Space), W held and let go'] : /S7|Rose|s7\./.test(m) ? [13, 'the board at 25; E on Rose; Mummo\'s ashore; "Look at this"'] : [0, '']);
+  console.log('Slice 2, as the solver plays it from the end of slice 1, and as story-slice.mjs --slice2 plays each move:');
+  lines.forEach((m, i) => { const [st, h] = how(m); console.log(`${String(i + 1).padStart(3)}. [step ${st}] ${m}${h ? `  — ${h}` : ''}`); });
+  console.log(`story-slice --plan slice2: ${lines.length} moves`);
+  process.exit(0);
+}
 if (MODE === 'plan') {
   const r = spawnSync(process.execPath, ['--max-old-space-size=3000', path.join(ROOT, 'scripts/story-solve.mjs'), '--plan-only'], { encoding: 'utf8', maxBuffer: 1 << 24 });
   const lines = (r.stdout || '').split('\n').filter((l) => /^\s*\d+\. /.test(l)).map((l) => l.replace(/^\s*\d+\.\s*/, ''));
@@ -635,19 +661,52 @@ async function ignore() {
   // /d
 }
 
-// d: --slice2 (Round 2, "The second playable slice"): the sections of the streams, in the slice's order; the join puts
-// A2's and E's in. From the end of chapter 1 (the turn played: story.debug.fixture('turn') where the join provides it,
-// else its facts, HELPERS_D turn())
+// d: --slice2 (Round 2, "The second playable slice"): the sections of the streams, in the slice's order (the join, c2).
+// From the end of chapter 1 (story.debug.fixture('turn'), A2's fixtures-a2.js: no export of the Round 1 --slice season
+// is kept). Season A, Farm 31 from 10 July: A2's 1–9 (the join's 3: the notice on the board through E's hook; 5: A2's
+// half, then D's tally on A2's own lines), then D's 10, 14 (an open episode's place: E's runner) and 11. Season B, Moose
+// Lake 25 on 9 June (the lilacs' window), the same fixture: E's 14a, 3, 13a, 14b, 12, 13b, 13c (E's own order: each leaves
+// the season as the next wants it). Travel is L.tp (the chase snapped); papers closed before every talk.
+const JOIN3 = { id: 'join3', step: 3, title: 'the Kettle notice on Farm\'s board through E\'s flyer hook: paper beside the pins, outside the count, no deadline', run: async ({ page, result, ctx }) => {
+  const r = await page.evaluate((d0) => {
+    const g = window.__game, A = window.__a2, T = g.tasks;
+    A.at(d0, 19);
+    const slots = T.board(31), html = T.boardSection(31), div = document.createElement('div'); div.innerHTML = html;
+    const flyers = [...div.querySelectorAll('.pin.flyer')], paper = flyers.map((f) => f.textContent.replace(/\s+/g, ' ').trim().slice(0, 120));
+    return { slots: slots.length, pins: div.querySelectorAll('.pin').length, flyers: flyers.length, paper, hook: !!T.flyerHook, ids: flyers.map((f) => f.dataset.flyer), deadline: flyers.some((f) => /days? left|due/i.test(f.textContent)) };
+  }, ctx.d0);
+  result('3 (join: A2 + E) the evening of the rain: the Kettle notice on Farm\'s board as a flyer through E\'s hook (paper beside the pins, not one of them), no deadline', r.hook && r.flyers === 1 && r.ids[0] === 'ep:mining' && r.pins === r.slots + 1 && /FIELD HELP/i.test(r.paper[0] || '') && !r.deadline, r);
+} };
 async function slice2() {
-  const A = await openGame('slice2');
-  const home = Number(arg('home', 31));
-  await newSeason(A, home, 180);
-  await A.evaluate(HELPERS_D);
-  const ctx = { home };
-  for (const s of D_STEPS) {
-    log(`-- step ${s.step} ${s.id}: ${s.title}`);
-    try { await s.run({ page: A, result, log, ctx }); } catch (e) { result(`${s.step} ${s.id}: threw`, false, { e: String(e && e.stack || e).slice(0, 900) }); }
-  }
+  const ctx = { home: 31, join: true, shots: SHOTS };
+  const run = async (page, s, who) => {
+    if (!s) { result(`slice2: a section step is missing (${who})`, false); return; }
+    if (ONLY && !ONLY.has(s.id)) return;
+    log(`-- ${who} step ${s.step} ${s.id}: ${s.title}`);
+    try { await s.run({ page, result, log, ctx, shots: SHOTS }); } catch (e) { result(`${s.step} ${s.id}: threw`, false, { e: String(e && e.stack || e).slice(0, 900) }); }
+  };
+  const a2 = (id) => A2_STEPS.find((q) => q.id === id), d = (id) => D_STEPS.find((q) => q.id === id);
+  // --- season A: Farm 31, 10 July ---------------------------------------------------------------------------------------
+  const A = await openGame('slice2-A');
+  await newSeason(A, 31, 191);
+  await A.evaluate(() => { const g = window.__game, o = g.outfitter; if (o.open) o.hide(); g.day.setClock(g.day.year, g.day.doy, 10); window.__L.step(10); });
+  await A.evaluate(HELPERS_A2); await A.evaluate(HELPERS_D);
+  try { await A2_SETUP({ page: A, result, log, ctx }); } catch (e) { result('slice2 0 setup: threw', false, { e: String(e && e.stack || e).slice(0, 900) }); }
+  for (const id of ['porch', 'cafe']) await run(A, a2(id), 'A2');
+  await run(A, JOIN3, 'join');
+  for (const id of ['notice', 'kettle']) await run(A, a2(id), 'A2');
+  // join 5: a trip under way (the Kettle day was a day out on foot), Len's pictures handed in on it (A2), its end (D)
+  await A.evaluate(() => { const g = window.__game; if (!g.trip.active) window.__d.trip(31); });
+  await run(A, a2('tally'), 'A2'); await run(A, d('tally'), 'D');
+  for (const id of ['table', 'map', 'pietro', 'clean']) await run(A, a2(id), 'A2');
+  for (const id of ['day-beat', 'episode-beat', 'climax', 'stall']) await run(A, d(id), 'D');
+  // --- season B: Moose Lake 25, 9 June (the lilacs' window), from the end of chapter 1 too ---------------------------------
+  const B = await openGame('slice2-B');
+  await newSeason(B, 25, 160);
+  await B.evaluate(HELPERS_E);
+  const fx = await B.evaluate(() => { const g = window.__game; if (g.outfitter.open) g.outfitter.hide(); const r = g.story.debug.fixture('turn'); window.__L.step(20); return { r, stage: g.story.stage }; });
+  result('slice2 B0 the second season from the end of chapter 1 (the turn fixture), S3', fx.stage === 'S3', fx);
+  for (const s2 of E_STEPS) await run(B, s2, 'E');
 }
 // /d
 

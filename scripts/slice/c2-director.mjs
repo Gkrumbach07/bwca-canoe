@@ -9,7 +9,7 @@
 //   await ignoreDays(page, { result, log, days, tag })   (story-slice --ignore: the director's rate on a season ignored)
 //
 // The stubs this part stands in for until the join (each named where it is used, and swapped by the join):
-//   STUBS.episodes   E's episodes.places() (S7's place and its rumour 70.6.1.11) where E is not built in
+//   STUBS.episodes   E's episodes.places() where no runner is in (the join: story.episodes is E's runner; this is unused there)
 //   STUBS.a2pay      A2's `pay:` ("Field help, Kettle creek" $35, "Gas, Tauno") and its card line, by story.action
 //   STUBS.testArc    the test arc's climax record (the boys: Bob, 70.6.3.3), registered beside mining's
 // Travel between places is a teleport (the chase snapped: __L.tp-style), as the slice says; a party is met as the game
@@ -28,7 +28,8 @@ export const HELPERS_D = () => {
   D.wait = (ms) => new Promise((r) => setTimeout(r, ms));
   D.abs = () => absOf(g.day.year, g.day.doy);
   D.state = () => D.beats().debugState();
-  D.tp = async (x, z) => { const ok = await g.player.teleport(x, z); if (ok && g.chase && g.chase.snap) g.chase.snap(); for (let i = 0; i < 400 && g.player.teleporting; i++) { D.step(10); await D.wait(25); } D.step(10); return ok; };
+  D.tp = async (x, z) => { const ok = window.__L && window.__L.tp ? await window.__L.tp(x, z) : await g.player.teleport(x, z); if (ok && g.chase && g.chase.snap) g.chase.snap(); // (the join: L.tp, the chase snapped)
+    for (let i = 0; i < 400 && g.player.teleporting; i++) { D.step(10); await D.wait(25); } D.step(10); return ok; };
   // the end of chapter 1 (the turn played), where no export of the Round 1 --slice season is kept: the fixture when the
   // join provides story.debug.fixture('turn'), else the facts the turn leaves (stage S3)
   D.turn = () => {
@@ -152,24 +153,28 @@ export const steps = [
     result('10e at most one set piece a trip (a second is refused; the same one again is fine)', sp[0] && !sp[1] && sp[2], { sp });
     ctx.dayBeat = { found, A, fb };
   } },
-  // ---- join 14 (D's half): an open episode's place in reach is the day's beat (episodes.places(); E's stub here) ------
+  // ---- join 14 (D's half): an open episode's place in reach is the day's beat (episodes.places(): E's runner, story.episodes)
   { id: 'episode-beat', step: 14, title: 'an open episode\'s place in reach is the day\'s beat (D reads episodes.places())', run: async ({ page, result }) => {
     const r = await page.evaluate(async (stub) => {
-      const g = window.__game, d = window.__d, B = d.beats();
-      const real = !!(g.episodes && typeof g.episodes.places === 'function');
-      const abs = d.abs() + 2, p = g.player;
-      const f = d.findCamp({ from: abs, days: 20, x: p.x, z: p.z, r: 3800 });
-      if (!f) return { ok: false, why: 'no camp near' };
+      const g = window.__game, d = window.__d, s = g.story, E = s.episodes || g.episodes;
+      const real = !!(E && typeof E.places === 'function' && !E.stub);
+      // (the join: E's runner. An open episode with a place: S7 or S9 already open, else S9 opened as its hook-up does —
+      // the yes at the beach rock — when its window holds; the stand-in only where no runner is in)
+      let P = real ? E.places() : [];
+      if (real && !P.length && typeof E.yes === 'function') { E.yes('S9', 'rig'); P = E.places(); }
+      const p0 = P[0] || null;
+      const abs = d.abs() + 2, p = g.player, at = p0 ? { x: p0.x, z: p0.z } : { x: p.x, z: p.z };
+      const f = d.findCamp({ from: abs, days: 20, x: at.x, z: at.z, r: 3800 });
+      if (!f) return { ok: false, real, p0, why: 'no camp near' };
       d.setDay(f.abs, 15); await d.tp(f.camp.x + 300, f.camp.z + 300);
-      // (stub, until E's runner joins: S7 open, its place where the player is)
       const was = g.episodes;
       if (!real) g.episodes = { places: () => [{ ...stub, x: g.player.x + 400, z: g.player.z }], stub: true };
       g.story.doc.nb.here = { ...g.story.doc.nb.here, NB20: g.story.time().abs, NB31: g.story.time().abs }; // (Farm's places read: none of them is the beat)
       const a = d.evening();
       if (!real) g.episodes = was;
-      return { real, a, active: g.trip.active, f: { abs: f.abs, camp: f.camp.id }, why: d.state().log.slice(-2) };
+      return { real, p0, a, active: g.trip.active, f: { abs: f.abs, camp: f.camp.id }, why: d.state().log.slice(-2) };
     }, STUBS.episodes);
-    result('14d an open episode\'s place in reach: its line is the day\'s beat' + (r.real ? '' : ' [E stub: a stand-in episode, its rumour 70.6.1.9]'), r.a && r.a.kind === 'episode' && (r.real || r.a.line === STUBS.episodes.line), r);
+    result('14d an open episode\'s place in reach: its line is the day\'s beat' + (r.real ? ` (E's runner: ${r.p0 ? `${r.p0.ep} at ${r.p0.place}, ${r.p0.line}` : 'no open place'})` : ' [E stub: a stand-in episode, its rumour 70.6.1.9]'), r.a && r.a.kind === 'episode' && (r.real ? !!r.p0 && r.a.line === r.p0.line : r.a.line === STUBS.episodes.line), r);
   } },
   // ---- step 11: climax spacing on a test arc beside mining; stall relief -------------------------------------------
   { id: 'climax', step: 11, title: 'climax spacing on a test arc beside mining: the second waits a trip and its person is named; a 14-day window goes ahead', run: async ({ page, result, log }) => {
@@ -177,7 +182,10 @@ export const steps = [
       const g = window.__game, d = window.__d, B = d.beats(), s = g.story;
       d.endTrip(31); d.closeCard();
       const n0 = d.trip(38); // (a Sawbill trip: the boys' country, where their rumour is said)
-      s.debug.set('door.mining.climax'); // (A2's climax opens on this trip: the stub stands for door.mining.climax)
+      // the first climax opens on this trip: A2's own (door.mining.climax) when it hasn't yet; in the joined slice it opened
+      // trips ago at the slab (step 9), so a second arc's climax stands in for it on this trip (beats.climaxOpened)
+      const first = s.has('door.mining.climax') ? 'join.first' : 'mining';
+      if (first === 'mining') s.debug.set('door.mining.climax'); else B.climaxOpened(first);
       const a = B.climax(arc.arc, { person: arc.person, rumour: arc.rumour });
       const sensor = s.when(`climax:${arc.arc}`);
       // the day's beat names the held arc's person (a party at the next site near Sawbill)
@@ -224,12 +232,16 @@ export const steps = [
     result('11e once per lock: the next visit, no stall rumour again', r.done && r.done.includes(lock) && !(r.again || []).some((t) => t === (r.story[0] || {}).text), { done: r.done, again: r.again });
   } },
   // ---- join 5 (D's half): the trip's end: the tally pays A2's pay: lines, the card names the story, beats found -------
-  { id: 'tally', step: 5, title: 'the trip\'s end: the tally pays the `pay:` lines (A2 stub) with their words, the card\'s story line, the beats found', run: async ({ page, result }) => {
-    const r = await page.evaluate(async (pays) => {
+  { id: 'tally', step: 5, title: 'the trip\'s end: the tally pays the `pay:` lines with their words, the card\'s story line, the beats found', run: async ({ page, result, ctx = {} }) => {
+    const join = !!ctx.join; // (the joined slice: A2's own lines owed from the Kettle day and Len's favour handed in on this trip)
+    const r = await page.evaluate(async ({ pays, join }) => {
       const g = window.__game, d = window.__d, s = g.story, pr = g.profile;
-      d.trip(31);
-      for (const q of pays) s.action('pay', q.pay, { rule: q.rule }); // (A2's rules do this through the same handler: stub)
-      s.action('card', '20:5.1.card', {}); // (A2's card line for the Kettle pad stands here: stub)
+      const owed = ((s.doc.dir && s.doc.dir.pay) || []).filter((p) => !p.paid).map((p) => ({ amt: p.amt, line: p.line, text: p.text }));
+      if (!join || !g.trip.active) d.trip(31);
+      if (!join) {
+        for (const q of pays) s.action('pay', q.pay, { rule: q.rule }); // (A2's rules do this through the same handler: standalone)
+        s.action('card', '20:5.1.card', {}); // (A2's card line for the Kettle pad stands here: standalone)
+      }
       s.debug.set('ring.c2.tally'); // (a story beat on the day)
       const m0 = pr.money;
       d.endTrip(31);
@@ -239,11 +251,13 @@ export const steps = [
       if (g.record.finishCount) g.record.finishCount();
       const html2 = document.querySelector('.tc-tally') ? document.querySelector('.tc-tally').innerText : '';
       d.closeCard();
-      return { m0, m1: pr.money, pay: T ? T.pay : null, story: T ? T.story : null, total: T ? T.total : null, text: html2 || html };
-    }, STUBS.a2pay);
+      return { owed, m0, m1: pr.money, pay: T ? T.pay : null, story: T ? T.story : null, total: T ? T.total : null, text: html2 || html };
+    }, { pays: STUBS.a2pay, join });
     const kettle = r.pay && r.pay.find((p) => p.title === 'Field help, Kettle creek');
-    result('5d the tally pays "Field help, Kettle creek" $35 through the pay: handler into the purse, with its line on the card [A2 stub]', kettle && kettle.pay === 35 && r.m1 - r.m0 >= 35 && /Field help, Kettle creek/.test(r.text), r);
-    result('5e the card\'s story line stamped under "Story beats found" (the day counted) [A2\'s Kettle line stubbed by 20:5.1.card]', r.story && r.story.beats >= 1 && r.story.lines.length >= 1 && /Story beats found/i.test(r.text) && r.text.toLowerCase().includes(r.story.lines[0].toLowerCase()), r);
+    const len = r.pay && r.pay.find((p) => /history wall/i.test(p.title || ''));
+    result('5d the tally pays "Field help, Kettle creek" $35 through the pay: handler into the purse, with its line on the card' + (join ? ' (A2\'s own line, owed since the Kettle day); Len\'s favour $40 with it' : ' [A2 stub]'), kettle && kettle.pay === 35 && r.m1 - r.m0 >= (join ? 75 : 35) && /Field help, Kettle creek/.test(r.text) && (!join || (len && len.pay === 40)), r);
+    if (join) result('5e the card\'s story line names the Kettle pad (30:4.3.pay.2), under "Story beats found" (the day counted)', r.story && r.story.beats >= 1 && r.story.lines.some((l) => /Kettle pad/.test(l)) && /Story beats found/i.test(r.text), r.story);
+    else result('5e the card\'s story line stamped under "Story beats found" (the day counted) [A2\'s Kettle line stubbed by 20:5.1.card]', r.story && r.story.beats >= 1 && r.story.lines.length >= 1 && /Story beats found/i.test(r.text) && r.text.toLowerCase().includes(r.story.lines[0].toLowerCase()), r);
   } },
 ];
 
