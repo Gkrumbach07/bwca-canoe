@@ -437,19 +437,24 @@ steps.push(
     await page.evaluate(async (d) => { const A = window.__a2; A.at(d, 8); await A.toFarm(); window.__L.step(30); }, ctx.askDay + 1);
     const a2 = await talk(page, 'cast:tauno:31');
     const money0 = await page.evaluate(() => window.__game.profile.s.money);
+    // (c2-fix: a night slept before the ride. A.at jumps the clock a day at a time and fills the food, water and warmth,
+    // but not the rest need: hours awake ran on across the jumps, the ceiling was nothing, and the ride's two hours on
+    // the clock ran out the hour of grace: evacuated home to Farm's door at the road end (the trip's end paid the gas),
+    // so the lot's check saw Farm and Tauno's slab talk never opened. A player gets here after a night's sleep)
+    const rest0 = await page.evaluate(() => { const e = window.__game.energy, t = window.__game.trip; const was = { awake: +e.awake.toFixed(1), ceiling: +(e.ceiling ?? 0).toFixed(2), spentAt: e.spentAt ?? null, trip: !!(t && t.active) }; e.fresh(); e.bunk(); e.value = 1; window.__L.step(4); return was; });
     await page.evaluate(() => { window.__a2.last0 = window.__game.rides.last; }); // (c2-fix: the ride this step takes, not one before it)
     const go = await choose(page, 'Let\'s go.');
     // the cut: the cab, the fade, the fee (the veil's card) and the lot at the Little Gabbro road end
     const rideTrace = await page.evaluate(async () => {
       const L = window.__L, g = window.__game, A = window.__a2, tr = []; let key = null;
-      const peek = (k) => { const r = g.rides, l = r && r.last, p = g.player; const o = { k, busy: !!(r && r.busy), last: l ? l.to : null, fresh: !!(l && l !== A.last0), at: [Math.round(p.x), Math.round(p.z)], tp: !!p.teleporting, title: g.title.state, convo: !!(g.dialogue && g.dialogue.convo), veil: !!((g.veil || (g.rides && g.rides.veil)) && (g.veil || g.rides.veil).active) }; const kk = JSON.stringify({ ...o, k: 0 }); if (kk !== key) { key = kk; tr.push(o); } };
+      const peek = (k) => { const r = g.rides, l = r && r.last, p = g.player; const tl = g.trip && g.trip.state && g.trip.state.log ? g.trip.state.log.slice(-1)[0] : null; const o = { k, busy: !!(r && r.busy), last: l ? l.to : null, fresh: !!(l && l !== A.last0), at: [Math.round(p.x), Math.round(p.z)], tp: !!p.teleporting, trip: !!(g.trip && g.trip.active), tlog: tl ? `${tl.k || tl.kind || ''}:${tl.why || ''}` : null, ceil: +(g.energy.ceiling ?? 0).toFixed(2), title: g.title.state, convo: !!(g.dialogue && g.dialogue.convo), veil: !!((g.veil || (g.rides && g.rides.veil)) && (g.veil || g.rides.veil).active) }; const kk = JSON.stringify({ ...o, k: 0 }); if (kk !== key) { key = kk; tr.push(o); } };
       for (let k = 0; k < 120 && !(g.rides && !g.rides.busy && g.rides.last && g.rides.last !== A.last0 && g.rides.last.to === 33); k++) { peek(k); L.step(10); await L.wait(120); }
       peek('out'); for (let k = 0; k < 30; k++) { L.step(10); await L.wait(60); } peek('end');
       return tr.slice(0, 40);
     });
     const lot = await page.evaluate(() => { const g = window.__game, l = g.rides.last; return { last: l && { from: l.from, to: l.to, price: l.price }, at: [Math.round(g.player.x), Math.round(g.player.z)], ride: g.story.has('tauno.ride'), staged: window.__a2.M().miningCast.staged(), money: g.profile.s.money, pay: window.__a2.M().miningCast.debug.pays().due.map((p) => `${p.line}:${p.n}`) }; });
     result('9b "Let\'s go." (the same words: 30:4.9.1): Tauno\'s ride to the EP 33 road end (the cab, the fade); the fee on the next tally as "Gas, Tauno" (D\'s pay:)',
-      a2 && a2.say === a1.say && go.ok && lot.ride && lot.last && lot.last.to === 33 && lot.pay.some((p) => p.startsWith('30:4.9.gas:')), { lot, money0, go, rideTrace });
+      a2 && a2.say === a1.say && go.ok && lot.ride && lot.last && lot.last.to === 33 && lot.pay.some((p) => p.startsWith('30:4.9.gas:')), { lot, money0, go, rest0, rideTrace });
     await shot(page, shots, 'A2-9-lot');
     // Tauno in the lot: in the pickup while Tasha loads (30:4.9.3–4), else on the slab; the core shed; the dot free
     const tf = await page.evaluate(async () => { const L = window.__L, M = window.__a2.M().miningCast; for (let k = 0; k < 200 && !(M.slab && M.slab.tauno); k++) { L.step(10); window.__game.storyLayer.poll(); await L.wait(100); } return M.slab && M.slab.tauno ? { x: M.slab.tauno.x, z: M.slab.tauno.z, tasha: !!M.slab.tasha } : null; });
