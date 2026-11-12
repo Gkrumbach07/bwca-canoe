@@ -35,7 +35,7 @@ export const HELPERS_A2 = () => {
   A.abs = (doy) => Math.round(Date.UTC(g.day.year, 0, doy) / 86400000);
   // the clock to a day and hour; the player fed and rested (the slice's days are the story's: a week of them with no food
   // bought ends in an evacuation home, energy.js's, which is not what is under test here)
-  A.at = (doy, h) => { g.day.setClock(g.day.year, doy, h); const e = g.energy; if (e) { e.value = 1; try { if (e.needs) { e.needs.food = 1; e.needs.water = 1; e.needs.warmth = 1; } if ('lastMealAbs' in e) e.lastMealAbs = e.now; } catch { /* energy.js's own */ } } L.step(6); g.story.update(); L.step(4); };
+  A.at = (doy, h) => { g.day.setClock(g.day.year, doy, h); const e = g.energy; if (e) { e.value = 1; e.spentAt = null; try { if (e.needs) { e.needs.food = 1; e.needs.water = 1; e.needs.warmth = 1; } if ('lastMealAbs' in e) e.lastMealAbs = e.now; } catch { /* energy.js's own */ } } L.step(6); g.story.update(); L.step(4); };
   A.facts = (ks) => Object.fromEntries(ks.map((k) => [k, g.story.has(k)]));
   A.store = () => g.outfitter.layout(31);
   // to Farm's porch, a little off the steps (the cast seats him on the bench once you are this near)
