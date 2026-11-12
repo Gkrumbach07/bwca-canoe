@@ -169,7 +169,11 @@ export const steps = [
       d.setDay(f.abs, 15); await d.tp(f.camp.x + 300, f.camp.z + 300);
       const was = g.episodes;
       if (!real) g.episodes = { places: () => [{ ...stub, x: g.player.x + 400, z: g.player.z }], stub: true };
-      g.story.doc.nb.here = { ...g.story.doc.nb.here, NB20: g.story.time().abs, NB31: g.story.time().abs }; // (Farm's places read: none of them is the beat)
+      // (every Walt place and Farm's read where he wrote it: §12 puts a Walt place in reach before an episode's, so none of
+      // them may be the beat here; the joined slice stands this near C1690, a starred site, at Alice Lake)
+      const here = { NB20: g.story.time().abs, NB31: g.story.time().abs };
+      for (const pl of g.storyLayer && g.storyLayer.places ? g.storyLayer.places() : []) for (const t of pl.triggers || []) if (t.nb && !g.story.nbHas('here', t.nb)) here[t.nb] = g.story.time().abs;
+      g.story.doc.nb.here = { ...g.story.doc.nb.here, ...here };
       const a = d.evening();
       if (!real) g.episodes = was;
       return { real, p0, a, active: g.trip.active, f: { abs: f.abs, camp: f.camp.id }, why: d.state().log.slice(-2) };

@@ -699,6 +699,19 @@ async function slice2() {
   await A.evaluate(() => { const g = window.__game; if (!g.trip.active) window.__d.trip(31); });
   await run(A, a2('tally'), 'A2'); await run(A, d('tally'), 'D');
   for (const id of ['table', 'map', 'pietro', 'clean']) await run(A, a2(id), 'A2');
+  // between A2's section and D's: the player as D's rig starts it (up off any bench, no talk or paper open, rested), said
+  const was = await A.evaluate(async () => {
+    const g = window.__game, p = g.player, o = g.outfitter;
+    const before = { mode: p.mode, seat: !!p.seat, tp: !!p.teleporting, convo: !!(g.dialogue && g.dialogue.convo), paper: g.hud.paper || null, trip: g.trip.active, inside: !!(o.visit && o.visit.inside), riding: !!(g.rides && g.rides.busy) };
+    if (g.dialogue && g.dialogue.convo) g.dialogue.close(false);
+    if (p.seat && typeof p.stand === 'function') p.stand(); p.seat = null;
+    if (g.record && g.record.shown) g.record.close();
+    if (o.open) o.hide();
+    for (let k = 0; k < 100 && p.teleporting; k++) { window.__L.step(10); await window.__L.wait(50); }
+    window.__J.refresh(); window.__L.step(10);
+    return before;
+  });
+  log('slice2: the player between A2\'s section and D\'s', JSON.stringify(was));
   for (const id of ['day-beat', 'episode-beat', 'climax', 'stall']) await run(A, d(id), 'D');
   // --- season B: Moose Lake 25, 9 June (the lilacs' window), from the end of chapter 1 too ---------------------------------
   const B = await openGame('slice2-B');
