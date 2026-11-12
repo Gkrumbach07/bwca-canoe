@@ -165,7 +165,7 @@ function coreRack({ rng, opts = {} }) {
   }
   // the box ends spilled at its foot: rotten core boxes, one with its lid
   for (let k = 0; k < 3; k++) { const x = -0.5 + k * 0.5 + (rng() - 0.5) * 0.1; b.box(V(x, 0.05, -0.55 - rng() * 0.1), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), 0.22, 0.05, 0.12, TILE.WOOD, COLA.slatOld); }
-  const dots = [{ y: 0.35, r: 0.9 }];
+  const dots = [{ y: 0.35, r: 0.7 }];
   return { geo: b.build(), dots };
 }
 // the lid on its box end, alone (its own prop so it goes when taken): a slat with a punched stamp on its end

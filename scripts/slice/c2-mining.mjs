@@ -33,6 +33,18 @@ export const HELPERS_A2 = () => {
   A.inv = (id) => g.inventory.count(id, { reachable: false });
   // walk to (x, z) by the keys: the view turned toward it, W held, stepped; the API only if it sticks (said so)
   A.yaw = (x, z) => Math.atan2(-(z - g.player.z), x - g.player.x);
+  // a thing at your feet: stand d m off, face it, look down until the dot is on it (camera.js slides the look point in to
+  // the ground at the walker's feet as the view comes down, so the middle of the view finds it)
+  A.faceLow = (id, d = 1.3) => {
+    const q = L.prop(id), w = g.world; if (!q) return null; let t = null; const tried = [];
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2, x = q.x + Math.cos(a) * d, z = q.z + Math.sin(a) * d;
+      if (w.isWater(x, z)) continue;
+      const yaw = Math.atan2(-(q.z - z), q.x - x); L.standAt(x, z, yaw); L.step(4);
+      for (const pitch of [-0.5, -0.7, -0.9, -1.1, -1.3]) { g.chase.viewYaw = yaw; g.chase.forwardYaw = yaw; g.chase.viewPitch = pitch; L.step(3); t = L.target(); tried.push([k, pitch, t && t.ref]); if (t && t.ref === `story:${id}`) return t; }
+    }
+    A.lastLow = tried; return null;
+  };
   A.place = (id) => { const q = g.storyLayer.place(id); return q && { x: q.x, z: q.z, n: q.n, lanes: q.lanes }; };
   return true;
 };
@@ -68,12 +80,18 @@ async function press(page, key) { await page.keyboard.press(key); await page.eva
 async function shot(page, shots, name) { if (shots) { try { await page.screenshot({ path: `${shots}/${name}.png` }); } catch { /* the shot is a nicety */ } } }
 const d0Of = (ctx) => ctx.d0;
 const facts = (page, ks) => page.evaluate((ks) => window.__a2.facts(ks), ks);
-async function talk(page, key) { await page.evaluate((k) => window.__t.talkTo(k), key); await page.waitForTimeout(120); return page.evaluate(() => window.__t.convo()); }
+async function talk(page, key) {
+  await page.evaluate((k) => window.__t.talkTo(k), key); await page.waitForTimeout(120);
+  const c = await page.evaluate(() => window.__t.convo());
+  if (!c && LOG) LOG(`  talk ${key}: no conversation ${JSON.stringify(await page.evaluate(() => { const g = window.__game, S = g.outfitter.layout(31); return { staged: window.__a2.staged(), at: [Math.round(g.player.x), Math.round(g.player.z)], store: S ? Math.round(Math.hypot(S.centre.x - g.player.x, S.centre.z - g.player.z)) : null, clock: [g.day.doy, +g.day.hours.toFixed(2), window.__a2.dow(g.day.doy)], convo: !!(g.dialogue && g.dialogue.convo), visit: g.outfitter.visit, mode: g.player.mode, warned: !!window.__a2.M().miningCast.warned }; })).slice(0, 1500)}`);
+  return c;
+}
 async function picks(page, list) { const out = []; for (const p of list) { const r = await choose(page, p); out.push(r); if (!r.ok) return { ok: false, at: p, r, out }; } return { ok: true, out }; }
 // E on a story prop (the dot found from whichever side; the key pressed) → the target as the dot named it
 let LOG = null;
 async function eOn(page, id, d = 1.8, dy = 0.4) {
   let t = await page.evaluate(([id, d, dy]) => window.__L.faceTo(id, d, dy), [id, d, dy]);
+  if (!t || t.ref !== `story:${id}`) { const t3 = await page.evaluate((id) => window.__a2.faceLow(id), id); if (t3) t = t3; }
   if (!t || t.ref !== `story:${id}`) { // (once more from further off, the view less steep)
     const t2 = await page.evaluate(([id, d, dy]) => window.__L.faceTo(id, d, dy), [id, d + 1.2, dy + 0.3]);
     if (t2 && t2.ref === `story:${id}`) t = t2; else if (LOG) LOG(`  eOn ${id}: ${JSON.stringify({ t, t2, face: await page.evaluate(() => window.__L.lastFace) }).slice(0, 1200)}`);
