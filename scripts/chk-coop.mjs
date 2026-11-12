@@ -57,7 +57,8 @@ try {
     return { mode: s.mode, facts: Object.keys(s.facts()), sleep, tr, ev: [...new Set(ev)], stats: f.stats(), book, stage: s.stage, flush: s.flush(), stored: g.store.getItem('bwca-canoe:story2') };
   });
   result('C1 the guest\'s story in the room: mirror, no facts, walt.onSleep refuses, nothing flushed', g1.mode === 'mirror' && !g1.facts.length && !g1.sleep && g1.flush === false, { pre, g1: { ...g1, stored: g1.stored && g1.stored.slice(0, 200) } });
-  result('C2 the guest\'s own story2 untouched while visiting', g1.stored === own0, { same: g1.stored === own0 });
+  const diff2 = (() => { try { const a = JSON.parse(own0), b = JSON.parse(g1.stored); return Object.keys({ ...a, ...b }).filter((k) => JSON.stringify(a[k]) !== JSON.stringify(b[k])).map((k) => ({ k, a: JSON.stringify(a[k]).slice(0, 300), b: JSON.stringify(b[k]).slice(0, 300) })); } catch (e) { return String(e); } })(); // (e: what moved, when it did)
+  result('C2 the guest\'s own story2 untouched while visiting', g1.stored === own0, { same: g1.stored === own0, diff: g1.stored === own0 ? null : diff2 });
   const host = await A.evaluate(() => ({ mode: window.__game.story.mode, facts: Object.keys(window.__game.story.facts()) }));
   result('C3 the host stays live (its own facts only)', host.mode === 'live' && !host.facts.includes('crews.seen'), host);
   // e: Round 2 stream E (episodes.js): a guest's engine is off: no story flyers on the board, no snag on June's pot, no
