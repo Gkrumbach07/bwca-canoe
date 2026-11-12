@@ -29,6 +29,7 @@ export async function startFeed({ story, mods = {}, guest = () => false } = {}) 
     import('./feed-book.js'),      // st-b: the layer's read-here, pages and Walt's things got
     import('./feed-place.js'),     // st-l: the story layer's verbs, read-here and photos
     import('./feed-talk.js'),      // st-t: who you talk to, what you ask
+    import('./feed-episodes.js'),  // e: the camera's prints against the episodes' targets (the runner: connect, main.js e:)
     // (Round 1 streams: their feed-*.js here, one line each)
   ]);
   return feed.start({ story, mods, guest });

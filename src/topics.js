@@ -181,6 +181,10 @@ export class SceneRun {
       if (!text) continue;
       out.push({ text, kind: c.kind, tag: c.tag, go: () => this.pick(c, id) });
     }
+    // e: "Look at this…" (show.js, Round 2 stream E): a scene whose context offers it (ctx.show(run, from) → a choice or
+    // null) has it among its choices whenever there is a print or a thing to show; a scene without ctx.show is unchanged
+    if (typeof this.ctx.show === 'function') { let sc = null; try { sc = this.ctx.show(this, id); } catch (e) { console.warn('story scene show', e); } if (sc) out.push(sc); }
+    // /e
     if (!out.length) out.push({ text: '…', kind: 'bye', go: () => null });
     return out;
   }

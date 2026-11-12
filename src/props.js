@@ -1800,7 +1800,7 @@ function flushStoreNews() {
 // The cork board inside the door: a canvas of cork with the outfitter's notices pinned on it (setStoreNotices, from the
 // board's live notices: tasks.js board(ep)), or a few scribbled papers until then.
 const BOARD_PX = [1024, 768];
-function drawBoard(cv, notices = null) {
+function drawBoard(cv, notices = null, extra = []) { // (e: extra, the story's flyers: [] with the flag off)
   const x = cv.getContext('2d'), [W, H] = BOARD_PX, r = mulberry32(5 + (notices ? notices.length : 0));
   x.fillStyle = '#a47a4e'; x.fillRect(0, 0, W, H);
   for (let i = 0; i < 2600; i++) { const v = r(); x.fillStyle = v < 0.5 ? `rgba(70,45,25,${0.12 + r() * 0.15})` : `rgba(215,175,125,${0.1 + r() * 0.12})`; x.fillRect(r() * W, r() * H, 2 + r() * 3, 2 + r() * 3); }
@@ -1836,14 +1836,36 @@ function drawBoard(cv, notices = null) {
     x.fillStyle = 'rgba(255,255,255,0.45)'; x.beginPath(); x.arc(-3, -h / 2 + 15, 4, 0, Math.PI * 2); x.fill();
     x.restore();
   });
+  // e: a story flyer (episodes.js, Round 2 stream E) pinned over the middle of the cork, smaller than a notice, beside
+  // the four pins (never one of them); none with the flag off
+  extra.slice(0, 2).forEach((t, i) => {
+    const w = 300, h = 230, px = 362 + i * 40, py = 250 + i * 30;
+    x.save(); x.translate(px + w / 2, py + h / 2); x.rotate(-0.04 + i * 0.07);
+    x.fillStyle = 'rgba(40,25,10,0.28)'; x.fillRect(-w / 2 + 6, -h / 2 + 8, w, h);
+    x.fillStyle = t.taken ? '#e6e1cf' : '#f4efe0'; x.fillRect(-w / 2, -h / 2, w, h);
+    x.fillStyle = '#2b2218'; x.textAlign = 'left'; x.textBaseline = 'top';
+    x.font = '700 24px Georgia, "Times New Roman", serif';
+    const words = `${t.title || ''} ${t.text || ''}`.split(/\s+/); let line = '', y = -h / 2 + 22, n = 0;
+    for (const wd of words) { const tryL = line ? `${line} ${wd}` : wd; if (x.measureText(tryL).width > w - 36) { x.fillText(line, -w / 2 + 18, y); y += 28; line = wd; if (++n >= 6) { line = ''; break; } x.font = 'italic 21px Georgia, "Times New Roman", serif'; } else line = tryL; }
+    if (line && n < 6) x.fillText(line, -w / 2 + 18, y);
+    if (t.sign) { x.font = '18px Georgia, "Times New Roman", serif'; x.textAlign = 'right'; x.fillText(`— ${String(t.sign).split(' (')[0]}`, w / 2 - 16, h / 2 - 34); }
+    x.fillStyle = '#7a3a8a'; x.beginPath(); x.arc(0, -h / 2 + 14, 10, 0, Math.PI * 2); x.fill();
+    x.restore();
+  });
+  // /e
 }
+// e: the story's flyers on a store's cork (feed-episodes.js sets the source; null with the flag off)
+let storeFlyers = null;
+export function setStoreFlyers(fn) { storeFlyers = typeof fn === 'function' ? fn : null; }
+// /e
 // Pin up entry point ep's notices on its store's board (tasks.js board(ep): a notice, or null for a bare pin). A notice
 // reads { title, text, sign } and `taken` when it is out with you.
 export function setStoreNotices(ep, notices) {
   const L = storeLayout(ep);
   if (!L || !L.boardCanvas) return false;
   const list = (notices || []).map((t) => (t ? { title: t.title, text: t.text, sign: t.sign, taken: !!t.status && t.status !== 'offered' } : null));
-  drawBoard(L.boardCanvas, list);
+  const extra = storeFlyers ? (() => { try { return (storeFlyers(ep) || []).map((f) => ({ ...f.paper, taken: !!f.taken })); } catch { return []; } })() : []; // e:
+  drawBoard(L.boardCanvas, list, extra);
   L.boardTex.needsUpdate = true;
   return true;
 }

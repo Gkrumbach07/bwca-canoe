@@ -68,7 +68,8 @@ try {
   {
     const ids = S.places.map((p) => p.id), stale = storyPlaces(makeWorld('1999'), PLACES);
     const clear = storyClearings(S.places), points = clear.filter((s) => s[0] === s[2] && s[1] === s[3]);
-    result('data: 3 places + 37 starred sites for v9 (NB15 Rum held); another release places nothing', S.places.length === 40 && ids.includes('crews.landing') && ids.includes('ws.c837') && !ids.includes('ws.c940') && WALT_SITES.length === 38 && stale.stale && stale.places.length === 0, { n: S.places.length, stale: stale.places.length });
+    result('data: every story-places.json place + 37 starred sites for v9 (NB15 Rum held); another release places nothing', S.places.length === PLACES.places.length + 37 && // e: (was 3 + 37: Round 2 adds places)
+       ids.includes('crews.landing') && ids.includes('ws.c837') && !ids.includes('ws.c940') && WALT_SITES.length === 38 && stale.stale && stale.places.length === 0, { n: S.places.length, stale: stale.places.length });
     result('data: the clearings are lawns (no positive-radius point: site.js reads those as campsites); the grade is a 140 m lane', clear.length > 40 && clear.every((s) => s[4] < 0) && points.every((s) => s[4] < 0) && clear.some((s) => Math.hypot(s[2] - s[0], s[3] - s[1]) > 139), { n: clear.length });
     result('data: the portages the story names resolve (bc.64 = v9 691, the pair 659/660)', layer.portage('bc.64') === 691 && layer.portage('pair.205') === 659 && layer.portage('pair.50') === 660 && layer.portage('nope') === null, layer.state().portages);
   }
