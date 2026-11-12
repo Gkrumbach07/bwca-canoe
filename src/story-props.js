@@ -42,8 +42,8 @@ function quartzCobble({ rng }) {
 }
 // 20 §11.2: a box of squared logs notched at the corners, soft with rot, the top course gone; rock fills it; a rusted
 // iron ring spiked into the corner log where the boats tied up. Its foot on the bed, its top a hand over the water.
-function crib({ rng, level = 0.6 }) {
-  const b = new PropBuilder(), W = 1.6, D = 1.25, lr = 0.13, top = Math.max(0.35, level + 0.22);
+function crib({ rng, level = 0.6, opts = {} }) {
+  const b = new PropBuilder(), W = 1.6, D = 1.25, lr = 0.13, top = Number.isFinite(opts.under) ? Math.max(0.3, level - opts.under) : Math.max(0.35, level + 0.22); // e: opts.under: its top that far under the surface (60 S7's dock cribs, a metre under)
   const courses = Math.max(2, Math.round(top / (lr * 1.8)));
   for (let c = 0; c < courses; c++) {
     const y = lr + c * lr * 1.8, alongX = c % 2 === 0, col = c < courses - 1 ? COL.logWet : COL.log;
@@ -134,7 +134,107 @@ function drillRod({ rng }) {
   return { geo: b.build(), dots: [{ y: 0.05, r: 0.9 }] };
 }
 
-const REGISTRY = { stumpCut, quartzCobble, crib, landingRock, redPine, gradeMouth, slab, pole, drillRod };
+// e: Round 2 stream E's kits (docs/story/60-side-stories.md S7 "The place", S9 "The place"): Mummo's on Inlet Bay (the
+// lilacs, the stone step, the foundation, the bed frame, the sauna's footing, the swimming rock; Toivo's cobble is
+// quartzCobble on the step; the cribs are crib), Alice's beach rock (landingRock) and June's pot half in the sand, and the
+// stub table Rose sits at by the window of Moose Lake 25 until A2's café kit lands (the join swaps roseTable for it).
+const COL_E = { leaf: C(0x40593a), leafDark: C(0x34492f), bloom: C(0x9a76b8), bloomPale: C(0xb79bd0), stem: C(0x6a5a4a),
+  field: C(0x86817a), rust: C(0x7a4a2e), enamel: C(0x2f5f9a), chip: C(0x1c1c1c), shadow: C(0x2a2a26), table: C(0x8a6a48) };
+// a lilac thicket three metres high (opts.bloom: purple in June, else green); a dot on its middle
+function lilacs({ rng, opts = {} }) {
+  const b = new PropBuilder(), n = 9;
+  for (let k = 0; k < n; k++) {
+    const a = rng() * Math.PI * 2, d = rng() * 1.6, x = Math.cos(a) * d, z = Math.sin(a) * d, H = 2.2 + rng() * 1.0;
+    b.cyl(V(x, -0.1, z), V(x * 1.15, H * 0.7, z * 1.15), 0.05, 0.03, 5, TILE.BARK, COL_E.stem);
+    for (let j = 0; j < 3; j++) {
+      const y = H * (0.5 + j * 0.2), s = 0.7 + rng() * 0.5, rot = rng() * 6.28, ax = V(Math.cos(rot), 0, Math.sin(rot));
+      b.box(V(x * 1.2, y, z * 1.2), ax, V(0, 1, 0), V(-ax.z, 0, ax.x), s, 0.45 + rng() * 0.2, s * 0.8, TILE.FIBRE, j % 2 ? COL_E.leaf : COL_E.leafDark);
+      if (opts.bloom) for (let q = 0; q < 3; q++) {
+        const bx = x * 1.2 + (rng() - 0.5) * s * 1.6, bz = z * 1.2 + (rng() - 0.5) * s * 1.6, by = y + 0.35 + rng() * 0.3;
+        b.cyl(V(bx, by - 0.12, bz), V(bx, by + 0.22, bz), 0.1, 0.03, 5, TILE.FIBRE, q % 2 ? COL_E.bloom : COL_E.bloomPale, { cap1: true });
+      }
+    }
+  }
+  return { geo: b.build(), dots: [{ y: 1.6, r: 1.9 }] };
+}
+// three flat stones up from the water to nothing (-z: the water); `top` is the top step (Toivo's cobble sits there)
+function stoneStep({ rng }) {
+  const b = new PropBuilder();
+  for (let k = 0; k < 3; k++) {
+    const y = -0.08 + k * 0.17, z = 0.55 - k * 0.42;
+    chunkStone(b, new THREE.Matrix4().compose(V((rng() - 0.5) * 0.1, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rng() * 0.4, 0)), V(0.48, 0.11, 0.26)), rng, COL.granite);
+  }
+  return { geo: b.build(), dots: [{ y: 0.3, r: 0.75 }], top: 0.43 };
+}
+// a rectangle of fieldstone in the grass, about 6 × 8 m, a course or two high
+function foundation({ rng }) {
+  const b = new PropBuilder(), hw = 3, hd = 4;
+  for (const [ax, along, off] of [[1, hw, -hd], [1, hw, hd], [0, hd, -hw], [0, hd, hw]]) {
+    for (let t = -along; t <= along; t += 0.55) {
+      const x = ax ? t : off, z = ax ? off : t, s = 0.2 + rng() * 0.12;
+      if (rng() < 0.12) continue; // (a stone gone)
+      chunkStone(b, new THREE.Matrix4().compose(V(x, 0.02 + rng() * 0.06, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rng() * 6, 0)), V(s, s * 0.6, s * 0.85)), rng, COL_E.field);
+    }
+  }
+  return { geo: b.build(), dots: [{ y: 0.2, r: 1.2 }, { y: 0.2, r: 1.2, part: 'corner' }] };
+}
+// a rusted iron bed frame leaned on a birch (the birch is the forest's: the frame stands leaning, its head up)
+function bedFrame() {
+  const b = new PropBuilder(), lean = 0.32, w = 0.48, L = 1.9;
+  const up = V(0, Math.cos(lean), Math.sin(lean));
+  const P = (x, t) => V(x, 0, 0).add(up.clone().multiplyScalar(t));
+  for (const x of [-w, w]) b.cyl(P(x, 0), P(x, L), 0.018, 0.018, 5, TILE.METAL, COL_E.rust);
+  for (const t of [0.05, 0.6, 1.2, L - 0.05]) b.cyl(P(-w, t), P(w, t), 0.014, 0.014, 5, TILE.METAL, COL_E.rust);
+  for (let x = -w + 0.12; x < w; x += 0.12) b.cyl(P(x, L - 0.4), P(x, L - 0.05), 0.008, 0.008, 4, TILE.METAL, COL_E.rust);
+  return { geo: b.build(), dots: [{ y: 0.9, r: 0.8 }] };
+}
+// the sauna's footing: a ring of stones by the water
+function stoneRing({ rng }) {
+  const b = new PropBuilder(), R = 1.5;
+  for (let k = 0; k < 14; k++) { const a = (k / 14) * Math.PI * 2, s = 0.18 + rng() * 0.1; chunkStone(b, new THREE.Matrix4().compose(V(Math.cos(a) * R, 0.03, Math.sin(a) * R), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, a, 0)), V(s, s * 0.65, s)), rng, COL_E.field); }
+  return { geo: b.build(), dots: [{ y: 0.2, r: 1.4 }] };
+}
+// the flat swimming rock: a shelf at waist depth, then deep (it stands in the water: its top about level with the
+// surface's waist, level - 0.9)
+function swimRock({ rng, level = 0.9 }) {
+  const b = new PropBuilder(), top = Math.max(0.15, level - 0.85);
+  chunkStone(b, new THREE.Matrix4().compose(V(0, top - 0.3, 0), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rng() * 0.5, 0)), V(1.5, 0.32, 1.2)), rng, COL.granite);
+  return { geo: b.build(), dots: [{ y: Math.max(top, level) - 0.1, r: 1.6 }] };
+}
+// June's pot (S9): blue enamel, lid on, one side under the sand, its wire bail standing up out of the sand in a loop
+function enamelPot({ rng }) {
+  const b = new PropBuilder(), r = 0.11, h = 0.2, tilt = 0.5;
+  const ax = V(Math.sin(tilt), Math.cos(tilt), 0), base = V(0, -0.06, 0);
+  b.cyl(base, base.clone().add(ax.clone().multiplyScalar(h)), r * 1.05, r * 0.92, 10, TILE.PAINT, COL_E.enamel, { cap1: true, capTile: TILE.PAINT, capCol: COL_E.enamel });
+  const lip = base.clone().add(ax.clone().multiplyScalar(h));
+  b.cyl(lip, lip.clone().add(ax.clone().multiplyScalar(0.035)), r * 0.8, r * 0.3, 8, TILE.PAINT, COL_E.enamel, { cap1: true });
+  const loop = []; for (let k = 0; k <= 12; k++) { const a = Math.PI * (k / 12); loop.push(lip.clone().add(V(0, 0, Math.cos(a) * r * 0.95)).add(ax.clone().multiplyScalar(Math.sin(a) * 0.16))); }
+  b.tube(loop, 0.005, 4, TILE.METAL, COL.iron);
+  void rng;
+  return { geo: b.build(), dots: [] }; // (under 2.4 m of water: never the dot's; it comes up on a line)
+}
+// the dark shape on the sand where the pot lies (60 S9: N03 read at the beach rock on a calm bright day)
+function sandShape() {
+  const b = new PropBuilder(), n = 12, pts = [];
+  for (let k = 0; k < n; k++) { const a = (k / n) * Math.PI * 2; pts.push(V(Math.cos(a) * 0.34, 0.01, Math.sin(a) * 0.26)); }
+  b.face(pts, TILE.PLAIN, COL_E.shadow, { ref: V(0, 1, 0) });
+  return { geo: b.build(), dots: [] };
+}
+// Rose's table by the store window (the stub until A2's café kit): a plain square table and a chair
+function roseTable() {
+  const b = new PropBuilder(), H = 0.74, hw = 0.4;
+  b.box(V(0, H, 0), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), hw, 0.02, hw, TILE.WOOD, COL_E.table);
+  for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) b.cyl(V(x * (hw - 0.05), 0, z * (hw - 0.05)), V(x * (hw - 0.05), H - 0.02, z * (hw - 0.05)), 0.025, 0.025, 5, TILE.WOOD, COL_E.table);
+  b.box(V(0, 0.44, 0.62), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), 0.21, 0.02, 0.2, TILE.WOOD, COL_E.table);
+  b.box(V(0, 0.7, 0.81), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), 0.21, 0.24, 0.02, TILE.WOOD, COL_E.table);
+  for (const [x, z] of [[-1, 0.44], [1, 0.44], [-1, 0.8], [1, 0.8]]) b.cyl(V(x * 0.19, 0, z), V(x * 0.19, 0.43, z), 0.018, 0.018, 4, TILE.WOOD, COL_E.table);
+  return { geo: b.build(), dots: [] };
+}
+// /e
+
+const REGISTRY = { stumpCut, quartzCobble, crib, landingRock, redPine, gradeMouth, slab, pole, drillRod,
+  lilacs, stoneStep, foundation, bedFrame, stoneRing, swimRock, enamelPot, sandShape, roseTable, // e:
+};
 export const KITS = Object.freeze(Object.keys(REGISTRY));
 export function kit(name) { const f = REGISTRY[name]; return f ? { build: (ctx = {}) => f({ rng: Math.random, opts: {}, ...ctx }) } : null; }
 // a seeded rng for a prop (the same stump every load)
