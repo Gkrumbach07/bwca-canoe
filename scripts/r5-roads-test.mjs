@@ -261,7 +261,7 @@ try {
       let here = [S.x, S.z];
       for (let s = S.s0; s <= S.path.len - 2; s += 0.3) {
         T.pose(S.path, s);
-        if (Math.hypot(T.x - here[0], T.z - here[1]) > 140) { await H.goNear(T.x, T.z); here = [T.x, T.z]; T.pose(S.path, s); }
+        if (Math.hypot(T.x - here[0], T.z - here[1]) > 140) { here = [T.x, T.z]; await H.goNear(T.x, T.z); T.pose(S.path, s); } // (here taken before the frames: main.js settles the truck on its own job each frame, which moved it back to the store and made every later pose a new stop: the 3600 s)
         const t = H.tyres(); out.frames++; if (t.gap > 0.1) out.over10 = (out.over10 || 0) + 1;
         if (t.gap > out.gap) { out.gap = t.gap; out.worst = [Math.round(T.x), Math.round(T.z), +t.gap.toFixed(2), 'gap']; }
         if (t.sink > out.sink) out.sink = t.sink;
