@@ -30,8 +30,9 @@
 //   loaded it and, per function, the rigs that ran it. The changed lines of a src .js file (git diff -U0 from the merge
 //   base) pick the rigs that ran the innermost function holding each line (module top-level code: every rig that
 //   loaded the file); lines are mapped from the merge base's copy to the recorded copy by git's own diff of the two.
-//   Whole-file picks (every rig that loaded it): .css, files a rig read as text, tile-worker.js and what it imports
-//   (worker code is not covered), a file whose recorded copy is not in this repo.
+//   Whole-file picks (every rig that loaded it): .css, tile-worker.js and what it imports
+//   (worker code is not covered), a file whose recorded copy is not in this repo; and a rig that fetched a file's
+//   source as text (r4-roads-test reads player.js) takes that file whole.
 //   ALL rigs: package*.json, vite.config.*, index.html, public/, server/ for the co-op rigs only, a src .bin/.json data
 //   file that any recorded rig loaded (a data file no rig loaded, such as story text behind STORY_ON, picks none), and
 //   rig-deps.json missing or recorded at a commit this repo does not have.
@@ -145,10 +146,11 @@ export function select(spec, rigs, { log = console.log } = {}) {
       const rec = byFile[f], loaded = rigsOfFile(f);
       if (!rec) why = 'loaded by no recorded rig: none';
       else if (/\.(bin|json)$/.test(f)) { all(`${f} (data, loaded by ${loaded.length} rigs)`); why = 'data: ALL'; }
-      else if (/\.css$/.test(f) || worker.has(f) || (deps.fetched || []).includes(f) || !rec.fns) {
-        const k = /\.css$/.test(f) ? 'a stylesheet' : worker.has(f) ? 'worker code' : !rec.fns ? 'no coverage for it' : 'read as text by a rig';
+      else if (/\.css$/.test(f) || worker.has(f) || !rec.fns) {
+        const k = /\.css$/.test(f) ? 'a stylesheet' : worker.has(f) ? 'worker code' : 'no coverage for it';
         for (const r of loaded) pick(r, `${f} (${k}: whole file)`); why = `${k}: ${loaded.length} rigs`;
       } else {
+        for (const r of maskRigs(deps, rec.fetched)) pick(r, `${f} (its source read as text by the rig: whole file)`);
         let baseBlob = null; try { baseBlob = git('rev-parse', `${base}:${f}`).trim(); } catch { /* added in this change */ }
         let recOk = true; try { git('cat-file', '-e', rec.blob); } catch { recOk = false; }
         if (!recOk) { for (const r of loaded) pick(r, `${f} (recorded copy not in this repo: whole file)`); why = `whole file: ${loaded.length} rigs`; }
@@ -181,11 +183,11 @@ export function select(spec, rigs, { log = console.log } = {}) {
 function writeDeps(rigs, dir) {
   const sha = git('rev-parse', 'HEAD').trim(), names = [], per = [];
   for (const r of rigs) { const f = path.join(dir, r.replace(/\//g, '_') + '.json'); if (!existsSync(f)) continue; names.push(r); per.push(JSON.parse(readFileSync(f, 'utf8'))); }
-  const files = {}, fetched = new Set();
+  const files = {};
   const bit = (i) => 1n << BigInt(i), hex = (m) => m.toString(16);
   per.forEach((d, i) => {
     for (const f of d.files) { files[f] = files[f] || { loaded: 0n }; files[f].loaded |= bit(i); }
-    for (const f of d.fetched || []) fetched.add(f);
+    for (const f of d.fetched || []) { files[f] = files[f] || { loaded: 0n }; files[f].fetched = (files[f].fetched || 0n) | bit(i); }
   });
   // functions: the union of every function seen, each with the rigs that ran it; a function run by the same rigs as the
   // innermost one round it is left out (the lookup takes the innermost listed function: the same answer)
@@ -208,9 +210,9 @@ function writeDeps(rigs, dir) {
     }
     files[f].fns = kept;
   }
-  for (const f of Object.keys(files)) { try { files[f].blob = git('rev-parse', `HEAD:${f}`).trim(); } catch { files[f].blob = null; } files[f].loaded = hex(files[f].loaded); }
+  for (const f of Object.keys(files)) { try { files[f].blob = git('rev-parse', `HEAD:${f}`).trim(); } catch { files[f].blob = null; } files[f].loaded = hex(files[f].loaded); if (files[f].fetched) files[f].fetched = hex(files[f].fetched); }
   const sorted = Object.fromEntries(Object.keys(files).sort().map((f) => [f, files[f]]));
-  writeFileSync(DEPS, JSON.stringify({ sha, recorded: new Date().toISOString(), rigs: names, fetched: [...fetched].sort(), files: sorted }, null, 0).replace(/("src\/[^"]+":)/g, '\n$1') + '\n');
+  writeFileSync(DEPS, JSON.stringify({ sha, recorded: new Date().toISOString(), rigs: names, files: sorted }, null, 0).replace(/("src\/[^"]+":)/g, '\n$1') + '\n');
   console.log(`wrote ${DEPS}: ${names.length} rigs, ${Object.keys(files).length} files, at ${sha.slice(0, 8)}`);
 }
 
