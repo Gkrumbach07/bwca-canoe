@@ -165,7 +165,8 @@ export const steps = [
       if (real && !P.length && typeof E.yes === 'function') { E.yes('S9', 'rig'); P = E.places(); }
       const p0 = P[0] || null;
       const abs = d.abs() + 2, p = g.player, at = p0 ? { x: p0.x, z: p0.z } : { x: p.x, z: p.z };
-      const f = d.findCamp({ from: abs, days: 20, x: at.x, z: at.z, r: 3800 });
+      // (the final pass: a season's parties may camp nowhere near the beach in 20 days (slice2 run 2): look 40 days on)
+      const f = d.findCamp({ from: abs, days: 20, x: at.x, z: at.z, r: 3800 }) || d.findCamp({ from: abs + 20, days: 20, x: at.x, z: at.z, r: 3800 });
       if (!f) return { ok: false, real, p0, why: 'no camp near' };
       d.setDay(f.abs, 15); await d.tp(f.camp.x + 300, f.camp.z + 300);
       const was = g.episodes;
