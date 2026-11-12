@@ -93,9 +93,10 @@ const STATE = () => {
   // the surface under a figure: a ray down from 1.2 m over its feet onto whatever is drawn there (a store's floor, the
   // dock's deck, a bench), the figure's own meshes skipped; else the terrain
   const TH = g.THREE, rc = TH ? new TH.Raycaster() : null;
-  const under = (x, y, z, self) => {
+  const under = (x, y, z, self) => { try { return under0(x, y, z, self); } catch (e) { window.__C.underErr = String(e && e.message || e); return p.groundAt(x, z); } };
+  const under0 = (x, y, z, self) => {
     if (!rc) return p.groundAt(x, z);
-    rc.set(new TH.Vector3(x, y + 1.2, z), new TH.Vector3(0, -1, 0)); rc.far = 4;
+    rc.set(new TH.Vector3(x, y + 1.2, z), new TH.Vector3(0, -1, 0)); rc.far = 4; rc.camera = g.camera; // (sprites want the camera)
     const own = (o) => { for (let q = o; q; q = q.parent) if (q === self) return true; return false; };
     const hits = rc.intersectObjects(g.scene.children, true).filter((h) => h.object.visible && !own(h.object) && !h.object.isSkinnedMesh && !(h.object.material && h.object.material.transparent && h.object.material.opacity < 0.5));
     const gy = p.groundAt(x, z);
@@ -151,7 +152,7 @@ async function look(page, name, { book = null } = {}) {
   await page.evaluate(() => { if (window.__L) window.__L.step(12); });
   await page.waitForTimeout(700);
   let st = null, screen = null;
-  try { st = await page.evaluate(STATE); } catch (e) { st = { error: String(e) }; }
+  try { st = await page.evaluate(STATE); } catch (e) { st = { error: String(e).slice(0, 400) }; log('STATE threw', st.error); }
   try { screen = await page.evaluate(SCREEN); } catch { /* */ }
   try { await page.screenshot({ path: path.join(SHOTS, `${id}.png`) }); } catch { /* a nicety */ }
   const L = { id, name, st, screen };
@@ -163,7 +164,8 @@ async function look(page, name, { book = null } = {}) {
     if (q.drawn && q.in && q.in !== 'err' && q.in.length) note('polish', id, `${q.who} inside/against ${q.in.join(', ')}`, q);
   }
   if (st && st.field) for (const q of st.field) { if (q.dy != null && Math.abs(q.dy) > 0.35) note('broken', id, `${q.who} off the ground by ${q.dy} m`, q); if (q.in && q.in !== 'err' && q.in.length) note('polish', id, `${q.who} inside/against ${q.in.join(', ')}`, q); }
-  log(`LOOK ${id}`, JSON.stringify({ clock: st && st.clock, money: st && st.money, at: st && st.at, paper: st && st.paper, dot: st && st.dot, tasks: st && st.tasks, leads: st && st.leads, nRings: st && st.nRings, near: st && st.near && st.near.map((q) => `${q.who}:${q.d}m dy${q.dy}${q.in && q.in.length ? ' IN ' + q.in : ''}`) }).slice(0, 1200));
+  if (st && st.error) log(`LOOK ${id} STATE error`, st.error);
+  log(`LOOK ${id}`, JSON.stringify({ underErr: await page.evaluate(() => window.__C.underErr || null), clock: st && st.clock, money: st && st.money, at: st && st.at, paper: st && st.paper, dot: st && st.dot, tasks: st && st.tasks, leads: st && st.leads, nRings: st && st.nRings, near: st && st.near && st.near.map((q) => `${q.who}:${q.d}m dy${q.dy}${q.in && q.in.length ? ' IN ' + q.in : ''}`) }).slice(0, 1200));
   return L;
 }
 // the book as a player opens it (I): the sides asked for, each screenshotted with its words
@@ -174,8 +176,8 @@ async function bookLook(page, id, sides) {
       const g = window.__game, j = g.journal, view = side === 'walt' ? 'walt' : side === 'pages' ? 'pages' : null;
       if (view) side = 'walt';
       try { if (!j.open) j.show(side); else j.setSide(side); } catch (e) { return `(no side ${side}: ${e.message})`; }
-      if (view && g.book) { g.book.view = view; if (view === 'walt' && g.book.case && g.book.case.seen) g.book.case.seen(); g.book.render(true); }
       window.__L.step(6);
+      if (view) { const b = document.querySelector(`#journal [data-nbv="${view}"]`); if (b) b.click(); else return `(no ${view} tab on the Walt side)`; window.__L.step(6); } // (the tab clicked, as a player does)
       const el = document.getElementById('journal') || document.querySelector('.journal');
       return el ? el.innerText.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 120) : null;
     }, side);
@@ -395,6 +397,14 @@ async function seasonB() {
     const m1 = await B.evaluate(() => window.__game.profile.s.money);
     if (m1 !== m0) log(`   money ${m0} → ${m1} over ${s.id}`);
     await look(B, `B-${s.id}`, { book: /E13c|E12|E13b/.test(s.id) ? ['journal', 'stories'] : null });
+    if (s.id === 'E13b') {
+      // the trip's end as a player has it (in by the door at Moose Lake): the tally pays Rose's $25 with its line?
+      const t = await B.evaluate(async () => { const g = window.__game, m0 = g.profile.s.money, tr = g.trip, was = !!tr.active; if (g.dialogue.convo) g.dialogue.close(false); window.__t.walkOut(25); window.__L.step(20); window.__t.walkIn(25); for (let k = 0; k < 20; k++) { window.__L.step(10); await window.__L.wait(60); } const open = g.hud.paper; const card = [...document.querySelectorAll('.tripcard, #tripcard, [class*=tripcard], .record-card')].map((e) => e.innerText).join('\n').slice(0, 1800); return { was, active: !!tr.active, open, card, m0, m1: g.profile.s.money }; });
+      log('S7 trip end', JSON.stringify(t));
+      await look(B, 'B-S7-tripend');
+      if (t.m1 - t.m0 !== 25 && !/Rose/.test(t.card || '')) note('broken', 'B S7 tally', `Rose's $25 not paid at the trip's end (purse ${t.m0} → ${t.m1}; trip was ${t.was ? 'on' : 'off'})`, t);
+      await dismissPapers(B);
+    }
   }
   return B.evaluate(() => window.__C.log);
 }
