@@ -89,7 +89,7 @@ async function shot(page, ctx, name) { if (ctx && ctx.shots) { try { await page.
 
 // a cast by real input: the rod up (F), the jig by its number, Space held to load and let go; then W held (the
 // retrieve) until a hook-up, the lure back at the tip, or `max` frames
-async function castAndWork(page, { max = 2400 } = {}) {
+export async function castAndWork(page, { max = 2400 } = {}) {
   const F0 = await page.evaluate(() => window.__e.fish());
   if (F0.state === 'stowed') await press(page, 'KeyF');
   // the jig: its number in the strip (fishing.owned order), pressed
