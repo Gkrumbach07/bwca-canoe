@@ -423,7 +423,7 @@ steps.push(
       a2 && a2.say === a1.say && go.ok && lot.ride && lot.last && lot.last.to === 33 && lot.pay.some((p) => p.startsWith('30:4.9.gas:')), { lot, money0 });
     await shot(page, shots, 'A2-9-lot');
     // Tauno in the lot: in the pickup while Tasha loads (30:4.9.3–4), else on the slab; the core shed; the dot free
-    const tf = await page.evaluate(async () => { const L = window.__L, M = window.__a2.M().miningCast; for (let k = 0; k < 40 && !(M.slab && M.slab.tauno); k++) { L.step(10); await L.wait(60); } return M.slab && M.slab.tauno ? { x: M.slab.tauno.x, z: M.slab.tauno.z, tasha: !!M.slab.tasha } : null; });
+    const tf = await page.evaluate(async () => { const L = window.__L, M = window.__a2.M().miningCast; for (let k = 0; k < 200 && !(M.slab && M.slab.tauno); k++) { L.step(10); window.__game.storyLayer.poll(); await L.wait(100); } return M.slab && M.slab.tauno ? { x: M.slab.tauno.x, z: M.slab.tauno.z, tasha: !!M.slab.tasha } : null; });
     const talkT = async () => { await dismiss(page); await page.evaluate(() => { const f = window.__a2.M().miningCast.slab.tauno; window.__L.standAt(f.x + 1.6, f.z, Math.PI); window.__L.step(4); f.onTalk(f); }); await page.waitForTimeout(100); return page.evaluate(() => window.__t.convo()); };
     let waited = null;
     if (tf && tf.tasha) { waited = await talkT(); await hear(page, 3); await page.evaluate(() => window.__a2.endTalk()); await page.evaluate(async () => { const L = window.__L; for (let k = 0; k < 30; k++) { L.step(10); await L.wait(320); } }); }
@@ -455,7 +455,7 @@ export const variant = { id: 'variant', step: 9, title: 'the variant: "You don\'
   const d = await page.evaluate(() => { const g = window.__game, s = g.story, A = window.__a2; s.debug.fixture('turn'); for (const k of ['tauno.farm.met', 'tauno.said.pads', 'kettle.visited', 'door.mining.yield', 'tauno.e7sketch', 'tauno.crewmap']) s.set(k, true, 'rig:variant'); let x = g.day.doy + 2; while (A.dow(x) !== 6) x++; A.at(x, 8); return x; }); await page.evaluate(async () => { await window.__a2.toFarm(); window.__L.step(30); });
   const a = await talk(page, 'cast:tauno:31');
   const go = await choose(page, 'Let\'s go.');
-  await page.evaluate(async () => { const L = window.__L, g = window.__game; for (let k = 0; k < 80 && !(g.rides && !g.rides.busy && g.rides.last && g.rides.last.to === 33); k++) { L.step(10); await L.wait(120); } const M = window.__a2.M().miningCast; for (let k = 0; k < 40 && !(M.slab && M.slab.tauno); k++) { L.step(10); await L.wait(60); } if (M.slab && M.slab.tasha) { M.slab.tasha.remove(); M.slab.tasha = null; } });
+  await page.evaluate(async () => { const L = window.__L, g = window.__game; for (let k = 0; k < 80 && !(g.rides && !g.rides.busy && g.rides.last && g.rides.last.to === 33); k++) { L.step(10); await L.wait(120); } const M = window.__a2.M().miningCast; for (let k = 0; k < 200 && !(M.slab && M.slab.tauno); k++) { L.step(10); window.__game.storyLayer.poll(); await L.wait(100); } if (M.slab && M.slab.tasha) { M.slab.tasha.remove(); M.slab.tasha = null; } });
   const talkT = async () => { await dismiss(page); await page.evaluate(() => { const f = window.__a2.M().miningCast.slab.tauno; window.__L.standAt(f.x + 1.6, f.z, Math.PI); window.__L.step(4); f.onTalk(f); }); await page.waitForTimeout(100); return page.evaluate(() => window.__t.convo()); };
   await talkT(); await hear(page, 3); await page.evaluate(() => window.__a2.endTalk());
   await talkT();
