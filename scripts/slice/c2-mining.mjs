@@ -11,7 +11,22 @@
 //   for (const s of steps) await s.run({ page, result, log, ctx, shots })
 //   await variant.run(...)                      a second season: "You don't owe anybody this.", then On the record
 // ctx: { home: 31, year, d0 (the Tuesday the slice starts), shots }
-import { choose as chooseT, hear, steps as T_STEPS } from './c1-talk.mjs';
+import { choose as chooseT, steps as T_STEPS } from './c1-talk.mjs';
+
+// press through the '…' lines (Digit1, as c1-talk's hear), the dialogue's own choose(0) where the key does not take
+async function hear(page, n = 14) {
+  const said = [];
+  for (let k = 0; k < n; k++) {
+    const c = await page.evaluate(() => window.__t.convo());
+    if (!c) break;
+    if (!said.length || said[said.length - 1] !== c.say) said.push(c.say);
+    if (!(c.choices.length === 1 && c.choices[0] === '…')) break;
+    await page.keyboard.press('Digit1'); await page.waitForTimeout(60);
+    const d = await page.evaluate(() => window.__t.convo());
+    if (d && d.say === c.say && JSON.stringify(d.choices) === JSON.stringify(c.choices)) await page.evaluate(() => { window.__game.dialogue.choose(0); window.__L.step(3); });
+  }
+  return said;
+}
 
 // a choice by its number on the keyboard (c1-talk's choose); past nine, or when the key does not take, by the dialogue's
 // own choose(i) (what a click on the line does), and said so in the result
