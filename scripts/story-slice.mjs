@@ -683,6 +683,9 @@ async function slice2() {
     if (!s) { result(`slice2: a section step is missing (${who})`, false); return; }
     if (ONLY && !ONLY.has(s.id)) return;
     log(`-- ${who} step ${s.step} ${s.id}: ${s.title}`);
+    // (a step that ends with the pause card up leaves the next one in main.js's shell: no input, no outfitter, no parties)
+    const paused = await page.evaluate(() => { const t = window.__game.title; if (t.state !== 'pause') return false; t.resume(); window.__L.step(4); return true; });
+    if (paused) log(`   (the pause card was up before ${s.id}: resumed)`);
     try { await s.run({ page, result, log, ctx, shots: SHOTS }); } catch (e) { result(`${s.step} ${s.id}: threw`, false, { e: String(e && e.stack || e).slice(0, 900) }); }
   };
   const a2 = (id) => A2_STEPS.find((q) => q.id === id), d = (id) => D_STEPS.find((q) => q.id === id);
