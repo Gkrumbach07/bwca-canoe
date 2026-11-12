@@ -71,9 +71,19 @@ const facts = (page, ks) => page.evaluate((ks) => window.__a2.facts(ks), ks);
 async function talk(page, key) { await page.evaluate((k) => window.__t.talkTo(k), key); await page.waitForTimeout(120); return page.evaluate(() => window.__t.convo()); }
 async function picks(page, list) { const out = []; for (const p of list) { const r = await choose(page, p); out.push(r); if (!r.ok) return { ok: false, at: p, r, out }; } return { ok: true, out }; }
 // E on a story prop (the dot found from whichever side; the key pressed) → the target as the dot named it
-async function eOn(page, id, d = 1.8, dy = 0.4) { const t = await page.evaluate(([id, d, dy]) => window.__L.faceTo(id, d, dy), [id, d, dy]); await press(page, 'e'); return t; }
+let LOG = null;
+async function eOn(page, id, d = 1.8, dy = 0.4) {
+  let t = await page.evaluate(([id, d, dy]) => window.__L.faceTo(id, d, dy), [id, d, dy]);
+  if (!t || t.ref !== `story:${id}`) { // (once more from further off, the view less steep)
+    const t2 = await page.evaluate(([id, d, dy]) => window.__L.faceTo(id, d, dy), [id, d + 1.2, dy + 0.3]);
+    if (t2 && t2.ref === `story:${id}`) t = t2; else if (LOG) LOG(`  eOn ${id}: ${JSON.stringify({ t, t2, face: await page.evaluate(() => window.__L.lastFace) }).slice(0, 1200)}`);
+  }
+  if (t && t.ref === `story:${id}`) await press(page, 'e');
+  return t && t.ref === `story:${id}` ? t : null;
+}
 
 export async function setup({ page, result, log, ctx }) {
+  LOG = log;
   // P1 at Farm (stream T's step: the keeper, Josie, the bundle), then the end of chapter 1 as the fixture writes it
   await T_STEPS[0].run({ page, result, log, ctx });
   const f = await page.evaluate(() => { const g = window.__game, r = g.story.debug.fixture('turn'); window.__L.step(6); return { r, stage: g.story.stage, ring: window.__a2.ringed('farm31'), mining: !!g.storyMining }; });
@@ -176,7 +186,7 @@ export const steps = [
     const W = await page.evaluate(() => { const A = window.__a2, w = A.place('westpads'), k = A.place('kettle'); return { w, k }; });
     const route = [[W.w.x - 8, W.w.z + 2], [W.w.x - 200, W.w.z + 95], [W.w.x - 380, W.w.z + 230], [W.k.x + 250, W.k.z - 120], [W.k.x + 90, W.k.z - 30], [W.k.x + 10, W.k.z + 10]];
     const legs0 = await walkRoute(page, [[W.w.x + 9, W.w.z - 3]], { r: 3, log }); // (the landing to the casing, up the grade)
-    const casing = await eOn(page, 'westpads.casing', 1.2, 0.1);
+    const casing = await eOn(page, 'westpads.casing', 2.2, 0.35);
     if (!casing) log('  casing faceTo', JSON.stringify(await page.evaluate(() => ({ face: window.__L.lastFace, built: window.__game.storyLayer.builtList().filter((b) => b.place === 'westpads') }))).slice(0, 1500));
     await shot(page, shots, 'A2-4-casing');
     const cas = await page.evaluate(() => { const g = window.__game, q = g.storyLayer.prop('westpads.casing').prop, p = g.player, dx = q.x - p.x, dz = q.z - p.z, n = Math.hypot(dx, dz) || 1; g.storyLayer.shot({ eye: { x: p.x, y: 446, z: p.z }, dir: { x: dx / n, y: 0, z: dz / n } }); return window.__a2.task('lenphotos'); });
@@ -204,7 +214,7 @@ export const steps = [
     for (const id of ['kettle.up', 'kettle.trench.stake', 'kettle.pond']) fills[id] = await eOn(page, id, 1.3, 0.5);
     const notHere = await page.evaluate(() => { const l = window.__game.storyLayer; return { rack: l.verbs('kettle.rack').length, trench: l.verbs('kettle.trench').length }; });
     const dam = await eOn(page, 'kettle.dam', 1.6, 0.4);
-    const lidT = await eOn(page, 'kettle.lid', 1.2, 0.05);
+    const lidT = await eOn(page, 'kettle.lid', 2.0, 0.3);
     await shot(page, shots, 'A2-4-lid');
     const st = await page.evaluate(() => ({ f: window.__a2.facts(['kettle.fill.up', 'kettle.fill.trench', 'kettle.fill.pond', 'kettle.secchi', 'kettle.lid']), lid: window.__a2.inv('leolid'), stamp: (window.__game.items.itemDef('leolid') || {}).identity, run: window.__a2.M().kettle.day().run, creek: window.__game.scene.children.filter((m) => /^a2 creek/.test(m.name)).map((m) => m.name) }));
     result('4c Fill (E) at "Up top", "The trench", "The pond" and nowhere else; "Lower the Secchi disk" at the dam (gone under a metre); "Box lid" → Take: Leo\'s lid, its stamp read off the item (item.leolid.stamp); the creek runs orange',
@@ -311,7 +321,7 @@ export const steps = [
     const w1 = await page.evaluate(() => window.__game.story.walt().includes('30:4.7.w.1'));
     // NB70 read there (B's reader calls layer.readHere; the rig marks it read as the book does)
     await page.evaluate(() => { const g = window.__game; g.story.markRead('NB70', 'rig'); g.storyLayer.readHere('NB70'); window.__L.step(6); });
-    const blade = await eOn(page, 'pietro.blade', 1.0, 0.05);
+    const blade = await eOn(page, 'pietro.blade', 2.0, 0.3);
     const f = await facts(page, ['pietro.dig.seen', 'knows.backdoor', 'pietro.wronghill', 'key.L2C', 'pietro.blade']);
     const w = await page.evaluate(() => ['30:4.7.w.1', '30:4.7.w.2.2', '30:4.7.w.3'].filter((x) => window.__game.story.walt().includes(x)));
     const inv = await page.evaluate(() => window.__a2.inv('shovelblade'));

@@ -173,7 +173,7 @@ function boxLid() {
   const b = new PropBuilder();
   b.box(V(0, 0.04, 0), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), 0.36, 0.012, 0.13, TILE.WOOD, COLA.slat);
   b.box(V(0, 0.015, 0), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), 0.34, 0.015, 0.12, TILE.WOOD, COLA.slatOld);
-  return { geo: b.build(), dots: [{ y: 0.05, r: 0.3 }] };
+  return { geo: b.build(), dots: [{ y: 0.12, r: 0.45 }] };
 }
 // the 1976 trench: a long scar full of brown water (the water a flat face a hand under the lip), its spoil either side
 function trench({ rng }) {
@@ -245,7 +245,7 @@ function shovelBlade() {
   const b = new PropBuilder();
   b.quad(V(-0.11, 0.02, -0.14), V(0.11, 0.02, -0.14), V(0.1, 0.05, 0.12), V(-0.1, 0.05, 0.12), TILE.METAL, COLA.rust);
   b.cyl(V(0, 0.05, 0.12), V(0, 0.07, 0.2), 0.018, 0.018, 5, TILE.METAL, COLA.rust);
-  return { geo: b.build(), dots: [{ y: 0.05, r: 0.28 }] };
+  return { geo: b.build(), dots: [{ y: 0.12, r: 0.45 }] };
 }
 // two square-cut stumps a sledge-width apart (Two Stump, 1975), birch growing out of the clearing
 function twoStumps({ rng }) {
