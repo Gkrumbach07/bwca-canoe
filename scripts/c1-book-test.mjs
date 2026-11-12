@@ -141,7 +141,7 @@ try {
   await A.evaluate(async () => { const g = window.__game; if (g.slots && g.slots.flush) await g.slots.flush(); if (g.store && g.store.flush) await g.store.flush(); });
   await A.waitForTimeout(800);
   await A.reload({ timeout: 180000 });
-  await A.waitForFunction(() => window.__game && window.__game.title && window.__game.title.state === 'title' && window.__game.book, null, { timeout: 300000, polling: 500 });
+  await A.waitForFunction(() => window.__game && window.__game.title && window.__game.title.state === 'title' && window.__game.book && typeof window.__game.step === 'function', null, { timeout: 300000, polling: 500 }); // (a2: the step hook too: later story blocks load after the book's)
   await A.evaluate(() => { const g = window.__game; if (g.title.continueTrip) g.title.continueTrip(); });
   await h.until(() => window.__game.title.state === 'game', null, 150000);
   await h.step(10);
