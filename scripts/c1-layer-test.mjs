@@ -64,7 +64,7 @@ try {
   {
     const on = await A.evaluate(() => { const g = window.__game, l = g.storyLayer, w = g.world; return { st: l.state(), clear: (w.storyClear || []).length, lawns: (w.storyClear || []).every((s) => s[4] < 0), feed: g.storySeams.feed.names(), pub: w.portagesPublic() === w.portages, stub: l.stub }; });
     on.mods = await loaded(A, LAYER_MODS);
-    result('2 flag on: the layer attached (40 places, this release), World.load\'s clearings (lawns), the place adapter in the feed', on.st.places === 40 && !on.st.stale && on.clear >= 80 && on.lawns && on.feed.includes('place') && on.pub && on.stub === false, on);
+    result('2 flag on: the layer attached (40 places, this release), World.load\'s clearings (lawns), the place adapter in the feed', on.st.places === 44 /* a2: + westpads, kettle, pietro.dig, twostump (Round 2) */ && !on.st.stale && on.clear >= 80 && on.lawns && on.feed.includes('place') && on.pub && on.stub === false, on);
   }
   // 3 the slice section -----------------------------------------------------------------------------------------------
   for (const s of section.steps.filter((x) => !x.guest)) {
@@ -86,11 +86,11 @@ try {
       let pl = g.storyLayer.place('ep33.crewcamp');
       for (let k = 0; k < 150 && !Number.isFinite(pl.x); k++) { L.step(10); await L.wait(100); }
       const lotD = Number.isFinite(pl.x) ? Math.round(Math.hypot(pl.x - ep.x, pl.z - ep.z)) : null;
-      if (Number.isFinite(pl.x)) { await g.tiles.ensure(pl.x, pl.z, 130); L.standAt(pl.x + 4, pl.z + 4); for (let k = 0; k < 40; k++) { L.step(5); await L.wait(40); g.storyLayer.poll(); if (g.storyLayer.builtList().filter((b) => b.place === 'ep33.crewcamp').length === 2) break; } }
+      if (Number.isFinite(pl.x)) { await g.tiles.ensure(pl.x, pl.z, 130); L.standAt(pl.x + 4, pl.z + 4); for (let k = 0; k < 40; k++) { L.step(5); await L.wait(40); g.storyLayer.poll(); if (g.storyLayer.builtList().filter((b) => b.place === 'ep33.crewcamp' && b.prop !== 'ep33.rock').length === 2) break; } }
       pl = g.storyLayer.place('ep33.crewcamp'); const b = g.storyLayer.builtList().filter((q) => q.place === 'ep33.crewcamp');
       return { placed: Number.isFinite(pl.x), lotD, built: b.map((q) => q.prop), names: [g.storyLayer.dotName('ep33.slab'), g.storyLayer.dotName('ep33.pole')], verbs: g.storyLayer.verbs('ep33.slab').map((v) => v.verb) };
     });
-    result('4 the EP 33 lot: the slab and the pole beside it once the lot is built; the dot reads Slab / Pole, Look only', lot.placed && lot.built.length === 2 && lot.names.join() === 'Slab,Pole' && lot.verbs.join() === 'Look', lot);
+    result('4 the EP 33 lot: the slab and the pole beside it once the lot is built; the dot reads Slab / Pole, Look only', lot.placed && lot.built.filter((p) => p !== 'ep33.rock' /* a2: the landing rock (30 §4.9) */).length === 2 && lot.names.join() === 'Slab,Pole' && lot.verbs.join() === 'Look', lot);
     if (lot.placed) { await A.evaluate(() => { const L = window.__L, q = L.prop('ep33.pole'); L.face(q, 6, q.y + 2.5); L.step(10); }); await A.screenshot({ path: path.join(OUT, 'L4-ep33-lot.png') }); }
   }
   // 5 co-op ---------------------------------------------------------------------------------------------------------------
