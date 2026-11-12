@@ -20,8 +20,8 @@
 //   anything else <!-- id: some.id -->  before a block (a code block, a paragraph, a list item, a table row);
 //                 <!-- list: some.id --> before a list: each item's quote becomes some.id.1, .2, …
 //                 Flags after the id: `hint`, `bark` (length limits), `page` (a Walt page line), `each` (an item with
-//                 several quotes: one id per quote, some.id.1, .2, …), `whole` (an item's whole words, not just its quote),
-//                 `quoted` (a paragraph's or an item's quoted words only, else its italic ones: Round 2 E). A
+//                 several quotes: one id per quote, some.id.1, .2, …), `whole` (an item's whole words, not just its quote), `q` (a paragraph's quoted words only, brackets and all;
+//                 with `each`, one id per quote). A
 //                 list anchor takes a quoted list (> - …) too.
 //
 // Never changes a doc. Node only, no dependencies.
@@ -437,14 +437,18 @@ export function extractDoc(key, src, known) {
       let e;
       if (b.t === 'item' && (e = speakerItem(b.text))) {
         if (a.flags.includes('bark')) e.bark = true;
-      } else if (a.flags.includes('each') && b.t === 'item' && (b.text.match(/"[^"]+"/g) || []).length > 1) {
+      } else if (a.flags.includes('each') && (b.t === 'item' || (b.t === 'p' && a.flags.includes('q'))) && (b.text.match(/"[^"]+"/g) || []).length > 1) {
         // `each`: an item holding several quoted lines (People: *"…"* / *"…"*) gives one id per quote, id.1, id.2, …
         const qs = [...b.text.matchAll(/"([^"]+)"/g)].map((m) => clean(m[1]));
         qs.forEach((q, k) => put(`${id}.${k + 1}`, { k: kindOf(a.flags), text: q }, b.ln));
         continue;
       } else {
-        let text = b.t === 'code' ? b.text : b.t === 'table' ? b.rows.map((r) => r.join(' | ')).join('\n') : a.flags.includes('quoted') && (b.t === 'item' || b.t === 'p') ? quotedOnly(b.text) : b.t === 'item' ? (a.flags.includes('whole') ? plain(b.text) : quotedOr(b.text)) : plain(b.text);
-        while (b.t === 'p' && b.qg && !a.flags.includes('quoted') && B[bi + 1] && B[bi + 1].t === 'p' && B[bi + 1].qg === b.qg) text += '\n\n' + plain(B[++bi].text);
+        // a2: `q` on a paragraph: only its quoted words, stage directions and brackets included (a line said inside a
+        // [bracket] or a prose paragraph: "Gas, Tauno"); with `each`, one id per quote (above)
+        if (a.flags.includes('q') && b.t === 'p' && /"[^"]+"/.test(b.text)) { put(id, { k: kindOf(a.flags), text: clean([...b.text.matchAll(/"([^"]+)"/g)].map((m) => m[1]).join(' ')) }, b.ln); continue; }
+        // /a2
+        let text = b.t === 'code' ? b.text : b.t === 'table' ? b.rows.map((r) => r.join(' | ')).join('\n') : b.t === 'item' ? (a.flags.includes('whole') ? plain(b.text) : quotedOr(b.text)) : plain(b.text);
+        while (b.t === 'p' && b.qg && B[bi + 1] && B[bi + 1].t === 'p' && B[bi + 1].qg === b.qg) text += '\n\n' + plain(B[++bi].text);
         e = { k: kindOf(a.flags), text };
         const cond = b.t === 'item' && b.text.match(/\)\s*$/) && b.text.match(/\(([^()]*)\)\s*$/);
         if (cond) e.if = clean(cond[1]);
@@ -543,15 +547,6 @@ export function extractDoc(key, src, known) {
     if (parts.length > 1) e.then = parts.slice(1);
     return e;
   }
-  // e: (Round 2 stream E) the `quoted` flag: a paragraph's or an item's quoted words only, else its *italic* words (a
-  // "First stamped: *…*" line, a dot's name quoted mid-paragraph), never the prose round them
-  function quotedOnly(text) {
-    const q = [...text.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
-    if (q.length) return clean(q.join(' '));
-    const it = [...text.matchAll(/(?<!\*)\*([^*]+)\*(?!\*)/g)].map((m) => m[1]);
-    return clean(it.length ? it.join(' ') : plain(text));
-  }
-  // /e
   function quotedOr(text) {
     const turn = text.match(/^\s*"([^"]+)"\s*→\s*"([^"]+)"/); // a line that turns: "Drowned" → "Went north."
     if (turn) return clean(turn[2]);

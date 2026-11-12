@@ -1613,7 +1613,7 @@ the print, nobody remarks on it there. A player can find the pattern for themsel
 - $25 from Rose.
 - Through 33: Aili opens; lock 4 key A; the print on her wall.
 - The swimming rock: Walt's "He was better at it" (N15) made real.
-<!-- id: S7.first quoted -->
+<!-- id: S7.first whole -->
 - **First stamped:** *Lilacs at Mummo's.*
 
 ### Red herrings
@@ -1633,7 +1633,7 @@ every June.
 
 ### The window and how it ends without you
 
-<!-- id: S7.end quoted -->
+<!-- id: S7.end q -->
 It doesn't. The lilacs come back every June; Rose's notice comes back with them. The page's last line, after the first
 June: *"Lilacs every June. Rose has the picture."*
 
@@ -1923,7 +1923,7 @@ time as the reel works and the sand lets go, then sticks, then gives. Reel too h
 the same as with any fish: the line breaks, the lure is lost, and the pot stays where it is for the next cast. Easing
 off and reeling again is the whole skill. It takes about a game minute.
 
-<!-- id: S9.pot.dot quoted -->
+<!-- id: S9.pot.dot q -->
 **It comes up by its bail handle**, the jig hooked through the wire, streaming sand and water, the lid still on. Into
 the hand, not the stringer. The dot on it: *"Blue enamel coffee pot. A chip on the lip."* Sand pours out of the spout
 for a while.
@@ -1951,7 +1951,7 @@ a while.]* "Forty years of kids and their jigs. Huh." → "Don't lose it off a r
   Nothing explains it. Normal item rules: it rides in a pack.
 - Main story, through 33: Aili's step 2 and lock 4 key A (if the lilacs didn't come first); the pot on her counter in
   the journalist ending (bible 7.1).
-<!-- id: S9.first quoted -->
+<!-- id: S9.first whole -->
 - **First stamped:** *Brought up June's pot.*
 
 ### Red herrings
