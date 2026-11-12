@@ -84,8 +84,9 @@ export const HELPERS_D = () => {
       if (Dm && Dm.d > 45) { const dx = Dm.site.x - p.x, dz = Dm.site.z - p.z, dd = Math.hypot(dx, dz); p.x += (dx / dd) * 8; p.z += (dz / dd) * 8; p.heading = Math.atan2(-dz, dx); }
       greeted = C.greeted.get(c.party.id) === T;
     }
-    const said = C.said.get(c.party.id);
-    return { ok: greeted, d, said: said ? [...said] : [] };
+    const said = C.said.get(c.party.id), lv = P.live && P.live.get ? [...P.live.values()].find((q) => String(q.party.id) === String(partyId)) : null;
+    const diag = greeted ? null : { live: P.live ? P.live.size : null, drawn: [...C.drawn.values()].map((q) => String(q.party.id)), inLive: !!lv, layout: !!(lv && lv.site && lv.site.layout), off: !!C.off, quiet: !!C.quiet, hours: +g.day.hours.toFixed(2), p: [Math.round(g.player.x), Math.round(g.player.z), g.player.mode], dist: Math.round(Math.hypot(s.x - g.player.x, s.z - g.player.z)) };
+    return { ok: greeted, d, said: said ? [...said] : [], diag };
   };
   // the evening (19:00 of today): the feed's trip:evening and the rule d.evening
   D.evening = () => { if (g.day.hours >= 19) { g.day.setClock(g.day.year, g.day.doy, 18.8); D.step(4); } g.day.setClock(g.day.year, g.day.doy, 19.05); g.story.lastQ = null; D.step(6); g.story.update(); return D.state().armed; };
