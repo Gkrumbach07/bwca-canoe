@@ -53,9 +53,11 @@ process.chdir(ROOT);
 export const ALL = 'gl-a-test gl-b-test gl-c-test gl-d-test gl-e-test gl-join-test glf-f1-store-ui-test glf-f2-trip-tasks-test glf-f3-names-keepers-test gl-ground-lint r2-tickets-test r2-pma-test r2-starter-test r2-join-test r2-wizard-test r2-markers-test r2-ep-check r2-npc-motion-test r2-npc2-test r3-replay-test r3-replay-play r3-start-test r3-guide-test r3-join-test r3-journal-test r3-locator-test r3-final-test r3-final-play edge-test e3-roads-test loop-tasks-test coop/game-loop coop/give coop/adventure coop/parties coop/r2-replay loop-r4-test r4-loopfix-test r4-roads-test r5-roads-test round4-test r4-body-test r4-tut-test r4-cabins-test r4-final-test r5-mapkit-test r5-fixes-test r5-final-test r4-doorstep-check'.split(' ');
 // known flaky under timing (rerun once): run alone
 export const SOLO = 'gl-e-test r2-npc2-test r3-journal-test r3-final-play r4-loopfix-test'.split(' ');
-// always picked by --changed: r3-start-test (a new season from the title, the wizard, the outfitter's start) and
-// r4-final-test (the round-4 loop end to end: drive, permit, carry, cabins, the truck) between them run most of the game
-export const SMOKE = ['r3-start-test', 'r4-final-test'];
+// always picked by --changed: of the rigs that are not flaky, the three whose recorded coverage together runs the most of
+// the game's functions (2405 of the 3932 that tell rigs apart): r3-start-test (a new season from the title, the wizard,
+// the outfitter's start), r4-final-test (the round-4 loop: drive, permit, carry, cabins, the truck), coop/adventure (two
+// browsers on the relay). (r3-final-play covers most alone, 2371, but is flaky.)
+export const SMOKE = ['r3-start-test', 'r4-final-test', 'coop/adventure'];
 const LANES = {}; // rig -> lane name: rigs in one lane never run at once (none needed: see Co-op above)
 const TIMEOUT = { 'r2-starter-test': 3600, 'r4-roads-test': 3600, 'r5-roads-test': 3600 };
 const REGRESS_ARGS = { 'r4-roads-test': ['--regress'], 'r5-roads-test': ['--regress'] };
