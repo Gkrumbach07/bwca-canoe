@@ -85,7 +85,7 @@ export const HELPERS_D = () => {
       greeted = C.greeted.get(c.party.id) === T;
     }
     const said = C.said.get(c.party.id), lv = P.live && P.live.get ? [...P.live.values()].find((q) => String(q.party.id) === String(partyId)) : null;
-    const diag = greeted ? null : { live: P.live ? P.live.size : null, drawn: [...C.drawn.values()].map((q) => String(q.party.id)), inLive: !!lv, layout: !!(lv && lv.site && lv.site.layout), off: !!C.off, quiet: !!C.quiet, hours: +g.day.hours.toFixed(2), p: [Math.round(g.player.x), Math.round(g.player.z), g.player.mode], dist: Math.round(Math.hypot(s.x - g.player.x, s.z - g.player.z)) };
+    const diag = greeted ? null : { live: P.live ? P.live.size : null, drawn: [...C.drawn.values()].map((q) => String(q.party.id)), inLive: !!lv, layout: !!(lv && lv.site && lv.site.layout), holder: P.registry && P.registry.holder ? String(P.registry.holder(c.key) || '') : null, me: String(c.party.holder || ''), blocked: P.blocked ? P.blocked.has(c.stay.id) : null, mine: (P.mineList || []).length, off: !!C.off, quiet: !!C.quiet, hours: +g.day.hours.toFixed(2), p: [Math.round(g.player.x), Math.round(g.player.z), g.player.mode], dist: Math.round(Math.hypot(s.x - g.player.x, s.z - g.player.z)) };
     return { ok: greeted, d, said: said ? [...said] : [], diag };
   };
   // the evening (19:00 of today): the feed's trip:evening and the rule d.evening
@@ -102,7 +102,7 @@ export const HELPERS_D = () => {
     p.placeOnGround();
   };
   // through the store's door: in to the middle, out to the foot of the steps (outfitter.updateVisit sees both)
-  D.walkIn = (ep) => { const L = g.outfitter.layout(ep); D.standAt(L.centre.x, L.centre.z); D.step(14); return !!(g.outfitter.visit && g.outfitter.visit.inside); };
+  D.walkIn = (ep) => { const L = g.outfitter.layout(ep); D.standAt(L.centre.x, L.centre.z); D.step(14); const ok = !!(g.outfitter.visit && g.outfitter.visit.inside); if (!ok) D.lastWalkIn = { visit: g.outfitter.visit ? { ep: g.outfitter.visit.ep, inside: !!g.outfitter.visit.inside } : null, p: [Math.round(g.player.x), Math.round(g.player.z), g.player.mode], c: [Math.round(L.centre.x), Math.round(L.centre.z)], stub: !!L.stub, tp: !!g.player.teleporting, trip: g.trip.active }; return ok; };
   D.walkOut = (ep) => { const L = g.outfitter.layout(ep), f = L.stepsFoot || L.door; D.standAt(f.x - (L.axes.b.x * 0.5), f.z - (L.axes.b.z * 0.5)); D.step(14); return !(g.outfitter.visit && g.outfitter.visit.inside); };
   return true;
 };
@@ -228,7 +228,7 @@ export const steps = [
       // once per lock: out and in again, the day after
       d.walkOut(31); d.setDay(d.abs() + 1, 10); d.walkIn(31);
       const S2 = d.state().stall, word2 = d.wordAt(31);
-      return { at, last, n, trips, stalled, inn, armed: S && S.armed, story, done: S2 && S2.done, again: word2 ? word2.filter((x) => x.kind === 'story').map((x) => x.text) : null, pushes: s.doc.dir.pushes.slice(-3) };
+      return { why: inn ? null : d.lastWalkIn || null, at, last, n, trips, stalled, inn, armed: S && S.armed, story, done: S2 && S2.done, again: word2 ? word2.filter((x) => x.kind === 'story').map((x) => x.text) : null, pushes: s.doc.dir.pushes.slice(-3) };
     });
     log('stall', JSON.stringify(r));
     const names = { L1: /Tauno/, L2: /Mary|Hap/, L3: /Walt's bunch|the guys/, L4: /Aili/ };
