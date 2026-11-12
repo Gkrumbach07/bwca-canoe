@@ -91,6 +91,7 @@ const facts = (page, ks) => page.evaluate((ks) => window.__a2.facts(ks), ks);
 // as a player closes it (E), else by its own close (story-slice.mjs dismissCard)
 async function dismiss(page) {
   for (let k = 0; k < 3; k++) {
+    await page.evaluate(() => { const h = window.__game.hud; if (h && h.big && typeof h.setMode === 'function') { h.setMode(h.settings && h.settings.cornerSheet ? 'corner' : 'hidden'); window.__L.step(3); } }); // (the map's sheet: a talk under it closes too)
     const p = await page.evaluate(() => { const h = window.__game.hud; return h && h.paper && h.paper !== 'outfitter' ? h.paper : null; });
     if (!p) return;
     if (k === 0) await page.keyboard.press('e');
@@ -317,6 +318,7 @@ export const steps = [
   } },
   // step 8: Pietro's north-east shore, landed by real input; the faint path; the dig; the back door; the wrong hill (L2C)
   { id: 'pietro', step: 8, title: 'Pietro\'s north-east shore: landed, the path, the dig (L2C), the blade; "Eino\'s sketch"', run: async ({ page, result, ctx, shots, log }) => {
+    if (ctx.mapDay == null) ctx.mapDay = await page.evaluate(() => { const g = window.__game, s = g.story; for (const k of ['tauno.farm.met', 'kettle.visited', 'door.mining.yield', 'tauno.e7sketch', 'tauno.crewmap']) s.set(k, true, 'rig:from'); return g.day.doy + 1; }); // (--from pietro: the map given)
     await page.evaluate((d) => window.__a2.at(d, 9), ctx.mapDay + 1);
     const P = await page.evaluate(() => window.__a2.place('pietro.dig'));
     const start = await page.evaluate(async (P) => {
@@ -349,7 +351,10 @@ export const steps = [
     await press(page, 'e');
     await page.evaluate(() => { const L = window.__L, p = window.__game.player; for (let k = 0; k < 40 && !p.onFoot; k++) L.step(15); L.step(30); });
     const landed = await page.evaluate((P) => { const p = window.__game.player; return { onFoot: p.onFoot, d: Math.round(Math.hypot(p.x - P.x, p.z - P.z)) }; }, P);
-    if (!landed.onFoot) await page.evaluate((P) => window.__L.standAt(P.x + P.n[0] * 3, P.z + P.n[1] * 3), P);
+    if (!landed.onFoot || landed.d > 60) {
+      log(`  pietro: not ashore at the landing ${JSON.stringify(await page.evaluate(() => { const g = window.__game; return { notes: [...document.querySelectorAll('.note, .hud-note, #note')].map((e) => e.innerText).filter(Boolean).slice(-3), trip: g.trip ? { active: !!g.trip.active } : null, visit: g.outfitter.visit ? g.outfitter.visit.ep : null, last: g.rides && g.rides.last ? g.rides.last.to : null, mode: g.player.mode }; }))}`);
+      await page.evaluate(async (P) => { const L = window.__L; await L.tp(P.x - P.n[0] * 30, P.z - P.n[1] * 30); await L.settle(); L.standAt(P.x + P.n[0] * 3, P.z + P.n[1] * 3, 0); L.step(20); }, P); // (ashore by the API: said in the result)
+    }
     // the faint path up: walked by the keys along the lane to the dig
     const ln = P.lanes[0];
     const legs = await walkRoute(page, [[ln.a[0] + ln.dir[0] * 60, ln.a[1] + ln.dir[1] * 60], [ln.a[0] + ln.dir[0] * 150, ln.a[1] + ln.dir[1] * 150], [ln.a[0] + ln.dir[0] * 250, ln.a[1] + ln.dir[1] * 250]], { r: 4, log });
