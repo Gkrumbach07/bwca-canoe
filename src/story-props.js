@@ -293,7 +293,8 @@ function launch() {
 // lilacs, the stone step, the foundation, the bed frame, the sauna's footing, the swimming rock; Toivo's cobble is
 // quartzCobble on the step; the cribs are crib), Alice's beach rock (landingRock) and June's pot half in the sand. Rose's
 // table by the window of Moose Lake 25 is A2's café kit (cafeTable at cafeSpots(L).window: the join).
-const COL_E = { leaf: C(0x40593a), leafDark: C(0x34492f), bloom: C(0x9a76b8), bloomPale: C(0xb79bd0), stem: C(0x6a5a4a),
+const COL_E = { leaf: C(0x6aa457), leafDark: C(0x4f8a4e), leafPale: C(0x86b865), bloom: C(0xa47fc4), bloomPale: C(0xc3a6dc), // (the final pass: the leaves in the crowns' greens, vegetation.js; they read as black blocks)
+   stem: C(0x6a5a4a),
   field: C(0x86817a), rust: C(0x7a4a2e), enamel: C(0x2f5f9a), chip: C(0x1c1c1c), shadow: C(0x2a2a26), table: C(0x8a6a48) };
 // a lilac thicket three metres high (opts.bloom: purple in June, else green); a dot on its middle
 function lilacs({ rng, opts = {} }) {
@@ -301,12 +302,14 @@ function lilacs({ rng, opts = {} }) {
   for (let k = 0; k < n; k++) {
     const a = rng() * Math.PI * 2, d = rng() * 1.6, x = Math.cos(a) * d, z = Math.sin(a) * d, H = 2.2 + rng() * 1.0;
     b.cyl(V(x, -0.1, z), V(x * 1.15, H * 0.7, z * 1.15), 0.05, 0.03, 5, TILE.BARK, COL_E.stem);
-    for (let j = 0; j < 3; j++) {
-      const y = H * (0.5 + j * 0.2), s = 0.7 + rng() * 0.5, rot = rng() * 6.28, ax = V(Math.cos(rot), 0, Math.sin(rot));
-      b.box(V(x * 1.2, y, z * 1.2), ax, V(0, 1, 0), V(-ax.z, 0, ax.x), s, 0.45 + rng() * 0.2, s * 0.8, TILE.FIBRE, j % 2 ? COL_E.leaf : COL_E.leafDark);
-      if (opts.bloom) for (let q = 0; q < 3; q++) {
-        const bx = x * 1.2 + (rng() - 0.5) * s * 1.6, bz = z * 1.2 + (rng() - 0.5) * s * 1.6, by = y + 0.35 + rng() * 0.3;
-        b.cyl(V(bx, by - 0.12, bz), V(bx, by + 0.22, bz), 0.1, 0.03, 5, TILE.FIBRE, q % 2 ? COL_E.bloom : COL_E.bloomPale, { cap1: true });
+    // (the final pass: small clumps round the stem, not three solid two-metre blocks; a panicle on most in June)
+    for (let j = 0; j < 7; j++) {
+      const y = H * (0.45 + rng() * 0.5), s = 0.3 + rng() * 0.28, rot = rng() * 6.28, ax = V(Math.cos(rot), 0, Math.sin(rot));
+      const cx = x * 1.2 + (rng() - 0.5) * 1.1, cz = z * 1.2 + (rng() - 0.5) * 1.1;
+      b.box(V(cx, y, cz), ax, V(0, 1, 0), V(-ax.z, 0, ax.x), s, 0.22 + rng() * 0.12, s * 0.85, TILE.FIBRE, [COL_E.leaf, COL_E.leafDark, COL_E.leafPale][j % 3]);
+      if (opts.bloom && j % 3 !== 2) {
+        const bx = cx + (rng() - 0.5) * s, bz = cz + (rng() - 0.5) * s, by = y + 0.22 + rng() * 0.12;
+        b.cyl(V(bx, by - 0.1, bz), V(bx, by + 0.26, bz), 0.11, 0.03, 5, TILE.FIBRE, j % 2 ? COL_E.bloom : COL_E.bloomPale, { cap1: true });
       }
     }
   }
