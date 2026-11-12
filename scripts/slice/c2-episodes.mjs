@@ -66,7 +66,15 @@ export const HELPERS_E = () => {
     return was;
   };
   // (c2-fix) why a cast came back: the gates fishing.js reads, the wind on the cast, its words
-  E.why = () => { const F = g.fishing, p = g.player; return { st: F.state, up: F.rodUp, foot: F.onFoot, blownN: F.blownN || 0, wind: F.wind ? +F.wind.speed.toFixed(2) : null, mode: p.mode, act: !!p.act, seat: !!p.seat, tp: !!p.teleporting, paused: !!(p.input && p.input.paused), title: g.title.state, paper: g.hud.paper || null, convo: !!(g.dialogue && g.dialogue.convo), book: !!(g.journal && g.journal.open), msg: F.message && F.message.text, prompt: p.prompt && p.prompt.text, lure: F.lureDef && F.lureDef.id, at: [+p.x.toFixed(1), +p.z.toFixed(1)], hours: +g.day.hours.toFixed(2), snags: F.snags ? F.snags.targets().length : null }; };
+  E.why = () => { const F = g.fishing, p = g.player; return { st: F.state, up: F.rodUp, foot: F.onFoot, blownN: F.blownN || 0, wind: F.wind ? +F.wind.speed.toFixed(2) : null, mode: p.mode, act: !!p.act, seat: !!p.seat, tp: !!p.teleporting, paused: !!(p.input && p.input.paused), title: g.title.state, paper: g.hud.paper || null, convo: !!(g.dialogue && g.dialogue.convo), book: !!(g.journal && g.journal.open), msg: F.message && F.message.text, prompt: p.prompt && p.prompt.text, lure: F.lureDef && F.lureDef.id, at: [+p.x.toFixed(1), +p.z.toFixed(1)], hours: +g.day.hours.toFixed(2), snags: F.snags ? F.snags.targets().length : null, lure: (() => { const l = F.lure, P = E.prop('s9.pot'), t = F.tipWorld(); if (!l || !P) return null; const ux = l.x - t.x, uz = l.z - t.z, L = Math.hypot(ux, uz) || 1, off = Math.abs((P.x - t.x) * uz - (P.z - t.z) * ux) / L; return { d: +L.toFixed(1), toPot: +Math.hypot(l.x - P.x, l.z - P.z).toFixed(2), off: +off.toFixed(2), depth: +(l.depth || 0).toFixed(2), bed: +(l.bed || 0).toFixed(2) }; })(), cw: F.castWind ? { felt: +F.castWind.felt.toFixed(2), H: +F.castWind.H.toFixed(2), blown: F.castWind.blown } : null }; };
+  // (c2-fix) the lure's nearest pass by the pot this cast: how near, how deep, whether fishing.snags.over() held there
+  E.track = (reset) => {
+    if (reset) { E.near = null; return null; }
+    const F = g.fishing, l = F.lure, P = E.prop('s9.pot'); if (!l || !P || F.state !== 'inwater') return E.near;
+    const d = Math.hypot(l.x - P.x, l.z - P.z);
+    if (!E.near || d < E.near.d) { const T = F.snags && F.snags.targets()[0]; E.near = { d: +d.toFixed(2), depth: +(l.depth || 0).toFixed(2), bed: +(l.bed || 0).toFixed(2), over: !!(T && F.snags.over(T, l, F.lureDef)), line: +F.lineOut.toFixed(1), pass: F.snagPass || 0 }; }
+    return E.near;
+  };
   E.money = () => (g.profile && g.profile.s ? g.profile.s.money : null);
   E.firsts = () => (g.record && g.record.s ? g.record.s.firsts.map((f) => f.words) : []);
   E.page = (id) => E.R().page(id);
@@ -94,18 +102,18 @@ async function castAndWork(page, { max = 2400 } = {}) {
   const loaded = await page.evaluate(() => window.__e.why());
   await page.keyboard.up('Space');
   for (let k = 0; k < 40; k++) { await page.evaluate(() => window.__L.step(5)); const s = await page.evaluate(() => window.__e.fish().state); if (s === 'inwater') break; }
-  const landed = await page.evaluate(() => window.__e.why());
+  const landed = await page.evaluate(() => { window.__e.track(true); return window.__e.why(); });
   for (let k = 0; k < 30; k++) await page.evaluate(() => window.__L.step(2)); // (let it sink to the bed)
   // worked back slowly along the sand (60 S9): W in short pulls, the jig let settle to the bottom between them
   let st = null, down = false;
   for (let k = 0; k < max; k += 4) {
     const want = (k % 28) < 12;
     if (want && !down) { await page.keyboard.down('KeyW'); down = true; } else if (!want && down) { await page.keyboard.up('KeyW'); down = false; }
-    await page.evaluate(() => window.__L.step(4)); st = await page.evaluate(() => window.__e.fish());
+    await page.evaluate(() => window.__L.step(4)); st = await page.evaluate(() => { window.__e.track(); return window.__e.fish(); });
     if (st.state !== 'inwater' && st.state !== 'flying') break;
   }
   if (down) await page.keyboard.up('KeyW');
-  return { aim, st, why: { before, loaded, landed, after: await page.evaluate(() => window.__e.why()) } };
+  return { aim, st, why: { before, loaded, landed, near: await page.evaluate(() => window.__e.near), after: await page.evaluate(() => window.__e.why()) } };
 }
 // the fight by real input: W held while it gives, let go while it sticks (the bar tells you: past ~0.7 ease off), or
 // greedy: W held throughout
@@ -196,7 +204,7 @@ export const steps = [
       let hooked = null, casts = 0, tries = [];
       for (; casts < 14 && !hooked; casts++) {
         const c = await castAndWork(page);
-        tries.push({ st: c.st && c.st.state, line: c.st && c.st.line, d: c.aim.d, why: casts < 2 ? c.why : { blownN: c.why.after.blownN, msg: c.why.after.msg } });
+        tries.push({ st: c.st && c.st.state, line: c.st && c.st.line, d: c.aim.d, why: casts < 2 ? c.why : { blownN: c.why.after.blownN, msg: c.why.after.msg, landed: c.why.landed.lure, near: c.why.near } });
         if (c.st && c.st.snag) hooked = c.st;
         else await page.evaluate(() => { const F = window.__game.fishing; if (F.state === 'inwater' || ((F.state === 'bite' || F.state === 'fight') && !(F.fish && F.fish.snag))) { F.fish = null; F.state = 'ready'; F.lineOut = 0; } window.__L.step(20); /* (join c2: a fish on instead of the bail is let go too, or every cast after it stayed in its fight) */ });
       }
