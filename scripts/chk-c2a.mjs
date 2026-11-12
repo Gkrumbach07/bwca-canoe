@@ -90,17 +90,29 @@ const STATE = () => {
   const near = [];
   const npc = g.npcs;
   const blocked = (x, z, y) => { try { const nr = g.tiles.treesNear(x, z, 2.5); return p.blockedAt(x, z, y, nr) ? nr.filter((t) => (t.box ? Math.abs((x - t.x) * t.ux + (z - t.z) * t.uz) < t.hx + 0.3 && Math.abs(-(x - t.x) * t.uz + (z - t.z) * t.ux) < t.hz + 0.3 : Math.hypot(x - t.x, z - t.z) < (t.r || 0.5) + 0.3)).map((t) => t.kind || (t.box ? 'box' : t.shape ? 'rock' : 'trunk')).slice(0, 3) : null; } catch { return 'err'; } };
+  // the surface under a figure: a ray down from 1.2 m over its feet onto whatever is drawn there (a store's floor, the
+  // dock's deck, a bench), the figure's own meshes skipped; else the terrain
+  const TH = g.THREE, rc = TH ? new TH.Raycaster() : null;
+  const under = (x, y, z, self) => {
+    if (!rc) return p.groundAt(x, z);
+    rc.set(new TH.Vector3(x, y + 1.2, z), new TH.Vector3(0, -1, 0)); rc.far = 4;
+    const own = (o) => { for (let q = o; q; q = q.parent) if (q === self) return true; return false; };
+    const hits = rc.intersectObjects(g.scene.children, true).filter((h) => h.object.visible && !own(h.object) && !h.object.isSkinnedMesh && !(h.object.material && h.object.material.transparent && h.object.material.opacity < 0.5));
+    const gy = p.groundAt(x, z);
+    return hits.length ? Math.max(hits[0].point.y, gy) : gy;
+  };
   if (npc && npc.rosters) for (const list of npc.rosters.values()) for (const v of list) {
     const f = v.figs && v.figs[0]; if (!f) continue;
     const dd = Math.hypot(f.x - p.x, f.z - p.z); if (dd > 60) continue;
     const b = npc.bodies.find((x) => x.who && x.who.person === v);
-    const gy = p.groundAt(f.x, f.z);
-    near.push({ who: v.name || v.key, key: v.key, d: Math.round(dd), dy: +(f.y - gy).toFixed(2), drawn: !!(b && b.group.visible), sit: !!(f.seat || f.sitting), in: blocked(f.x, f.z, f.y) });
+    const gy = under(f.x, f.y, f.z, b && b.group);
+    const sit = !!((f.spec && f.spec.pose === 'sit') || f.seat || f.sitting || (v.slot && /bench|seat|table|chair/.test(String(v.slot.at || v.slot.id || v.at || ''))) || /sit/.test(String(f.pose || f.anim || '')));
+    near.push({ who: v.name || v.key, key: v.key, d: Math.round(dd), dy: +(f.y - gy).toFixed(2), drawn: !!(b && b.group.visible), sit, in: sit ? null : blocked(f.x, f.z, f.y) });
   }
   const M = g.storyMining;
   const field = [];
   if (M) {
-    const fp = (f, tag) => { if (!f) return; const gy = f.groundY(); const ay = f.a && f.a.group ? f.a.group.position.y : null; field.push({ who: tag, d: Math.round(Math.hypot(f.x - p.x, f.z - p.z)), dy: ay != null ? +(ay - gy).toFixed(2) : null, in: blocked(f.x, f.z, gy) }); };
+    const fp = (f, tag) => { if (!f) return; const ay = f.a && f.a.group ? f.a.group.position.y : null; const gy = under(f.x, ay != null ? ay : f.groundY(), f.z, f.a && f.a.group); field.push({ who: tag, d: Math.round(Math.hypot(f.x - p.x, f.z - p.z)), dy: ay != null ? +(ay - gy).toFixed(2) : null, in: blocked(f.x, f.z, gy) }); };
     try { fp(M.kettle.tasha && M.kettle.tasha(), 'tasha@kettle'); } catch { /* */ }
     const S = M.miningCast.slab; if (S) { fp(S.tauno, 'tauno@slab'); fp(S.tasha, 'tasha@slab'); }
   }
@@ -119,6 +131,19 @@ const SCREEN = () => {
   // the words on screen, top-level visible text only (innerText skips display:none), split to lines, de-duplicated
   const t = (document.body.innerText || '').split('\n').map((l) => l.trim()).filter(Boolean);
   return [...new Set(t)].slice(0, 160);
+};
+
+// where a store person stands as a player looks from outside: the figure against the porch bench's seats, the door, the
+// café's spots; its pose
+const WHERE = (key) => {
+  const g = window.__game, S = g.outfitter.layout(31), n = g.npcs; let v = null;
+  for (const list of n.rosters.values()) for (const q of list) if (q.key === key) v = q;
+  if (!v || !S) return { none: key };
+  const f = v.figs[0], d = (q) => (q ? +Math.hypot(f.x - q.x, f.z - q.z).toFixed(2) : null);
+  const c = S.centre, a = S.axes.a, b = S.axes.b, rel = { a: +((f.x - c.x) * a.x + (f.z - c.z) * a.z).toFixed(2), b: +((f.x - c.x) * b.x + (f.z - c.z) * b.z).toFixed(2) };
+  const dr = { a: +((S.door.x - c.x) * a.x + (S.door.z - c.z) * a.z).toFixed(2), b: +((S.door.x - c.x) * b.x + (S.door.z - c.z) * b.z).toFixed(2) };
+  const cafe = S.cafe ? Object.fromEntries(Object.entries(S.cafe).filter(([, q]) => q && Number.isFinite(q.x)).map(([k, q]) => [k, d(q)])) : null;
+  return { key, pose: f.spec && f.spec.pose, slot: v.slot ? v.slot.id || v.slot.at : v.at || null, y: +f.y.toFixed(2), floorY: S.floorY, seats: (S.seats || []).map(d), door: d(S.door), rel, doorRel: dr, cafe };
 };
 let lookN = 0;
 async function look(page, name, { book = null } = {}) {
@@ -146,7 +171,10 @@ async function bookLook(page, id, sides) {
   const out = {};
   for (const side of sides) {
     const words = await page.evaluate((side) => {
-      const g = window.__game, j = g.journal; try { if (!j.open) j.show(side); else j.setSide(side); } catch (e) { return `(no side ${side}: ${e.message})`; }
+      const g = window.__game, j = g.journal, view = side === 'walt' ? 'walt' : side === 'pages' ? 'pages' : null;
+      if (view) side = 'walt';
+      try { if (!j.open) j.show(side); else j.setSide(side); } catch (e) { return `(no side ${side}: ${e.message})`; }
+      if (view && g.book) { g.book.view = view; if (view === 'walt' && g.book.case && g.book.case.seen) g.book.case.seen(); g.book.render(true); }
       window.__L.step(6);
       const el = document.getElementById('journal') || document.querySelector('.journal');
       return el ? el.innerText.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 120) : null;
@@ -220,12 +248,17 @@ async function seasonA() {
   await newSeason(A, 31, 191);
   await A.evaluate(() => { const g = window.__game, o = g.outfitter; if (o.open) o.hide(); g.day.setClock(g.day.year, g.day.doy, 10); window.__L.step(10); });
   await A.evaluate(HELPERS_A2); await A.evaluate(HELPERS_D);
+  // the slice's clock jumps (A.at) skip the nights a player sleeps: woken fresh at each jump, as after a night in a bunk
+  await A.evaluate(() => { const g = window.__game, A2 = window.__a2, at0 = A2.at; A2.at = (doy, h) => { g.day.setClock(g.day.year, doy, h); const e = g.energy; if (e) { e.awakeSince = e.now - 1; e.wokeAt = e.now - 1; } return at0(doy, h); }; });
   const ctx = { home: 31, join: true, shots: SHOTS };
   const a2 = (id) => A2_STEPS.find((q) => q.id === id), d = (id) => D_STEPS.find((q) => q.id === id);
   const run = async (s, who) => {
     await setStep(A, `A:${s.id}`);
     const paused = await A.evaluate(() => { const t = window.__game.title; if (t.state !== 'pause') return false; t.resume(); window.__L.step(4); return true; });
     if (paused) note('confusing', `A:${s.id}`, 'the pause card was up when this step began (a step before left the game paused)');
+    // a player sleeps: the slice's days skip the nights (A.at), so the walker is rested here as a night in a bunk would
+    // (else "too long awake" evacuates him mid-step: run 1 lost the clean book's ride to it)
+    await A.evaluate(() => { const e = window.__game.energy; if (e) { try { e.fresh(); e.bunk(); } catch { /* */ } e.value = 1; } });
     log(`-- ${who} ${s.step} ${s.id}`);
     try { await s.run({ page: A, result, log, ctx, shots: SHOTS }); } catch (e) { result(`${s.step} ${s.id}: threw`, false, { e: String(e && e.stack || e).slice(0, 900) }); }
   };
@@ -239,15 +272,25 @@ async function seasonA() {
   await look(A, 'A1-porch-after');
   // the dot on Tauno, on the bench (7:30–10): what a player aims at
   const t1 = await A.evaluate(() => { const t = window.__t.tauno(); return t ? `cast:tauno:${t.ep}` : null; });
-  if (t1) { const dt = await dotOn(A, t1); log('dot on Tauno', JSON.stringify(dt)); if (!dt.verb) note('broken', 'A1 porch', 'the dot on Tauno on the bench offers no verb', dt); await look(A, 'A1-dot-tauno'); }
+  if (t1) {
+    const w = await A.evaluate(WHERE, t1); log('Tauno where', JSON.stringify(w));
+    // from the yard, facing the bench under the window (as a player walking up)
+    await A.evaluate(() => { const g = window.__game, S = g.outfitter.layout(31), q = S.seats[0] || S.door, f = S.stepsFoot || S.door, b = S.axes.b; window.__L.standAt(f.x + b.x * 6, f.z + b.z * 6, 0); window.__L.step(4); window.__L.face({ x: q.x, z: q.z }, 6, S.floorY + 1.0); window.__L.step(6); });
+    await look(A, 'A1-porch-from-yard');
+    const dt = await dotOn(A, t1); log('dot on Tauno', JSON.stringify(dt)); if (!dt.verb) note('broken', 'A1 porch', 'the dot on Tauno on the bench offers no verb', dt); await look(A, 'A1-dot-tauno');
+  }
   else note('confusing', 'A1 porch', 'Tauno not staged after the porch step');
   // 2 the café and the dock
   await run(a2('cafe'), 'A2');
   await look(A, 'A2-dock-len', { book: ['journal'] });
+  log('Len where', JSON.stringify(await A.evaluate(WHERE, 'cast:len:31')));
   const dl = await dotOn(A, 'cast:len:31'); log('dot on Len', JSON.stringify(dl));
   if (dl.none || !dl.verb) note('confusing', 'A2 dock', 'the dot on Len offers no verb (or Len not there)', dl);
   // Mary at the window: the dot (9–11 Tue/Fri), the café as a player sees it
   await A.evaluate((d0) => { window.__a2.at(d0, 9.6); window.__a2.inside(); window.__L.step(30); }, ctx.d0);
+  log('Mary where', JSON.stringify(await A.evaluate(WHERE, 'cast:mary:31')));
+  const tw = await A.evaluate(() => { const t = window.__t.tauno(); return t ? `cast:tauno:${t.ep}` : null; });
+  if (tw) log('Tauno where (9:36)', JSON.stringify(await A.evaluate(WHERE, tw)));
   const dm = await dotOn(A, 'cast:mary:31'); log('dot on Mary', JSON.stringify(dm));
   if (dm.none || !dm.verb) note('confusing', 'A2 café', 'the dot on Mary offers no verb (or Mary not there)', dm);
   await look(A, 'A2-cafe-mary');
@@ -271,7 +314,18 @@ async function seasonA() {
     await A.evaluate(() => { const g = window.__game; if (g.dialogue.convo) g.dialogue.close(false); window.__L.step(3); });
   }
   await run(a2('notice'), 'A2');
-  await look(A, 'A3-notice-taken', { book: ['journal', 'walt'] });
+  await A.evaluate(() => window.__L.step(240)); // (the keeper's two lines, one after the other)
+  const kh = await A.evaluate((kl) => (window.__C.log || []).filter((r) => r.kind === 'line' && kl && kl.some((x) => r.text === x)).map((r) => `${r.who}: ${r.text}`), kl);
+  log('the keeper as the notice is taken', JSON.stringify(kh));
+  if (kl && kh.length < 2) note('confusing', 'A3 notice', `the keeper's two lines about the Kettle notice are not said as it is taken (${kh.length} of 2)`, { kh });
+  await look(A, 'A3-notice-taken', { book: ['journal', 'walt', 'stories'] });
+  // the board again: is the taken notice kept anywhere a player can read it again (the pile, the journal)?
+  const b2 = await boardE(A, 31);
+  const pile = await A.evaluate(() => [...document.querySelectorAll('.pile, .taken, [class*=pile]')].map((e) => e.innerText.replace(/\s+/g, ' ').trim()).join(' | ').slice(0, 1200));
+  log('the board after the take', JSON.stringify({ flyers: b2.flyers, pile }));
+  await look(A, 'A3-board-after');
+  if (!/FIELD HELP|Kettle/i.test(pile)) note('confusing', 'A3 notice', 'once taken, the Kettle notice is nowhere to read again (not in the board\'s pile of what you tore off, not in the journal): its when and where (the morning after the rain; the crews\' landing, the grade; T. Strand) go with it', { pile });
+  await dismissPapers(A);
   // 4 the Kettle day
   await run(a2('kettle'), 'A2');
   await look(A, 'A4-kettle-after');
@@ -294,12 +348,23 @@ async function seasonA() {
   // 8 Pietro
   await run(a2('pietro'), 'A2');
   await look(A, 'A8-pietro');
-  // 9 the clean book: watch the ride's landing against the slab
+  // 9 the clean book: watch the ride's landing against the slab (every move of the player recorded: the teleports, the
+  // ride's arrival, a store's arrival)
+  const pre9 = await A.evaluate(() => {
+    const g = window.__game, p = g.player, o = g.outfitter, W = window.__W = [];
+    const at = () => [Math.round(p.x), Math.round(p.z)];
+    if (!p.__w) { p.__w = true; const t0 = p.teleport.bind(p); p.teleport = async (x, z, ...r) => { W.push({ k: 'teleport', to: [Math.round(x), Math.round(z)], from: at(), why: (new Error().stack || '').split('\n').slice(2, 6).map((l) => l.trim().replace(/https?:\/\/[^/]+/, '')).join(' < ') }); return t0(x, z, ...r); }; }
+    const R = g.rides; if (R && !R.__w) { R.__w = true; const a0 = R.arrive.bind(R); R.arrive = async (...a) => { const r = await a0(...a); W.push({ k: 'arrive', to: a[1] && a[1].ep, ok: r, at: at(), arrival: o.arrival ? { ...o.arrival } : null }); return r; }; }
+    if (!o.__w) { o.__w = true; const u0 = o.updateArrival.bind(o); o.updateArrival = (dt) => { const b = at(), a = o.arrival ? { why: o.arrival.why, ep: o.arrival.ep } : null; const r = u0(dt); const c = at(); if (c[0] !== b[0] || c[1] !== b[1]) W.push({ k: 'updateArrival moved', from: b, to: c, arrival: a }); return r; }; }
+    return { arrival: o.arrival ? { why: o.arrival.why, ep: o.arrival.ep, pending: o.arrival.pending } : null, at: at(), trip: !!g.trip.active };
+  });
+  log('before the clean book', JSON.stringify(pre9));
   const m9 = await A.evaluate(() => window.__game.profile.s.money);
   await run(a2('clean'), 'A2');
   const m9b = await A.evaluate(() => window.__game.profile.s.money);
-  const ride = await A.evaluate(() => { const g = window.__game, l = g.rides.last, lot = g.outfitter.landing(33), pl = g.storyLayer.place('ep33.crewcamp'), sl = g.storyLayer.prop('ep33.slab'), e33 = g.world.entryPoints.find((e) => e.ep === 33); return { last: l && { from: l.from, to: l.to, price: l.price }, landing33: lot && { x: Math.round(lot.x), z: Math.round(lot.z), name: lot.name }, crewcamp: pl && [Math.round(pl.x), Math.round(pl.z)], slab: sl && [Math.round(sl.prop.x), Math.round(sl.prop.z)], ep33: e33 && { x: Math.round(e33.x), z: Math.round(e33.z), name: e33.name }, km: lot && pl ? +(Math.hypot(lot.x - pl.x, lot.z - pl.z) / 1000).toFixed(2) : null }; });
+  const ride = await A.evaluate(() => { const g = window.__game, l = g.rides.last, lot = g.rides.landing(33), pl = g.storyLayer.place('ep33.crewcamp'), sl = g.storyLayer.prop('ep33.slab'), e33 = g.world.entryPoints.find((e) => e.ep === 33); return { last: l && { from: l.from, to: l.to, price: l.price }, landing33: lot && { x: Math.round(lot.x), z: Math.round(lot.z), name: lot.name }, crewcamp: pl && [Math.round(pl.x), Math.round(pl.z)], slab: sl && [Math.round(sl.prop.x), Math.round(sl.prop.z)], ep33: e33 && { x: Math.round(e33.x), z: Math.round(e33.z), name: e33.name }, km: lot && pl ? +(Math.hypot(lot.x - pl.x, lot.z - pl.z) / 1000).toFixed(2) : null }; });
   log('the ride', JSON.stringify({ ride, m9, m9b }));
+  log('the moves over the clean book', JSON.stringify(await A.evaluate(() => window.__W)).slice(0, 4000));
   if (ride.km != null && ride.km > 0.5) note('broken', 'A9 clean book', `Tauno's ride sets the player down at EP 33's landing (${ride.landing33 && ride.landing33.name}), ${ride.km} km from the road end where he and the slab are`, ride);
   await look(A, 'A9-home', { book: ['walt', 'journal'] });
   // between A2's section and D's (story-slice's own block): up, no paper, rested
@@ -315,7 +380,8 @@ async function seasonB() {
   const B = await openGame('B');
   await newSeason(B, 25, 160);
   await B.evaluate(HELPERS_E);
-  await B.evaluate(() => { const g = window.__game; if (g.outfitter.open) g.outfitter.hide(); g.story.debug.fixture('turn'); window.__L.step(20); });
+  // (--b-no-fixture: season B as E's own rig starts it; the snag under the turn fixture is claude/c2-fix's)
+  await B.evaluate((fx) => { const g = window.__game; if (g.outfitter.open) g.outfitter.hide(); if (fx) g.story.debug.fixture('turn'); window.__L.step(20); }, !argv.includes('--b-no-fixture'));
   await setStep(B, 'B:turn');
   await look(B, 'B-turn', { book: ['journal'] });
   const ctx = { home: 25, join: true, shots: SHOTS };
