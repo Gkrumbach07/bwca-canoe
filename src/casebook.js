@@ -5,7 +5,7 @@
 // The heading is "W.H." until someone names him (knows.walt, or the porch's "Walt Haapala" line, 20:T3.w1), then
 // "Walt" with "(W.H.)" beside it. The sections (walt-lines.js WALT_SECTIONS) show only once they have a line, in the order
 // the lines were earned (story.walt()). A line that `replaces` another draws the old one crossed out above it. Every
-// line's words are the docs' (story-data/words.js, by id). The strip beside the page holds the nicknames gathered so far,
+// line's words are the docs' (story-data/words.js, by id). A lead with a `done` that holds is struck where it stands. The strip beside the page holds the nicknames gathered so far,
 // unmatched as chips (a place's chip, clicked, is handed to the map's pencil when P's pencil takes it: pencil.pick), and
 // matched with the player's note beside them. Nothing on the page says what to do, and nothing announces a line.
 //
@@ -42,6 +42,7 @@ export class Casebook {
       const r = waltRow(id), t = say((r && r.ref) || id, v);
       if (!t) continue;
       const line = { id, section: sectionOf(id), text: t };
+      if (r && r.done) { try { line.done = !!s.when(r.done); } catch { line.done = false; } } // (a lead followed up: struck where it stands)
       if (r && r.replaces && have.has(r.replaces)) line.struck = say(waltRow(r.replaces) && waltRow(r.replaces).ref || r.replaces, v);
       if (r && r.annotates) { const host = out.find((q) => q.id === r.annotates); if (host) { host.text = `${host.text} ${t}`; continue; } if (have.has(r.annotates)) { line.after = r.annotates; } }
       out.push(line);
@@ -77,7 +78,7 @@ export class Casebook {
     for (const l of lines) { if (!by.has(l.section)) by.set(l.section, []); by.get(l.section).push(l); }
     const sec = (key, label) => {
       const ls = by.get(key); if (!ls || !ls.length) return '';
-      return `<div class="cb-sec">${label ? `<div class="cb-h">${esc(label)}</div>` : ''}${ls.map((l) => `${l.struck ? `<div class="cb-line struck">${words(l.struck)}</div>` : ''}<div class="cb-line" data-walt="${esc(l.id)}">${words(l.text)}</div>`).join('')}</div>`;
+      return `<div class="cb-sec">${label ? `<div class="cb-h">${esc(label)}</div>` : ''}${ls.map((l) => `${l.struck ? `<div class="cb-line struck">${words(l.struck)}</div>` : ''}<div class="cb-line${l.done ? ' struck' : ''}" data-walt="${esc(l.id)}">${words(l.text)}</div>`).join('')}</div>`;
     };
     // the page in two halves: who he was on the left, what the player has on him on the right
     const leftKeys = ['walt', 'people', 'places', 'names'], rightKeys = ['years', 'odd', 'leads', 'farend'];

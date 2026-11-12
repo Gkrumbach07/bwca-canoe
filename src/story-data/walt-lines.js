@@ -9,6 +9,8 @@
 //   section   one of WALT_SECTIONS: where on the page it sits (a section shows only once it has a line, 10 §11.3)
 //   replaces  the id of a line it turns: the old one is drawn crossed out above it ("drowned" → "went north")
 //   annotates the id of the line it is a note on: its words go after that line's ("(ringed)"), not on a line of their own
+//   done      a story.when expression: once it holds, the line (a lead) is drawn struck through where it stands (the
+//             final pass, chk-c2a 7: the page kept leads already followed up)
 //
 // Ids are never reused (story-data/retired.js). Each stream adds its rows in its own marked block.
 
@@ -46,7 +48,7 @@ export const WALT_LINES = [
   { id: '20:T4.w10', section: 'odd' },
   { id: '20:7.2.w1', section: 'names' },
   // 20 §7.1: "Tauno's on the porch at Farm most mornings." is under Leads (chk-c1a 3: it sat under Things that don't add up)
-  { id: '20:7.1.lead.tauno', section: 'leads' },
+  { id: '20:7.1.lead.tauno', section: 'leads', done: 'f:tauno.farm.met' }, // (struck once he is found on Farm's porch)
   // (the join) 20 §7.3: "Walt page, Leads: the line gets *(ringed)*": a note on the crews' lead line, not a line of its own
   { id: '20:7.3.w1', section: 'leads', annotates: '20:11.2.w1' },
   // /st-b
@@ -64,12 +66,12 @@ export const WALT_LINES = [
   { id: 'w.door.guiding', section: 'leads', ref: '20:U5.w.1' },
   { id: 'w.door.boys', section: 'leads', ref: '20:U5.w.2' },
   { id: 'w.door.family', section: 'leads', ref: '20:U5.w.3' },
-  { id: 'w.door.mining', section: 'leads', ref: '20:U5.w.4' },
+  { id: 'w.door.mining', section: 'leads', ref: '20:U5.w.4', done: 'f:tauno.farm.met' },
   // /st-t
   // a2: the mining years (30 §4): the lines whose words are a quote inside a block, and the sections other than 30's
   // default (people). The Kettle line is the second quote of 30 §4.3's Pay paragraph (30:4.3.w2 is retired by the anchor)
   { id: 'w.kettle.orange', section: 'places', ref: '30:4.3.pay.2' },
-  { id: 'w.lead.pads', section: 'leads', ref: '30:4.1.30' },
+  { id: 'w.lead.pads', section: 'leads', ref: '30:4.1.30', done: 'f:kettle.visited' },
   { id: '30:4.1.w1', section: 'places' },
   { id: '30:4.1.w5', section: 'odd' },
   { id: '30:4.3.w1', section: 'places' },
