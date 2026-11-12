@@ -55,6 +55,16 @@ export const HELPERS_E = () => {
     return { pot: P, at: q, d: +d.toFixed(1) };
   };
   E.fish = () => { const F = g.fishing, f = F.fish; return { state: F.state, line: +F.lineOut.toFixed(2), snag: !!(f && f.snag), tension: f ? +f.tension.toFixed(2) : null, danger: f ? +f.danger.toFixed(2) : null, phase: f && f.snag ? f.snag.phase : null, lure: F.lureDef && F.lureDef.id, owned: F.owned, ui: F.ui && F.ui.fight ? { t: +F.ui.fight.tension.toFixed(2) } : null, msg: F.message && F.message.text }; };
+  // papers off (a talk can't stay open under one: the counter, the book, the trip card), the player on foot
+  E.clear = () => {
+    const was = { paper: g.hud.paper, mode: g.hud.mode, onFoot: g.player.onFoot, tp: g.player.teleporting };
+    if (g.outfitter.open) g.outfitter.hide();
+    if (g.journal.open) g.journal.close();
+    if (g.record && typeof g.record.close === 'function') { try { g.record.close(); } catch { /* */ } }
+    if (g.hud.paper && typeof g.hud.closePaper === 'function') g.hud.closePaper(g.hud.paper);
+    L.step(4);
+    return was;
+  };
   E.money = () => (g.profile && g.profile.s ? g.profile.s.money : null);
   E.firsts = () => (g.record && g.record.s ? g.record.s.firsts.map((f) => f.words) : []);
   E.page = (id) => E.R().page(id);
@@ -227,6 +237,7 @@ export const steps = [
         for (let k = 0; k < 40 && !E.ep().rose(); k++) { window.__L.step(4); await window.__L.wait(100); }
         const d = { rose: !!E.ep().rose(), inRoster: (g.npcs.rosters.get(25) || []).some((v) => v.key === 'cast:rose:25'), open: !!(g.dialogue && g.dialogue.convo), hours: g.day.hours, inside: !!(g.outfitter.visit && g.outfitter.visit.inside) };
         if (g.dialogue && g.dialogue.convo && g.dialogue.close) g.dialogue.close(false);
+        d.cleared = E.clear();
         d.talk = window.__t.talkTo('cast:rose:25'); window.__L.step(4);
         if (!window.__t.convo()) { d.fallback = E.ep().roseTalk(); window.__L.step(4); } // (E on her, the talk the dot opens: npcs.talkTo, else her own)
         d.convo = !!window.__t.convo();

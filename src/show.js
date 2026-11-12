@@ -40,7 +40,8 @@ export class Show {
     if (!this.live) return null;
     const things = this.showable(who);
     if (!things.length) return null;
-    return { text: LOOK, kind: 'show', go: () => this.picker(who, run, from, things) };
+    // (dialogue.js's own show list: the things as choices and its "Never mind."; go(thing) for the one chosen)
+    return { text: LOOK, kind: 'show', show: things.slice(0, 8).map((t) => ({ id: `${t.kind}:${t.id}`, label: t.label, t })), go: (pick) => this.shown(who, (pick && pick.t) || things[0], run, from) };
   }
   picker(who, run, from, things) {
     const back = () => (run && typeof run.choices === 'function' ? run.choices(from) : [{ text: '…', kind: 'bye', go: () => null }]);
