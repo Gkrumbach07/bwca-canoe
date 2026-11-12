@@ -632,6 +632,7 @@ if (!dataFiles.length) {
     for (const f of ['porch-act1.js', 'topics-act1.js']) if (existsSync(path.join(DATA, f))) { const m = await import(pathToFileURL(path.join(DATA, f)).href); const walk = (x, k) => { if (Array.isArray(x)) { for (const y of x) { if (k === 'then' && typeof y === 'string') writers.push({ by: f, a: y }); else walk(y, k); } } else if (x && typeof x === 'object') for (const [kk, v] of Object.entries(x)) walk(v, kk); }; walk(m, null); }
     const writes = (fact) => writers.filter((w) => { const m = /^f:([^=]+)/.exec(w.a); return m && m[1] === fact; });
     const BAN = /\b(windigo|wendigo|manitou|manidoo|misshepeshu|mishipeshu|memegwesi|maymaygwashi|thunderbird|animikii|nanabozho|wenabozho|spirit rock|offering rock)\b/i;
+    let a2words = null; try { const ks = Object.keys((await import(pathToFileURL(path.join(DATA, 'mining.js')).href)).A2_SENSORS || {}); if (ks.length) a2words = new RegExp(`(^|[\\s!(&|])(?:${ks.join('|')})(?=$|[\\s)&|])`, 'g'); } catch { a2words = null; }
     for (const E of EPISODES) {
       const at = `episode ${E.id}`;
       errs.push(...EP.checkRecord(E).map((w) => `${at}: ${w}`));
@@ -649,7 +650,7 @@ if (!dataFiles.length) {
       }
       const ids = [E.flyer && E.flyer.text, ...(E.page || []).map((p) => p.text), ...(E.ends || []).map((e) => e.line), E.first, ...(E.wants || []).flatMap((w) => w.say || []), ...(E.photo || []).map((p) => p.words), ...(E.doors || []).map((d) => d.line)].filter(Boolean);
       for (const id of ids) { const t = tp.T(id); if (t == null) errs.push(`${at}: no text '${id}'`); else if (BAN.test(t)) errs.push(`${at}: '${id}' names a being or sacred place (§10.2)`); }
-      for (const w of [E.window && E.window.when, E.flyer && E.flyer.when, ...(E.page || []).map((p) => p.when), ...(E.wants || []).map((x) => x.when), ...(E.titles || []).map((x) => x.when), E.rose && E.rose.when].filter(Boolean)) { const c = checkCond(w, at); errs.push(...(Array.isArray(c) ? c : c.errs)); }
+      for (const w of [E.window && E.window.when, E.flyer && E.flyer.when, ...(E.page || []).map((p) => p.when), ...(E.wants || []).map((x) => x.when), ...(E.titles || []).map((x) => x.when), E.rose && E.rose.when].filter(Boolean)) { const c = checkCond(a2words ? w.replace(a2words, '$1f:nb.found') : w, at); errs.push(...(Array.isArray(c) ? c : c.errs)); } // (join c2: an arc's flags, A2_SENSORS, read as either-way facts, as check 6 does)
     }
     result('episodes: the explicit yes, no slots, feeds with another source, the words', errs.length === 0, { episodes: EPISODES.map((e) => e.id), errs: errs.slice(0, 30) });
   }

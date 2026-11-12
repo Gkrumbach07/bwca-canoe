@@ -38,7 +38,7 @@
 //     story.tripLine({ all }?) → the trip card's story line (the `card:<text id>` actions of this trip, in order)
 //     story.tripBeats() → [{ abs, what: [...] }] the trip's days with a story beat ("story beats found this trip")
 //     story.tallyLines({ trip }) → [{ id, title, pay, kind: 'story' }] the `pay:` lines owed, paid into the purse now
-//   Actions handled here: beat:day | beat:stall | beat:tripend · card:<text id> · pay:<amount> <text id | words>
+//   Actions handled here: beat:day | beat:stall | beat:tripend · card:<text id> · pay:<amount> <text id | words> | pay:<amount>@<text id>
 import { compile } from './story-cond.js';
 import { T, texts } from './topics.js';
 import { ambient, WALT_LORE, BANNED } from './ambient.js';
@@ -230,11 +230,12 @@ export class Beats {
     this.story.dirty();
     return true;
   }
-  // pay:<amount> <text id | words>: owed now, paid at the trip-end tally with its line
+  // pay:<amount> <text id | words> (or pay:<amount>@<text id>, A2's and E's form: the join): owed now, paid at the
+  // trip-end tally with its line
   pay(arg, meta = {}) {
     const D = this.dir; if (!D || !this.live()) return false;
-    const m = /^\s*(-?\d+(?:\.\d+)?)\s+(.+)$/.exec(String(arg || ''));
-    if (!m) { this.note({ pay: arg, why: 'not "<amount> <line>"' }); return false; }
+    const m = /^\s*(-?\d+(?:\.\d+)?)(?:\s+|@)(.+)$/.exec(String(arg || ''));
+    if (!m) { this.note({ pay: arg, why: 'not "<amount> <line>" or "<amount>@<text id>"' }); return false; }
     const line = m[2].trim(), text = this.text(line) || line;
     if (!Array.isArray(D.pay)) D.pay = [];
     D.pay.push({ amt: +m[1], line, text, trip: this.trip(), abs: this.today(), rule: meta.rule || null, paid: false });

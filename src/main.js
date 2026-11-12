@@ -1320,7 +1320,7 @@ async function main() {
   // a2: the mining years (story Round 2, stream A2; docs/story/30-mining-years.md), only under STORY_ON: the arc's things
   // (mining-items.js), its favours (task-kinds-mining.js), the Kettle day (kettle.js: Tasha, the stations, the creek),
   // the Farm people, the café and Tauno's ride (mining-cast.js; cast.js hands it his Farm porch after the turn), the
-  // give:item.* stand-in (E's handler at the join), and story.debug.fixture('turn') (the end of chapter 1's slice). With
+  // give:item.* is E's handler (its e: block below, the join), and story.debug.fixture('turn') (the end of chapter 1's slice). With
   // the flag off none of it is fetched
   if (STORY_ON && story.v === 2 && window.__game.storyTalk) {
     try {
@@ -1330,7 +1330,6 @@ async function main() {
       const { loadWords } = await import('./story-data/words.js');
       const Wm = await loadWords(['mining']); texts.add(Wm.mining); // (already in from st-t: adding again keeps the first)
       MI.defineMiningItems((id) => { const e = texts.entry(id); return e && typeof e.text === 'string' ? e.text : null; });
-      MI.installGive(story, inventory);
       const mtasks = attachMiningTasks({ tasks, layer: sm.layer || null, story, hud });
       const common = { story, layer: sm.layer || null, scene, actors, pointer, talk, topics, inventory, hud, world, tiles, player, mtasks };
       kettle.attach(common);

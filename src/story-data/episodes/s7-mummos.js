@@ -30,8 +30,9 @@ export default {
   // show.js: what Rose wants to see (a print of the lilacs at the old camp), and what she says
   wants: [{ who: 'rose', print: 's7.lilacs.camp', when: 'f:ep.S7.yes & !f:ep.S7.shown', say: ['S7.conv.7', 'S7.conv.8', 'S7.conv.9'], then: ['f:ep.S7.shown'] }],
   steps: [
-    // Rose's $25 for the print (D's pay: handler, the join; a direct pay until it lands: feed-episodes.js PAY_STUB)
-    { when: 'f:ep.S7.shown', then: ['pay:25@S7', 'f:ep.S7.paid'] },
+    // Rose's $25 for the print (D's pay: handler: owed now, paid at the next trip-end tally with the line "$25 from
+    // Rose.", 60 S7 "What it gives", until the writers give the tally its own words)
+    { when: 'f:ep.S7.shown', then: ['pay:25@S7.pay', 'f:ep.S7.paid'] },
   ],
   // not steps (no yes needed): the main story's line when a player swims off the rock (60 S7 The place)
   rules: [

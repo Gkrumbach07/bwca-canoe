@@ -4,7 +4,7 @@
 // still prop at the dock), Tasha by the counter for ice; the café at Farm 31 (props.js L.cafe); the clean book's ride to
 // the Little Gabbro road end (rides.js rideWith: the cab, the fade, the fee his) and the slab there;
 // (the café is drawn here in the store's frame, cafeOf: no change to props.js, so the tile worker's modules are main's); the want (Mary and
-// the lid: E's show.js "Give" at the join, a choice here until then); the `pay:` stand-in (D's handler at the join).
+// the lid: E's show.js "Give" and "Look at this…", A2's want, the join); pay: is D's handler (beats.js, the join).
 // Loaded only under STORY_ON (main.js's a2 block). A co-op guest's story is a mirror: nobody is staged for them.
 //
 //   miningCast.attach({ story, cast, npcs, talk, topics, outfitter, player, day, world, scene, tiles, rides, actors,
@@ -12,18 +12,19 @@
 //   miningCast.update(dt)              the Farm people by their schedules, the café, the Thursday sight, the slab's people
 //   miningCast.farmTalk(st) → bool     cast.js: E on Tauno on Farm's porch after the turn (his slot's scene 'a2:farm')
 //   miningCast.talk(who) → bool        E on Len, Mary, Brekke or Tasha at Farm
-//   miningCast.give(who, item) → bool  the want: Mary and Leo's lid (E's show.js calls this at the join)
+//   miningCast.give(who, item) → bool  the want: Mary and Leo's lid, as the dot's Give does (show.js giveFor; rigs)
 //   miningCast.ride() / home()         the drive with Tauno, there and back (the scene's do:ride / do:home)
 //   miningCast.staged() · miningCast.debug { stage(who, slotId), slab(), pays() }
 import * as THREE from 'three';
 import { SceneRun, T } from './topics.js';
 import { storeLayout } from './props.js';
-import { kit, rngFor } from './story-props.js';
+import { kit, rngFor, cafeSpots } from './story-props.js';
 import { propMaterial } from './prop-kit.js';
 import { registerSensor } from './story-cond.js';
 import { CAST } from './story-data/cast.js';
 import { FARM, SLAB, LEN, MARY, TASHA, BREKKE, KEEPER, farmEntry, slabEntry, lenEntry, maryEntry, tashaEntry, opener, closer, FIRST_SAT, THURSDAY_LINE, WANTS, A2_SENSORS } from './story-data/mining.js';
-import { ITEM, has, takeItem } from './mining-items.js';
+import { ITEM, has } from './mining-items.js';
+import { show } from './show.js';
 import { FieldPerson, decorate } from './kettle.js';
 
 for (const [k, v] of Object.entries(A2_SENSORS)) registerSensor(k, v);
@@ -46,11 +47,12 @@ class MiningCast {
     this.offs.push(s.on('season', () => this.clear()));
     // the Farm keeper's rings (30 §4.1), on the keepers' story topics (topics.js: under "Ask about…")
     if (this.c.topics && typeof this.c.topics.add === 'function') this.offs.push(this.c.topics.add(KEEPER));
-    // the pay: stand-in (D's record.js handler at the join): paid at the next trip's end, its line in the hud
-    if (!(s.actions && s.actions.has('pay'))) {
-      this.offs.push(s.handle('pay', (arg) => this.payLater(arg)));
-      this.offs.push(s.on('trip:end', () => this.payNow()));
-    }
+    // Mary's want (E's show.js, the join): Leo's lid carried, the dot on her offers Give, and her talk "Look at this…";
+    // given, her back table goes on (MARY 'table'). The lid is taken from you by show.js; the favour closes here
+    for (const w of WANTS) this.offs.push(show.want({ id: `mining:${w.who}:${w.item}`, who: w.who, item: w.item, give: true, when: w.when, to: w.scene, run: () => { if (this.c.mtasks) this.c.mtasks.lidGiven(); } }));
+    this.offs.push(show.talker('mary', (o = {}) => this.talk('mary', o)));
+    // pay: is D's (beats.js: owed now, paid at the next trip-end tally with its line, record.js): the join took out A2's
+    // stand-in
     return this;
   }
   get story() { return this.c.story || null; }
@@ -121,13 +123,7 @@ class MiningCast {
   // Farm 31's café in the store's own frame (props.js's: a across, b toward the front wall and the door; the store's
   // inside is ±2.86 × ±3.86 m): Mary's window table front left, the corner table front right clear of the board, the urn
   // on the counter. Written onto the layout as L.cafe (grounding.js reads it: a café where the store has one)
-  cafeOf(L) {
-    const A = L.axes.a, B = L.axes.b, C = L.centre, y = L.floorY;
-    const W = (a, b) => ({ x: C.x + A.x * a + B.x * b, z: C.z + A.z * a + B.z * b });
-    const head = (da, db) => Math.atan2(-(A.z * da + B.z * db), A.x * da + B.x * db);
-    const tab = (a, b) => ({ ...W(a, b), y, ax: { x: B.x, z: B.z }, seats: [{ ...W(a, b - 0.62), y, heading: head(0, 1) }, { ...W(a, b + 0.62), y, heading: head(0, -1) }] });
-    return { window: tab(-1.65, 3.05), corner: tab(1.5, 2.95), urn: { ...W(2.45, -2.65), y: y + 0.95 } };
-  }
+  cafeOf(L) { return cafeSpots(L); } // (story-props.js: shared with Rose's window table at Moose Lake 25, the join)
   buildCafe(L) {
     if (!L.cafe && L.axes && L.centre) L.cafe = this.cafeOf(L);
     if (!L.cafe || (this.cafe && this.cafe.L === L)) { if (this.cafe) this.lidOnTable(); return; }
@@ -171,7 +167,7 @@ class MiningCast {
     const n = this.c.npcs;
     return new SceneRun(this.c.topics, def, { who, args: { ...this.args(FARM_EP), ...(ctx.args || {}) }, mark: n && n.mark ? (t) => n.mark(t) : null, ...ctx });
   }
-  talk(who) {
+  talk(who, o = {}) {
     if (!this.on) return false;
     const st = this.live.get(who), D = this.c.talk, s = this.story; if (!st || !D) return false;
     const def = SCENES[who]; if (!def) return false;
@@ -191,27 +187,22 @@ class MiningCast {
       favour: () => { if (tasks) tasks.offerLen(FARM_EP); },
       lid: () => { if (tasks) tasks.offerMary(FARM_EP); },
       pick: () => {},
-    } });
+    }, ...(who === 'mary' ? { show: (r, from) => show.choice('mary', r, from) } : {}) }); // (e: "Look at this…" in Mary's talk: the join)
     // Len's "Where are you headed next?": a real lake picked on the map (the canary, told.len kept; nothing leaks yet)
     const lake = (ch) => (who === 'len' && ch.text === T('30:4.2/len-saari-first-meeting.c6') ? { ...ch, pick: 'lake', go: ((g) => (a) => { if (a && a.name) s.person('len', 'told', '=', String(a.name), 'a2:canary'); return g(); })(ch.go) } : ch);
     const first = () => {
-      let node = run.node(start);
-      node = decorate(node, lake);
-      // the want (E's show.js "Give" at the join): Mary at the window, Leo's lid carried
-      if (who === 'mary' && node && Array.isArray(node.choices) && this.wants('mary')) node.choices.unshift({ text: 'Give: Box lid', kind: 'give', go: () => this.giveNode(run) });
-      return node;
+      // the dot's Give (show.js giveFor → show.talker): the want answered, then her back table (its `to`)
+      if (who === 'mary' && o.give) return show.answer(o.give, { kind: 'item', id: o.give.item }, () => run.choices(start), () => run.node(o.give.to || 'table'));
+      return decorate(run.node(start), lake);
     };
     return D.open({ speaker: st.h.speaker, name: this.nameOf(who), role: '', room: FARM_EP, start: first, bye: () => null });
   }
   wants(who) { const s = this.story; return WANTS.some((w) => w.who === who && s.when(w.when) && has(this.c.inventory, w.item) > 0); }
-  giveNode(run) { const s = this.story; if (!this.wants('mary')) return null; takeItem(this.c.inventory, ITEM.lid, 1); if (this.c.mtasks) this.c.mtasks.lidGiven(); s.set('mary.lid.given', true, 'a2:give'); return run.node('table'); }
-  // the want, from outside (E's show.js at the join; the rigs): Mary at the window takes the lid → her back table
+  // the want, from outside (the rigs): what the dot's Give on Mary does (show.js giveFor, the join)
   give(who, item) {
     if (who !== 'mary' || item !== ITEM.lid || !this.wants('mary')) return false;
-    const st = this.live.get('mary'), D = this.c.talk; if (!st || !D) return false;
-    const run = this.run(MARY, 'mary', { hooks: {} });
-    st.talked = true; this.story.meet('mary', 'a2');
-    return D.open({ speaker: st.h.speaker, name: this.nameOf('mary'), role: '', room: FARM_EP, start: () => this.giveNode(run), bye: () => null });
+    const q = show.giveFor('cast:mary:31');
+    return q ? q.run() : false;
   }
   // "Here, give me your map. I'll ring the old pads for you.": the landing, the grade, the west pads, in Len's voice
   lenRings() {
@@ -304,20 +295,15 @@ class MiningCast {
     return true;
   }
 
-  // --- the pay: stand-in: "pay:<dollars>@<text id>", paid at the next trip's end (D's record.js tally at the join) ---------
-  payLater(arg) {
-    const s = this.story, m = /^(\d+)@(.+)$/.exec(String(arg)); if (!m || !s || !s.doc) return false;
-    (s.doc.dir.a2pay || (s.doc.dir.a2pay = [])).push({ n: +m[1], line: m[2], abs: s.nowAbs() });
-    s.dirty();
-    return true;
+  // --- pay: D's handler owes "pay:<dollars>@<text id>" and the trip-end tally pays it (the join: the stand-in went) -----
+  // (for the rigs: what D owes and has paid from these rules, and the tally's own pay now)
+  payLines() {
+    const s = this.story, d = s && s.doc && s.doc.dir, L = (d && Array.isArray(d.pay)) ? d.pay : [];
+    return L.map((p) => ({ n: p.amt, line: p.line, text: p.text, paid: !!p.paid, rule: p.rule }));
   }
   payNow() {
-    const s = this.story, q = s && s.doc && s.doc.dir.a2pay; if (!q || !q.length) return [];
-    const P = this.c.profile, out = [];
-    for (const e of q) { const w = T(e.line) || e.line; if (P && typeof P.earn === 'function' && e.n > 0) P.earn(e.n, w); out.push(`${w} · $${e.n}`); }
-    s.doc.dir.a2paid = [...(s.doc.dir.a2paid || []), ...q].slice(-20); s.doc.dir.a2pay = []; s.dirty();
-    if (this.c.hud && out.length) this.c.hud.note(out.join(' · '), 6);
-    return out;
+    const s = this.story; if (!s || typeof s.tallyLines !== 'function') return [];
+    return (s.tallyLines({}) || []).map((l) => `${l.title} · $${l.pay}`);
   }
 
   makeDebug() {
@@ -325,7 +311,7 @@ class MiningCast {
     return {
       stage(who, id = null) { const L = storeLayout(FARM_EP), R = CAST[who]; if (!L || !R) return null; const slot = R.where.find((w) => w.id === id) || R.where[0]; self.unstage(who); return self.stage(who, slot, L) ? self.staged() : null; },
       slab(o = {}) { self.slab = { since: performance.now(), tauno: null, tasha: null, waited: false, forceTasha: !!o.tasha }; return true; },
-      pays() { const d = self.story && self.story.doc && self.story.doc.dir; return { due: (d && d.a2pay) || [], paid: (d && d.a2paid) || [] }; },
+      pays() { const L = self.payLines(); return { handler: 'd', due: L.filter((p) => !p.paid), paid: L.filter((p) => p.paid) }; },
       payNow: () => self.payNow(),
     };
   }

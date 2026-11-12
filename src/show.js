@@ -5,8 +5,11 @@
 // Mary and Leo's lid), the way any verb on the dot does.
 //
 //   show.attach({ story, photo, inventory, text: (id) → words, hud }) → show
-//   show.want({ id?, who, print?, item?, when?, say?: [text id], then?: [action], give?: true, run?(ctx) }) → off
-//                          print: a layer photo match ('s7.lilacs.camp'); item: an item id (Leo's lid: 'leolid')
+//   show.want({ id?, who, print?, item?, when?, say?: [text id], then?: [action], give?: true, run?(ctx), to? }) → off
+//                          print: a layer photo match ('s7.lilacs.camp'); item: an item id (Leo's lid: 'leolid');
+//                          to: a node of the talk's scene that goes on from it (Mary's back table: 'table'; the join)
+//   show.talker(who, fn(o)) → off   who the dot's Give opens a talk with ({ give: want }) besides E's own (Rose):
+//                          A2's Mary (mining-cast.js; the join)
 //   show.wanted(who) → [want]       the wants of a person that hold now (story.when)
 //   show.choice(who, run, from) → a dialogue choice "Look at this…" | null   SceneRun ctx.show (topics.js // e:)
 //   show.giveFor(personKey) → { verb: 'Give', run } | null   the dot's Q on a person carrying what they want
@@ -15,12 +18,13 @@
 export const LOOK = 'Look at this…';
 
 export class Show {
-  constructor() { this.c = {}; this.list = []; this.n = 0; }
+  constructor() { this.c = {}; this.list = []; this.n = 0; this.talkers = new Map(); }
   attach(c = {}) { Object.assign(this.c, c); return this; }
   get story() { return this.c.story || null; }
   get live() { const s = this.story; return !!(s && s.doc && s.mode !== 'mirror'); }
   when(expr) { const s = this.story; if (!expr || expr === 'true') return true; try { return !!(s && s.when(expr)); } catch { return false; } }
-  want(w) { const r = { id: w.id || `want:${++this.n}`, ...w }; this.list.push(r); return () => { this.list = this.list.filter((x) => x !== r); }; }
+  want(w) { const r = { id: w.id || `want:${++this.n}`, ...w }; this.list = this.list.filter((x) => x.id !== r.id); this.list.push(r); return () => { this.list = this.list.filter((x) => x !== r); }; }
+  talker(who, fn) { this.talkers.set(who, fn); return () => { if (this.talkers.get(who) === fn) this.talkers.delete(who); }; }
   wanted(who) { return this.live ? this.list.filter((w) => w.who === who && this.when(w.when)) : []; }
   words(id) { const T = this.c.text; return typeof T === 'function' ? T(id) : null; }
   matches(printId) { const E = this.c.episodes; return E && typeof E.matchesOf === 'function' ? E.matchesOf(printId) : []; }
@@ -54,9 +58,10 @@ export class Show {
     const w = this.wanted(who).find((x) => (thing.kind === 'print' ? x.print && (thing.matches || []).includes(x.print) : x.item === thing.id));
     const back = () => (run && typeof run.choices === 'function' ? run.choices(from) : [{ text: '…', kind: 'bye', go: () => null }]);
     if (!w) return { say: '…', filler: true, choices: back() };
-    return this.answer(w, thing, back);
+    return this.answer(w, thing, back, w.to && run && typeof run.node === 'function' ? () => run.node(w.to) : null);
   }
-  answer(w, thing, back) {
+  // (cont: the scene's own node after the want's lines, when the want says where it goes on: to)
+  answer(w, thing, back, cont = null) {
     const lines = (w.say || []).map((id) => this.words(id)).filter(Boolean);
     const act = () => {
       if (w.give && thing.kind === 'item') this.takeFromYou(thing.id);
@@ -65,11 +70,11 @@ export class Show {
       if (typeof w.run === 'function') { try { w.run({ thing, story: s }); } catch (e) { console.warn('show: run', e); } }
       if (s && typeof s.emit === 'function') s.emit('shown', { who: w.who, kind: thing.kind, id: thing.id, want: w.id });
     };
-    if (!lines.length) { act(); return { say: '…', filler: true, choices: back() }; }
+    if (!lines.length) { act(); return cont ? cont() : { say: '…', filler: true, choices: back() }; }
     const step = (i) => {
       const last = i === lines.length - 1;
       if (last) act();
-      return { say: lines[i], choices: last ? back() : [{ text: '…', go: () => step(i + 1) }] };
+      return { say: lines[i], choices: last ? (cont ? [{ text: '…', go: cont }] : back()) : [{ text: '…', go: () => step(i + 1) }] };
     };
     return step(0);
   }
@@ -84,7 +89,7 @@ export class Show {
     const m = /^cast:([\w-]+):/.exec(String(key || '')); if (!m) return null;
     const w = this.wanted(m[1]).find((x) => x.item && x.give && this.carried(x.item));
     if (!w) return null;
-    return { verb: 'Give', run: () => { const T = this.c.talkTo; if (typeof T === 'function') T(m[1], { give: w }); else this.answer(w, { kind: 'item', id: w.item }, () => []); } };
+    return { verb: 'Give', run: () => { const own = this.talkers.get(m[1]), T = own || this.c.talkTo; if (typeof T === 'function') return own ? own({ give: w }) : T(m[1], { give: w }); return this.answer(w, { kind: 'item', id: w.item }, () => []); } };
   }
 }
 

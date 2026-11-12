@@ -84,7 +84,7 @@ const ask = (id) => T(id);
 
 test('every line id the mining data names resolves in the extract (and each walt: id is a Walt-page line)', () => {
   const ids = new Set([...textIds(SCENES), ...M.OPENERS.map((o) => o.id), ...M.PLAIN_OPENERS, M.CLOSERS.after, ...M.CLOSERS.plain, M.TASHA_LID, ...M.KEEPER_NOTICE,
-    M.THURSDAY_LINE, ...Object.values(M.CREWMAP), ...Object.values(M.WORDS), ...M.STATIONS.map((q) => q.ask), arc.doors[1].paper.text, ...arc.doors[1].keeper]);
+    M.THURSDAY_LINE, ...Object.values(M.CREWMAP), ...Object.values(M.WORDS), ...M.STATIONS.map((q) => q.ask), arc.flyer.text, ...arc.flyer.keeper]); // (join c2: the notice is the record's flyer)
   const miss = [...ids].filter((id) => T(id) == null);
   assert.deepEqual(miss, []);
   const walt = actsOf([SCENES, RULES_MINING]).filter((a) => a.startsWith('walt:')).map((a) => a.slice(5));
@@ -167,7 +167,7 @@ test('step 3: the Kettle notice: up from 18:00 of a forecast two-day rain\'s fir
   rain.story = s; rain.weather = { _hour: () => ({ s: 1 }) }; rain.cache.clear(); // (fair every hour: the forced rain only)
   rain.force({ from: 20620, days: 2 });
   s.sensor('kettlenotice', () => !!rain.spellAt(s.nowAbs()));
-  const D = arc.doors.find((d) => d.kind === 'flyer');
+  const D = arc.flyer; // (join c2: the record's flyer, E's runner)
   const at = (abs, h) => { s.clock({ abs, hours: h }); return s.when(D.when); };
   assert.equal(at(20620, 19), false, 'no notice without "The pads"');
   s.set('tauno.said.pads', true);

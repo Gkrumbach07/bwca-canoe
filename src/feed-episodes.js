@@ -13,10 +13,10 @@
 //     · S9: fishing.snags (the pot's bail on the bed off Alice's beach rock), the pot into the hand (give:item.*), Gus's
 //       line at Moose Lake 25 the first time you come in with it (S9.conv.1–2), the rumour in the keepers' word, the
 //       family's kid at C1690 (and the family at C593 on some June days: parties.pinnedFn)
-//     · S7: Rose at her table by Moose Lake 25's window on Tuesdays (the stub table until A2's café kit), her scene
+//     · S7: Rose at her table by Moose Lake 25's window on Tuesdays (A2's café kit, the join), her scene
 //       (S7.conv), "Look at this" with a print of the lilacs at the old camp, the swim off the rock
 //     · June's pot's coffee: two cups (kit.brew), nothing said
-//     · the stubs the join swaps: PAY_STUB (D's pay: handler), roseTable (A2's café kit)
+//     · pay: is D's handler (beats.js, paid at the trip-end tally); Rose's table is A2's café kit (the join)
 // A co-op guest (story.mode 'mirror' or guest()): none of it moves: no flyers, no snag, no Rose's scene, no Stories side.
 import * as THREE from 'three';
 import { feed } from './story-feed.js';
@@ -29,10 +29,9 @@ import { lilacBloom } from './season.js';
 import { EPISODES } from './story-data/episodes/index.js';
 import { storeLayout, storeLayouts, setStoreFlyers, setStoreNotices } from './props.js';
 import { propMaterial } from './prop-kit.js';
-import { kit as propKit, rngFor } from './story-props.js';
+import { kit as propKit, rngFor, cafeSpots } from './story-props.js';
 import { itemDef } from './items.js';
 
-export const PAY_STUB = true;   // (the join: D's pay: handler takes `pay:<n>@<id>`; until it is there, paid at once)
 const ROSE_NEAR = 90;           // m: Rose is seated while you are this near Moose Lake 25's store
 const KID_NEAR = 45;            // m: the family's kid speaks up as you come this near their site
 const SWIM_R = 7;               // m: a swim this near the flat rock is a swim off it
@@ -73,33 +72,35 @@ export async function connect(t) {
   // --- the runner, the minigames, show, the Stories side ------------------------------------------------------------------
   for (const r of EPISODES) episodes.register(r);
   episodes.attach({ story, record, hud, layer, text: T, guest });
+  story.episodes = episodes; // (the director reads story.episodes.places() for the day's beat: D, feed-beats.js; the join)
   minigames.attach({ story, held: () => episodes.held(), guest });
   minigames.register('snag', snag);
   show.attach({ story, photo, inventory, text: T, episodes, itemName: (id) => (itemDef(id) || {}).name || id, talkTo: (who, o) => talkTo(who, o) });
   for (const E of EPISODES) for (const w of E.wants || []) show.want({ ...w, id: `${E.id}:${w.who}:${w.print || w.item}` });
   const stories = journal ? installStories({ journal, episodes, photo, story }) : null;
 
-  // --- D's pay: (the stub until the join) and the give:item.* handler -----------------------------------------------------
-  if (PAY_STUB && !story.actions.has('pay')) {
-    story.handle('pay', (arg) => {
-      const [n] = String(arg).split('@'), v = Number(n);
-      if (!(v > 0) || !profile || typeof profile.earn !== 'function') return false;
-      profile.earn(v, 'story'); note(`+$${v}`, 3); return true;
-    });
-  }
+  // --- the give:item.* handler (pay: is D's, beats.js: the join took out PAY_STUB) -----------------------------------------
+  // give:item.<id>[*n] (the one handler: E's, with A2's count, the join): chained after B's give:page.* (notebook.js)
   const give0 = story.actions.get('give');
-  story.handle('give', (arg, meta, s) => {
-    const m = /^item\.(.+)$/.exec(String(arg));
-    if (!m) return give0 ? give0(arg, meta, s) : false;
-    if (!inventory || !itemDef(m[1])) return false;
-    const d = itemDef(m[1]);
+  const giveOne = (id) => {
+    const d = itemDef(id);
     let r = null;
     // into the hand (a pot is a container: it is carried in a hand as one, inventory.carry's way), else a pack with you
-    if (d.kind === 'container' && typeof inventory.freeHand === 'function' && inventory.freeHand() >= 0) { const c = inventory.addContainer(m[1], 'hands', null, { quiet: true, hand: inventory.freeHand() }); if (c) { inventory.emit('carry'); r = { ok: true }; } }
-    if (!(r && r.ok) && d.kind !== 'container' && typeof inventory.toHandNew === 'function') r = inventory.toHandNew(m[1]);
-    if (!(r && r.ok) && typeof inventory.place === 'function') r = inventory.place(m[1], 1, {}); // (both hands full: into a pack with you, as a kept fish goes)
-    if (!(r && r.ok) && typeof inventory.place === 'function') r = inventory.place(m[1], 1, { crate: true });
+    if (d.kind === 'container' && typeof inventory.freeHand === 'function' && inventory.freeHand() >= 0) { const c = inventory.addContainer(id, 'hands', null, { quiet: true, hand: inventory.freeHand() }); if (c) { inventory.emit('carry'); r = { ok: true }; } }
+    if (!(r && r.ok) && d.kind !== 'container' && typeof inventory.toHandNew === 'function') r = inventory.toHandNew(id);
+    if (!(r && r.ok) && typeof inventory.place === 'function') r = inventory.place(id, 1, {}); // (both hands full: into a pack with you, as a kept fish goes)
+    if (!(r && r.ok) && typeof inventory.place === 'function') r = inventory.place(id, 1, { crate: true });
     return !!(r && r.ok);
+  };
+  story.handle('give', (arg, meta, s) => {
+    const m = /^item\.([\w:-]+?)(?:\*(\d+))?$/.exec(String(arg));
+    if (!m) return give0 ? give0(arg, meta, s) : false;
+    if (!live() || !inventory || !itemDef(m[1])) return false;
+    let k = 0;
+    for (let i = 0; i < (Number(m[2]) || 1); i++) if (giveOne(m[1])) k++;
+    try { if (k && typeof inventory.write === 'function') inventory.write(); } catch { /* the inventory's own */ }
+    if (k && typeof story.ingest === 'function') story.ingest('got', { item: m[1] });
+    return k > 0;
   });
 
   // --- the flyers on the boards ---------------------------------------------------------------------------------------------
@@ -192,14 +193,12 @@ export async function connect(t) {
   };
   const SIDE_WHO = { 'S7.the-set-piece.2': 'Parent' };
 
-  // --- S7: Rose at her table by the window (the stub table until A2's café kit) -----------------------------------------
+  // --- S7: Rose at her table by the window: A2's café kit (owner call 8; the join) ---------------------------------------
   const S7 = EPISODES.find((e) => e.id === 'S7');
   let rose = null;
   const roseSpot = (L) => {
-    const A2 = L.axes.a, B = L.axes.b, c = L.centre, iW = L.size.iW, iD = L.size.iD;
-    const doorA = (L.door.x - c.x) * A2.x + (L.door.z - c.z) * A2.z, a = -(Math.sign(doorA) || 1) * iW * 0.55, b = iD - 0.8;
-    const x = c.x + A2.x * a + B.x * b, z = c.z + A2.z * a + B.z * b;
-    return { table: { x, z, rot: Math.atan2(B.x, B.z) }, seat: { x: x + B.x * 0.6, z: z + B.z * 0.6, y: L.floorY, heading: Math.atan2(B.z, -B.x) } };
+    const W = cafeSpots(L).window; // (the café's window table, front left, in the store's own frame; her seat the window side, facing the room)
+    return { table: { x: W.x, z: W.z, rot: Math.atan2(W.ax.x, W.ax.z) }, seat: W.seats[1] };
   };
   const roseHere = () => !!(S7 && live() && !episodes.held() && episodes.window('S7') && story.when(S7.rose.when));
   const unstageRose = () => {
@@ -209,7 +208,7 @@ export async function connect(t) {
     rose = null;
   };
   const stageRose = (L) => {
-    const sp = roseSpot(L), k = propKit('roseTable').build({ rng: rngFor('rose.table') });
+    const sp = roseSpot(L), k = propKit('cafeTable').build({ rng: rngFor('rose.table') });
     const mesh = new THREE.Mesh(k.geo, propMaterial());
     mesh.name = 'story rose.table'; mesh.position.set(sp.table.x, L.floorY, sp.table.z); mesh.rotation.y = sp.table.rot; mesh.castShadow = true; mesh.receiveShadow = true;
     mesh.matrixAutoUpdate = false; mesh.updateMatrix(); mesh.updateMatrixWorld(true);
@@ -234,7 +233,7 @@ export async function connect(t) {
     };
     return talk.open({ speaker: rose.h.speaker, name: story.has('ep.S7.rose') ? 'Rose' : 'Rose G.', role: '', room: 25, start, bye: () => (episodes.started('S7') ? T('S7.conv.10') : null) });
   }
-  function talkTo(who, o) { if (who === 'rose') return roseTalk(o); return false; }
+  function talkTo(who, o) { if (who === 'rose') return roseTalk(o); const f = show.talkers.get(who); return typeof f === 'function' ? f(o) : false; } // (the join: A2's Mary through show.talker)
 
   // --- June's pot: coffee made in it comes out as two cups (nothing says so) ----------------------------------------------
   if (kit && typeof kit.brew === 'function') {

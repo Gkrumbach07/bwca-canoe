@@ -1610,6 +1610,7 @@ the print, nobody remarks on it there. A player can find the pattern for themsel
 
 ### What it gives
 
+<!-- id: S7.pay whole -->
 - $25 from Rose.
 - Through 33: Aili opens; lock 4 key A; the print on her wall.
 - The swimming rock: Walt's "He was better at it" (N15) made real.

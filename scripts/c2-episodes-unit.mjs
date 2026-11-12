@@ -26,6 +26,9 @@ import { RULES_EPISODES } from '../src/story-data/rules-episodes.js';
 import { Minigames } from '../src/minigames.js';
 import { snag, snagTarget, overTarget, passes, SNAG } from '../src/minigames/snag.js';
 import { lilacBloom } from '../src/season.js';
+import { registerSensor } from '../src/story-cond.js';
+import { A2_SENSORS } from '../src/story-data/mining.js';
+for (const [k, v] of Object.entries(A2_SENSORS)) registerSensor(k, v); // (join: the arc's flags, as mining-cast.js registers them)
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SIDE = JSON.parse(readFileSync(path.join(ROOT, 'src/story-data/text/side.json'), 'utf8')).text;
@@ -142,7 +145,7 @@ function world({ y = 2026, m = 6, d = 9, h = 11 } = {}) {
   const r = s.rules.rules.get('ep.S9.door3'); void r;
   s.markRead('NB06', 'unit'); s.readHere('NB06', 'unit'); s.set('mg.snag.landed', true, 'unit');
   const p9 = E.page('S9');
-  const ok7 = s.get('ep.S7.end') === 'rose' && pays.includes('25@S7') && s.has('ep.S7.paid') && p1.end === text('S7.end') && p1.first === 'Lilacs at Mummo\'s.' && p1.title === 'Mummo\'s' && p0.lines.includes(text('S7.the-place.w1'));
+  const ok7 = s.get('ep.S7.end') === 'rose' && pays.includes('25@S7.pay') && s.has('ep.S7.paid') && p1.end === text('S7.end') && p1.first === 'Lilacs at Mummo\'s.' && p1.title === 'Mummo\'s' && p0.lines.includes(text('S7.the-place.w1'));
   const ok9 = s.get('ep.S9.end') === 'pot' && s.has('ep.S9.pot') && gives.includes('item.junespot') && p9.first === 'Brought up June\'s pot.' && p9.title === 'Coffee Lake';
   result('ends: S7 with the print shown (its page\'s last line, $25 through pay:), S9 with the pot (give:item.junespot)', ok7 && ok9, { p0, p1, p9, pays, gives });
   const before = stamps.length; s.emit('fact', { key: 'ep.S7.end' }); // (a second hearing stamps nothing)
@@ -201,6 +204,30 @@ function world({ y = 2026, m = 6, d = 9, h = 11 } = {}) {
   result('snag: its results are the story\'s mg:snag events and the facts the steps read (hooked, landed); S9\'s pot given', heard.join(',') === 'hooked,landed' && W.s.has('mg.snag.landed') && W.s.has('ep.S9.pot') && W.gives.includes('item.junespot') && !M.active.length, { heard, gives: W.gives });
   const G = world(); G.s.setMode('mirror'); const MG = new Minigames().attach({ story: G.s }); MG.register('snag', snag);
   result('snag: a guest starts none (no snag on the pot)', MG.start('snag', { target: T }) === null, {});
+}
+
+// --- the join (Round 2): A2's arc on the runner, its flyer (the Kettle notice), the director's places() lines ----------------
+{
+  const W = world({ m: 7, d: 14, h: 19 }), A = EPISODES.find((e) => e.id === 'mining');
+  const MIN = JSON.parse(readFileSync(path.join(ROOT, 'src/story-data/text/mining.json'), 'utf8')).text; W.E.c.text = (id) => text(id) || (MIN[id] ? MIN[id].text : null);
+  W.s.sensor('kettlenotice', () => true);
+  const none = W.E.flyers(31).length; // (before "The pads": nothing)
+  W.s.set('tauno.said.pads', true); W.E.dayTurn(true);
+  const F = W.E.flyers(31), words = F[0] && F[0].paper;
+  const took = F[0] ? W.E.take(F[0].id) : false;
+  const after = W.E.flyers(31);
+  result('join: the mining arc on the runner: the Kettle notice a flyer on Farm\'s board only after "The pads" and in the rain\'s window; taken, kettle.notice (no yes: the arc\'s yes is the bench)',
+    !!A && none === 0 && F.length === 1 && /^FIELD HELP/.test(words.title || '') && took && W.s.has('kettle.notice') && !W.E.started('mining') && after.length === 1 && after[0].taken, { none, F: F.length, words, took, after });
+  W.s.set('door.mining.open', true);
+  const yes = W.E.started('mining');
+  W.s.set('door.mining.done', true);
+  result('join: the arc\'s yes is the first Farm morning sat (door.mining.open: a place door, ep.mining.yes); it ends with door.mining.done; its flyer is down then',
+    yes && W.s.get('ep.mining.end') === 'done' && W.E.flyers(31).length === 0, { yes, end: W.s.get('ep.mining.end') });
+  // the director's places(): an open episode's place carries its line (S7's rumour), a layer place needed
+  const P = world({ m: 6, d: 9 }); P.E.c.layer = { place: (id) => (id === 's7.mummos' ? { x: -17480, z: 3730 } : null) };
+  P.E.take(P.E.flyers(25)[0].id);
+  const pl = P.E.places();
+  result('join: episodes.places() gives the director each open episode\'s place with its line (S7: 70.6.1.11)', pl.length === 1 && pl[0].ep === 'S7' && pl[0].line === '70.6.1.11' && pl[0].place === 's7.mummos', { pl });
 }
 
 // --- the lilacs' window -------------------------------------------------------------------------------------------------

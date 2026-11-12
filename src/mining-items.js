@@ -6,9 +6,7 @@
 //   defineMiningItems(T)   T(id) → the words (topics.js T): the lid's stamp, the crew map's labels. Idempotent
 //   giveItem(inventory, id, n = 1) → n given · takeItem(inventory, id, n = 1) → n taken · has(inventory, id) → count
 //   ITEM   the ids: bottle, lid, blade, map ('page:crewmap')
-//   installGive(story, inventory) → off   the `give:item.<id>[*n]` action (E's give:item.* handler is the join's: this is
-//                                         the thin local stand-in, chained to whatever give: handler is there first, so
-//                                         B's give:page.* still answers)
+//   (the `give:item.<id>[*n]` action is E's handler, feed-episodes.js: the join took out A2's stand-in)
 import { defineItem, definePage } from './items.js';
 
 export const ITEM = { bottle: 'samplebottle', lid: 'leolid', blade: 'shovelblade', map: 'page:crewmap' };
@@ -40,18 +38,4 @@ export function takeItem(inv, id, n = 1) {
   for (let i = 0; i < n; i++) { try { if (inv && inv.remove(id, 1)) k++; } catch { break; } }
   try { if (k && typeof inv.write === 'function') inv.write(); } catch { /* the inventory's own */ }
   return k;
-}
-
-// the give:item.<id>[*n] action (rules and scenes): E's handler at the join; this one until then
-export function installGive(story, inv) {
-  if (!story || typeof story.handle !== 'function') return () => {};
-  const prev = story.actions && story.actions.get('give');
-  return story.handle('give', (arg, meta, s) => {
-    const m = /^item\.([\w:-]+?)(?:\*(\d+))?$/.exec(String(arg));
-    if (!m || !Object.values(ITEM).includes(m[1])) return prev ? prev(arg, meta, s) : false;
-    if (s && s.mode === 'mirror') return false;
-    const n = giveItem(inv, m[1], Number(m[2]) || 1);
-    if (n && s && typeof s.ingest === 'function') s.ingest('got', { item: m[1] });
-    return n > 0;
-  });
 }

@@ -6,9 +6,10 @@
 //
 //   kettle.attach({ story, layer, scene, actors, pointer, talk, topics, inventory, hud, world, tiles, player, mtasks })
 //   kettle.update(dt)                 Tasha and her coolers by the day; the creek's run or stain; the lid seen taken
-//   kettle.flyers(ep) → [{ id, paper: { title, text }, keeper, take() }]   the Kettle notice on Farm's board, while it
-//                                     is up (E's episodes.flyers reads arc-mining.js's door; this is its stand-in)
-//   kettle.takeNotice() → bool        the flyer taken (the yes): kettle.notice; its rule rings the pad
+//   kettle.flyers(ep) → [{ id, paper: { title, text }, keeper, take() }]   the Kettle notice on Farm's board while it
+//                                     is up and not taken: E's runner's own flyer (episodes.flyers, arc-mining.js's
+//                                     `flyer`), read here for the rigs (the join: no stand-in)
+//   kettle.takeNotice() → bool        the flyer taken (episodes.take): kettle.notice; its rule rings the pad
 //   kettle.day() → { spell, day, here, run, notice }   where the weather stands for the Kettle (rigs, why())
 //   kettle.tasha() → the field person | null · kettle.filled() → bool (the three bottles)
 //   FieldPerson                       a named person away from any store (Tasha at the turnaround, Tauno at the slab):
@@ -24,6 +25,7 @@ import { TASHA, tashaEntry, STATIONS, KETTLE, TASHA_LID, KEEPER_NOTICE, WORDS } 
 import { CAST } from './story-data/cast.js';
 import { ITEM, giveItem, takeItem, has } from './mining-items.js';
 import arc from './story-data/episodes/arc-mining.js';
+import { episodes } from './episodes.js';
 
 const ft1 = (m) => (m * 3.28084).toFixed(1);
 // the turnaround on the forest road south of the pad (story-places' kettle frame: [dx, dz] from the pad), and the creek
@@ -97,13 +99,14 @@ class Kettle {
   tasha() { return this.field; }
 
   // --- the notice --------------------------------------------------------------------------------------------------------
-  door() { return arc.doors.find((d) => d.kind === 'flyer'); }
+  door() { return arc.flyer; }
   flyers(ep) {
     const s = this.story, D = this.door();
-    if (!this.on || !D || !D.at.includes(Number(ep)) || s.has('kettle.notice') || !s.when(D.when)) return [];
-    return [{ id: D.id, paper: { title: D.paper.title, text: T(D.paper.text) }, keeper: KEEPER_NOTICE.map((id) => T(id)).filter(Boolean), take: () => this.takeNotice() }];
+    if (!this.on || !D || s.has('kettle.notice')) return [];
+    return episodes.flyers(ep).filter((f) => f.id === `ep:${arc.id}` && !f.taken)
+      .map((f) => ({ id: f.id, paper: { title: f.paper.title, text: T(D.text), sign: f.paper.sign }, keeper: KEEPER_NOTICE.map((id) => T(id)).filter(Boolean), take: () => this.takeNotice() }));
   }
-  takeNotice() { const s = this.story; if (!this.on || s.has('kettle.notice') || !this.flyersOk()) return false; return s.set('kettle.notice', true, 'flyer:kettle'); }
+  takeNotice() { const s = this.story; if (!this.on || s.has('kettle.notice')) return false; return episodes.take(`ep:${arc.id}`) && s.has('kettle.notice'); }
   flyersOk() { const s = this.story, D = this.door(); return !!(D && s.when(D.when)); }
 
   // --- each frame ---------------------------------------------------------------------------------------------------------

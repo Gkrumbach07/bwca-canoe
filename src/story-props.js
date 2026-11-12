@@ -291,8 +291,8 @@ function launch() {
 
 // e: Round 2 stream E's kits (docs/story/60-side-stories.md S7 "The place", S9 "The place"): Mummo's on Inlet Bay (the
 // lilacs, the stone step, the foundation, the bed frame, the sauna's footing, the swimming rock; Toivo's cobble is
-// quartzCobble on the step; the cribs are crib), Alice's beach rock (landingRock) and June's pot half in the sand, and the
-// stub table Rose sits at by the window of Moose Lake 25 until A2's café kit lands (the join swaps roseTable for it).
+// quartzCobble on the step; the cribs are crib), Alice's beach rock (landingRock) and June's pot half in the sand. Rose's
+// table by the window of Moose Lake 25 is A2's café kit (cafeTable at cafeSpots(L).window: the join).
 const COL_E = { leaf: C(0x40593a), leafDark: C(0x34492f), bloom: C(0x9a76b8), bloomPale: C(0xb79bd0), stem: C(0x6a5a4a),
   field: C(0x86817a), rust: C(0x7a4a2e), enamel: C(0x2f5f9a), chip: C(0x1c1c1c), shadow: C(0x2a2a26), table: C(0x8a6a48) };
 // a lilac thicket three metres high (opts.bloom: purple in June, else green); a dot on its middle
@@ -375,22 +375,23 @@ function sandShape() {
   b.face(pts, TILE.PLAIN, COL_E.shadow, { ref: V(0, 1, 0) });
   return { geo: b.build(), dots: [] };
 }
-// Rose's table by the store window (the stub until A2's café kit): a plain square table and a chair
-function roseTable() {
-  const b = new PropBuilder(), H = 0.74, hw = 0.4;
-  b.box(V(0, H, 0), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), hw, 0.02, hw, TILE.WOOD, COL_E.table);
-  for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) b.cyl(V(x * (hw - 0.05), 0, z * (hw - 0.05)), V(x * (hw - 0.05), H - 0.02, z * (hw - 0.05)), 0.025, 0.025, 5, TILE.WOOD, COL_E.table);
-  b.box(V(0, 0.44, 0.62), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), 0.21, 0.02, 0.2, TILE.WOOD, COL_E.table);
-  b.box(V(0, 0.7, 0.81), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), 0.21, 0.24, 0.02, TILE.WOOD, COL_E.table);
-  for (const [x, z] of [[-1, 0.44], [1, 0.44], [-1, 0.8], [1, 0.8]]) b.cyl(V(x * 0.19, 0, z), V(x * 0.19, 0.43, z), 0.018, 0.018, 4, TILE.WOOD, COL_E.table);
-  return { geo: b.build(), dots: [] };
-}
 // /e
 
 const REGISTRY = { stumpCut, quartzCobble, crib, landingRock, redPine, gradeMouth, slab, pole, drillRod,
   casing, coreRack, boxLid, trench, stockpile, stationStake, creekRun, beaverDam, digPit, surveyLath, surveyTag, shovelBlade, twoStumps, cafeTable, urn, coolers, launch, // (a2: the mining years' kits)
-  lilacs, stoneStep, foundation, bedFrame, stoneRing, swimRock, enamelPot, sandShape, roseTable, // e:
+  lilacs, stoneStep, foundation, bedFrame, stoneRing, swimRock, enamelPot, sandShape, // e:
 };
+// a2: the café's spots in a store's own frame (props.js's: a across, b toward the front wall and the door; every store's
+// inside is the same ±2.86 × ±3.86 m): the window table front left, the corner table front right clear of the board, the
+// urn on the counter; each table's two seats facing it. Farm 31's café (mining-cast.js) and Rose's window table at Moose
+// Lake 25 (feed-episodes.js, the join) both stand here
+export function cafeSpots(L) {
+  const A = L.axes.a, B = L.axes.b, Cn = L.centre, y = L.floorY;
+  const W = (a, b) => ({ x: Cn.x + A.x * a + B.x * b, z: Cn.z + A.z * a + B.z * b });
+  const head = (da, db) => Math.atan2(-(A.z * da + B.z * db), A.x * da + B.x * db);
+  const tab = (a, b) => ({ ...W(a, b), y, ax: { x: B.x, z: B.z }, seats: [{ ...W(a, b - 0.62), y, heading: head(0, 1) }, { ...W(a, b + 0.62), y, heading: head(0, -1) }] });
+  return { window: tab(-1.65, 3.05), corner: tab(1.5, 2.95), urn: { ...W(2.45, -2.65), y: y + 0.95 } };
+}
 export const KITS = Object.freeze(Object.keys(REGISTRY));
 export function kit(name) { const f = REGISTRY[name]; return f ? { build: (ctx = {}) => f({ rng: Math.random, opts: {}, ...ctx }) } : null; }
 // a seeded rng for a prop (the same stump every load)

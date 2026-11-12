@@ -24,7 +24,7 @@
 //   westpads.seen (L1C) · kettle.visited · kettle.lid · pietro.dig.seen · pietro.wronghill (L2C) (story-places.json and
 //   rules-mining.js write those)
 // the condition names the scenes read from their own context (cast.js args) or the world (kettle.js sensors)
-export const A2_SENSORS = { rained: 'flag', kettlerun: 'flag', tashaHere: 'flag', bigNew: 'flag', belt: 'flag' };
+export const A2_SENSORS = { rained: 'flag', kettlerun: 'flag', tashaHere: 'flag', bigNew: 'flag', belt: 'flag', kettlenotice: 'flag', kettleday: 'flag' }; // (join c2: + feed-weather.js's two the arc's flyer reads)
 
 // --- the Kettle day ---------------------------------------------------------------------------------------------------
 // the three stations, by Tasha's own names (30 §4.3 "The work"), each a stake in story-places.json `kettle`
@@ -151,11 +151,14 @@ export const FARM = {
   },
 };
 
+// the director's climax spacing (D, beats.js: the sensor climax:mining; the join): the clean book's ask (the way to the
+// climax) waits a trip when another arc's climax opened this trip or last. With no director (Node: the solver) it holds
+const spaced = (s) => !(s.sensors instanceof Map && s.sensors.has('climax')) || s.readSensor('climax', 'mining') !== false;
 // where Tauno's Farm scene starts (cast.js, the solver): ctx { asked: the ask already made this visit, porchVisit:
 // a porch visit since the map (a later day), lovelyBook: Brekke's "lovely book" heard }
 export function farmEntry(s, ctx = {}) {
   if (!s.has('tauno.farm.met')) return 'first';
-  if (s.has('door.mining.yield') && !s.has('tauno.ride') && !ctx.asked && (ctx.porchVisit || s.has('brekke.lovelybook'))) return 'ask';
+  if (s.has('door.mining.yield') && !s.has('tauno.ride') && !ctx.asked && (ctx.porchVisit || s.has('brekke.lovelybook')) && spaced(s)) return 'ask';
   if (s.has('kettle.visited') && !s.has('door.mining.yield')) return 'well';
   return 'morning';
 }
@@ -260,7 +263,7 @@ export const TASHA = {
       { ask: '30:4.3.c9', once: 'where', say: ['30:4.3.7'] }] },
     bg: { hub: 'hub', go: [{ ask: '30:4.3.c7', once: 'bg2', say: ['30:4.3.5'], then: ['walt:30:4.3.w1'] }] },
     // the bottles handed back at the tailgate: she closes it (the pay at the trip's end, owner call 10)
-    done: { say: ['30:4.3.9'], then: ['f:kettle.done', 'f:kettle.rain', 'walt:w.kettle.orange', 'pay:35@30:4.3.pay.1', 'do:back'], end: true },
+    done: { say: ['30:4.3.9'], then: ['f:kettle.done', 'f:kettle.rain', 'walt:w.kettle.orange', 'pay:35@30:4.3.pay.1', 'card:30:4.3.pay.2', 'do:back'], end: true }, // (join c2: the trip card's story line names the Kettle pad, D's card:; the doc has no card line of its own, so its Walt line)
     // 4.10 any time after the creek day: "Cooler hand. How's your back?"
     second: { say: ['30:4.10.7'], go: [{ ask: '30:4.10.c3', once: 'note', say: ['30:4.10.8'], then: ['walt:30:4.10.w1', 'f:tasha.second'], end: true }] },
     // 4.10 the coda: Tauno comes in behind you at the coffee (the climax done, the creek worked with her)

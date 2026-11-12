@@ -30,7 +30,8 @@
 //   episodes.state(id) → { started, ended, end, win, how, at } · open() → [id] (started, not ended)
 //   episodes.window(id) → bool         · dayTurn() (the feed's day turn; also run at attach)
 //   episodes.flyers(ep) → [{ id, paper, taken }] · take(flyerId) → bool
-//   episodes.places() → [{ id, ep, x, z, r }]   the open episodes' places in the layer (the day's beat, D)
+//   episodes.places() → [{ id, ep, place, x, z, r, line }]   the open episodes' places in the layer (the day's beat, D:
+//                          line its words; story.episodes is this runner, feed-episodes.js connect, the join)
 //   episodes.page(id) / pages() → { id, title, lines, end, first, prints }   (stories.js draws them)
 //   episodes.print(recId, matches) (a print's place matches, kept per print) · prints(match) → [recId]
 //   episodes.hold(reason) → release   no side story moves while held (60 §0.5: the run, Round 3's R)
@@ -42,6 +43,10 @@ export const RUN_GUARD = '!run.active';
 const ID_RX = /^[A-Za-z][\w-]*$/;
 const KINDS = new Set(['side', 'mini', 'arc']);
 const YES_DOORS = new Set(['flyer', 'choice', 'place', 'entry']);
+
+// the line the director's day's beat says for an open episode's place (D: beats.js reads places()[].line; the join): the
+// record's own `beat`, else its first rumour door's line (S7: 70.6.1.11, S9: S9.rumour)
+const beatLine = (rec) => rec.beat || ((rec.doors || []).find((d) => d.kind === 'rumour' && d.line) || {}).line || null;
 
 // --- the records → rules ---------------------------------------------------------------------------------------------
 export const startedOf = (id) => `f:ep.${id}.yes`;
@@ -273,7 +278,7 @@ export class Episodes {
       const rec = this.recs.get(id); if (!this.window(id) || !rec.places) continue;
       for (const pid of rec.places) {
         const pl = L && typeof L.place === 'function' ? L.place(pid) : null;
-        if (pl && Number.isFinite(pl.x)) out.push({ id: pid, ep: id, x: pl.x, z: pl.z, r: pl.r || 60 });
+        if (pl && Number.isFinite(pl.x)) out.push({ id: pid, ep: id, place: pid, x: pl.x, z: pl.z, r: pl.r || 60, line: beatLine(rec) });
       }
     }
     return out;
