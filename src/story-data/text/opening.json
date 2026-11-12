@@ -1,4 +1,4 @@
-{"$doc":"docs/story/20-opening.md","$hash":"b7990d15d1de","$body":"fc8039feac84","$v":1,"text":{"20:0.1":{"k":"line","text":"Before my time.","when":"Beat: The return"},
+{"$doc":"docs/story/20-opening.md","$hash":"5a4fa5cf8c11","$body":"0d8a1f4ed1ce","$v":1,"text":{"20:0.1":{"k":"line","text":"Before my time.","when":"Beat: The return"},
 "20:1.2.1":{"k":"line","who":"Keeper","text":"Now. You'll want a pack and a tent. Oh, look at that. Josie? Have we got anything left at all?","when":"Manner: warm"},
 "20:1.2.2":{"k":"line","who":"Keeper","text":"Pack and tent. Normally I'd point at that wall. Josie, tell them why I can't.","when":"Manner: dry"},
 "20:1.2.3":{"k":"line","who":"Keeper","text":"Rentals are out. Josie.","when":"Manner: gruff"},
@@ -54,6 +54,7 @@
 "20:4.5":{"k":"line","text":"Old-timers used to have their own names for half these lakes. Wouldn't tell you what they were.","when":"#: L5"},
 "20:4.6":{"k":"line","text":"Where'd you come in? Good. That's an old pack.","when":"#: L6"},
 "20:4.7":{"k":"line","text":"Old guide used to camp here alone, they say. Always left a rock on the stump.","when":"#: L7"},
+"20:5.1.card":{"k":"block","text":"An old notebook, rolled in the tent's fly."},
 "20:5.2.1":{"k":"line","text":"You're back! All in one piece. Did that old tent keep the rain off?","when":"Manner: warm"},
 "20:5.2.2":{"k":"line","text":"You brought the museum back. Did anything fall off?","when":"Manner: dry"},
 "20:5.2.3":{"k":"line","text":"Back. Old tent hold?","when":"Manner: gruff"},

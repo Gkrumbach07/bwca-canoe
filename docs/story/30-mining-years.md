@@ -1256,12 +1256,14 @@ entry, with its second ink:
 
 **The day's beat in Farm's reach** (bible 6.1; for a trip day with no story beat by evening). A scheduled party at
 the next site or portage gives one line, picked from:
+<!-- list: 30:9.beat -->
 - "Old fella at the store said the crews used to drill out here. You can still find pipe in the moss if you look."
 - "There's a white rock on a stump at a site on Bald Eagle. Somebody put it there. We left it."
 - "We came in at Little Gabbro. Two-person quota. Booked it in January. Worth it."
 - "You see the orange creek? My kid wanted to swim in it. No."
 
 **Farm 31's ambient lines** (the store and café; in the voice of `02b` §6.2 and §6.13):
+<!-- list: 30:9.farm -->
 - *(Keeper)* "Fella on the bench? Tauno. He's been on that bench since my dad had the place. He's harmless. Mostly
   he's watching for his daughter's car."
 - *(Keeper)* "Thursdays the old man from up the lake comes for lunch. Tips like it's 1975."

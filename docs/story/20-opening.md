@@ -323,6 +323,7 @@ Tauno's "They'll tell you he drowned."
 
 Trip one's tally (`campaigns.md`, "The trip-end screen") gets one story line, under story beats, stamped like a first:
 
+<!-- id: 20:5.1.card -->
 > *An old notebook, rolled in the tent's fly.*
 
 If 2.4 happened, a second line: *"He was here: the 64."* (or the site). That's all. The screen never says "Walt".
