@@ -139,6 +139,31 @@ export class Rides {
     if (this.veil) return this.veil.card(card).then(done, done);
     return Promise.resolve(card.onDark()).then(done, done);
   }
+  // a2: riding with a person (story Round 2; 30 §4.9; 90 §3 "Riding with a person"): Tauno in the cab to the Little Gabbro
+  // road end and home again. A faded drive as take()'s, from an outfitter's landing (his porch, not the counter): the
+  // fare is the normal one by the road and he pays it (`pays`: nothing comes out of your hand; the caller puts "Gas,
+  // Tauno" on the next tally), the card says nothing but who you're with, and nothing goes wrong on the road.
+  //   rides.rideWith(toEp, { from, who, pays = true }) → false | Promise<{ ok, price, km, hours }>
+  rideWith(toEp, { from = null, who = '', pays = true } = {}) {
+    const o = this.outfitter, a = from != null ? this.landing(from) : this.here(), b = this.landing(toEp);
+    if (this.busy || !o || !a || !b || a.ep === b.ep) return false;
+    const q = quoteBetween(a, b, this.world);
+    const r = { ...q, price: this.sandbox ? 0 : q.price, lake: this.lakeOf(b) || b.place, late: false };
+    if (!pays && r.price > 0 && !this.sandbox) { const pr = this.profile; if (!pr || !pr.spend(r.price, `the drive to ${b.name}`)) return false; }
+    this.busy = true;
+    if (o.open) o.hide();
+    const toP = outfitterProfile(b.ep, this.world);
+    const card = {
+      kicker: `${a.name} → ${b.name}${who ? ` · with ${who}` : ''}`, text: '', sub: `${kmWords(r.km)} miles to ${r.lake}, ${rideTime(r.hours)}.`,
+      fadeIn: this.sandbox ? 0.6 : 1.2, hold: this.sandbox ? 0.4 : 3.2, fadeOut: this.sandbox ? 0.8 : 1.8,
+      onDark: () => this.arrive(a, b, r, toP),
+    };
+    let ok = false;
+    const done = (v) => { this.busy = false; ok = v !== false; return { ok, price: r.price, km: r.km, hours: r.hours }; };
+    if (this.veil) return this.veil.card(card).then(() => done(true), () => done(false));
+    return Promise.resolve(card.onDark()).then(done, () => done(false));
+  }
+  // /a2
   // the clock for a drive of `hours` starting now: { night } after moving it (a late one is a bunk night: at the far
   // end, or before the truck goes)
   clock(hours, { bunkFirst = false } = {}) {
