@@ -86,6 +86,10 @@ export const FACTS = [
   { key: 'asked.walt.', kind: 'bool', doc: '20 §5.2/§7.3/§12.4 a keeper topic of the opening asked (asked.walt.<topic>)' },
   { key: 'ring.', kind: 'any', doc: '20 §7.3/§12.4 a keeper rang a story place (value: the keeper\'s name)' },
   // /st-t
+  // e: Round 2 stream E (episodes.js; 60 S7, S9): Rose Gornik's own facts (her scene's said.*), the minigames' results
+  { key: 'rose.', kind: 'any', doc: '60 S7 Rose Gornik: her scene (rose.said.<choice>)' },
+  { key: 'mg.snag.', kind: 'bool', doc: '§10 the snag minigame: mg.snag.hooked | landed | snapped (minigames/snag.js through episodes)' },
+  // /e
 ];
 
 // the arcs whose yields are the big findings (§3.3 story.big), and the doors the player can be offered

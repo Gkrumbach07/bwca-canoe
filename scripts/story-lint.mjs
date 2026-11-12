@@ -518,6 +518,59 @@ if (!dataFiles.length) {
   }
 }
 
+// e: --- 7 episodes (Round 2 stream E; campaign-design §10.2, Part 3 #4) ------------------------------------------------------
+// story-data/episodes/index.js EPISODES, on the one runner (episodes.js):
+//   started   the explicit-yes atom f:ep.<id>.yes, and nothing writes it but the record's own yes doors (a flyer taken,
+//             an accept choice, an entry read at its place, the thing done there): no rule, scene or place verb elsewhere
+//   no slots  slot is never set (Part 3 #4)
+//   feeds     every fact an episode feeds has a producer outside the episode, or gates nothing alone (every lock key that
+//             reads it has a sibling key that doesn't): an episode is never the sole key to anything (bible 5.2)
+//   text      every id it names (flyer, page, ends, first, wants' lines) resolves in the extract
+//   banned    no Ojibwe beings or sacred places in its words (§10.2)
+{
+  const idx = path.join(DATA, 'episodes', 'index.js');
+  if (!existsSync(idx)) result('episodes: the explicit yes, no slots, feeds with another source, the words', null, { why: 'no story-data/episodes' });
+  else {
+    const errs = [];
+    const { EPISODES } = await import(pathToFileURL(idx).href);
+    const EP = await import(pathToFileURL(path.join(SRC, 'episodes.js')).href);
+    const tp = await import(pathToFileURL(path.join(SRC, 'topics.js')).href);
+    for (const f of readdirSync(path.join(DATA, 'text')).filter((x) => x.endsWith('.json'))) tp.texts.add(JSON.parse(readFileSync(path.join(DATA, 'text', f), 'utf8')));
+    const LK = await import(pathToFileURL(path.join(DATA, 'locks.js')).href);
+    const all = await import(pathToFileURL(path.join(DATA, 'all-rules.js')).href);
+    const rules = [...all.RULES_ALL, ...LK.lockRules()];
+    // every writer of a fact: the rules, the places' verbs and triggers, the scenes' and topics' then
+    const writers = [];
+    for (const r of rules) for (const a of r.then || []) writers.push({ by: r.id, ep: r.ep || null, a });
+    const placesF2 = path.join(SRC, 'story-places.json');
+    if (existsSync(placesF2)) for (const pl of JSON.parse(readFileSync(placesF2, 'utf8')).places || []) for (const v of [...(pl.verbs || []), ...(pl.triggers || [])]) for (const a of v.then || []) writers.push({ by: `place:${pl.id}`, a });
+    for (const f of ['porch-act1.js', 'topics-act1.js']) if (existsSync(path.join(DATA, f))) { const m = await import(pathToFileURL(path.join(DATA, f)).href); const walk = (x, k) => { if (Array.isArray(x)) { for (const y of x) { if (k === 'then' && typeof y === 'string') writers.push({ by: f, a: y }); else walk(y, k); } } else if (x && typeof x === 'object') for (const [kk, v] of Object.entries(x)) walk(v, kk); }; walk(m, null); }
+    const writes = (fact) => writers.filter((w) => { const m = /^f:([^=]+)/.exec(w.a); return m && m[1] === fact; });
+    const BAN = /\b(windigo|wendigo|manitou|manidoo|misshepeshu|mishipeshu|memegwesi|maymaygwashi|thunderbird|animikii|nanabozho|wenabozho|spirit rock|offering rock)\b/i;
+    for (const E of EPISODES) {
+      const at = `episode ${E.id}`;
+      errs.push(...EP.checkRecord(E).map((w) => `${at}: ${w}`));
+      if (E.slot) errs.push(`${at}: a slot (Part 3 #4: no slots)`);
+      const yes = `ep.${E.id}.yes`;
+      if ((E.started || EP.startedOf(E.id)) !== `f:${yes}`) errs.push(`${at}: started '${E.started}' is not the explicit yes f:${yes}`);
+      for (const w of writes(yes)) if (!(w.ep === E.id && /^ep\.[\w-]+\.door\d+$/.test(w.by))) errs.push(`${at}: ${w.by} writes ${yes} (only its yes doors may)`);
+      for (const d of E.doors || []) if (d.yes && !['flyer', 'choice', 'place', 'entry'].includes(d.kind)) errs.push(`${at}: a ${d.kind} door says yes`);
+      for (const F of E.feeds || []) {
+        const outside = writers.some((w) => w.ep !== E.id && new RegExp(`^f:${F.replace(/\./g, '\\.')}(=|$)`).test(w.a)) || (F.startsWith('ink.') && existsSync(path.join(DATA, 'leads-act1.js')) && (await import(pathToFileURL(path.join(DATA, 'leads-act1.js')).href)).INK.some((r) => `ink.${r.nick}` === F));
+        const readers = LK.LOCKS.flatMap((L) => L.keys.filter((k) => new RegExp(`f:${F.replace(/\./g, '\\.')}\\b`).test(k.when)).map((k) => ({ L, k })));
+        const alone = readers.filter(({ L, k }) => !L.keys.some((k2) => k2 !== k && !new RegExp(`f:${F.replace(/\./g, '\\.')}\\b`).test(k2.when)));
+        if (!outside && alone.length) errs.push(`${at}: feeds ${F}, the only producer of a lock's only key (${alone.map((x) => x.k.id).join(', ')})`);
+        if (!outside && !readers.length && !rules.some((r) => r.ep !== E.id && new RegExp(`f:${F.replace(/\./g, '\\.')}\\b`).test(r.when || ''))) { /* (gates nothing: fine) */ }
+      }
+      const ids = [E.flyer && E.flyer.text, ...(E.page || []).map((p) => p.text), ...(E.ends || []).map((e) => e.line), E.first, ...(E.wants || []).flatMap((w) => w.say || []), ...(E.photo || []).map((p) => p.words), ...(E.doors || []).map((d) => d.line)].filter(Boolean);
+      for (const id of ids) { const t = tp.T(id); if (t == null) errs.push(`${at}: no text '${id}'`); else if (BAN.test(t)) errs.push(`${at}: '${id}' names a being or sacred place (§10.2)`); }
+      for (const w of [E.window && E.window.when, E.flyer && E.flyer.when, ...(E.page || []).map((p) => p.when), ...(E.wants || []).map((x) => x.when), ...(E.titles || []).map((x) => x.when), E.rose && E.rose.when].filter(Boolean)) { const c = checkCond(w, at); errs.push(...(Array.isArray(c) ? c : c.errs)); }
+    }
+    result('episodes: the explicit yes, no slots, feeds with another source, the words', errs.length === 0, { episodes: EPISODES.map((e) => e.id), errs: errs.slice(0, 30) });
+  }
+}
+// /e
+
 const fails = Object.values(report.checks).filter((c) => c.pass === false).length;
 if (JSON_OUT) console.log(JSON.stringify(report));
 console.log(fails ? `story-lint: ${fails} FAIL` : 'story-lint: all pass');

@@ -27,6 +27,8 @@ export const LAKES = {
   baldeagle: { name: 'Bald Eagle Lake', x: -25071, z: 29412 },
   gabbro: { name: 'Gabbro Lake', x: -27857, z: 26210 },
   gull: { name: 'Gull Lake', x: -21414, z: 27033 },
+  basswood: { name: 'Basswood Lake', x: -27410, z: 1664 }, // e: S7 (Mummo's, Inlet Bay)
+  alice: { name: 'Alice Lake', x: -116, z: 16442 }, // e: S9 (Coffee Lake)
 };
 
 export const PLACES = {
@@ -43,6 +45,7 @@ export const PLACES = {
   'lake.kek': { lake: 'kek', r: 1400, label: 'Kekekabic' },
   'lake.littlesag': { lake: 'littlesag', r: 1300, label: 'Little Saganaga' },
   'lake.fourtown': { lake: 'fourtown', r: 1200, label: 'Fourtown' },
+  's7.inletbay': { layer: 's7.mummos', x: -17483, z: 3724, r: 450, label: 'Inlet Bay' }, // e: Rose's ring (60 S7 "Where are the lilacs?")
 };
 
 // (the join: every lead's Walt line is now the docs' own words by id: 20:11.2.w1, 20:7.1.lead.tauno, and T's U5 lines
@@ -102,5 +105,10 @@ export const INK = [
   { nick: 'vwater', label: 'V.\'s water', lake: 'baldeagle', nb: 'NB20', seen: ['NB20', 'NB39'], when: 'und:NB20 & (ringon:baldeagle | onlake:baldeagle)' },
   { nick: 'twostump', label: 'Two Stump', lake: 'gabbro', nb: 'NB31', seen: ['NB31'], when: 'und:NB31 & (ringon:gabbro | onlake:gabbro)' },
   // the far end: nobody rings it; inked by the world only (lock 2), on Gull with any L2 key, pencil or not
+  // e: S7 Rose's ring on the Inlet Bay shore inks Mummo's if it is pencilled on Basswood (60 S7); S9 the pot found
+  // inks Coffee Lake (bible 5.3.4), on Alice
+  { nick: 'mummos', label: 'Mummo\'s', lake: 'basswood', nb: 'NB35', seen: ['NB35', 'NB45'], when: 'ringon:basswood' },
+  { nick: 'coffeelake', label: 'Coffee Lake', lake: 'alice', nb: 'NB06', seen: ['NB06'], when: 'f:ep.S9.pot & onlake:alice' },
+  // /e
   { nick: 'farend', label: 'the far end', lake: 'gull', nb: 'NB21', seen: ['NB21', 'NB27', 'NB32', 'NB39', 'NB46'], when: 'any(key.L2*) & onlake:gull', auto: true, walt: 'walt.nb.und.5' },
 ];

@@ -117,3 +117,16 @@ export function seasonName(doy) {
   if (doy < 244) return 'summer';
   return 'fall';
 }
+
+// e: the lilacs' bloom (docs/story/60-side-stories.md S7 and §0.6: "about 1–20 June", seeded ± 5 days a year; Round 2
+// stream E). A pure function of the year and a season's seed, read by the story only (the layer's window:lilac on
+// Mummo's thickets and the camera's "the lilacs at the old camp"); nothing in the game reads it with the story off.
+// → { start, end } days of the year (end inclusive), open(doy)
+export function lilacBloom(year, seed = '') {
+  let h = 0x811c9dc5; const s = `lilac:${year}:${seed}`;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0, june1 = 152 + (leap ? 1 : 0);
+  const start = june1 + ((h % 11) - 5), end = start + 19;
+  return { start, end, open: (doy) => doy >= start && doy <= end };
+}
+// /e

@@ -6,5 +6,6 @@ import { RULES_CORE } from './rules-core.js';
 import { RULES_BOOK } from './rules-book.js';
 import { RULES_LAYER } from './rules-layer.js';
 import { RULES_TALK } from './rules-talk.js';
+import { RULES_EPISODES } from './rules-episodes.js'; // e: every episode's steps (episodes/index.js)
 
-export const RULES_ALL = [...RULES_CORE, ...RULES_BOOK, ...RULES_LAYER, ...RULES_TALK];
+export const RULES_ALL = [...RULES_CORE, ...RULES_BOOK, ...RULES_LAYER, ...RULES_TALK, ...RULES_EPISODES];
