@@ -94,7 +94,14 @@ class Kettle {
     return { spell, day: d, today: Math.floor(now), here: d != null && Math.floor(now) === d && h >= KETTLE.tasha.hours[0] && h < KETTLE.tasha.hours[1], run: rain.running(now), notice: !!spell };
   }
   // Tasha is at the tailgate: the notice taken, the morning after the rain (owner call 10: no rain, no notice, no Tasha)
-  tashaDue() { const s = this.story; if (!s || !s.has('kettle.notice') || s.has('kettle.done')) return false; return this.day().here || (s.has('tasha.met') && !s.has('kettle.done') && this.field != null); }
+  tashaDue() { const s = this.story; if (!s || !s.has('kettle.notice') || s.has('kettle.done')) return false; return this.day().here || this.waiting() || (s.has('tasha.met') && !s.has('kettle.done') && this.field != null); }
+  // (chk-c2b B4: once her bottles are out she waits at the tailgate the rest of that day, till KETTLE.tasha.stay: walk
+  // off and come back that afternoon and she is still there to take them back; 30 §4.3 "Nothing can be lost")
+  waiting() {
+    const s = this.story, r = s && s.doc && s.doc.facts['kettle.bottles']; if (!r || r[1] == null) return false;
+    const now = s.nowAbs(), h = (now - Math.floor(now)) * 24;
+    return Math.floor(now) === r[1] && h < KETTLE.tasha.stay;
+  }
   filled() { const s = this.story; return !!s && STATIONS.every((q) => s.has(`kettle.fill.${q.id}`)) && s.has('kettle.secchi'); }
   tasha() { return this.field; }
 

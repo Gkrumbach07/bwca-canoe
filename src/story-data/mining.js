@@ -40,7 +40,7 @@ export const KETTLE = {
   notice: { from: 18, days: 5 },   // the notice: up from 18:00 of a forecast two-day rain's first day, until 5 days after it
   rainDay: 6,                      // hours of rain that make a day of rain (feed-weather.js)
   runDays: 2,                      // the creek runs orange this many days after the rain stops; else the stain only
-  tasha: { hours: [7, 14], dows: [1, 2, 3, 4, 5] }, // the morning after the rain quits (a weekday), at the tailgate
+  tasha: { hours: [7, 14], dows: [1, 2, 3, 4, 5], stay: 19 }, // the morning after the rain quits (a weekday), at the tailgate; once her bottles are out, till 19:00 that day
 };
 
 // --- the Farm cast's hours (30 §7 "Schedules"; owner calls 3, 4) -------------------------------------------------------
