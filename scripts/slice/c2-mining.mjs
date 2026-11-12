@@ -334,7 +334,9 @@ export const steps = [
     Object.assign(ctx, { mapDay: day + 1 });
   } },
   // step 8: Pietro's north-east shore, landed by real input; the faint path; the dig; the back door; the wrong hill (L2C)
-  { id: 'pietro', step: 8, title: 'Pietro\'s north-east shore: landed, the path, the dig (L2C), the blade; "Eino\'s sketch"', run: async ({ page, result, ctx, shots, log }) => {
+  { id: 'pietro', step: 8, title: 'Pietro\'s north-east shore: landed, the path, the dig (L2C), the blade; "Eino\'s sketch"', run: async (o) => { try { await pietro(o); } finally { await o.page.evaluate(() => { const g = window.__game; if (g.wind) g.wind.override = null; }); } } },
+];
+async function pietro({ page, result, ctx, shots, log }) {
     if (ctx.mapDay == null) ctx.mapDay = await page.evaluate(() => { const g = window.__game, s = g.story; for (const k of ['tauno.farm.met', 'kettle.visited', 'door.mining.yield', 'tauno.e7sketch', 'tauno.crewmap']) s.set(k, true, 'rig:from'); return g.day.doy + 1; }); // (--from pietro: the map given)
     await page.evaluate((d) => window.__a2.at(d, 9), ctx.mapDay + 1);
     const P = await page.evaluate(() => window.__a2.place('pietro.dig'));
@@ -370,7 +372,7 @@ export const steps = [
     await page.evaluate(() => { const L = window.__L, p = window.__game.player; for (let k = 0; k < 40 && !p.onFoot; k++) L.step(15); L.step(30); });
     const landed = await page.evaluate((P) => { const p = window.__game.player; return { onFoot: p.onFoot, d: Math.round(Math.hypot(p.x - P.x, p.z - P.z)) }; }, P);
     if (!landed.onFoot || landed.d > 60) {
-      log(`  pietro: not ashore at the landing ${JSON.stringify(await page.evaluate(() => { const g = window.__game; return { notes: [...document.querySelectorAll('.note, .hud-note, #note')].map((e) => e.innerText).filter(Boolean).slice(-3), trip: g.trip ? { active: !!g.trip.active } : null, visit: g.outfitter.visit ? g.outfitter.visit.ep : null, last: g.rides && g.rides.last ? g.rides.last.to : null, mode: g.player.mode, arrival: g.outfitter.arrival ? { why: g.outfitter.arrival.why, ep: g.outfitter.arrival.ep } : null, energy: g.energy ? +g.energy.value.toFixed(2) : null, tele: !!g.player.teleporting, log: g.trip && g.trip.log ? g.trip.log.slice(-4).map((e) => e.t || e.k || e.type) : null }; }))}`);
+      log(`  pietro: not ashore at the landing ${JSON.stringify(await page.evaluate(() => { const g = window.__game; return { notes: [...document.querySelectorAll('.note, .hud-note, #note')].map((e) => e.innerText).filter(Boolean).slice(-3), trip: g.trip ? { active: !!g.trip.active } : null, visit: g.outfitter.visit ? g.outfitter.visit.ep : null, last: g.rides && g.rides.last ? g.rides.last.to : null, mode: g.player.mode, arrival: g.outfitter.arrival ? { why: g.outfitter.arrival.why, ep: g.outfitter.arrival.ep } : null, energy: g.energy ? +g.energy.value.toFixed(2) : null, tele: !!g.player.teleporting, landing: g.player.landing ? 'landing' : null, ashore: g.player.ashore ? 'ashore' : null }; }))}`);
       await page.evaluate(async (P) => { const L = window.__L, g = window.__game; for (let k = 0; k < 100 && g.player.teleporting; k++) { L.step(10); await L.wait(100); } await L.near(P.x + P.n[0] * 3, P.z + P.n[1] * 3); L.standAt(P.x + P.n[0] * 3, P.z + P.n[1] * 3, 0); L.step(20); }, P); // (ashore by the API: said in the result)
     }
     // the faint path up: walked by the keys along the lane to the dig
@@ -403,7 +405,8 @@ export const steps = [
     await page.evaluate(() => window.__a2.endTalk());
     const w3 = await page.evaluate(() => window.__game.story.walt().includes('30:4.5.w3'));
     result('8b back on the porch: "Eino\'s sketch" → "You want to read Eino, turn your head." (30:4.5.w3)', w3 || !s.ok, { s: s.ok ? 'ok' : s, w3 });
-  } },
+}
+steps.push(
   // step 9: the clean book: the ask, "Not today." once, then "Let's go.": the ride, the road end, the slab, the confession
   { id: 'clean', step: 9, title: 'the clean book: the ask, the ride, the slab, the five questions, the choice (tauno.record), home', run: async ({ page, result, ctx, shots }) => {
     // (the ask is the opener on the first porch visit after the map's day: step 8b's visit may have had it)
@@ -442,7 +445,7 @@ export const steps = [
     const o = await page.evaluate(() => { const M = window.__a2.M(), s = window.__game.story; return { opener: M.miningCast.lastOpener }; });
     result('9d the openers change for good (one in three "I slept. Can you believe that. Eight hours."); the closer "Same bench tomorrow."', true, o);
   } },
-];
+);
 
 // the second season's variant (the spec's "a second season-slot variant"): "You don't owe anybody this.", then "On the
 // record" asked on a later porch visit: tauno.record the same. The way there is the facts a played season leaves (the
