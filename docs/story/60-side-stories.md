@@ -1613,6 +1613,7 @@ the print, nobody remarks on it there. A player can find the pattern for themsel
 - $25 from Rose.
 - Through 33: Aili opens; lock 4 key A; the print on her wall.
 - The swimming rock: Walt's "He was better at it" (N15) made real.
+<!-- id: S7.first quoted -->
 - **First stamped:** *Lilacs at Mummo's.*
 
 ### Red herrings
@@ -1632,6 +1633,7 @@ every June.
 
 ### The window and how it ends without you
 
+<!-- id: S7.end quoted -->
 It doesn't. The lilacs come back every June; Rose's notice comes back with them. The page's last line, after the first
 June: *"Lilacs every June. Rose has the picture."*
 
@@ -1890,8 +1892,10 @@ clearer for the player, and a dark shape shows on the sand at the very edge of s
 
 ### How it starts
 
+<!-- id: S9.rumour -->
 - **Rumour** (Moose Lake 25 and any keeper with Alice in reach; finished text): "There's an old coffee pot off the
   Alice beach site. Every kid who camps there's lost a lure on it. Half the jigs in Alice are in that pot."
+<!-- id: S9.kid.1 -->
 - **The family's kid**, at the site or paddling past it: "There's a pot down there. Dad says it's a rock. It's a pot."
 - **Aili** (33 6.3): "The blue one. He lost it off a rock somewhere."
 - **Walt's entry:** N03 (Coffee Lake: finding the pot inks the nickname, bible 5.3.4).
@@ -1919,12 +1923,15 @@ time as the reel works and the sand lets go, then sticks, then gives. Reel too h
 the same as with any fish: the line breaks, the lure is lost, and the pot stays where it is for the next cast. Easing
 off and reeling again is the whole skill. It takes about a game minute.
 
+<!-- id: S9.pot.dot quoted -->
 **It comes up by its bail handle**, the jig hooked through the wire, streaming sand and water, the lid still on. Into
 the hand, not the stringer. The dot on it: *"Blue enamel coffee pot. A chip on the lip."* Sand pours out of the spout
 for a while.
 
 The family, if there:
+<!-- id: S9.kid.2 -->
 - KID *(watching the rod bend)*: "You got a big one! Is it a big one?"
+<!-- id: S9.kid.3 each -->
 - KID *(seeing it come up)*: "YOU GOT IT. Can I hold it?" → ▸ *(let them)* → KID: "It's heavy. It's got sand in it.
   Dad, it's a pot." / PARENT: "I see that." / KID: *[gives it back]* "You can keep it. I just wanted to know."
 
@@ -1939,10 +1946,12 @@ a while.]* "Forty years of kids and their jigs. Huh." → "Don't lose it off a r
 
 ### What it gives
 
+<!-- id: S9.pot.identity -->
 - **June's pot** (unique cook item; *"Blue enamel, a chip on the lip"*). Coffee made in it comes out as **two cups**.
   Nothing explains it. Normal item rules: it rides in a pack.
 - Main story, through 33: Aili's step 2 and lock 4 key A (if the lilacs didn't come first); the pot on her counter in
   the journalist ending (bible 7.1).
+<!-- id: S9.first quoted -->
 - **First stamped:** *Brought up June's pot.*
 
 ### Red herrings
