@@ -219,7 +219,7 @@ class MiningCast {
     const D = this.c.talk, s = this.story; if (!D) return false;
     const today = floorDay(s.nowAbs()), yf = s.fact('door.mining.yield');
     const d = this.c.day, month = d ? new Date(Date.UTC(d.year, 0, d.doy)).getUTCMonth() + 1 : 7;
-    const ctx = { asked: this.asked === today, porchVisit: !!(yf && today > yf.abs) && month >= 6 && month <= 10 };
+    const ctx = { asked: this.asked === today, porchVisit: !!(yf && today > yf.abs) && month >= 6 && month <= 10, riding: !!(this.slab || (this.c.rides && this.c.rides.busy)) }; // (chk-c2b fix: riding)
     const start = farmEntry(s, ctx);
     if (start === 'ask') this.asked = today;
     st.talked = true;
