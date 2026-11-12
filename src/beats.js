@@ -244,15 +244,22 @@ export class Beats {
   }
   tallyLines() {
     const D = this.dir; if (!D || !this.live() || !Array.isArray(D.pay)) return [];
-    const out = [], prof = this.story.profile || (this.story.ctx && this.story.ctx.profile) || null;
+    const out = [], prof = this.story.profile || (this.story.ctx && this.story.ctx.profile) || null, due = [];
     D.pay.forEach((p, i) => {
       if (p.paid) return;
-      p.paid = true; p.paidAbs = this.today();
+      p.paid = true; p.paidAbs = this.today(); due.push([p, i]);
+    });
+    if (!due.length) return out;
+    // chk-c2b fix: the story written now, in the same store batch as the purse (store.js commits each microtask's writes
+    // as one transaction, one after another): with dirty() the story's write was the next transaction, so a tab closed
+    // right after the tally kept the money and lost `paid`, and the next trip paid it again
+    try { this.story.flush(); } catch { this.story.dirty(); }
+    for (const [p, i] of due) {
       if (p.amt > 0 && prof && typeof prof.earn === 'function') { try { prof.earn(p.amt, 'story'); } catch (e) { console.warn('beats: pay', e); } }
       out.push({ id: `story:${p.rule || i}:${p.abs}`, title: p.text, pay: p.amt, kind: 'story', from: null });
-    });
+    }
     if (D.pay.length > 40) D.pay = D.pay.filter((p) => !p.paid || this.today() - p.paidAbs < 60);
-    if (out.length) this.story.dirty();
+    this.story.dirty();
     return out;
   }
 

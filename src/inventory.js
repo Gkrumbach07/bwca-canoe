@@ -142,7 +142,10 @@ export class Inventory {
   serialize() {
     // a signature item (sig:<ep>) is defined only once its store's profile is made: its definition rides in the save,
     // so it is there when the inventory restores, before any store is drawn
-    const defs = {}, keep = (id) => { if (/^sig:/.test(id) && itemDef(id)) defs[id] = itemDef(id); };
+    // chk-c2b fix: a story thing (story code defines it only under STORY_ON: Leo's lid, a book page) rides the same way,
+    // so a build with the flag off keeps it instead of dropping it at restore and writing the bag without it (the lid's
+    // fact stays set and its prop gone: Mary's back table could never be reached). Main never makes one: flag off = main
+    const defs = {}, keep = (id) => { const d = itemDef(id); if (d && (/^sig:/.test(id) || d.story || d.kind === 'page')) defs[id] = d; };
     for (const c of this.containers) for (const e of c.grid) keep(e.id);
     for (const l of this.long) keep(l.id);
     return { v: VERSION, season: this.season, n: this.n, containers: this.containers.map((c) => ({ ...c, grid: c.grid.map((e) => ({ ...e })), at: c.at ? { ...c.at } : null })), long: this.long.map((l) => ({ ...l, at: l.at ? { ...l.at } : null })), defs };

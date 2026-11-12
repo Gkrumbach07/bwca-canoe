@@ -220,7 +220,14 @@ class MiningCast {
     const today = floorDay(s.nowAbs()), yf = s.fact('door.mining.yield');
     const d = this.c.day, month = d ? new Date(Date.UTC(d.year, 0, d.doy)).getUTCMonth() + 1 : 7;
     const ctx = { asked: this.asked === today, porchVisit: !!(yf && today > yf.abs) && month >= 6 && month <= 10 };
-    const start = farmEntry(s, ctx);
+    let start = farmEntry(s, ctx);
+    // chk-c2b fix: "Let's go." taken but the slab never reached (the road end is this cast's memory, not the save: a tab
+    // closed in the cab or in the lot before his talk, or a drive that could not start) left tauno.ride set and no way to
+    // door.mining.climax. The ask comes again, the same words, once a day, until the climax (a game-only state: the
+    // solver's farmEntry is unchanged)
+    const riding = !!(this.slab || (this.c.rides && this.c.rides.busy));
+    const spaced = !(s.sensors instanceof Map && s.sensors.has('climax')) || s.readSensor('climax', 'mining') !== false;
+    if (start === 'morning' && s.has('tauno.ride') && !s.has('door.mining.climax') && !riding && !ctx.asked && (ctx.porchVisit || s.has('brekke.lovelybook')) && spaced) start = 'ask';
     if (start === 'ask') this.asked = today;
     st.talked = true;
     s.rules.apply({ id: 'cast:talk', then: ['f:tauno.talk'] }, {});
