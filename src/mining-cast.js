@@ -2,7 +2,8 @@
 // "Schedules"; owner calls 2–4): Tauno's Farm porch after the turn (cast.js hands his scene here), Len at the dock's end
 // or the corner table, Mary at the window table, Brekke at the corner table on Thursdays (his handshake, his launch a
 // still prop at the dock), Tasha by the counter for ice; the café at Farm 31 (props.js L.cafe); the clean book's ride to
-// the Little Gabbro road end (rides.js rideWith: the cab, the fade, the fee his) and the slab there; the want (Mary and
+// the Little Gabbro road end (rides.js rideWith: the cab, the fade, the fee his) and the slab there;
+// (the café is drawn here in the store's frame, cafeOf: no change to props.js, so the tile worker's modules are main's); the want (Mary and
 // the lid: E's show.js "Give" at the join, a choice here until then); the `pay:` stand-in (D's handler at the join).
 // Loaded only under STORY_ON (main.js's a2 block). A co-op guest's story is a mirror: nobody is staged for them.
 //
@@ -117,7 +118,18 @@ class MiningCast {
   staged() { return [...this.live.values()].map((st) => ({ who: st.who, slot: st.slot.id, at: st.slot.at, x: +st.x.toFixed(1), z: +st.z.toFixed(1), talked: st.talked })).concat(this.slab ? [{ who: 'tauno', slot: 'slab', at: 'field', x: +this.slab.tauno.x.toFixed(1), z: +this.slab.tauno.z.toFixed(1), tasha: !!this.slab.tasha }] : []); }
 
   // --- the café -----------------------------------------------------------------------------------------------------
+  // Farm 31's café in the store's own frame (props.js's: a across, b toward the front wall and the door; the store's
+  // inside is ±2.86 × ±3.86 m): Mary's window table front left, the corner table front right clear of the board, the urn
+  // on the counter. Written onto the layout as L.cafe (grounding.js reads it: a café where the store has one)
+  cafeOf(L) {
+    const A = L.axes.a, B = L.axes.b, C = L.centre, y = L.floorY;
+    const W = (a, b) => ({ x: C.x + A.x * a + B.x * b, z: C.z + A.z * a + B.z * b });
+    const head = (da, db) => Math.atan2(-(A.z * da + B.z * db), A.x * da + B.x * db);
+    const tab = (a, b) => ({ ...W(a, b), y, ax: { x: B.x, z: B.z }, seats: [{ ...W(a, b - 0.62), y, heading: head(0, 1) }, { ...W(a, b + 0.62), y, heading: head(0, -1) }] });
+    return { window: tab(-1.65, 3.05), corner: tab(1.5, 2.95), urn: { ...W(2.45, -2.65), y: y + 0.95 } };
+  }
   buildCafe(L) {
+    if (!L.cafe && L.axes && L.centre) L.cafe = this.cafeOf(L);
     if (!L.cafe || (this.cafe && this.cafe.L === L)) { if (this.cafe) this.lidOnTable(); return; }
     this.dropCafe();
     const sc = this.c.scene; if (!sc) return;

@@ -17,7 +17,6 @@ import { tileCreeks, BROOK } from './creeks.js'; // the wetlands round: brooks, 
 import { roadExclusions, DECK, tileChains, chainsNear } from './roads.js'; // stream E3: the roads in 3D (round 5: every road, by tile)
 import { nearRoad } from './road-grade.js'; // round 4: a portage's sign kept off the roads (the truck's way)
 import { cabinExclusions, tileCabins } from './cabins.js'; // round 4 C: a few cabins at the edge
-import { STORY_ON } from './story-flag.js'; // a2: Farm 31's café (the story's only; with the flag off no store has one)
 // round 4: whether (x, z) stands on a road (its half width and pad m, the water's pieces too: the graded table has only
 // the land's)
 // (roadGap: how far (x, z) stands off the nearest road's edge, by each segment of its line, not only its points: they
@@ -2396,15 +2395,6 @@ function* buildStore(ctx, F, rng, ep, group, pieces, dock, site) {
     ],
     boardCanvas: cv, boardTex: tex, mesh, glass,
   };
-  // a2: Farm 31's café (story Round 2; 30 §3, 90 §3): Mary's window table, the corner table (Len and Brekke on
-  // Thursdays) and the coffee urn on the counter, in the store's frame. Each table: its centre on the floor, `ax` the way
-  // its two chairs sit (± 0.62 m), `seats` where a person at it stands. Under STORY_ON only (the café is drawn by
-  // mining-cast.js; with the flag off no store has one)
-  if (STORY_ON && ep.ep === 31) {
-    const tab = (a, c) => { const w = W2(a, c), s0 = W2(a, c - 0.62), s1 = W2(a, c + 0.62); return { x: w.x, z: w.z, y: floorY, ax: { x: Z.x, z: Z.z }, seats: [{ ...s0, y: floorY, heading: heading(0, 1) }, { ...s1, y: floorY, heading: heading(0, -1) }] }; };
-    L.cafe = { window: tab(-1.65, 3.05), corner: tab(1.5, 2.95), urn: at3(2.45, IN.counter.h, -2.65) };
-  }
-  // /a2
   stores.set(ep.ep, L);
   notePlace(L); // round 2 markers: where the store stands, for a release outfitter-places.json was not made for
   storeNews.push(L);
