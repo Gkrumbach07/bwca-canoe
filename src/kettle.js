@@ -62,7 +62,7 @@ export function decorate(node, fn) {
 }
 
 class Kettle {
-  constructor() { this.c = {}; this.field = null; this.meshes = new Map(); this.t = 0; this.offs = []; this.lidSeen = false; }
+  constructor() { this.c = {}; this.field = null; this.meshes = new Map(); this.t = 0; this.offs = []; this.lidSeen = false; this.rain = rain; }
   attach(c = {}) {
     Object.assign(this.c, c);
     const s = this.c.story;

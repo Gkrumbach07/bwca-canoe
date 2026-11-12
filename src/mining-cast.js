@@ -21,7 +21,7 @@ import { kit, rngFor } from './story-props.js';
 import { propMaterial } from './prop-kit.js';
 import { registerSensor } from './story-cond.js';
 import { CAST } from './story-data/cast.js';
-import { FARM, SLAB, LEN, MARY, TASHA, BREKKE, farmEntry, slabEntry, lenEntry, maryEntry, tashaEntry, opener, closer, FIRST_SAT, THURSDAY_LINE, WANTS, A2_SENSORS } from './story-data/mining.js';
+import { FARM, SLAB, LEN, MARY, TASHA, BREKKE, KEEPER, farmEntry, slabEntry, lenEntry, maryEntry, tashaEntry, opener, closer, FIRST_SAT, THURSDAY_LINE, WANTS, A2_SENSORS } from './story-data/mining.js';
 import { ITEM, has, takeItem } from './mining-items.js';
 import { FieldPerson, decorate } from './kettle.js';
 
@@ -43,6 +43,8 @@ class MiningCast {
     this.offs.push(s.sensor('belt', () => { const n = s.since('trips', 'crews.stood'); return n != null && n <= 1; }));
     this.offs.push(s.sensor('tashaHere', () => !!(this.slab && this.slab.tasha)));
     this.offs.push(s.on('season', () => this.clear()));
+    // the Farm keeper's rings (30 §4.1), on the keepers' story topics (topics.js: under "Ask about…")
+    if (this.c.topics && typeof this.c.topics.add === 'function') this.offs.push(this.c.topics.add(KEEPER));
     // the pay: stand-in (D's record.js handler at the join): paid at the next trip's end, its line in the hud
     if (!(s.actions && s.actions.has('pay'))) {
       this.offs.push(s.handle('pay', (arg) => this.payLater(arg)));

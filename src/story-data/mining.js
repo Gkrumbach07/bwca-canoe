@@ -296,3 +296,15 @@ export const THURSDAY_LINE = '30:4.6/the-thursday-lunch-tier.w1';
 export const CREWMAP = { map: 'item.crewmap.map', inset: '30:4.5.c5', stations: 'item.crewmap.stations', corner: 'item.crewmap.corner' };
 // the lid's stamp and the tally lines
 export const WORDS = { stamp: 'item.leolid.stamp', fieldHelp: '30:4.3.pay.1', gas: '30:4.9.gas', notice: '30:4.3.notice', wrongPhoto: '30:4.2.1.wrong', caption: '30:4.2.1.caption' };
+
+// --- the Farm keeper's rings (30 §4.1: "The Farm keeper offers to ring …"; "rings 'the old grade' and 'the west pads'
+// if Len hasn't already"), as topics.js keeper topics (topics.add). The player's question has no words in the docs: the
+// label is the place's own name (a writers' leftover, as Round 1's easy nicknames); the keeper answers with the ring
+export const KEEPER = [
+  { id: 'a2.crewscountry', pri: 3.9, once: true, label: 'The old crews\' country?', when: 'f:tauno.drilled & ep:31',
+    ring: { x: -26600, z: 28400, r: 2600, place: 'crewscountry', label: 'the old crews\' country' } },
+  { id: 'a2.grade', pri: 3.9, once: true, label: 'The old grade?', when: 'f:tauno.said.pads & ep:31 & !f:len.westpads.rings',
+    ring: { x: -25960, z: 30060, r: 220, place: 'grade', label: 'the old grade' } },
+  { id: 'a2.westpads', pri: 3.9, once: true, label: 'The west pads?', when: 'f:tauno.said.pads & ep:31 & !f:len.westpads.rings',
+    ring: { x: -26300, z: 30260, r: 520, place: 'westpads', label: 'the west pads' } },
+];
