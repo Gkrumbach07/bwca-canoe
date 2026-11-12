@@ -454,6 +454,19 @@ class Record {
     const pr = this.profile, purse0 = pr && typeof pr.money === 'number' ? pr.money : null;
     let paid = { lines: [], missed: [], total: 0 };
     try { if (this.tasks && typeof this.tasks.settle === 'function') paid = this.tasks.settle({ ep: o.ep ?? null, trip: T }) || paid; } catch (err) { console.warn('record: the tally', err); }
+    // d: the story's part of the tally (stream D, story Round 2; only under STORY_ON: feed-beats.js sets record.story):
+    // the `pay:` lines owed (story.tallyLines pays them into the purse now, as settle does), the trip's story line
+    // (story.tripLine) and the days with a story beat (story.tripBeats)
+    let storyT = null;
+    try {
+      const S = this.story;
+      if (S && typeof S.tallyLines === 'function') {
+        const lines = S.tallyLines({ trip: T, ep: o.ep ?? null }) || [];
+        if (lines.length) { if (!Array.isArray(paid.lines)) paid.lines = []; for (const l of lines) { paid.lines.push(l); paid.total = (paid.total || 0) + (Number(l.pay) || 0); } }
+        storyT = { lines: typeof S.tripLine === 'function' ? S.tripLine({ all: true }) || [] : [], beats: typeof S.tripBeats === 'function' ? (S.tripBeats() || []).length : 0 };
+      }
+    } catch (err) { console.warn('record: the story tally', err); }
+    // /d
     try { this.watchNotices(); this.watchFish(); this.watchPhotos(); } catch { /* the watchers' own */ }
     let c = null;
     try { c = this.cardOf(T, o); } catch (err) { console.warn('record: the trip card', err); }
@@ -464,6 +477,7 @@ class Record {
     this.merge(c);
     const after = milestonesOf(this.withTrip(c));
     c.tally = this.tallyOf(c, paid, purse0, pr && typeof pr.money === 'number' ? pr.money : null, inked, before, after);
+    if (storyT && (storyT.beats || storyT.lines.length)) c.tally.story = { beats: storyT.beats, lines: storyT.lines.slice(0, 2) }; // d: (the card keeps what it said)
     this.s.trips.push(c);
     if (this.s.trips.length > KEEP_TRIPS) this.s.trips.splice(0, this.s.trips.length - KEEP_TRIPS);
     this.s.pending = c.id; this.freeT = 0;
@@ -934,7 +948,7 @@ class Record {
     const T = c.tally; if (!T) return '';
     const L = [];
     const line = (cls, lab, v, pay = 0) => L.push(`<li class="tl-l ${cls}${live ? '' : ' on'}"${pay ? ` data-pay="${pay}"` : ''}><span class="tl-k">${lab}</span><span class="tl-v">${v}</span></li>`);
-    for (const n of T.pay || []) line('pay', `“${esc(n.title)}”`, `<span class="num">+${money(n.pay)}</span>`, n.pay);
+    for (const n of T.pay || []) line('pay', `“${esc(n.title)}”`, n.kind === 'story' && !n.pay ? '' : `<span class="num">+${money(n.pay)}</span>`, n.pay); // (d: a story line with nothing to pay, "Gas, Tauno", says only its words)
     if (T.fine) line('fine', '<span class="tl-ticket" aria-hidden="true"></span>A ranger’s ticket: out after dark on day use', `<span class="num">${money(T.fine)}</span>, in your book`);
     if (T.km >= 0.1) line('stat', 'Paddled', `<span class="num">${miles(T.km)}</span> mi`);
     if (T.portages) line('stat', cap(plural(T.portages, 'Portage')), `${word(T.portages)}${T.rods ? `, <span class="num">${T.rods}</span> rods` : ''}`);
@@ -942,6 +956,12 @@ class Record {
     if (T.fish) line('stat', 'Fish', `${word(T.fish)}${T.species > 1 ? `, ${word(T.species)} kinds` : ''}`);
     if (T.photos) line('stat', 'Photos', word(T.photos));
     for (const f of T.firsts || []) line('first', '', `<span class="tl-stamp">${esc(cap(f))}</span>`);
+    // d: story beats found this trip (the days), and under them the trip's story line, stamped like a first (20 §5.1)
+    if (T.story) {
+      if (T.story.beats) line('stat story', 'Story beats found', word(T.story.beats));
+      for (const s of T.story.lines || []) line('first story', '', `<span class="tl-stamp">${esc(s)}</span>`);
+    }
+    // /d
     for (const m of T.milestones || []) {
       const pct = Math.round((100 * m.n) / (m.of || 1));
       line(`mile${m.fresh ? ' fresh' : ''}`, esc(cap(m.words)), m.fresh ? `<span class="tl-title">${esc(m.title)}</span>` : `<span class="tl-bar" style="--f:${pct}%" aria-hidden="true"></span><span class="num">${m.n.toLocaleString('en-US')} of ${m.of.toLocaleString('en-US')}</span>`);

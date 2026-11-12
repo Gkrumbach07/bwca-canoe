@@ -1,4 +1,4 @@
-{"$doc":"docs/story/30-mining-years.md","$hash":"25bba636dd9d","$body":"c986592daafd","$v":1,"text":{"30:2.3.c1":{"k":"choice","text":"L.P."},
+{"$doc":"docs/story/30-mining-years.md","$hash":"812c110620e4","$body":"59136c54f994","$v":1,"text":{"30:2.3.c1":{"k":"choice","text":"L.P."},
 "30:4.1.1":{"k":"line","who":"Tauno","text":"You found it. Sit on the bench, not the step. The step's where people stand when they want me to notice them. Good. Now we're two old fools looking at a parking lot. Nobody looks twice at that."},
 "30:4.1.2":{"k":"line","who":"Tauno","text":"Front tonight. You'll hear it in the poplars first."},
 "30:4.1.3":{"k":"line","who":"Tauno","text":"Where'd you go? Don't tell me where. Tell me the wind."},
@@ -267,4 +267,15 @@
 "30:5.7":{"k":"line","who":"Len","text":"I go every day but Thursday.","when":"Who: Len"},
 "30:5.8":{"k":"line","who":"Mary","text":"I just typed. I never read what I typed.","when":"Who: Mary"},
 "30:5.9":{"k":"line","who":"Dan","text":"If there were any, sure.","when":"Who: Dan"},
-"30:8.2.1":{"k":"line","who":"Tasha","text":"My numbers are in a drawer. They're using his."}}}
+"30:8.2.1":{"k":"line","who":"Tasha","text":"My numbers are in a drawer. They're using his."},
+"30:9.beat.1":{"k":"block","text":"Old fella at the store said the crews used to drill out here. You can still find pipe in the moss if you look."},
+"30:9.beat.2":{"k":"block","text":"There's a white rock on a stump at a site on Bald Eagle. Somebody put it there. We left it."},
+"30:9.beat.3":{"k":"block","text":"We came in at Little Gabbro. Two-person quota. Booked it in January. Worth it."},
+"30:9.beat.4":{"k":"block","text":"You see the orange creek? My kid wanted to swim in it. No."},
+"30:9.farm.1":{"k":"block","text":"Fella on the bench? Tauno. He's been on that bench since my dad had the place. He's harmless. Mostly he's watching for his daughter's car."},
+"30:9.farm.2":{"k":"block","text":"Thursdays the old man from up the lake comes for lunch. Tips like it's 1975."},
+"30:9.farm.3":{"k":"block","text":"Mary's bars are free. Don't tell her they're not good. Everybody knows they're not good."},
+"30:9.farm.4":{"k":"block","text":"My grandson's on the company's survey crew. Good money. I don't ask him about it."},
+"30:9.farm.5":{"k":"block","text":"My dad was underground thirty years. He'd hate this one. It's not the mining, it's where."},
+"30:9.farm.6":{"k":"block","text":"I don't talk about it at Thanksgiving anymore. We tried."},
+"30:9.farm.7":{"k":"block","text":"Before the bill there were boats on this lake you could hear in town."}}}
