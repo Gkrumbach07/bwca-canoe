@@ -1335,7 +1335,7 @@ async function main() {
       const common = { story, layer: sm.layer || null, scene, actors, pointer, talk, topics, inventory, hud, world, tiles, player, mtasks };
       kettle.attach(common);
       miningCast.attach({ ...common, cast, npcs, outfitter, day, rides, profile, pencil: sm.pencil || null, kettle });
-      cast.attach({ mining: miningCast });
+      cast.c.mining = miningCast; // (not cast.attach again: that would hang its story handlers a second time)
       installTurnFixture(story, { profile, day });
       const updA2 = outfitter.update.bind(outfitter);
       outfitter.update = (dt) => { updA2(dt); try { kettle.update(dt); miningCast.update(dt); } catch (e) { if (!miningCast.warned) { miningCast.warned = true; console.warn('story A2: the mining years', e); } } };
