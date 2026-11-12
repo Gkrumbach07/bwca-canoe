@@ -22,7 +22,7 @@ import { kit, rngFor, cafeSpots } from './story-props.js';
 import { propMaterial } from './prop-kit.js';
 import { registerSensor } from './story-cond.js';
 import { CAST } from './story-data/cast.js';
-import { FARM, SLAB, LEN, MARY, TASHA, BREKKE, KEEPER, farmEntry, slabEntry, lenEntry, maryEntry, tashaEntry, opener, closer, FIRST_SAT, THURSDAY_LINE, WANTS, A2_SENSORS } from './story-data/mining.js';
+import { FARM, SLAB, LEN, MARY, TASHA, BREKKE, KEEPER, farmEntry, slabEntry, lenEntry, maryEntry, tashaEntry, opener, closer, FIRST_SAT, THURSDAY_LINE, WANTS, A2_SENSORS, KEEPER_NOTICE } from './story-data/mining.js';
 import { ITEM, has } from './mining-items.js';
 import { show } from './show.js';
 import { FieldPerson, decorate } from './kettle.js';
@@ -45,6 +45,9 @@ class MiningCast {
     this.offs.push(s.sensor('belt', () => { const n = s.since('trips', 'crews.stood'); return n != null && n <= 1; }));
     this.offs.push(s.sensor('tashaHere', () => !!(this.slab && this.slab.tasha)));
     this.offs.push(s.on('season', () => this.clear()));
+    // chk-c2a: the keeper's two lines about the Kettle notice (30:4.3.keeper), said by her head as you take it off Farm's
+    // board (they were only read by the rigs: nothing in the game said them)
+    this.offs.push(s.on('fact', ({ key }) => { if (key === 'kettle.notice') this.keeperNotice(); }));
     // the Farm keeper's rings (30 §4.1), on the keepers' story topics (topics.js: under "Ask about…")
     if (this.c.topics && typeof this.c.topics.add === 'function') this.offs.push(this.c.topics.add(KEEPER));
     // Mary's want (E's show.js, the join): Leo's lid carried, the dot on her offers Give, and her talk "Look at this…";
@@ -57,6 +60,14 @@ class MiningCast {
   }
   get story() { return this.c.story || null; }
   get on() { const s = this.story; return !!(s && s.doc && s.mode !== 'mirror'); }
+  // chk-c2a: the keeper's two lines as the notice comes off her board (in the store at Farm only), the second as the first ends
+  keeperNotice() {
+    const N = this.c.npcs, o = this.c.outfitter, v = o && o.visit;
+    if (!this.on || !N || typeof N.at !== 'function' || !v || v.ep !== FARM_EP) return false;
+    const k = (N.at(FARM_EP) || []).find((q) => q.keeper); if (!k) return false;
+    const [a, b] = KEEPER_NOTICE.map((id) => T(id)).filter(Boolean); if (!a) return false;
+    return N.bark(k, 0, a, 3, b ? { sp: N.speakerOf(k, 0), text: b } : null) != null; // (3: dialogue.js PRI.reply)
+  }
   args(ep = FARM_EP) { const n = this.c.cast; return n && typeof n.args === 'function' ? n.args(ep) : { ep, farm: ep === FARM_EP }; }
 
   // --- the Farm people by their schedules ---------------------------------------------------------------------------
