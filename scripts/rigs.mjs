@@ -20,7 +20,8 @@
 //   --retry         RETRY=1     a rig that failed in the pool is run once more alone; its line says "retried"
 // Logs: rig-logs/<rig>.log (coop/x as coop_x.log). Times: scripts/rig-times.json, each rig's last duration (seconds),
 // rewritten after every run but a --record one; it orders the pool, longest first. Timeouts as loop-r4-all.sh: 1500 s, 3600 s for
-// r2-starter-test, r4-roads-test and r5-roads-test (exit 124 when one runs out, its whole process group stopped).
+// r2-starter-test, r4-roads-test and r5-roads-test (exit 124 when one runs out, its whole process group stopped); three
+// times those under --record.
 // The runner exits 0 (as the old loop did); read the RIG lines.
 //
 // The regression mode of the roads rigs: r4-roads-test and r5-roads-test are passed --regress (a fixed sample of 19
@@ -42,6 +43,7 @@
 //   rig-deps.json missing or recorded at a commit this repo does not have.
 //   A rig's own script (and the scripts/ modules and src/ files it imports in node) picks that rig; a rig with no
 //   record is picked. docs/, *.md and the runner's own files pick nothing. SMOKE below is always added.
+//   Hunks that only touch comments or blank lines, and a package.json whose "scripts" alone changed, pick nothing.
 //   It prints each pick and its reason. Re-record (--record) after a round lands: coverage says what ran then.
 import { spawn, execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, openSync, closeSync } from 'node:fs';
@@ -90,15 +92,27 @@ const closure = (start, read) => {
 };
 const readAt = (rev) => (f) => { try { return rev ? git('show', `${rev}:${f}`) : readFileSync(f, 'utf8'); } catch { return null; } };
 // old-side line ranges of each changed file: { file: [[a, b], ...] } (an insertion after line n: [n, n + 1])
+// (a hunk whose every removed and added line is blank or a comment changes no code: it is left out, and counted)
+const commentOnly = (t) => { const x = t.trim(); return !x || x.startsWith('//') || x.startsWith('*') || x.startsWith('/*'); };
 const changedLines = (from, to) => {
-  const out = {}, args = ['diff', '-U0', '--no-color', '--no-ext-diff', '-M', from]; if (to) args.push(to);
-  let cur = null;
+  const out = {}, skipped = {}, args = ['diff', '-U0', '--no-color', '--no-ext-diff', '-M', from]; if (to) args.push(to);
+  let cur = null, h = null;
+  const close = () => { if (h && cur) { if (/\.(m?js|css)$/.test(cur) && h.lines.every(commentOnly)) skipped[cur] = (skipped[cur] || 0) + 1; else out[cur].push(h.range); } h = null; };
   for (const l of git(...args).split('\n')) {
     let m;
-    if ((m = /^diff --git a\/(.+?) b\/(.+)$/.exec(l))) { cur = m[1]; out[cur] = out[cur] || []; if (m[2] !== m[1]) out[m[2]] = out[m[2]] || []; continue; }
-    if (cur && (m = /^@@ -(\d+)(?:,(\d+))? \+\d+(?:,\d+)? @@/.exec(l))) { const a = +m[1], n = m[2] == null ? 1 : +m[2]; out[cur].push(n === 0 ? [a, a + 1] : [a, a + n - 1]); }
+    if ((m = /^diff --git a\/(.+?) b\/(.+)$/.exec(l))) { close(); cur = m[1]; out[cur] = out[cur] || []; if (m[2] !== m[1]) out[m[2]] = out[m[2]] || []; continue; }
+    if (cur && (m = /^@@ -(\d+)(?:,(\d+))? \+\d+(?:,\d+)? @@/.exec(l))) { close(); const a = +m[1], n = m[2] == null ? 1 : +m[2]; h = { range: n === 0 ? [a, a + 1] : [a, a + n - 1], lines: [] }; continue; }
+    if (h && /^[-+]/.test(l) && !/^(---|\+\+\+) /.test(l)) h.lines.push(l.slice(1));
   }
-  return out;
+  close();
+  return { out, skipped };
+};
+// package.json: only its "scripts" changed (npm run names) is not the page's build
+const pkgScriptsOnly = (base, to) => {
+  try {
+    const a = JSON.parse(git('show', `${base}:package.json`)), b = JSON.parse(to ? git('show', `${to}:package.json`) : readFileSync('package.json', 'utf8'));
+    delete a.scripts; delete b.scripts; return JSON.stringify(a) === JSON.stringify(b);
+  } catch { return false; }
 };
 // base-copy line -> recorded-copy line, from git's diff of the two blobs
 const lineMap = (recBlob, baseBlob) => {
@@ -123,7 +137,7 @@ export function select(spec, rigs, { log = console.log } = {}) {
   const picks = new Map(); // rig -> [reasons]
   const pick = (r, why) => { if (!rigs.includes(r)) return; if (!picks.has(r)) picks.set(r, []); const a = picks.get(r); if (a.length < 4 && !a.includes(why)) a.push(why); };
   const all = (why) => { for (const r of rigs) pick(r, why); };
-  const changed = changedLines(base, to);
+  const { out: changed, skipped } = changedLines(base, to);
   const files = Object.keys(changed);
   log(`changed: ${files.length} files, ${spec} (merge base ${base.slice(0, 8)}${to ? '' : ', against the working tree'})`);
   let deps = null, stale = null;
@@ -145,6 +159,8 @@ export function select(spec, rigs, { log = console.log } = {}) {
   for (const f of files) {
     const lines = changed[f], before = picks.size; let why = null;
     if (RUNNER_FILES.has(f)) why = 'the runner itself: none';
+    else if (!lines.length && skipped[f]) why = 'comments only: none';
+    else if (f === 'package.json' && pkgScriptsOnly(base, to)) why = 'its "scripts" only: none';
     else if (/^(package(-lock)?\.json|vite\.config\.[cm]?[jt]s|index\.html)$/.test(f) || f.startsWith('public/')) { all(`${f} (the page's build)`); why = 'ALL'; }
     else if (f.startsWith('server/')) { for (const r of rigs) if (r.startsWith('coop/')) pick(r, `${f} (the relay)`); why = 'the co-op rigs'; }
     if (!why && nodeDeps.has(f)) { for (const r of nodeDeps.get(f)) pick(r, f === `scripts/${r}.mjs` ? 'its own script' : `${f} (imported by its script in node)`); if (!f.startsWith('src/')) why = `${nodeDeps.get(f).length} rig scripts`; }
@@ -165,8 +181,8 @@ export function select(spec, rigs, { log = console.log } = {}) {
           for (const [a, b] of lines) for (let l = a; l <= b; l++) {
             const L = map(l); let best = null;
             for (const fn of fns) if (fn[0] <= L && L <= fn[1] && (!best || fn[1] - fn[0] < best[1] - best[0])) best = fn;
-            const who = best ? maskRigs(deps, best[2]) : loaded; // (no function holds it: module top level)
-            for (const r of who) { hitBy.add(r); pick(r, `${f}:${l}${best ? ` (in the function at ${best[0]}-${best[1]})` : ' (top level)'}`); }
+            const who = best ? maskRigs(deps, best[2]) : loaded; // (no listed function holds it: module top level, or a function every loading rig ran)
+            for (const r of who) { hitBy.add(r); pick(r, `${f}:${l}${best ? ` (in the function at ${best[0]}-${best[1]})` : ' (run by every rig that loads it)'}`); }
           }
           why = `${hitBy.size} of the ${loaded.length} rigs that load it ran the changed lines`;
         }
@@ -174,10 +190,10 @@ export function select(spec, rigs, { log = console.log } = {}) {
     }
     if (!why && f.startsWith('src/') && stale) why = 'ALL (stale deps)';
     if (!why) why = 'none';
-    summary.push(`  ${f.padEnd(44)} ${String(lines.length).padStart(3)} hunks  ${why}${picks.size > before ? `  (+${picks.size - before} new)` : ''}`);
+    summary.push(`  ${f.padEnd(44)} ${String(lines.length).padStart(3)} hunks${skipped[f] ? ` (+${skipped[f]} comment-only)` : ''}  ${why}${picks.size > before ? `  (+${picks.size - before} new)` : ''}`);
   }
-  for (const s of summary.slice(0, 80)) log(s);
-  if (summary.length > 80) log(`  ... and ${summary.length - 80} more files`);
+  for (const s of summary.slice(0, 200)) log(s);
+  if (summary.length > 200) log(`  ... and ${summary.length - 200} more files`);
   for (const r of SMOKE) pick(r, 'smoke set');
   const out = rigs.filter((r) => picks.has(r));
   log(`picked ${out.length} of ${rigs.length}:`);
@@ -188,7 +204,7 @@ export function select(spec, rigs, { log = console.log } = {}) {
 // ---- recording -----------------------------------------------------------------------------------------------------------
 function writeDeps(rigs, dir) {
   const sha = git('rev-parse', 'HEAD').trim(), names = [], per = [];
-  for (const r of rigs) { const f = path.join(dir, r.replace(/\//g, '_') + '.json'); if (!existsSync(f)) continue; names.push(r); per.push(JSON.parse(readFileSync(f, 'utf8'))); }
+  for (const r of [...new Set([...ALL, ...rigs])]) { const f = path.join(dir, r.replace(/\//g, '_') + '.json'); if (!existsSync(f)) continue; names.push(r); per.push(JSON.parse(readFileSync(f, 'utf8'))); } // (every rig with a record there: a run of a few rigs re-records those and keeps the rest)
   const files = {};
   const bit = (i) => 1n << BigInt(i), hex = (m) => m.toString(16);
   per.forEach((d, i) => {
@@ -234,7 +250,7 @@ const summarize = (file) => {
 function runOne(r, { full, record, depsDir }) {
   return new Promise((resolve) => {
     mkdirSync('rig-logs', { recursive: true });
-    const f = logName(r), fd = openSync(f, 'w'), t0 = Date.now(), limit = (TIMEOUT[r] || 1500) * 1000;
+    const f = logName(r), fd = openSync(f, 'w'), t0 = Date.now(), limit = (TIMEOUT[r] || 1500) * 1000 * (record ? 3 : 1); // (coverage makes a rig 2-4 times slower: a recording gets three times the time, so it is not cut short)
     const e = { ...env };
     if (record) { e.RIG_DEPS_OUT = path.join(depsDir, r.replace(/\//g, '_') + '.json'); e.NODE_OPTIONS = `${env.NODE_OPTIONS || ''} --import ${pathToFileURL(path.join(ROOT, HOOK)).href}`.trim(); }
     const args = [`scripts/${r}.mjs`, ...(full ? [] : REGRESS_ARGS[r] || [])];
