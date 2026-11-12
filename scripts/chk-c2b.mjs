@@ -196,6 +196,7 @@ async function groupA() {
       A.at(tue, 9.4); await A.toFarm(); A.inside(); for (let k = 0; k < 10; k++) { L.step(20); await L.wait(30); }
       out.staged = M.miningCast.staged().map((q) => q.who);
       out.wants = M.miningCast.wants('mary');
+      const o = g.outfitter; if (o && o.open) { o.hide(); L.step(3); } // (the counter's paper: a talk under it closes the frame it opens, as the slice's dismiss)
       out.give1 = M.miningCast.give('mary', 'leolid'); L.step(3);
       for (let k = 0; k < 10 && !window.__t.convo(); k++) { await L.wait(60); L.step(2); }
       out.c = window.__t.convo();
@@ -270,7 +271,15 @@ async function groupA() {
     const nd = await ev(P, () => { const g = window.__game; window.__a2.at(g.day.doy + 1, 8); return g.day.doy; });
     const t4 = await talkTauno(P);
     const hub = t4.c ? await hear(P, 1) : [];
-    const c4 = await convo(P); await endTalk(P);
+    const c4 = await convo(P);
+    let again = null;
+    if (t4.c && /^You doing anything this morning\?/.test(t4.c.say || '')) {
+      const g2 = await pick(P, 'Let\'s go.');
+      again = await ev(P, async () => { const L = window.__L, g = window.__game, M = window.__a2.M().miningCast; for (let k = 0; k < 90 && !(g.rides && !g.rides.busy && g.rides.last && g.rides.last.to === 33); k++) { L.step(10); await L.wait(120); } for (let k = 0; k < 120 && !(M.slab && M.slab.tauno); k++) { L.step(10); g.storyLayer.poll(); await L.wait(100); } const f = M.slab && M.slab.tauno; if (f) { L.standAt(f.x + 1.6, f.z, Math.PI); L.step(4); f.onTalk(f); L.step(3); } return { slab: !!f, c: window.__t.convo() }; });
+      again.pick = g2.ok;
+    }
+    await endTalk(P);
+    if (again) result('B8b … the ask again, "Let\'s go." again: the ride, Tauno at the slab, "Core shed." (the climax reachable)', again.pick && again.slab && again.c && /^(Core shed\.|We'll sit)/.test(again.c.say || ''), again);
     result('B8 the page reloaded after "Let\'s go." (at the road end, before the slab): Tauno at the slab again, or the ask again at Farm — some way to door.mining.climax',
       b8.slab || (t4.c && /^You doing anything this morning\?/.test(t4.c.say || '')) || (c4 && c4.choices.some((t) => /record/i.test(t))), { b8, nd, t4: t4.c && t4.c.say, c4 });
   } catch (e) { result('B7/B8 threw', false, { e: String(e.stack || e).slice(0, 800) }); }
@@ -279,6 +288,8 @@ async function groupA() {
   // another trip: never paid twice
   try {
     await ev(P, () => { const s = window.__game.story; s.rules.apply({ id: 'chk:pay', then: ['pay:35@30:4.3.pay.1'] }, {}); });
+    await flushAll(P); // (the pay owed is in the save before the trip: what is under test is the tally and the reload)
+    const mBefore = await ev(P, () => window.__game.profile.money);
     const p0 = await pays(P);
     const t1 = await tripOnce(P);
     const p1 = await pays(P);
@@ -288,8 +299,9 @@ async function groupA() {
     const p2 = await pays(P);
     const t2 = await tripOnce(P);
     const owed = p0.filter((p) => !p.paid).reduce((a, p) => a + p.amt, 0);
-    result('B9 the pay owed: paid at the next trip\'s tally with its line, the purse up by it; reloaded at once: kept; the next trip pays none of it again',
-      t1.m1 - t1.m0 >= owed && t1.story && t1.story.some((l) => /Field help/.test(l.title)) && m1 === t1.m1 && p2.every((p) => p.paid) && t2.m1 === t2.m0 && !(t2.story || []).length, { p0, t1, p1, m1, p2, t2 });
+    const kept = m1 === t1.m1 && p2.every((p) => p.paid), lost = m1 === mBefore && p2.some((p) => !p.paid);
+    result('B9 the pay owed: paid at the next trip\'s tally with its line, the purse up by it; the tab closed at once (no flush): the purse and the paid mark kept or lost together; over both trips paid exactly once',
+      t1.m1 - t1.m0 >= owed && t1.story && t1.story.some((l) => /Field help/.test(l.title)) && (kept || lost) && t2.m1 - mBefore === owed, { mBefore, p0, t1, p1, m1, p2, t2, kept, lost });
   } catch (e) { result('B9 threw', false, { e: String(e.stack || e).slice(0, 800) }); }
   await P.context().browser().close();
 }
@@ -411,7 +423,7 @@ async function groupC() {
   const g2 = await ev(B, async () => {
     const g = window.__game, L = window.__L, M = g.storyMining, lay = g.storyLayer, K = lay && lay.place ? lay.place('kettle') : null;
     if (!K) return { noLayer: true };
-    await L.near(K.x - 30, K.z + 8); lay.poll(); L.step(10); lay.poll(); if (M) M.kettle.update(1);
+    await L.near(K.x - 30, K.z + 8); L.standAt(K.x - 31, K.z + 8, 0); L.step(10); lay.poll(); L.step(10); lay.poll(); if (M) M.kettle.update(1);
     let look = null; try { look = lay.look('kettle.lid'); } catch (e) { look = 'threw:' + e.message; }
     return { look, verbs: lay.verbs('kettle.lid'), tasha: M ? !!M.kettle.tasha() : 'none', facts: Object.keys(g.story.facts()), lid: g.inventory.count('leolid', { reachable: false }), at: [Math.round(g.player.x), Math.round(g.player.z)] };
   });
