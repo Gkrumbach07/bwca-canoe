@@ -106,6 +106,7 @@ const facts = (page, ks) => page.evaluate((ks) => window.__a2.facts(ks), ks);
 // a paper up (the trip card as a trip ends at a door): a talk under it is closed the frame it opens, so it goes first,
 // as a player closes it (E), else by its own close (story-slice.mjs dismissCard)
 async function dismiss(page) {
+  await page.evaluate(() => { const o = window.__game.outfitter; if (o && o.open) { o.hide(); window.__L.step(3); } }); // (the counter's paper: input paused under it)
   for (let k = 0; k < 3; k++) {
     await page.evaluate(() => { const h = window.__game.hud; if (h && h.big && typeof h.setMode === 'function') { h.setMode(h.settings && h.settings.cornerSheet ? 'corner' : 'hidden'); window.__L.step(3); } }); // (the map's sheet: a talk under it closes too)
     const p = await page.evaluate(() => { const h = window.__game.hud; return h && h.paper && h.paper !== 'outfitter' ? h.paper : null; });
@@ -347,7 +348,7 @@ async function pietro({ page, result, ctx, shots, log }) {
       await L.tp(P.x - P.n[0] * 60, P.z - P.n[1] * 60); await L.settle();
       const o = L.waterOut(P.x - P.n[0] * 3, P.z - P.n[1] * 3, 140, P.x - P.n[0] * 3, P.z - P.n[1] * 3);
       if (o) { await L.tp(o.x, o.z); await L.settle(); }
-      return { mode: g.player.mode, d: Math.round(Math.hypot(g.player.x - P.x, g.player.z - P.z)), o };
+      return { mode: g.player.mode, d: Math.round(Math.hypot(g.player.x - P.x, g.player.z - P.z)), o, dock: Object.fromEntries(Object.entries(g.outfitter).filter(([k, v]) => /dock|berth|tie|near|visit/i.test(k) && (v == null || typeof v !== 'object' || 'ep' in v)).map(([k, v]) => [k, v && typeof v === 'object' ? v.ep : v])) };
     }, P);
     // paddle in: W held, the view turned at the landing (A/D as c1-layer's), then E ashore
     const aim = { x: P.x - P.n[0] * 3, z: P.z - P.n[1] * 3 };
@@ -370,10 +371,10 @@ async function pietro({ page, result, ctx, shots, log }) {
     await page.evaluate(() => { window.__L.step(30); const g = window.__game; if (g.wind) g.wind.override = null; });
     await press(page, 'e');
     await page.evaluate(() => { const L = window.__L, p = window.__game.player; for (let k = 0; k < 40 && !p.onFoot; k++) L.step(15); L.step(30); });
-    const landed = await page.evaluate((P) => { const p = window.__game.player; return { onFoot: p.onFoot, d: Math.round(Math.hypot(p.x - P.x, p.z - P.z)) }; }, P);
+    const landed = await page.evaluate((P) => { const g = window.__game, p = g.player; return { onFoot: p.onFoot, d: Math.round(Math.hypot(p.x - P.x, p.z - P.z)), open: !!g.outfitter.open, docking: !!g.outfitter.docking }; }, P);
     if (!landed.onFoot || landed.d > 60) {
       log(`  pietro: not ashore at the landing ${JSON.stringify(await page.evaluate(() => { const g = window.__game; return { notes: [...document.querySelectorAll('.note, .hud-note, #note')].map((e) => e.innerText).filter(Boolean).slice(-3), trip: g.trip ? { active: !!g.trip.active } : null, visit: g.outfitter.visit ? g.outfitter.visit.ep : null, last: g.rides && g.rides.last ? g.rides.last.to : null, mode: g.player.mode, arrival: g.outfitter.arrival ? { why: g.outfitter.arrival.why, ep: g.outfitter.arrival.ep } : null, energy: g.energy ? +g.energy.value.toFixed(2) : null, tele: !!g.player.teleporting, landing: g.player.landing ? 'landing' : null, ashore: g.player.ashore ? 'ashore' : null }; }))}`);
-      await page.evaluate(async (P) => { const L = window.__L, g = window.__game; for (let k = 0; k < 100 && g.player.teleporting; k++) { L.step(10); await L.wait(100); } await L.near(P.x + P.n[0] * 3, P.z + P.n[1] * 3); L.standAt(P.x + P.n[0] * 3, P.z + P.n[1] * 3, 0); L.step(20); }, P); // (ashore by the API: said in the result)
+      await page.evaluate(async (P) => { const L = window.__L, g = window.__game; const o = g.outfitter; if (o.open) o.hide(); o.docking = null; o.arrival = null; o.pendingShow = false; for (let k = 0; k < 100 && g.player.teleporting; k++) { L.step(10); await L.wait(100); } await L.near(P.x + P.n[0] * 3, P.z + P.n[1] * 3); L.standAt(P.x + P.n[0] * 3, P.z + P.n[1] * 3, 0); L.step(20); }, P); // (ashore by the API: said in the result)
     }
     // the faint path up: walked by the keys along the lane to the dig
     const ln = P.lanes[0];
