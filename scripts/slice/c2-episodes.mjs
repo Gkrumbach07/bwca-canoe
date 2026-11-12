@@ -79,7 +79,7 @@ async function shot(page, ctx, name) { if (ctx && ctx.shots) { try { await page.
 
 // a cast by real input: the rod up (F), the jig by its number, Space held to load and let go; then W held (the
 // retrieve) until a hook-up, the lure back at the tip, or `max` frames
-async function castAndWork(page, { max = 900 } = {}) {
+async function castAndWork(page, { max = 2400 } = {}) {
   const F0 = await page.evaluate(() => window.__e.fish());
   if (F0.state === 'stowed') await press(page, 'KeyF');
   // the jig: its number in the strip (fishing.owned order), pressed
@@ -91,10 +91,15 @@ async function castAndWork(page, { max = 900 } = {}) {
   await page.keyboard.up('Space');
   for (let k = 0; k < 40; k++) { await page.evaluate(() => window.__L.step(5)); const s = await page.evaluate(() => window.__e.fish().state); if (s === 'inwater') break; }
   for (let k = 0; k < 30; k++) await page.evaluate(() => window.__L.step(2)); // (let it sink to the bed)
-  await page.keyboard.down('KeyW');
-  let st = null;
-  for (let k = 0; k < max; k += 4) { await page.evaluate(() => window.__L.step(4)); st = await page.evaluate(() => window.__e.fish()); if (st.state !== 'inwater' && st.state !== 'flying') break; }
-  await page.keyboard.up('KeyW');
+  // worked back slowly along the sand (60 S9): W in short pulls, the jig let settle to the bottom between them
+  let st = null, down = false;
+  for (let k = 0; k < max; k += 4) {
+    const want = (k % 28) < 12;
+    if (want && !down) { await page.keyboard.down('KeyW'); down = true; } else if (!want && down) { await page.keyboard.up('KeyW'); down = false; }
+    await page.evaluate(() => window.__L.step(4)); st = await page.evaluate(() => window.__e.fish());
+    if (st.state !== 'inwater' && st.state !== 'flying') break;
+  }
+  if (down) await page.keyboard.up('KeyW');
   return { aim, st };
 }
 // the fight by real input: W held while it gives, let go while it sticks (the bar tells you: past ~0.7 ease off), or

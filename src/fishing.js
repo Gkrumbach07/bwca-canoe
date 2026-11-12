@@ -939,9 +939,9 @@ export class Fishing {
   // story's to hand over (into the hand, not the stringer).
   snagCheck(l, def) {
     const S = this.snags; let T = null;
-    try { for (const t of S.targets() || []) if (S.over(t, l, def)) { T = t; break; } } catch (e) { console.warn('fishing: snag targets', e); return false; }
-    if (!T) { this.snagIn = null; return false; }
-    if (this.snagIn === T.id) return false; // (the same pass: rolled already)
+    try { for (const t of S.targets() || []) if (Math.hypot(l.x - t.x, l.z - t.z) <= t.r) { T = t; break; } } catch (e) { console.warn('fishing: snag targets', e); return false; }
+    if (!T) { this.snagIn = null; return false; } // (out of reach: the next time in is a new pass)
+    if (this.snagIn === T.id || !S.over(T, l, def)) return false; // (this pass rolled already; or the lure is running high over it)
     this.snagIn = T.id; this.snagPass = (this.snagPass || 0) + 1;
     if (!S.passes(T, `${this.snagCast || 0}:${this.snagPass}`)) return false;
     const h = S.start(T, { line: this.lineOut, snap: TUNING.snapDanger * (this.player.gear ? this.player.gear.snap : 1) * (this.kit ? this.kit.mods.snap : 1), seed: `${this.snagCast || 0}:${this.snagPass}` });
