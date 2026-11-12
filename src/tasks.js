@@ -456,7 +456,7 @@ export class Tasks {
   held() { return this.active; }
   daysFor(t) { return KIND_DAYS[t && t.kind] ?? DAYS_ELSE; }
   // the last day a notice may be done on (its taken day + its kind's days)
-  dueOf(t) { if (!t) return null; if (!Number.isFinite(t.due)) t.due = (Number.isFinite(t.taken) ? t.taken : this.today()) + this.daysFor(t); return t.due; }
+  dueOf(t) { if (!t || t.noDue) return null; if (!Number.isFinite(t.due)) t.due = (Number.isFinite(t.taken) ? t.taken : this.today()) + this.daysFor(t); return t.due; }
   daysLeft(t) { const d = this.dueOf(t); return d == null ? null : d - this.today(); }
   // a co-op guest mirrors the host's notices: the host keeps their deadlines and their pay
   get mirror() { const g = typeof window !== 'undefined' ? window.__game : null, c = g && g.coopTrip; return !!(c && c.mirroring); }
@@ -467,7 +467,7 @@ export class Tasks {
     const gone = [];
     for (const t of this.active) {
       if (t.status !== 'open') continue;
-      if (this.dueOf(t) >= today) continue;
+      const due = this.dueOf(t); if (due == null || due >= today) continue; // (chk-c2a: a favour asked in talk with no deadline, t.noDue, never expires)
       gone.push(t);
     }
     for (const t of gone) {

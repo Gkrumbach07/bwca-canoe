@@ -42,7 +42,7 @@ export function attachMiningTasks({ tasks, layer = null, story = null, hud = nul
     const L = T.landing(Number(ep));
     const t = { id: T.nextId++, kind: spec.kind, from: Number(ep), fromName: L ? L.name : 'Farm Lake', band: 'local', status: 'open', posted: T.today(), taken: T.today(),
       npc: spec.npc, npcName: spec.name, sign: spec.name, title: spec.title, text: spec.title, pay: spec.pay, ...extra };
-    if (spec.days) t.due = t.taken + spec.days;
+    if (spec.days) t.due = t.taken + spec.days; else t.noDue = true; // (chk-c2a: Mary's lid waits on the Kettle day, which waits on a rain: no deadline, never "gone")
     t.clue = t.text;
     T.ads.set(t.id, t);
     T.changed(); T.boardChanged();
