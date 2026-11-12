@@ -193,7 +193,7 @@ export const steps = [
         const c = await castAndWork(page);
         tries.push({ st: c.st && c.st.state, line: c.st && c.st.line, d: c.aim.d });
         if (c.st && c.st.snag) hooked = c.st;
-        else await page.evaluate(() => { const F = window.__game.fishing; if (F.state === 'inwater') { F.state = 'ready'; F.lineOut = 0; } window.__L.step(20); });
+        else await page.evaluate(() => { const F = window.__game.fishing; if (F.state === 'inwater' || ((F.state === 'bite' || F.state === 'fight') && !(F.fish && F.fish.snag))) { F.fish = null; F.state = 'ready'; F.lineOut = 0; } window.__L.step(20); /* (join c2: a fish on instead of the bail is let go too, or every cast after it stayed in its fight) */ });
       }
       const yes = await page.evaluate(() => ({ yes: window.__game.story.has('ep.S9.yes'), hooked: window.__game.story.has('mg.snag.hooked'), open: window.__e.R().open() }));
       result('12a (E) a jig cast toward the sand off the beach rock and worked back snags the bail (the hook-up: S9\'s yes; S7 and S9 open at once)', !!hooked && yes.yes && yes.hooked && yes.open.includes('S7') && yes.open.includes('S9'), { at, casts, tries: tries.slice(-4), hooked, yes });
@@ -206,7 +206,7 @@ export const steps = [
       // jig, and with none in the strip the cast went out on whatever lure was left and rode over the bail: the join)
       await page.evaluate(() => { window.__e.kitUp(); window.__L.step(4); });
       let h2 = null;
-      for (let k = 0; k < 14 && !h2; k++) { const c = await castAndWork(page); if (c.st && c.st.snag) h2 = c.st; else await page.evaluate(() => { const F = window.__game.fishing; if (F.state === 'inwater') { F.state = 'ready'; F.lineOut = 0; } window.__L.step(20); }); }
+      for (let k = 0; k < 14 && !h2; k++) { const c = await castAndWork(page); if (c.st && c.st.snag) h2 = c.st; else await page.evaluate(() => { const F = window.__game.fishing; if (F.state === 'inwater' || ((F.state === 'bite' || F.state === 'fight') && !(F.fish && F.fish.snag))) { F.fish = null; F.state = 'ready'; F.lineOut = 0; } window.__L.step(20); /* (join c2: a fish on instead of the bail is let go too, or every cast after it stayed in its fight) */ }); }
       const t0 = await page.evaluate(() => window.__game.day.hours);
       const g2 = h2 ? await fight(page) : null;
       const r = await page.evaluate((t0) => { const g = window.__game, E = window.__e; g.storyLayer.poll(); window.__L.step(4); return { pot: g.story.has('ep.S9.pot'), end: g.story.get('ep.S9.end'), inHand: E.holding('junespot'), msg: E.fish().msg, built: E.built('s9.pot'), firsts: E.firsts(), page: E.page('S9'), mins: +((g.day.hours - t0) * 60).toFixed(1), ink: g.story.has('ink.coffeelake') }; }, t0);
