@@ -411,7 +411,7 @@ async function pietro({ page, result, ctx, shots, log }) {
     const w = await page.evaluate(() => ['30:4.7.w.1', '30:4.7.w.2.2', '30:4.7.w.3'].filter((x) => window.__game.story.walt().includes(x)));
     const inv = await page.evaluate(() => window.__a2.inv('shovelblade'));
     result('8a Pietro\'s north-east shore landed by the keys (W, A/D, E ashore); the faint path walked up; the dig (E Look): pietro.dig.seen; with the crew map "the sketch doesn\'t fit"; with NB70 the back door; with both the wrong hill (L2C); the blade carried',
-      landed.onFoot && dig && dig.label === 'Dig' && w1 && Object.values(f).every(Boolean) && w.length === 3 && blade && blade.label === 'Shovel blade, broken' && inv === 1, { start, landed, legs, dig, f, w, blade, inv });
+      landed.onFoot && dig && dig.label === 'Old dig' && w1 && Object.values(f).every(Boolean) && w.length === 3 && blade && blade.label === 'Shovel blade, broken' && inv === 1, { start, landed, legs, dig, f, w, blade, inv });
     // back on the porch: "Eino's sketch" → "turn your head" (30:4.5.w3)
     await page.evaluate(async (d) => { const A = window.__a2; A.at(d, 8); await A.toFarm(); window.__L.step(30); }, ctx.mapDay + 2);
     // (the first porch visit after the map's day opens with the clean book's ask: 9a "Not today." here, then E again)
