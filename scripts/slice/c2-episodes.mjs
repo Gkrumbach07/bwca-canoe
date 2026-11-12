@@ -65,6 +65,8 @@ export const HELPERS_E = () => {
     L.step(4);
     return was;
   };
+  // (c2-fix) why a cast came back: the gates fishing.js reads, the wind on the cast, its words
+  E.why = () => { const F = g.fishing, p = g.player; return { st: F.state, up: F.rodUp, foot: F.onFoot, blownN: F.blownN || 0, wind: F.wind ? +F.wind.speed.toFixed(2) : null, mode: p.mode, act: !!p.act, seat: !!p.seat, tp: !!p.teleporting, paused: !!(p.input && p.input.paused), title: g.title.state, paper: g.hud.paper || null, convo: !!(g.dialogue && g.dialogue.convo), book: !!(g.journal && g.journal.open), msg: F.message && F.message.text, prompt: p.prompt && p.prompt.text, lure: F.lureDef && F.lureDef.id, at: [+p.x.toFixed(1), +p.z.toFixed(1)], hours: +g.day.hours.toFixed(2), snags: F.snags ? F.snags.targets().length : null }; };
   E.money = () => (g.profile && g.profile.s ? g.profile.s.money : null);
   E.firsts = () => (g.record && g.record.s ? g.record.s.firsts.map((f) => f.words) : []);
   E.page = (id) => E.R().page(id);
@@ -86,10 +88,13 @@ async function castAndWork(page, { max = 2400 } = {}) {
   const ix = await page.evaluate(async () => { const F = window.__game.fishing, { LURES } = await import('/src/fishing.js'), j = LURES.findIndex((l) => l.id === 'jig'); return F.owned.indexOf(j); });
   if (ix >= 0) await press(page, `Digit${ix + 1}`);
   const aim = await page.evaluate(() => window.__e.aimPast(3));
+  const before = await page.evaluate(() => window.__e.why());
   await page.keyboard.down('Space');
   for (let k = 0; k < 40; k++) await page.evaluate(() => window.__L.step(2));
+  const loaded = await page.evaluate(() => window.__e.why());
   await page.keyboard.up('Space');
   for (let k = 0; k < 40; k++) { await page.evaluate(() => window.__L.step(5)); const s = await page.evaluate(() => window.__e.fish().state); if (s === 'inwater') break; }
+  const landed = await page.evaluate(() => window.__e.why());
   for (let k = 0; k < 30; k++) await page.evaluate(() => window.__L.step(2)); // (let it sink to the bed)
   // worked back slowly along the sand (60 S9): W in short pulls, the jig let settle to the bottom between them
   let st = null, down = false;
@@ -100,7 +105,7 @@ async function castAndWork(page, { max = 2400 } = {}) {
     if (st.state !== 'inwater' && st.state !== 'flying') break;
   }
   if (down) await page.keyboard.up('KeyW');
-  return { aim, st };
+  return { aim, st, why: { before, loaded, landed, after: await page.evaluate(() => window.__e.why()) } };
 }
 // the fight by real input: W held while it gives, let go while it sticks (the bar tells you: past ~0.7 ease off), or
 // greedy: W held throughout
@@ -191,12 +196,12 @@ export const steps = [
       let hooked = null, casts = 0, tries = [];
       for (; casts < 14 && !hooked; casts++) {
         const c = await castAndWork(page);
-        tries.push({ st: c.st && c.st.state, line: c.st && c.st.line, d: c.aim.d });
+        tries.push({ st: c.st && c.st.state, line: c.st && c.st.line, d: c.aim.d, why: casts < 2 ? c.why : { blownN: c.why.after.blownN, msg: c.why.after.msg } });
         if (c.st && c.st.snag) hooked = c.st;
         else await page.evaluate(() => { const F = window.__game.fishing; if (F.state === 'inwater' || ((F.state === 'bite' || F.state === 'fight') && !(F.fish && F.fish.snag))) { F.fish = null; F.state = 'ready'; F.lineOut = 0; } window.__L.step(20); /* (join c2: a fish on instead of the bail is let go too, or every cast after it stayed in its fight) */ });
       }
       const yes = await page.evaluate(() => ({ yes: window.__game.story.has('ep.S9.yes'), hooked: window.__game.story.has('mg.snag.hooked'), open: window.__e.R().open() }));
-      result('12a (E) a jig cast toward the sand off the beach rock and worked back snags the bail (the hook-up: S9\'s yes; S7 and S9 open at once)', !!hooked && yes.yes && yes.hooked && yes.open.includes('S7') && yes.open.includes('S9'), { at, casts, tries: tries.slice(-4), hooked, yes });
+      result('12a (E) a jig cast toward the sand off the beach rock and worked back snags the bail (the hook-up: S9\'s yes; S7 and S9 open at once)', !!hooked && yes.yes && yes.hooked && yes.open.includes('S7') && yes.open.includes('S9'), { at, casts, tries: tries.length > 4 ? [...tries.slice(0, 2), ...tries.slice(-2)] : tries, hooked, yes });
       await shot(page, ctx, 'e12-fight');
       // greedy first: W held into the sticks → the red, the line parts, the pot stays
       const g1 = await fight(page, { greedy: true });

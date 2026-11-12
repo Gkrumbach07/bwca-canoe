@@ -34,11 +34,16 @@ try {
   await B.evaluate(async () => { const g = window.__game; g.walt.find({ key: 1, lake: 'Guest Own Lake' }); await new Promise((r) => setTimeout(r, 200)); g.story.debug.set('crews.seen'); g.story.flush(); g.slots.flush(); await new Promise((r) => setTimeout(r, 500)); });
   const own0 = await raw2(B);
   const ownSeason = await B.evaluate(() => window.__game.profile.seasonId);
+  log('guest own0', JSON.stringify(await B.evaluate(() => { const g = window.__game, o = g.outfitter; return { title: g.title.state, visit: o.visit ? { ep: o.visit.ep, inside: !!o.visit.inside } : null, at: [Math.round(g.player.x), Math.round(g.player.z)], hours: +g.day.hours.toFixed(2) }; })));
   // the host
   const A = await fresh('host');
   await go(A, 'story=1'); await newSeason(A, 25, 166);
   await A.evaluate(() => { const g = window.__game; if (g.outfitter.open) g.outfitter.hide(); if (g.onboarding.pending()) { g.onboarding.give(); g.onboarding.finish(25, false); } });
   const code = await A.evaluate(() => window.__game.coop.invite({ name: 'Host', shirt: 2 }));
+  // (c2-fix: the guest's own game ran on while the host booted; what its story did meanwhile, before the join link)
+  const s1 = await B.evaluate(() => { const g = window.__game, s = g.story, o = g.outfitter, f = g.storySeams && g.storySeams.feed; return { title: g.title.state, visit: o.visit ? { ep: o.visit.ep, inside: !!o.visit.inside } : null, at: [Math.round(g.player.x), Math.round(g.player.z)], facts: Object.keys(s.facts()), log: (s.doc && s.doc.log || []).slice(-6), recent: f ? f.recent.slice(-8).map((r) => `${r.evt}:${r.how}`) : null }; });
+  const own1 = await raw2(B);
+  log('guest before the join link', JSON.stringify({ moved: own1 !== own0, ...s1 }).slice(0, 1500));
   // the guest joins from their own game (pause card's join: the title's join card)
   await B.goto(`${APP}/?relay=${encodeURIComponent(RELAY)}&story=1&join=${code}`, { timeout: 180000 }); await booted(B);
   await B.waitForFunction(() => { const c = document.getElementById('coop-card'); return c && !c.hidden && document.getElementById('coop-code'); }, null, { timeout: 120000 });
@@ -58,7 +63,8 @@ try {
   });
   result('C1 the guest\'s story in the room: mirror, no facts, walt.onSleep refuses, nothing flushed', g1.mode === 'mirror' && !g1.facts.length && !g1.sleep && g1.flush === false, { pre, g1: { ...g1, stored: g1.stored && g1.stored.slice(0, 200) } });
   const diff2 = (() => { try { const a = JSON.parse(own0), b = JSON.parse(g1.stored); return Object.keys({ ...a, ...b }).filter((k) => JSON.stringify(a[k]) !== JSON.stringify(b[k])).map((k) => ({ k, a: JSON.stringify(a[k]).slice(0, 300), b: JSON.stringify(b[k]).slice(0, 300) })); } catch (e) { return String(e); } })(); // (e: what moved, when it did)
-  result('C2 the guest\'s own story2 untouched while visiting', g1.stored === own0, { same: g1.stored === own0, diff: g1.stored === own0 ? null : diff2 });
+  const added = (() => { try { const a = JSON.parse(own0), b = JSON.parse(g1.stored); return { facts: Object.keys(b.facts || {}).filter((k) => !(k in (a.facts || {}))).map((k) => [k, b.facts[k]]), log: (b.log || []).slice((a.log || []).length) }; } catch (e) { return String(e); } })();
+  result('C2 the guest\'s own story2 untouched while visiting', g1.stored === own0, { same: g1.stored === own0, added: g1.stored === own0 ? null : added, diff: g1.stored === own0 ? null : diff2 });
   const host = await A.evaluate(() => ({ mode: window.__game.story.mode, facts: Object.keys(window.__game.story.facts()) }));
   result('C3 the host stays live (its own facts only)', host.mode === 'live' && !host.facts.includes('crews.seen'), host);
   // e: Round 2 stream E (episodes.js): a guest's engine is off: no story flyers on the board, no snag on June's pot, no
