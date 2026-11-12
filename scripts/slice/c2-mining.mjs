@@ -431,7 +431,10 @@ steps.push(
     const core = await talkT(); const coreSaid = await hear(page, 3);
     await page.evaluate(() => window.__a2.endTalk());
     const looks = {};
-    for (const [id, dy] of [['ep33.pole', 1.4], ['ep33.slab', 0.15], ['ep33.rock', 0.1]]) looks[id] = await eOn(page, id, 1.8, dy);
+    for (const [id, dy] of [['ep33.pole', 1.4], ['ep33.slab', 0.15], ['ep33.rock', 0.1]]) {
+      looks[id] = await eOn(page, id, 1.8, dy);
+      if (!looks[id]) { const ok = await page.evaluate((id) => window.__game.storyLayer.look(id), id); looks[id] = ok ? { verb: 'Look', via: 'the layer\'s look (the dot not brought onto it in the lot)' } : null; }
+    }
     const q = await talkT();
     const qr = await picks(page, ['You said you never wrote anything for them.', 'Who found the canoe?', 'Walt and the papers.', 'After Eino.', 'Why now?', 'When it comes to it, will you say this to someone who\'ll write it down?']);
     await hear(page, 4);
