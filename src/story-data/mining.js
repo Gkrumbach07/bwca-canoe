@@ -301,10 +301,10 @@ export const WORDS = { stamp: 'item.leolid.stamp', fieldHelp: '30:4.3.pay.1', ga
 // if Len hasn't already"), as topics.js keeper topics (topics.add). The player's question has no words in the docs: the
 // label is the place's own name (a writers' leftover, as Round 1's easy nicknames); the keeper answers with the ring
 export const KEEPER = [
-  { id: 'a2.crewscountry', pri: 3.9, once: true, label: 'The old crews\' country?', when: 'f:tauno.drilled & ep:31',
+  { id: 'a2.crewscountry', pri: 4.95, once: true, label: 'The old crews\' country?', when: 'f:tauno.drilled & ep:31',
     ring: { x: -26600, z: 28400, r: 2600, place: 'crewscountry', label: 'the old crews\' country' } },
-  { id: 'a2.grade', pri: 3.9, once: true, label: 'The old grade?', when: 'f:tauno.said.pads & ep:31 & !f:len.westpads.rings',
+  { id: 'a2.grade', pri: 4.95, once: true, label: 'The old grade?', when: 'f:tauno.said.pads & ep:31 & !f:len.westpads.rings',
     ring: { x: -25960, z: 30060, r: 220, place: 'grade', label: 'the old grade' } },
-  { id: 'a2.westpads', pri: 3.9, once: true, label: 'The west pads?', when: 'f:tauno.said.pads & ep:31 & !f:len.westpads.rings',
+  { id: 'a2.westpads', pri: 4.95, once: true, label: 'The west pads?', when: 'f:tauno.said.pads & ep:31 & !f:len.westpads.rings',
     ring: { x: -26300, z: 30260, r: 520, place: 'westpads', label: 'the west pads' } },
 ];

@@ -38,13 +38,14 @@ export const HELPERS_A2 = () => {
 };
 
 // walk to a point by the keys (W held, the view turned at it each few frames); → { ok, d, stuck }
-async function walkTo(page, x, z, { r = 3, max = 900 } = {}) {
+async function walkTo(page, x, z, { r = 3, max = 400, log = null } = {}) {
   let last = null, still = 0, d = Infinity;
   await page.keyboard.down('w');
   try {
     for (let k = 0; k < max; k++) {
-      const s = await page.evaluate(([x, z]) => { const g = window.__game, p = g.player, L = window.__L; L.look(window.__a2.yaw(x, z), 0); L.step(6); return { d: Math.hypot(x - p.x, z - p.z), x: p.x, z: p.z, mode: p.mode }; }, [x, z]);
+      const s = await page.evaluate(([x, z]) => { const g = window.__game, p = g.player, L = window.__L; L.look(window.__a2.yaw(x, z), 0); L.step(10); return { d: Math.hypot(x - p.x, z - p.z), x: p.x, z: p.z, mode: p.mode }; }, [x, z]);
       d = s.d;
+      if (log && k % 50 === 0) log(`   walk k=${k} d=${Math.round(d)} at ${Math.round(s.x)},${Math.round(s.z)} ${s.mode}`);
       if (d < r) return { ok: true, d, k };
       if (last && Math.hypot(s.x - last.x, s.z - last.z) < 0.05) { if (++still > 25) return { ok: false, d, stuck: true, at: [Math.round(s.x), Math.round(s.z)], mode: s.mode }; } else still = 0;
       last = s;
@@ -59,6 +60,7 @@ async function walkRoute(page, pts, opts = {}) {
     let w = await walkTo(page, x, z, opts);
     if (!w.ok) { await page.evaluate(([x, z]) => { const g = window.__game, p = g.player, a = Math.atan2(z - p.z, x - p.x); window.__L.standAt(p.x + Math.cos(a) * 4, p.z + Math.sin(a) * 4, window.__a2.yaw(x, z)); window.__L.step(6); }, [x, z]); w = { ...(await walkTo(page, x, z, opts)), helped: true }; }
     legs.push({ to: [Math.round(x), Math.round(z)], ok: w.ok, d: Math.round(w.d), helped: !!w.helped, stuck: w.stuck || null });
+    if (opts.log) opts.log('  leg', JSON.stringify(legs[legs.length - 1]));
   }
   return legs;
 }
@@ -102,7 +104,7 @@ export const steps = [
     result('1b E on him: "You found it. Sit on the bench, not the step." (30:4.1.1, its sitting half held back), the hub: "The outfit" → "Where, exactly?" (tauno.drilled, L1A, 30:4.1.w1), "BRM-14" (knows.brm14, L1B), "The pads" (a lead)',
       c0 && /^You found it\. Sit on the bench/.test(c0.say) && !/two old fools/.test(c0.say) && r.ok && brm.ok && r2.ok && Object.values(f).every(Boolean) && lead.pads === 'open' && lead.walt.length === 2, { c0, said, f, lead, brm: brm.ok ? 'ok' : brm });
     // sit beside him: the second half (30:4.1.1 "Good. Now we're two old fools…")
-    const sat = await page.evaluate(async () => { const g = window.__game, S = window.__a2.store(), seat = S.seats[1] || S.seats[0]; const ok = g.player.sitAt ? g.player.sitAt(seat) : false; window.__L.step(90); const s = g.story.has('tauno.farm.sat'); if (g.player.stand) g.player.stand(); window.__L.step(40); return { ok: !!ok, sat: s }; });
+    const sat = await page.evaluate(async () => { const g = window.__game, S = window.__a2.store(), seat = S.seats[1] || S.seats[0], h = seat.heading, fx = Math.cos(h), fz = -Math.sin(h); window.__L.standAt(seat.x + fx * 0.7, seat.z + fz * 0.7, h + Math.PI); window.__L.step(4); const ok = g.player.sitAt ? g.player.sitAt(seat) : false; window.__L.step(90); const s = g.story.has('tauno.farm.sat'); if (g.player.stand) g.player.stand(); window.__L.step(40); return { ok: !!ok, sat: s }; });
     result('1c sitting on the bench beside him: his second half said (tauno.farm.sat)', sat.sat, sat);
     // the Farm keeper rings "the old grade" and "the west pads" when asked
     await page.evaluate(() => window.__a2.inside());
@@ -142,9 +144,9 @@ export const steps = [
     const after = await page.evaluate(() => window.__a2.rings());
     const f = await facts(page, ['len.met', 'len.westpads.rings', 'asked.len.walt', 'said.len.walt', 'tier.1', 'len.favour']);
     const fav = await page.evaluate(() => window.__a2.task('lenphotos'));
-    const lens = after.filter((g) => /Len/.test(g.who || '')).length;
+    const lens = new Set(after.filter((g) => /Len/.test(g.who || '')).flatMap((g) => g.places || [])); // (rings this near each other are one ring in a second voice: pencil.js)
     result('2b Len at the dock\'s end (a Tuesday morning): "The crews" → three rings in his voice (len.westpads.rings, L1A); "Walt" → asked.len.walt (tier 1) and the lie; "What do you do now?" → his favour in the journal ($40, two pictures)',
-      dock && dock.at === 'a2:dock' && l0 && lr.ok && lw.ok && ln.ok && Object.values(f).every(Boolean) && lens >= 3 && fav && fav.pay === 40, { dock, l0, f, lens, rings: after.length - before, fav });
+      dock && dock.at === 'a2:dock' && l0 && lr.ok && lw.ok && ln.ok && Object.values(f).every(Boolean) && ['crews.landing', 'grade', 'westpads'].every((q) => lens.has(q)) && fav && fav.pay === 40, { dock, l0, f, lens: [...lens], rings: after.length - before, fav });
   } },
   // step 3 (A2's half; E's board hook shows the flyer): the evening of the first rain day the notice is up; taking it rings the pad
   { id: 'notice', step: 3, title: 'the Kettle notice (A2\'s half): up the first evening of the rain; taken, the pad rung', run: async ({ page, result, ctx }) => {
@@ -161,26 +163,30 @@ export const steps = [
     result('3 (A2) the notice: up in the rain\'s window once "The pads" is heard (30:4.3.notice; the keeper\'s two lines); taken: kettle.notice, the pad rung. (On the board: E\'s flyer hook, the join; its opening hour: c2-mining-unit)', r.at19 === 1 && /^FIELD HELP, ONE DAY/.test(r.paper || '') && r.keeper && r.keeper.length === 2 && r.f['kettle.notice'] && r.ring, r);
   } },
   // step 4: the Kettle day (Thursday, the morning after the rain): the crews' landing on foot to the hollow; Tasha; the stations
-  { id: 'kettle', step: 4, title: 'the Kettle day: the grade and the bushwhack walked, the hollow, Tasha, the stations, the Secchi, the lid', run: async ({ page, result, ctx, shots }) => {
+  { id: 'kettle', step: 4, title: 'the Kettle day: the grade and the bushwhack walked, the hollow, Tasha, the stations, the Secchi, the lid', run: async ({ page, result, ctx, shots, log }) => {
+    if (ctx.kettleDay == null) ctx.kettleDay = await page.evaluate(() => { const A = window.__a2, g = window.__game, s = g.story, M = A.M(); let d = g.day.doy + 2; while (A.dow(d) !== 3) d++; M.kettle.rain.force({ from: A.abs(d) - 2, days: 2 }); s.set('tauno.said.pads', true, 'rig'); s.set('kettle.notice', true, 'rig'); return d; }); // (--from kettle: the notice taken as step 3 leaves it)
     const day = await page.evaluate((d) => { const A = window.__a2; A.at(d, 8); return { doy: d, dow: A.dow(d), here: A.M().kettle.day() }; }, ctx.kettleDay);
     const C = await page.evaluate(() => window.__a2.place('crews.landing'));
-    await page.evaluate(async (C) => { const L = window.__L; await L.tp(C.x + C.n[0] * 6, C.z + C.n[1] * 6); await L.settle(); L.standAt(C.x + C.n[0] * 6, C.z + C.n[1] * 6, 0); L.step(20); }, C);
+    const t00 = Date.now();
+    await page.evaluate(async (C) => { const L = window.__L; await L.tp(C.x - C.n[0] * 30, C.z - C.n[1] * 30); await L.settle(); L.standAt(C.x + C.n[0] * 6, C.z + C.n[1] * 6, 0); L.step(20); }, C);
+    log(`  at the crews' landing in ${Date.now() - t00} ms`);
     // the photo of the crib for Len (the camera's own shot handler: the layer's photo targets)
     const crib = await page.evaluate(() => { const g = window.__game, q = g.storyLayer.prop('crews.crib').prop, p = g.player, eye = { x: p.x, y: 445, z: p.z }, dx = q.x - p.x, dz = q.z - p.z, n = Math.hypot(dx, dz); g.storyLayer.shot({ eye, dir: { x: dx / n, y: 0, z: dz / n } }); return window.__a2.task('lenphotos'); });
     // up the grade: the casing, the rack, the second pine; the bushwhack where it fades; over the rise into the hollow
     const W = await page.evaluate(() => { const A = window.__a2, w = A.place('westpads'), k = A.place('kettle'); return { w, k }; });
     const route = [[W.w.x - 8, W.w.z + 2], [W.w.x - 200, W.w.z + 95], [W.w.x - 380, W.w.z + 230], [W.k.x + 250, W.k.z - 120], [W.k.x + 90, W.k.z - 30], [W.k.x + 10, W.k.z + 10]];
+    const legs0 = await walkRoute(page, [[W.w.x + 9, W.w.z - 3]], { r: 3, log }); // (the landing to the casing, up the grade)
     const casing = await eOn(page, 'westpads.casing', 1.6, 0.15);
     await shot(page, shots, 'A2-4-casing');
     const cas = await page.evaluate(() => { const g = window.__game, q = g.storyLayer.prop('westpads.casing').prop, p = g.player, dx = q.x - p.x, dz = q.z - p.z, n = Math.hypot(dx, dz) || 1; g.storyLayer.shot({ eye: { x: p.x, y: 446, z: p.z }, dir: { x: dx / n, y: 0, z: dz / n } }); return window.__a2.task('lenphotos'); });
     const pine = await page.evaluate(() => window.__L.faceTo('crews.pine2', 1.8, 1.3));
     const t0 = await page.evaluate(() => performance.now());
-    const legs = await walkRoute(page, route, { r: 4 });
+    const legs = await walkRoute(page, route, { r: 4, log });
     const t1 = await page.evaluate(() => performance.now());
     await page.evaluate(() => { window.__game.storyLayer.poll(); window.__L.step(10); window.__game.storyLayer.poll(); });
     const hollow = await facts(page, ['westpads.seen', 'kettle.visited', 'key.L1C']);
     result('4a up the grade on foot: "Casing" (E Look), the blaze named "Old blaze. Orange." if his line is known, else "Blaze"; the bushwhack where it fades; over the rise into the hollow: westpads.seen (L1C), kettle.visited',
-      casing && casing.label === 'Casing' && pine && /Blaze|Old blaze/.test(pine.label) && hollow['westpads.seen'] && hollow['kettle.visited'], { casing, pine, legs, secs: Math.round((t1 - t0) / 1000), hollow, day });
+      casing && casing.label === 'Casing' && pine && /Blaze|Old blaze/.test(pine.label) && hollow['westpads.seen'] && hollow['kettle.visited'], { casing, pine, legs0, legs, secs: Math.round((t1 - t0) / 1000), hollow, day });
     await shot(page, shots, 'A2-4-hollow');
     // Tasha at the tailgate (the turnaround south of the pad)
     const tasha = await page.evaluate(async () => { const M = window.__a2.M(), L = window.__L; M.kettle.update(1); L.step(10); const f = M.kettle.tasha(); if (!f) return null; L.standAt(f.x + 1.8, f.z, Math.atan2(0, -1)); L.aim({ x: f.x, z: f.z }, f.groundY() + 1.4); L.step(6); return { x: f.x, z: f.z, target: L.target() }; });
@@ -262,7 +268,7 @@ export const steps = [
     Object.assign(ctx, { mapDay: day + 1 });
   } },
   // step 8: Pietro's north-east shore, landed by real input; the faint path; the dig; the back door; the wrong hill (L2C)
-  { id: 'pietro', step: 8, title: 'Pietro\'s north-east shore: landed, the path, the dig (L2C), the blade; "Eino\'s sketch"', run: async ({ page, result, ctx, shots }) => {
+  { id: 'pietro', step: 8, title: 'Pietro\'s north-east shore: landed, the path, the dig (L2C), the blade; "Eino\'s sketch"', run: async ({ page, result, ctx, shots, log }) => {
     await page.evaluate((d) => window.__a2.at(d, 9), ctx.mapDay + 1);
     const P = await page.evaluate(() => window.__a2.place('pietro.dig'));
     const start = await page.evaluate(async (P) => {
@@ -298,7 +304,7 @@ export const steps = [
     if (!landed.onFoot) await page.evaluate((P) => window.__L.standAt(P.x + P.n[0] * 3, P.z + P.n[1] * 3), P);
     // the faint path up: walked by the keys along the lane to the dig
     const ln = P.lanes[0];
-    const legs = await walkRoute(page, [[ln.a[0] + ln.dir[0] * 60, ln.a[1] + ln.dir[1] * 60], [ln.a[0] + ln.dir[0] * 150, ln.a[1] + ln.dir[1] * 150], [ln.a[0] + ln.dir[0] * 250, ln.a[1] + ln.dir[1] * 250]], { r: 4 });
+    const legs = await walkRoute(page, [[ln.a[0] + ln.dir[0] * 60, ln.a[1] + ln.dir[1] * 60], [ln.a[0] + ln.dir[0] * 150, ln.a[1] + ln.dir[1] * 150], [ln.a[0] + ln.dir[0] * 250, ln.a[1] + ln.dir[1] * 250]], { r: 4, log });
     const dig = await eOn(page, 'pietro.dig', 2.2, 0.0);
     await shot(page, shots, 'A2-8-dig');
     const w1 = await page.evaluate(() => window.__game.story.walt().includes('30:4.7.w.1'));

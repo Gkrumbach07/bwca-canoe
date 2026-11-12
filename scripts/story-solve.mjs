@@ -288,6 +288,7 @@ function castSlot(S, who, w) {
       if (sl.at === 'porch:home' && w.ep !== HOME) continue;
       const m = /^porch:(\d+)$/.exec(sl.at); if (m && Number(m[1]) !== w.ep) continue;
       if (sl.at === 'walkout' && w.noPorch && c.noPorch !== 'truck') continue;
+      if (/^a2:/.test(sl.scene || '')) continue; // a2: Round 2's Farm hub (story-data/mining.js FARM: the same seat topics) is the slice-2 subgraph's, the join's solver
       if (S.when(sl.when, { ep: w.ep, home: w.ep === HOME })) return sl;
     }
     return null;
