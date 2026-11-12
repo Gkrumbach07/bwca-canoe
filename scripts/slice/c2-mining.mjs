@@ -87,7 +87,19 @@ async function press(page, key) { await page.keyboard.press(key); await page.eva
 async function shot(page, shots, name) { if (shots) { try { await page.screenshot({ path: `${shots}/${name}.png` }); } catch { /* the shot is a nicety */ } } }
 const d0Of = (ctx) => ctx.d0;
 const facts = (page, ks) => page.evaluate((ks) => window.__a2.facts(ks), ks);
+// a paper up (the trip card as a trip ends at a door): a talk under it is closed the frame it opens, so it goes first,
+// as a player closes it (E), else by its own close (story-slice.mjs dismissCard)
+async function dismiss(page) {
+  for (let k = 0; k < 3; k++) {
+    const p = await page.evaluate(() => { const h = window.__game.hud; return h && h.paper && h.paper !== 'outfitter' ? h.paper : null; });
+    if (!p) return;
+    if (k === 0) await page.keyboard.press('e');
+    else await page.evaluate((p) => { const g = window.__game, h = g.hud; if (p === 'tripcard' && g.record && g.record.close) g.record.close(); else { const c = h.papers && h.papers.get(p); if (c) c(); } }, p);
+    await page.evaluate(() => window.__L.step(3));
+  }
+}
 async function talk(page, key) {
+  await dismiss(page);
   await page.evaluate((k) => window.__t.talkTo(k), key); await page.waitForTimeout(120);
   const c = await page.evaluate(() => window.__t.convo());
   if (!c && LOG) LOG(`  talk ${key}: no conversation ${JSON.stringify(await page.evaluate(() => { const g = window.__game, S = g.outfitter.layout(31); return { staged: window.__a2.staged(), at: [Math.round(g.player.x), Math.round(g.player.z)], store: S ? Math.round(Math.hypot(S.centre.x - g.player.x, S.centre.z - g.player.z)) : null, clock: [g.day.doy, +g.day.hours.toFixed(2), window.__a2.dow(g.day.doy)], convo: !!(g.dialogue && g.dialogue.convo), visit: g.outfitter.visit ? { ep: g.outfitter.visit.ep, inside: !!g.outfitter.visit.inside } : null, mode: g.player.mode, warned: !!window.__a2.M().miningCast.warned }; })).slice(0, 1500)}`);
@@ -385,7 +397,7 @@ export const steps = [
     await shot(page, shots, 'A2-9-lot');
     // Tauno in the lot: in the pickup while Tasha loads (30:4.9.3–4), else on the slab; the core shed; the dot free
     const tf = await page.evaluate(async () => { const L = window.__L, M = window.__a2.M().miningCast; for (let k = 0; k < 40 && !(M.slab && M.slab.tauno); k++) { L.step(10); await L.wait(60); } return M.slab && M.slab.tauno ? { x: M.slab.tauno.x, z: M.slab.tauno.z, tasha: !!M.slab.tasha } : null; });
-    const talkT = async () => { await page.evaluate(() => { const f = window.__a2.M().miningCast.slab.tauno; window.__L.standAt(f.x + 1.6, f.z, Math.PI); window.__L.step(4); f.onTalk(f); }); await page.waitForTimeout(100); return page.evaluate(() => window.__t.convo()); };
+    const talkT = async () => { await dismiss(page); await page.evaluate(() => { const f = window.__a2.M().miningCast.slab.tauno; window.__L.standAt(f.x + 1.6, f.z, Math.PI); window.__L.step(4); f.onTalk(f); }); await page.waitForTimeout(100); return page.evaluate(() => window.__t.convo()); };
     let waited = null;
     if (tf && tf.tasha) { waited = await talkT(); await hear(page, 3); await page.evaluate(() => window.__a2.endTalk()); await page.evaluate(async () => { const L = window.__L; for (let k = 0; k < 30; k++) { L.step(10); await L.wait(320); } }); }
     const core = await talkT(); const coreSaid = await hear(page, 3);
@@ -417,7 +429,7 @@ export const variant = { id: 'variant', step: 9, title: 'the variant: "You don\'
   const a = await talk(page, 'cast:tauno:31');
   const go = await choose(page, 'Let\'s go.');
   await page.evaluate(async () => { const L = window.__L, g = window.__game; for (let k = 0; k < 80 && !(g.rides && !g.rides.busy && g.rides.last && g.rides.last.to === 33); k++) { L.step(10); await L.wait(120); } const M = window.__a2.M().miningCast; for (let k = 0; k < 40 && !(M.slab && M.slab.tauno); k++) { L.step(10); await L.wait(60); } if (M.slab && M.slab.tasha) { M.slab.tasha.remove(); M.slab.tasha = null; } });
-  const talkT = async () => { await page.evaluate(() => { const f = window.__a2.M().miningCast.slab.tauno; window.__L.standAt(f.x + 1.6, f.z, Math.PI); window.__L.step(4); f.onTalk(f); }); await page.waitForTimeout(100); return page.evaluate(() => window.__t.convo()); };
+  const talkT = async () => { await dismiss(page); await page.evaluate(() => { const f = window.__a2.M().miningCast.slab.tauno; window.__L.standAt(f.x + 1.6, f.z, Math.PI); window.__L.step(4); f.onTalk(f); }); await page.waitForTimeout(100); return page.evaluate(() => window.__t.convo()); };
   await talkT(); await hear(page, 3); await page.evaluate(() => window.__a2.endTalk());
   await talkT();
   const qr = await picks(page, ['After Eino.', 'Who found the canoe?', 'You said you never wrote anything for them.', 'Walt and the papers.', 'Why now?', 'You don\'t owe anybody this.']);
