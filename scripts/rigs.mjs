@@ -13,6 +13,8 @@
 //   --changed REF   CHANGED=REF only the rigs a change touches (below): REF against the working tree, or A..B
 //   --record        RECORD=1    record each rig's dependencies (scripts/rig-deps-hook.mjs) and write scripts/rig-deps.json
 //   --dry                       print what would run (and why, with --changed) and stop
+//   --minfree MB    MINFREE=MB  a rig starts only while the host has this much memory available (default 5000; one
+//                               rig's Chromium takes 3-4 GB on fedora's GPU; on ben's CPU r4-final-test alone passed 20 GB)
 //   --retry         RETRY=1     a rig that failed in the pool is run once more alone; its line says "retried"
 // Logs: rig-logs/<rig>.log (coop/x as coop_x.log). Times: scripts/rig-times.json, each rig's last duration (seconds),
 // rewritten after every run but a --record one; it orders the pool, longest first. Timeouts as loop-r4-all.sh: 1500 s, 3600 s for
@@ -245,12 +247,14 @@ function runOne(r, { full, record, depsDir }) {
   });
 }
 const running = new Set();
+const memAvail = () => { try { const m = /MemAvailable:\s+(\d+)/.exec(readFileSync('/proc/meminfo', 'utf8')); return m ? +m[1] / 1024 : Infinity; } catch { return Infinity; } };
 for (const s of ['SIGINT', 'SIGTERM']) process.on(s, () => { for (const k of running) k('SIGTERM'); process.exit(130); });
 
 async function main() {
   const jobs = Math.max(1, Number(opt('jobs') || env.JOBS || 3));
   const changedSpec = opt('changed') || env.CHANGED;
   const soloArg = opt('solo');
+  const minFree = Number(opt('minfree') || env.MINFREE || 5000);
   const full = flag('full') || on(env.FULL), record = flag('record') || on(env.RECORD), dry = flag('dry'), retry = flag('retry') || on(env.RETRY);
   let rigs = argv.length ? argv : env.RIGS ? env.RIGS.trim().split(/\s+/) : ALL;
   const missing = rigs.filter((r) => !existsSync(`scripts/${r}.mjs`));
@@ -272,9 +276,19 @@ async function main() {
     const pool = rigs.filter((r) => !solo.has(r)).sort((a, b) => est(b) - est(a));
     const lanesBusy = new Set(); let active = 0;
     await new Promise((resolve) => {
+      let waiting = null, lastStart = 0, warned = false;
       const next = () => {
         if (!pool.length && !active) return resolve();
-        while (active < jobs) {
+        while (active < jobs && pool.length) {
+          // (the first always starts; another waits 20 s after the last start, so that one's Chromium has taken its memory,
+          // and for minfree MB available)
+          const since = Date.now() - lastStart, low = memAvail() < minFree;
+          if (active > 0 && (since < 20000 || low)) {
+            if (low && !warned) { console.log(`  ${now()} waiting: ${Math.round(memAvail())} MB available, under ${minFree}`); warned = true; }
+            if (!waiting) waiting = setTimeout(() => { waiting = null; next(); }, low ? 15000 : 20000 - since);
+            break;
+          }
+          warned = false; lastStart = Date.now();
           const i = pool.findIndex((r) => !LANES[r] || !lanesBusy.has(LANES[r])); if (i < 0) break;
           const r = pool.splice(i, 1)[0]; active++; if (LANES[r]) lanesBusy.add(LANES[r]);
           runOne(r, { full, record, depsDir }).then((x) => { active--; if (LANES[r]) lanesBusy.delete(LANES[r]); done(x, 'done'); next(); });
