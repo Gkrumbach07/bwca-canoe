@@ -92,7 +92,11 @@ export async function connect(t) {
     const m = /^item\.(.+)$/.exec(String(arg));
     if (!m) return give0 ? give0(arg, meta, s) : false;
     if (!inventory || !itemDef(m[1])) return false;
-    let r = typeof inventory.toHandNew === 'function' ? inventory.toHandNew(m[1]) : null;
+    const d = itemDef(m[1]);
+    let r = null;
+    // into the hand (a pot is a container: it is carried in a hand as one, inventory.carry's way), else a pack with you
+    if (d.kind === 'container' && typeof inventory.freeHand === 'function' && inventory.freeHand() >= 0) { const c = inventory.addContainer(m[1], 'hands', null, { quiet: true, hand: inventory.freeHand() }); if (c) { inventory.emit('carry'); r = { ok: true }; } }
+    if (!(r && r.ok) && d.kind !== 'container' && typeof inventory.toHandNew === 'function') r = inventory.toHandNew(m[1]);
     if (!(r && r.ok) && typeof inventory.place === 'function') r = inventory.place(m[1], 1, {}); // (both hands full: into a pack with you, as a kept fish goes)
     if (!(r && r.ok) && typeof inventory.place === 'function') r = inventory.place(m[1], 1, { crate: true });
     return !!(r && r.ok);

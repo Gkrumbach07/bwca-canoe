@@ -113,6 +113,7 @@ export const steps = [
         E.at(2026, 160, 10); // (9 June 2026, a Tuesday, 10:00)
         await E.toStore(25);
         window.__t.walkIn(25); window.__L.step(20);
+        for (let k = 0; k < 40 && !E.ep().rose(); k++) { window.__L.step(4); await window.__L.wait(100); }
         const rose = !!E.ep().rose();
         // E on Rose before the notice: her close, nothing more (talk opened as E opens it: npcs.talkTo)
         const opened = window.__t.talkTo('cast:rose:25'); window.__L.step(4);
@@ -204,7 +205,7 @@ export const steps = [
       const r = await page.evaluate(async () => {
         const g = window.__game, E = window.__e;
         E.at(2026, 160, 11);
-        const a = await E.ashore('s7.mummos', 4);
+        const a = await E.ashore('s7.mummos', 6);
         for (let k = 0; k < 10; k++) { g.storyLayer.poll(); window.__L.step(5); await window.__L.wait(50); }
         const built = ['s7.lilacs', 's7.lilacs.green', 's7.step', 's7.foundation', 's7.bed', 's7.footing', 's7.rock', 's7.cobble'].filter((id) => E.built(id));
         const lilac = g.story.when('window:lilac');
@@ -213,7 +214,7 @@ export const steps = [
         const dot = g.storyLayer.dotName('s7.rock');
         // a June print of the lilacs at the old camp: the camera up, the lilacs in the middle of the frame
         const P = E.prop('s7.lilacs'), p = g.player, yaw = Math.atan2(-(P.z - p.z), P.x - p.x);
-        g.photo.raise(); g.chase.viewYaw = yaw; g.chase.forwardYaw = yaw; g.chase.viewPitch = 0.08; window.__L.step(4);
+        window.__L.look(yaw, 0.05); window.__L.step(4); g.photo.raise(); window.__L.look(yaw, 0.05); window.__L.step(4);
         const rec = g.photo.capture(); window.__L.step(4); g.photo.lower(); window.__L.step(4);
         return { a, built, lilac, here: here && here.id, dot, print: rec && rec.id, matches: rec ? E.R().matchesOf(rec.id) : null, found: g.story.has('ep.S7.found') };
       });
@@ -221,7 +222,7 @@ export const steps = [
       result('13b (E) Mummo\'s in June: the lilacs in bloom, the step, the foundation, the frame, the footing, the rock; NB35 read at the step: "The swimming rock."; a print matched as the lilacs at the old camp', r.lilac && r.built.includes('s7.lilacs') && !r.built.includes('s7.lilacs.green') && ['s7.step', 's7.foundation', 's7.bed', 's7.footing', 's7.rock'].every((id) => r.built.includes(id)) && r.dot === 'The swimming rock.' && (r.matches || []).includes('s7.lilacs.camp'), r);
       // back to Rose: "Look at this…", the print, S7.conv.7–9 and $25
       const m0 = await page.evaluate(async () => { await window.__e.toStore(25); window.__t.walkIn(25); window.__e.at(2026, 160, 13); window.__L.step(20); return window.__e.money(); });
-      await page.evaluate(() => { window.__t.talkTo('cast:rose:25'); window.__L.step(4); });
+      await page.evaluate(async () => { for (let k = 0; k < 40 && !window.__e.ep().rose(); k++) { window.__L.step(4); await window.__L.wait(100); } window.__t.talkTo('cast:rose:25'); window.__L.step(4); });
       const c1 = await choose(page, 'Look at this');
       const pick = await page.evaluate(() => { const c = window.__t.convo(); return c ? c.choices : null; });
       const ix = (pick || []).findIndex((t) => /lilac|Basswood|Inlet|A print/i.test(t));
@@ -242,7 +243,7 @@ export const steps = [
         for (let k = 0; k < 10; k++) { g.storyLayer.poll(); window.__L.step(5); await window.__L.wait(50); }
         const built = ['s7.lilacs', 's7.lilacs.green', 's7.step'].filter((id) => E.built(id));
         const P = E.prop('s7.lilacs'), p = g.player, yaw = Math.atan2(-(P.z - p.z), P.x - p.x);
-        g.photo.raise(); g.chase.viewYaw = yaw; g.chase.forwardYaw = yaw; g.chase.viewPitch = 0.08; window.__L.step(4);
+        window.__L.look(yaw, 0.05); window.__L.step(4); g.photo.raise(); window.__L.look(yaw, 0.05); window.__L.step(4);
         const rec = g.photo.capture(); window.__L.step(4); g.photo.lower(); window.__L.step(4);
         return { lilac: g.story.when('window:lilac'), built, matches: rec ? E.R().matchesOf(rec.id) : null, flyers };
       });
