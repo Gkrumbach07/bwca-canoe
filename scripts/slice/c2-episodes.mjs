@@ -222,14 +222,23 @@ export const steps = [
       result('13b (E) Mummo\'s in June: the lilacs in bloom, the step, the foundation, the frame, the footing, the rock; NB35 read at the step: "The swimming rock."; a print matched as the lilacs at the old camp', r.lilac && r.built.includes('s7.lilacs') && !r.built.includes('s7.lilacs.green') && ['s7.step', 's7.foundation', 's7.bed', 's7.footing', 's7.rock'].every((id) => r.built.includes(id)) && r.dot === 'The swimming rock.' && (r.matches || []).includes('s7.lilacs.camp'), r);
       // back to Rose: "Look at this…", the print, S7.conv.7–9 and $25
       const m0 = await page.evaluate(async () => { await window.__e.toStore(25); window.__t.walkIn(25); window.__e.at(2026, 160, 13); window.__L.step(20); return window.__e.money(); });
-      await page.evaluate(async () => { for (let k = 0; k < 40 && !window.__e.ep().rose(); k++) { window.__L.step(4); await window.__L.wait(100); } window.__t.talkTo('cast:rose:25'); window.__L.step(4); });
+      const diag = await page.evaluate(async () => {
+        const g = window.__game, E = window.__e;
+        for (let k = 0; k < 40 && !E.ep().rose(); k++) { window.__L.step(4); await window.__L.wait(100); }
+        const d = { rose: !!E.ep().rose(), inRoster: (g.npcs.rosters.get(25) || []).some((v) => v.key === 'cast:rose:25'), open: !!(g.dialogue && g.dialogue.convo), hours: g.day.hours, inside: !!(g.outfitter.visit && g.outfitter.visit.inside) };
+        if (g.dialogue && g.dialogue.convo && g.dialogue.close) g.dialogue.close(false);
+        d.talk = window.__t.talkTo('cast:rose:25'); window.__L.step(4);
+        if (!window.__t.convo()) { d.fallback = E.ep().roseTalk(); window.__L.step(4); } // (E on her, the talk the dot opens: npcs.talkTo, else her own)
+        d.convo = !!window.__t.convo();
+        return d;
+      });
       const c1 = await choose(page, 'Look at this');
       const pick = await page.evaluate(() => { const c = window.__t.convo(); return c ? c.choices : null; });
       const ix = (pick || []).findIndex((t) => /lilac|Basswood|Inlet|A print/i.test(t));
       if (ix >= 0) await press(page, `Digit${ix + 1}`); else if (pick && pick.length) await press(page, 'Digit1');
       const said = await hear(page, 6);
       const r2 = await page.evaluate((m0) => { const g = window.__game, E = window.__e; if (g.dialogue && g.dialogue.close) g.dialogue.close(false); return { shown: g.story.has('ep.S7.shown'), end: g.story.get('ep.S7.end'), paid: (E.money() ?? 0) - (m0 ?? 0), page: E.page('S7'), firsts: E.firsts() }; }, m0);
-      result('13c (E) back to Rose, "Look at this" with the June print: S7.conv.7–9, $25; the page\'s last line; the trip card\'s first', c1.ok && said.some((l) => /^Oh\.?$/.test(l || '')) && said.some((l) => /bottle of pop in 1956/.test(l || '')) && r2.shown && r2.end === 'rose' && r2.paid === 25 && r2.page && /Rose has the picture/.test(r2.page.end || '') && r2.firsts.includes('Lilacs at Mummo\'s.'), { c1, pick, said, r2 });
+      result('13c (E) back to Rose, "Look at this" with the June print: S7.conv.7–9, $25; the page\'s last line; the trip card\'s first', c1.ok && said.some((l) => /^Oh\.?$/.test(l || '')) && said.some((l) => /bottle of pop in 1956/.test(l || '')) && r2.shown && r2.end === 'rose' && r2.paid === 25 && r2.page && /Rose has the picture/.test(r2.page.end || '') && r2.firsts.includes('Lilacs at Mummo\'s.'), { diag, c1, pick, said, r2 });
     },
   },
   {
