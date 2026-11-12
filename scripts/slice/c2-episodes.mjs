@@ -132,7 +132,8 @@ async function fight(page, { greedy = false, max = 2400 } = {}) {
   return { st, red };
 }
 
-// E12, the snag (c2-fix: the cast goes in a light air when the season's own wind blows it back. The weather is seeded per
+// E12, the snag (c2-fix: the casts go in a light air once the season's own wind blows one back, or carries one off the
+// line through the pot so the retrieve never passes the bail on the bottom. The weather is seeded per
 // season, so on some seasons' 9 June the noon wind off Alice Lake raises whitecaps at the beach rock and every cast comes
 // back to the rod ("Too windy to cast here. Fish the lee.": fishing.js CAST_WIND, as designed): the join's 12a–d 4/4
 // under the turn fixture were such a season, not the fixture)
@@ -140,9 +141,13 @@ async function e12({ page, result, ctx, log }) {
   let calmed = null;
   const castAndWork = async (pg, opt) => {
     const c = await castWork(pg, opt);
-    if (!calmed && c.why.after.blownN > c.why.before.blownN) {
-      calmed = await pg.evaluate(() => { const w = window.__game.wind, F = window.__game.fishing; const was = { speed: +w.speed.toFixed(2), from: Math.round(w.from), blownN: F.blownN, msg: (F.message && F.message.text) || null }; w.override = 1.5; w.speed = 1.5; window.__L.step(10); return was; });
-      if (log) log(`   (E12: the season's noon wind blew the cast back at the beach rock ${JSON.stringify(calmed)}; the casts from here in a light air)`);
+    // blown back, or the retrieve never brought the jig over the bail on the bottom (a cross wind carried the cast off
+    // the line through the pot): the season's wind, not the snag. A pass that lost its roll is the snag's own luck
+    const blown = c.why.after.blownN > c.why.before.blownN, missed = !(c.st && c.st.snag) && !(c.why.near && c.why.near.d <= 1 && c.why.near.over);
+    if (!calmed && (blown || missed)) {
+      calmed = await pg.evaluate(() => { const w = window.__game.wind, F = window.__game.fishing; const was = { speed: +w.speed.toFixed(2), from: Math.round(w.from), blownN: F.blownN, msg: (F.message && F.message.text) || null, near: window.__e.near || null }; w.override = 1.5; w.speed = 1.5; window.__L.step(10); return was; });
+      calmed.why = blown ? 'blown back' : 'no pass over the bail';
+      if (log) log(`   (E12: the season's noon wind at the beach rock: ${calmed.why} ${JSON.stringify(calmed)}; the casts from here in a light air)`);
     }
     return c;
   };
