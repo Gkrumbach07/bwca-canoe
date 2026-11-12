@@ -38,6 +38,11 @@ import { MOVE } from './parties.js';
 import { tripWords } from './talk-visitors.js'; // gl-e: their trip, in their words (parties.js storyOf)
 import { grounding as GROUND } from './grounding.js'; // gl-e: only what is true here and now
 
+// d: the story's director (stream D, story Round 2; campaign-design §12): a party at the next site says the day's beat,
+// and now and then a story line at their fire. `line` is set only under STORY_ON (feed-beats.js: beats.partyLine), so
+// with the flag off nothing here changes: line(party, how) → words | null, how 'greet' (passing) or 'word' (E on them)
+export const storyHook = { line: null };
+// /d
 export const CAMPS = {
   drawR: 900,      // m: camps drawn within this of you
   keepR: 1000,     // and let go beyond this
@@ -684,7 +689,8 @@ export class PartyCamps {
     const up = f.spec.pose === 'stand' && rng() < CAMPS.wave;
     const far = this.storeDistance(D.site), pW = CAMPS.word[0] + (CAMPS.word[1] - CAMPS.word[0]) * clamp((far - CAMPS.store[0]) / (CAMPS.store[1] - CAMPS.store[0]), 0, 1);
     const met = this.people && typeof this.people.metLine === 'function' ? this.people.metLine(D.party, T) : null; // gl-e: they know you
-    const line = met || (rng() < pW ? this.helloLine(D, rng) : null);
+    const told = storyHook.line ? storyHook.line(D.party, 'greet') : null; // d: the day's beat, by the party it is for
+    const line = told || met || (rng() < pW ? this.helloLine(D, rng) : null);
     if (up || line) D.wave = { k, t: 0, up: up || !!met, line };
     if (line) this.say(D, k, line, PRI.greet);
   }
@@ -707,7 +713,7 @@ export class PartyCamps {
     const D = [...this.drawn.values()].find((x) => x.v === v); if (!D) return null;
     // (r2 2 verify: the one pointed at answers; the greeter only when nobody in particular was)
     const k = fig != null && D.v.figs[fig] ? fig : this.greeter(D) ?? 0, T = this.parties.today, rng = mulberry32(((D.stay.seed >>> 0) ^ 0xa11ce ^ (T * 977)) >>> 0);
-    const line = this.tripLine(D.party, D.stay.end === D.party.exit, rng);
+    const line = (storyHook.line && storyHook.line(D.party, 'word')) || this.tripLine(D.party, D.stay.end === D.party.exit, rng); // d: (the story's line first, when it has one)
     this.say(D, k, line, PRI.reply);
     if (this.people && typeof this.people.emitTalk === 'function') this.people.emitTalk({ kind: 'party', partyId: D.party.id, lakeId: this.parties.stayLake ? this.parties.stayLake(D.stay) : 0 }); // gl-e
     return line;
