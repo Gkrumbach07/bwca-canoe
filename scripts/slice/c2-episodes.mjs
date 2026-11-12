@@ -89,7 +89,8 @@ async function shot(page, ctx, name) { if (ctx && ctx.shots) { try { await page.
 
 // a cast by real input: the rod up (F), the jig by its number, Space held to load and let go; then W held (the
 // retrieve) until a hook-up, the lure back at the tip, or `max` frames
-export async function castAndWork(page, { max = 2400 } = {}) {
+export async function castAndWork(page, { max = 2400 } = {}) { return castWork(page, { max }); }
+async function castWork(page, { max = 2400 } = {}) {
   const F0 = await page.evaluate(() => window.__e.fish());
   if (F0.state === 'stowed') await press(page, 'KeyF');
   // the jig: its number in the strip (fishing.owned order), pressed
@@ -129,6 +130,51 @@ async function fight(page, { greedy = false, max = 2400 } = {}) {
   }
   if (down) await page.keyboard.up('KeyW');
   return { st, red };
+}
+
+// E12, the snag (c2-fix: the cast goes in a light air when the season's own wind blows it back. The weather is seeded per
+// season, so on some seasons' 9 June the noon wind off Alice Lake raises whitecaps at the beach rock and every cast comes
+// back to the rod ("Too windy to cast here. Fish the lee.": fishing.js CAST_WIND, as designed): the join's 12a–d 4/4
+// under the turn fixture were such a season, not the fixture)
+async function e12({ page, result, ctx, log }) {
+  let calmed = null;
+  const castAndWork = async (pg, opt) => {
+    const c = await castWork(pg, opt);
+    if (!calmed && c.why.after.blownN > c.why.before.blownN) {
+      calmed = await pg.evaluate(() => { const w = window.__game.wind, F = window.__game.fishing; const was = { speed: +w.speed.toFixed(2), from: Math.round(w.from), blownN: F.blownN, msg: (F.message && F.message.text) || null }; w.override = 1.5; w.speed = 1.5; window.__L.step(10); return was; });
+      if (log) log(`   (E12: the season's noon wind blew the cast back at the beach rock ${JSON.stringify(calmed)}; the casts from here in a light air)`);
+    }
+    return c;
+  };
+  const at = await page.evaluate(async () => { const g = window.__game, E = window.__e; window.__t.walkOut(25); E.at(2026, 160, 12); const a = await E.ashore('s9.beach', 1.6); E.kitUp(); g.storyLayer.poll(); window.__L.step(10); return { a, pot: E.prop('s9.pot'), built: E.built('s9.pot'), yes: g.story.has('ep.S9.yes'), rod: g.fishing.rodInHand() }; });
+  // casts until the bail is caught (about half the passes)
+  let hooked = null, casts = 0, tries = [];
+  for (; casts < 14 && !hooked; casts++) {
+    const c = await castAndWork(page);
+    tries.push({ st: c.st && c.st.state, line: c.st && c.st.line, d: c.aim.d, why: casts < 2 ? c.why : { blownN: c.why.after.blownN, msg: c.why.after.msg, landed: c.why.landed.lure, near: c.why.near } });
+    if (c.st && c.st.snag) hooked = c.st;
+    else await page.evaluate(() => { const F = window.__game.fishing; if (F.state === 'inwater' || ((F.state === 'bite' || F.state === 'fight') && !(F.fish && F.fish.snag))) { F.fish = null; F.bite = null; F.state = 'ready'; F.lineOut = 0; } window.__L.step(20); /* (join c2: a fish on instead of the bail is let go too, or every cast after it stayed in its fight) */ });
+  }
+  const yes = await page.evaluate(() => ({ yes: window.__game.story.has('ep.S9.yes'), hooked: window.__game.story.has('mg.snag.hooked'), open: window.__e.R().open() }));
+  result('12a (E) a jig cast toward the sand off the beach rock and worked back snags the bail (the hook-up: S9\'s yes; S7 and S9 open at once)', !!hooked && yes.yes && yes.hooked && yes.open.includes('S7') && yes.open.includes('S9'), { at, casts, calmed, tries: tries.length > 4 ? [...tries.slice(0, 2), ...tries.slice(-2)] : tries, hooked, yes });
+  await shot(page, ctx, 'e12-fight');
+  // greedy first: W held into the sticks → the red, the line parts, the pot stays
+  const g1 = await fight(page, { greedy: true });
+  const after1 = await page.evaluate(() => ({ pot: window.__game.story.has('ep.S9.pot'), built: window.__e.built('s9.pot'), msg: window.__e.fish().msg, state: window.__e.fish().state }));
+  result('12b (E) the dead weight on the existing tension bar: reeling too hard into it goes red and parts the line; the pot stays', g1.red > 0 && !after1.pot && after1.built && /line parted/i.test(after1.msg || ''), { g1, after1 });
+  // then again, easing off through the sticks (the spare jig tied on first, as a player does: the parted line took the
+  // jig, and with none in the strip the cast went out on whatever lure was left and rode over the bail: the join)
+  await page.evaluate(() => { window.__e.kitUp(); window.__L.step(4); });
+  let h2 = null;
+  for (let k = 0; k < 14 && !h2; k++) { const c = await castAndWork(page); if (c.st && c.st.snag) h2 = c.st; else await page.evaluate(() => { const F = window.__game.fishing; if (F.state === 'inwater' || ((F.state === 'bite' || F.state === 'fight') && !(F.fish && F.fish.snag))) { F.fish = null; F.bite = null; F.state = 'ready'; F.lineOut = 0; } window.__L.step(20); /* (join c2: a fish on instead of the bail is let go too, or every cast after it stayed in its fight) */ }); }
+  const t0 = await page.evaluate(() => window.__game.day.hours);
+  const g2 = h2 ? await fight(page) : null;
+  const r = await page.evaluate((t0) => { const g = window.__game, E = window.__e; g.storyLayer.poll(); window.__L.step(4); return { pot: g.story.has('ep.S9.pot'), end: g.story.get('ep.S9.end'), inHand: E.holding('junespot'), msg: E.fish().msg, built: E.built('s9.pot'), firsts: E.firsts(), page: E.page('S9'), mins: +((g.day.hours - t0) * 60).toFixed(1), ink: g.story.has('ink.coffeelake') }; }, t0);
+  result('12c (E) easing off and reeling again: it comes up by its bail into the hand: June\'s pot (its dot words, the trip card\'s first, the Stories page)', !!g2 && r.pot && r.end === 'pot' && r.inHand > 0 && !r.built && /Blue enamel coffee pot/.test(r.msg || '') && r.firsts.includes('Brought up June\'s pot.') && r.page && r.page.first, { g2: g2 && { red: g2.red }, r });
+  // Gus's line, walking into 25 with it (S9.conv.1–2)
+  const gus = await page.evaluate(async () => { const g = window.__game; await window.__e.toStore(25); window.__L.step(10); window.__t.walkIn(25); for (let k = 0; k < 30; k++) { window.__L.step(10); await window.__L.wait(100); if (g.story.has('ep.S9.gus')) break; } return g.story.has('ep.S9.gus'); });
+  result('12d (E) Gus\'s line the first time you walk into 25 with the pot (S9.conv.1–2)', gus, { gus });
+  return calmed;
 }
 
 export const steps = [
@@ -198,36 +244,7 @@ export const steps = [
   },
   {
     id: 'E12', step: 12, title: 'S9: the snag on June\'s pot by real input; the dead weight on the tension bar; the pot into the hand',
-    run: async ({ page, result, ctx }) => {
-      const at = await page.evaluate(async () => { const g = window.__game, E = window.__e; window.__t.walkOut(25); E.at(2026, 160, 12); const a = await E.ashore('s9.beach', 1.6); E.kitUp(); g.storyLayer.poll(); window.__L.step(10); return { a, pot: E.prop('s9.pot'), built: E.built('s9.pot'), yes: g.story.has('ep.S9.yes'), rod: g.fishing.rodInHand() }; });
-      // casts until the bail is caught (about half the passes)
-      let hooked = null, casts = 0, tries = [];
-      for (; casts < 14 && !hooked; casts++) {
-        const c = await castAndWork(page);
-        tries.push({ st: c.st && c.st.state, line: c.st && c.st.line, d: c.aim.d, why: casts < 2 ? c.why : { blownN: c.why.after.blownN, msg: c.why.after.msg, landed: c.why.landed.lure, near: c.why.near } });
-        if (c.st && c.st.snag) hooked = c.st;
-        else await page.evaluate(() => { const F = window.__game.fishing; if (F.state === 'inwater' || ((F.state === 'bite' || F.state === 'fight') && !(F.fish && F.fish.snag))) { F.fish = null; F.state = 'ready'; F.lineOut = 0; } window.__L.step(20); /* (join c2: a fish on instead of the bail is let go too, or every cast after it stayed in its fight) */ });
-      }
-      const yes = await page.evaluate(() => ({ yes: window.__game.story.has('ep.S9.yes'), hooked: window.__game.story.has('mg.snag.hooked'), open: window.__e.R().open() }));
-      result('12a (E) a jig cast toward the sand off the beach rock and worked back snags the bail (the hook-up: S9\'s yes; S7 and S9 open at once)', !!hooked && yes.yes && yes.hooked && yes.open.includes('S7') && yes.open.includes('S9'), { at, casts, tries: tries.length > 4 ? [...tries.slice(0, 2), ...tries.slice(-2)] : tries, hooked, yes });
-      await shot(page, ctx, 'e12-fight');
-      // greedy first: W held into the sticks → the red, the line parts, the pot stays
-      const g1 = await fight(page, { greedy: true });
-      const after1 = await page.evaluate(() => ({ pot: window.__game.story.has('ep.S9.pot'), built: window.__e.built('s9.pot'), msg: window.__e.fish().msg, state: window.__e.fish().state }));
-      result('12b (E) the dead weight on the existing tension bar: reeling too hard into it goes red and parts the line; the pot stays', g1.red > 0 && !after1.pot && after1.built && /line parted/i.test(after1.msg || ''), { g1, after1 });
-      // then again, easing off through the sticks (the spare jig tied on first, as a player does: the parted line took the
-      // jig, and with none in the strip the cast went out on whatever lure was left and rode over the bail: the join)
-      await page.evaluate(() => { window.__e.kitUp(); window.__L.step(4); });
-      let h2 = null;
-      for (let k = 0; k < 14 && !h2; k++) { const c = await castAndWork(page); if (c.st && c.st.snag) h2 = c.st; else await page.evaluate(() => { const F = window.__game.fishing; if (F.state === 'inwater' || ((F.state === 'bite' || F.state === 'fight') && !(F.fish && F.fish.snag))) { F.fish = null; F.state = 'ready'; F.lineOut = 0; } window.__L.step(20); /* (join c2: a fish on instead of the bail is let go too, or every cast after it stayed in its fight) */ }); }
-      const t0 = await page.evaluate(() => window.__game.day.hours);
-      const g2 = h2 ? await fight(page) : null;
-      const r = await page.evaluate((t0) => { const g = window.__game, E = window.__e; g.storyLayer.poll(); window.__L.step(4); return { pot: g.story.has('ep.S9.pot'), end: g.story.get('ep.S9.end'), inHand: E.holding('junespot'), msg: E.fish().msg, built: E.built('s9.pot'), firsts: E.firsts(), page: E.page('S9'), mins: +((g.day.hours - t0) * 60).toFixed(1), ink: g.story.has('ink.coffeelake') }; }, t0);
-      result('12c (E) easing off and reeling again: it comes up by its bail into the hand: June\'s pot (its dot words, the trip card\'s first, the Stories page)', !!g2 && r.pot && r.end === 'pot' && r.inHand > 0 && !r.built && /Blue enamel coffee pot/.test(r.msg || '') && r.firsts.includes('Brought up June\'s pot.') && r.page && r.page.first, { g2: g2 && { red: g2.red }, r });
-      // Gus's line, walking into 25 with it (S9.conv.1–2)
-      const gus = await page.evaluate(async () => { const g = window.__game; await window.__e.toStore(25); window.__L.step(10); window.__t.walkIn(25); for (let k = 0; k < 30; k++) { window.__L.step(10); await window.__L.wait(100); if (g.story.has('ep.S9.gus')) break; } return g.story.has('ep.S9.gus'); });
-      result('12d (E) Gus\'s line the first time you walk into 25 with the pot (S9.conv.1–2)', gus, { gus });
-    },
+    run: async (o) => { try { await e12(o); } finally { await o.page.evaluate(() => { const w = window.__game.wind; if (w) w.override = null; }); } },
   },
   {
     id: 'E13b', step: 13, title: 'S7: Mummo\'s in the lilacs\' window; a June print; the swimming rock; back to Rose: "Look at this", $25',
