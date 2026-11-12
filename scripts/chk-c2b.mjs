@@ -76,7 +76,7 @@ const tripOnce = (page, ep = 31) => ev(page, (ep) => {
   try { g.trip.start({ ep, foodDays: 1, canoe: 'aluminium' }); g.step(1 / 30, 30); g.trip.close('completed', 'came in', ep); g.step(1 / 30, 10); } catch (e) { return { err: e.message }; }
   const c = g.record.s.trips[g.record.s.trips.length - 1], t = c && c.tally;
   try { if (g.record.close) g.record.close(); } catch { /* */ }
-  const lines = t ? (t.lines || t.notices || []).map((l) => ({ title: l.title, pay: l.pay, kind: l.kind })) : null;
+  const lines = t ? (t.pay || []).map((l) => ({ title: l.title, pay: l.pay, kind: l.kind })) : null;
   return { m0, m1: g.profile.money, story: lines ? lines.filter((l) => l.kind === 'story') : null, tally: t ? Object.keys(t) : null };
 }, ep);
 const pays = (page) => ev(page, () => { const d = window.__game.story.doc.dir; return (d.pay || []).map((p) => ({ amt: p.amt, line: p.line, paid: !!p.paid })); });
@@ -93,7 +93,7 @@ async function groupA() {
   try {
     const r = await ev(P, async () => {
       const g = window.__game, A = window.__a2, L = window.__L, M = A.M(), K = A.place('kettle');
-      await L.near(K.x, K.z); g.storyLayer.poll(); L.step(10); g.storyLayer.poll(); M.kettle.update(1); L.step(4);
+      await L.near(K.x, K.z); L.standAt(K.x, K.z, 0); L.step(10); g.storyLayer.poll(); L.step(10); g.storyLayer.poll(); M.kettle.update(1); L.step(4);
       const lay = g.storyLayer;
       return { at: [Math.round(g.player.x), Math.round(g.player.z)], K: [K.x, K.z], f: A.facts(['kettle.visited', 'westpads.seen', 'kettle.notice', 'tauno.said.pads']), tasha: !!M.kettle.tasha(), up: lay.verbs('kettle.up'), dam: lay.verbs('kettle.dam'), lid: lay.verbs('kettle.lid') };
     });
@@ -185,7 +185,7 @@ async function groupA() {
   try {
     const r = await ev(P, async () => {
       const g = window.__game, A = window.__a2, L = window.__L, out = {};
-      const K = A.place('kettle'); await L.near(K.x - 30, K.z + 8); g.storyLayer.poll(); L.step(4);
+      const K = A.place('kettle'); await L.near(K.x - 30, K.z + 8); L.standAt(K.x - 31, K.z + 8, 0); g.storyLayer.poll(); L.step(4);
       out.take1 = g.storyLayer.look('kettle.lid'); L.step(4); out.take2 = g.storyLayer.look('kettle.lid');
       out.lid = A.inv('leolid'); out.f = A.facts(['kettle.lid']);
       return out;
@@ -197,6 +197,7 @@ async function groupA() {
       out.staged = M.miningCast.staged().map((q) => q.who);
       out.wants = M.miningCast.wants('mary');
       out.give1 = M.miningCast.give('mary', 'leolid'); L.step(3);
+      for (let k = 0; k < 10 && !window.__t.convo(); k++) { await L.wait(60); L.step(2); }
       out.c = window.__t.convo();
       return out;
     }, tue);
@@ -281,6 +282,7 @@ async function groupA() {
     const p0 = await pays(P);
     const t1 = await tripOnce(P);
     const p1 = await pays(P);
+    await P.waitForTimeout(Number(arg('b9wait', '0')));
     await reload(P, 'story=1', { flush: false });
     const m1 = await ev(P, () => window.__game.profile.money);
     const p2 = await pays(P);
