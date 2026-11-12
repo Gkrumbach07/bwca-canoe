@@ -702,7 +702,7 @@ async function slice2() {
   // between A2's section and D's: the player as D's rig starts it (up off any bench, no talk or paper open, rested), said
   const was = await A.evaluate(async () => {
     const g = window.__game, p = g.player, o = g.outfitter;
-    const before = { mode: p.mode, seat: !!p.seat, tp: !!p.teleporting, convo: !!(g.dialogue && g.dialogue.convo), paper: g.hud.paper || null, trip: g.trip.active, inside: !!(o.visit && o.visit.inside), riding: !!(g.rides && g.rides.busy) };
+    const before = { mode: p.mode, seat: !!p.seat, tp: !!p.teleporting, convo: !!(g.dialogue && g.dialogue.convo), paper: g.hud.paper || null, trip: g.trip.active, inside: !!(o.visit && o.visit.inside), riding: !!(g.rides && g.rides.busy), campsOff: !!(g.partyCamps && g.partyCamps.off), live: g.parties && g.parties.live ? g.parties.live.size : null, drawn: g.partyCamps ? g.partyCamps.drawn.size : null, paused: !!(p.input && p.input.paused), at: [Math.round(p.x), Math.round(p.z)], carry: !!p.carry, hud: g.hud.mode, day: [g.day.doy, +g.day.hours.toFixed(2)], visit: o.visit ? { ep: o.visit.ep, inside: !!o.visit.inside } : null };
     if (g.dialogue && g.dialogue.convo) g.dialogue.close(false);
     if (p.seat && typeof p.stand === 'function') p.stand(); p.seat = null;
     if (g.record && g.record.shown) g.record.close();

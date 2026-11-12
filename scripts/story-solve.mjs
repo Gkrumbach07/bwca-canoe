@@ -795,6 +795,14 @@ const DECLINES2 = [
   { id: 'S9\'s line parted', via: ['f:mg.snag.snapped & !f:mg.snag.landed'], end: END2 },
 ];
 const R2KEYS = { L1: ['L1A', 'L1B', 'L1C'], L2: ['L2A', 'L2C'], L5: ['L5B'], L6: ['L6B', 'L6C'] };
+// each key's own shortest route from the end of slice 1, by its goals (the main line would carry everything before it)
+const FARM1 = 'f:tauno.farm.met', MAP1 = 'f:door.mining.yield';
+const KEYVIA = {
+  L1A: [FARM1], L1B: [FARM1], L1C: ['f:kettle.visited'],
+  L2A: ['f:kettle.lid', 'f:mary.lid.given'], L2C: [FARM1, 'f:kettle.visited', MAP1, 'f:pietro.dig.seen', 'read:NB70'],
+  L5B: [FARM1, 'f:kettle.visited', MAP1],
+  L6B: [FARM1, 'f:kettle.visited'], L6C: [FARM1, 'f:kettle.visited', MAP1],
+};
 function on2() { R2 = true; relCache.clear(); }
 async function slice2(main, rp) {
   const out = report.slice2 = { witnesses: [], plan: null, branches: [], reentry: [], locks: [], director: [], warn: [] };
@@ -833,18 +841,19 @@ async function slice2(main, rp) {
     out.reentry.push({ id: d.id, reached: true, to: to.path.length, back: back.ok ? back.path.length : null, at: back.fail || null, askWaited });
     res(`slice 2 re-entry: ${d.id} (${to.path.length} moves), then ${d.end === END2 ? 'the slice\'s end' : 'the locks open and the arc done'} in ${back.ok ? back.path.length : '—'} moves${back.ok ? '' : ` (stuck at '${back.fail}')`}${d.held ? `; the ask waited while held: ${askWaited}` : ''}`, ok && (askWaited !== false));
   }
-  // the locks with their Round 2 keys: each reachable (its witness: the main line up to the move that keys it, else its own
-  // search), and no fact on the way to all of them: for each fact every key's witness has set since slice 1, blocked (no
-  // move that sets it is played), is there still a way to one of the keys? (each key searched along the main line's goals
-  // up to it, without the goals that read the blocked fact)
+  // the locks with their Round 2 keys: each reachable (its witness: its own shortest route, KEYVIA, else the main line up
+  // to the move that keys it), and no fact on the way to all of them: for each fact every key's witness has set since
+  // slice 1, blocked (no move that sets it is played), is there still a way to one of the keys? (each key searched along
+  // its route, without the goals that name the blocked fact)
   for (const [L, keys] of Object.entries(R2KEYS)) {
     const ends = [], row = { lock: L, keys: {}, articulation: [], one: keys.length < 2 }, via = {};
     for (const k of keys) {
       const goal = `f:key.${k}`;
       let path = null;
-      const n = m2.ok ? firstTrue(m2.path, goal, S1) : -1;
-      if (n >= 0) { path = m2.path.slice(0, n); via[k] = m2.marks.filter((q) => q.at <= n).map((q) => q.when); }
-      else { const c = chain([goal], S1); if (c.ok) { path = c.path; via[k] = []; } }
+      via[k] = KEYVIA[k] || [];
+      const c0 = chain([...via[k], goal], S1);
+      if (c0.ok) path = c0.path;
+      else { const n = m2.ok ? firstTrue(m2.path, goal, S1) : -1; if (n >= 0) { path = m2.path.slice(0, n); via[k] = m2.marks.filter((q) => q.at <= n).map((q) => q.when); } }
       const r = path ? replay(path, S1) : null, ok = !!(r && r.ok && r.S.when(goal));
       row.keys[k] = ok ? path.length : null;
       if (ok) ends.push(r.S);
