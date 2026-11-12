@@ -284,6 +284,7 @@ class MiningCast {
   talkSlab(f) {
     const S = this.slab, s = this.story, D = this.c.talk; if (!S || !D) return false;
     const start = slabEntry(s, { tashaHere: !!S.tasha });
+    if (start === 'wait' && !S.waited) S.waited = performance.now(); // (she loads her coolers while he says it; her truck goes after)
     const run = new SceneRun(this.c.topics, SLAB, { who: 'tauno', args: { ...this.args(ROAD_END) },
       hooks: { home: () => setTimeout(() => this.home(), 50) },
       onEnd: (at) => { f.talking = false; if (at === 'wait') S.waited = performance.now(); } });
