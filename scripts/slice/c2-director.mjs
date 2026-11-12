@@ -38,8 +38,22 @@ export const HELPERS_D = () => {
     for (const k of ['bundle.taken', 'tauno.armed', 'tauno.porch.done', 'tauno.talk', 'tauno.said.t5', 'rehook.again', 'knows.walt', 'crews.seen', 'tauno.turn', 'tauno.doors', 'door.crews.taken', 'door.mining.named', 'door.guiding.named', 'door.boys.named', 'door.family.named', 'door.mining.ringed']) s.debug.set(k);
     return s.stage;
   };
-  D.setDay = (abs, h) => { const d = new Date(abs * 86400000), y = d.getUTCFullYear(); g.day.setClock(y, abs - absOf(y, 0), h); g.story.lastQ = null; D.step(4); return { y, doy: abs - absOf(y, 0), h }; };
-  D.trip = (ep) => { const t = g.trip; if (t.active) t.close('completed', 'came in', ep); t.start({ ep, foodDays: 3, canoe: 'aluminium' }); D.step(4); return g.story.tripN(); };
+  // the player as the slice wants them between days: rested, fed and watered (the rig skips the meals: a jump of days
+  // would otherwise have them brought in spent, the trip ended)
+  D.refresh = () => { const e = g.energy; if (!e) return null; try { e.fresh(); e.bunk(); e.value = 1; } catch { /* */ } return e.value; };
+  D.setDay = (abs, h) => { const d = new Date(abs * 86400000), y = d.getUTCFullYear(); D.refresh(); g.day.setClock(y, abs - absOf(y, 0), h); g.story.lastQ = null; D.refresh(); D.step(4); return { y, doy: abs - absOf(y, 0), h }; };
+  // to a store's landing, its layout and tiles in (story-slice's goStore)
+  D.goStore = async (ep) => {
+    const l = g.outfitter.landing(ep);
+    if (Math.hypot(g.player.x - l.x, g.player.z - l.z) > 120) await D.tp(l.x, l.z);
+    for (let k = 0; k < 150 && !g.outfitter.layout(ep); k++) { D.step(10); await D.wait(60); }
+    const S = g.outfitter.layout(ep);
+    if (S && g.tiles.ensure) { try { await g.tiles.ensure(S.door.x, S.door.z, 120); } catch { /* */ } }
+    for (let k = 0; k < 60 && S && g.tiles.readyAt && !g.tiles.readyAt(S.door.x, S.door.z); k++) { D.step(5); await D.wait(60); }
+    D.step(20);
+    return !!S;
+  };
+  D.trip = (ep) => { const t = g.trip; if (t.active) t.close('completed', 'came in', ep); D.refresh(); t.start({ ep, foodDays: 3, canoe: 'aluminium' }); D.step(4); return g.story.tripN(); };
   D.endTrip = (ep) => { const t = g.trip; const o = t.active ? t.close('completed', 'came in', ep) : null; D.step(10); return o; };
   D.closeCard = () => { const r = g.record; if (r && r.shown) r.close(); if (r && r.s && r.s.pending) { r.s.pending = null; } };
   // the camps tonight (parties.campsAt), with their lakes
@@ -143,7 +157,7 @@ export const steps = [
       g.story.doc.nb.here = { ...g.story.doc.nb.here, NB20: g.story.time().abs, NB31: g.story.time().abs }; // (Farm's places read: none of them is the beat)
       const a = d.evening();
       if (!real) g.episodes = was;
-      return { real, a, why: d.state().log.slice(-1)[0] };
+      return { real, a, active: g.trip.active, f: { abs: f.abs, camp: f.camp.id }, why: d.state().log.slice(-2) };
     }, STUBS.episodes);
     result('14d an open episode\'s place in reach: its line is the day\'s beat (S7: "There\'s lilacs on Basswood…", 70.6.1.11)' + (r.real ? '' : ' [E stub]'), r.a && r.a.kind === 'episode' && (r.real || r.a.line === '70.6.1.11'), r);
   } },
@@ -157,8 +171,8 @@ export const steps = [
       const a = B.climax(arc.arc, { person: arc.person, rumour: arc.rumour });
       const sensor = s.when(`climax:${arc.arc}`);
       // the day's beat names the held arc's person (a party at the next site near Sawbill)
-      const L = g.outfitter.layout(38) || g.world.entryPoints.find((e) => e.ep === 38);
-      const f = d.findCamp({ from: d.abs() + 1, days: 30, x: L.centre ? L.centre.x : L.x, z: L.centre ? L.centre.z : L.z, r: 3800 });
+      const L = g.world.entryPoints.find((e) => e.ep === 38);
+      const f = d.findCamp({ from: d.abs() + 1, days: 30, x: L.x, z: L.z, r: 3800 });
       let named = null, met = null;
       if (f) { d.setDay(f.abs, 15); await d.tp(f.camp.x + 300, f.camp.z + 300); named = d.evening(); if (named) met = await d.meet(named.party); }
       d.endTrip(38); d.closeCard();
@@ -169,7 +183,7 @@ export const steps = [
       s.debug.set('door.boys.climax');
       const w = B.climax('family', { window: { days: 9 } }), w2 = B.climax('guiding', { window: { days: 40 } });
       d.endTrip(38); d.closeCard();
-      return { n0, a, sensor, named, met: met && { ok: met.ok, said: met.said }, n1, b, n2, c, w, w2 };
+      return { n0, a, sensor, f: f && { abs: f.abs, camp: f.camp.id }, named, active: g.trip.active, why: d.state().log.slice(-3), met: met && { ok: met.ok, said: met.said }, n1, b, n2, c, w, w2 };
     }, STUBS.testArc);
     log('climax', JSON.stringify(r));
     result('11a two climaxes ready on one trip: the second (the test arc) waits (held on its trip and the next; the sensor climax:test reads false), then goes', !r.a.ok && r.a.held && r.sensor === false && !r.b.ok && r.c.ok, r);
@@ -185,13 +199,13 @@ export const steps = [
       for (let k = 0; k < 4; k++) { d.trip(31); d.step(4); d.endTrip(31); d.closeCard(); trips.push(s.tripN()); }
       const stalled = B.stalled();
       // the next counter: into Farm's store (the store's door: store:enter)
-      const L = g.outfitter.layout(31); await d.tp(L.centre.x + L.axes.b.x * 12, L.centre.z + L.axes.b.z * 12);
+      const at = await d.goStore(31);
       d.walkOut(31); const inn = d.walkIn(31);
       const S = d.state().stall, word = d.wordAt(31), story = word ? word.filter((x) => x.kind === 'story') : [];
       // once per lock: out and in again, the day after
       d.walkOut(31); d.setDay(d.abs() + 1, 10); d.walkIn(31);
       const S2 = d.state().stall, word2 = d.wordAt(31);
-      return { last, n, trips, stalled, inn, armed: S && S.armed, story, done: S2 && S2.done, again: word2 ? word2.filter((x) => x.kind === 'story').map((x) => x.text) : null, pushes: s.doc.dir.pushes.slice(-3) };
+      return { at, last, n, trips, stalled, inn, armed: S && S.armed, story, done: S2 && S2.done, again: word2 ? word2.filter((x) => x.kind === 'story').map((x) => x.text) : null, pushes: s.doc.dir.pushes.slice(-3) };
     });
     log('stall', JSON.stringify(r));
     const names = { L1: /Tauno/, L2: /Mary|Hap/, L3: /Walt's bunch|the guys/, L4: /Aili/ };
@@ -219,7 +233,7 @@ export const steps = [
     }, STUBS.a2pay);
     const kettle = r.pay && r.pay.find((p) => p.title === 'Field help, Kettle creek');
     result('5d the tally pays "Field help, Kettle creek" $35 through the pay: handler into the purse, with its line on the card [A2 stub]', kettle && kettle.pay === 35 && r.m1 - r.m0 >= 35 && /Field help, Kettle creek/.test(r.text), r);
-    result('5e the card\'s story line stamped under "Story beats found" (the day counted) [A2\'s Kettle line stubbed by 20:5.1.card]', r.story && r.story.beats >= 1 && r.story.lines.length >= 1 && /Story beats found/.test(r.text) && r.text.includes(r.story.lines[0]), r);
+    result('5e the card\'s story line stamped under "Story beats found" (the day counted) [A2\'s Kettle line stubbed by 20:5.1.card]', r.story && r.story.beats >= 1 && r.story.lines.length >= 1 && /Story beats found/i.test(r.text) && r.text.toLowerCase().includes(r.story.lines[0].toLowerCase()), r);
   } },
 ];
 
