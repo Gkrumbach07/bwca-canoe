@@ -222,13 +222,17 @@ export const steps = [
       for (let k = 0; k < 4; k++) { d.trip(31); d.step(4); d.endTrip(31); d.closeCard(); trips.push(s.tripN()); }
       const stalled = B.stalled();
       // the next counter: into Farm's store (the store's door: store:enter)
-      const at = await d.goStore(31);
-      d.walkOut(31); const inn = d.walkIn(31);
-      const S = d.state().stall, word = d.wordAt(31), story = word ? word.filter((x) => x.kind === 'story') : [];
+      // the next counter: Farm's; where the least-explored lock's person has no line at Farm (L3, Walt's bunch: Sawbill's
+      // lines only, once A2's steps have explored L1 and L2: the joined slice), the next counter is Sawbill's
+      let ep = 31, at = await d.goStore(31);
+      d.walkOut(31); let inn = d.walkIn(31);
+      let S = d.state().stall;
+      if (inn && !(S && S.armed)) { d.walkOut(31); ep = 38; at = await d.goStore(38); d.walkOut(38); inn = d.walkIn(38); S = d.state().stall; }
+      const word = d.wordAt(ep), story = word ? word.filter((x) => x.kind === 'story') : [];
       // once per lock: out and in again, the day after
-      d.walkOut(31); d.setDay(d.abs() + 1, 10); d.walkIn(31);
-      const S2 = d.state().stall, word2 = d.wordAt(31);
-      return { why: inn ? null : d.lastWalkIn || null, at, last, n, trips, stalled, inn, armed: S && S.armed, story, done: S2 && S2.done, again: word2 ? word2.filter((x) => x.kind === 'story').map((x) => x.text) : null, pushes: s.doc.dir.pushes.slice(-3) };
+      d.walkOut(ep); d.setDay(d.abs() + 1, 10); d.walkIn(ep);
+      const S2 = d.state().stall, word2 = d.wordAt(ep);
+      return { ep, why: inn ? null : d.lastWalkIn || null, at, last, n, trips, stalled, inn, armed: S && S.armed, story, done: S2 && S2.done, again: word2 ? word2.filter((x) => x.kind === 'story').map((x) => x.text) : null, pushes: s.doc.dir.pushes.slice(-3) };
     });
     log('stall', JSON.stringify(r));
     const names = { L1: /Tauno/, L2: /Mary|Hap/, L3: /Walt's bunch|the guys/, L4: /Aili/ };

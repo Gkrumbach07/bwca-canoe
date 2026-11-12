@@ -202,7 +202,9 @@ export const steps = [
       const g1 = await fight(page, { greedy: true });
       const after1 = await page.evaluate(() => ({ pot: window.__game.story.has('ep.S9.pot'), built: window.__e.built('s9.pot'), msg: window.__e.fish().msg, state: window.__e.fish().state }));
       result('12b (E) the dead weight on the existing tension bar: reeling too hard into it goes red and parts the line; the pot stays', g1.red > 0 && !after1.pot && after1.built && /line parted/i.test(after1.msg || ''), { g1, after1 });
-      // then again, easing off through the sticks
+      // then again, easing off through the sticks (the spare jig tied on first, as a player does: the parted line took the
+      // jig, and with none in the strip the cast went out on whatever lure was left and rode over the bail: the join)
+      await page.evaluate(() => { window.__e.kitUp(); window.__L.step(4); });
       let h2 = null;
       for (let k = 0; k < 14 && !h2; k++) { const c = await castAndWork(page); if (c.st && c.st.snag) h2 = c.st; else await page.evaluate(() => { const F = window.__game.fishing; if (F.state === 'inwater') { F.state = 'ready'; F.lineOut = 0; } window.__L.step(20); }); }
       const t0 = await page.evaluate(() => window.__game.day.hours);
