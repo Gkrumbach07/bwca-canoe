@@ -142,8 +142,9 @@ export const steps = [
     // the crews' landing seen (stream L's place: its facts, as its verbs write them)
     await page.evaluate(() => { const s = window.__game.story; for (const f of ['crews.seen', 'landing.crib', 'landing.pink', 'landing.blaze']) s.debug.set(f); });
     await page.evaluate(() => { const g = window.__game; g.day.setClock(g.day.year, g.day.doy + 1, 8); window.__t.step(10); });
-    const staged = await page.evaluate((e) => window.__game.storyTalk.cast.debug.stage('tauno', e, 'home', 'bench'), ep);
-    await page.evaluate((k) => window.__t.talkTo(k), `cast:tauno:${ep}`);
+    // staged and talked to in one evaluate (the join, c2): the home slot's dayhash(tauno,5)=0 is false four days in five, and
+    // cast.update's half-second tick unstaged him between two evaluates before the talk opened (6a/6b failed 4 runs in 10)
+    const staged = await page.evaluate((e) => { const st = window.__game.storyTalk.cast.debug.stage('tauno', e, 'home', 'bench'); if (st) window.__t.talkTo(`cast:tauno:${e}`); return st; }, ep);
     await page.waitForTimeout(100);
     const u1 = await page.evaluate(() => window.__t.convo());
     const r = await picks(page, ['The crib\'s still there.', 'Somebody\'s flagged the grade.', 'Pink. New.', 'Measuring for who?', 'Away from the west shore', 'Somebody killed him.', 'Marlys?', 'I\'ll go.']);
