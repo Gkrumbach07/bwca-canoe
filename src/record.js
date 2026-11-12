@@ -948,7 +948,7 @@ class Record {
     const T = c.tally; if (!T) return '';
     const L = [];
     const line = (cls, lab, v, pay = 0) => L.push(`<li class="tl-l ${cls}${live ? '' : ' on'}"${pay ? ` data-pay="${pay}"` : ''}><span class="tl-k">${lab}</span><span class="tl-v">${v}</span></li>`);
-    for (const n of T.pay || []) line('pay', `“${esc(n.title)}”`, `<span class="num">+${money(n.pay)}</span>`, n.pay);
+    for (const n of T.pay || []) line('pay', `“${esc(n.title)}”`, n.kind === 'story' && !n.pay ? '' : `<span class="num">+${money(n.pay)}</span>`, n.pay); // (d: a story line with nothing to pay, "Gas, Tauno", says only its words)
     if (T.fine) line('fine', '<span class="tl-ticket" aria-hidden="true"></span>A ranger’s ticket: out after dark on day use', `<span class="num">${money(T.fine)}</span>, in your book`);
     if (T.km >= 0.1) line('stat', 'Paddled', `<span class="num">${miles(T.km)}</span> mi`);
     if (T.portages) line('stat', cap(plural(T.portages, 'Portage')), `${word(T.portages)}${T.rods ? `, <span class="num">${T.rods}</span> rods` : ''}`);
