@@ -65,6 +65,19 @@ function world({ y = 2026, m = 6, d = 9, h = 11 } = {}) {
   result('compile: started is the yes atom (f:ep.<id>.yes) for every record', EPISODES.every((e) => (e.started || startedOf(e.id)) === `f:ep.${e.id}.yes`), {});
 }
 
+// --- attach writes nothing (chk-coop C2: a guest's own story2 untouched while it boots into a visit) -----------------------
+{
+  const s = new StoryV2({ io: io() });
+  s.attach({ profile: { seasonId: 'c2-e', started: true, onChange: () => {} } });
+  s.clock({ abs: absOf(2026, 6, 9), hours: 11 });
+  const before = JSON.stringify(s.doc), starts = [];
+  const E = new Episodes(); for (const r of EPISODES) E.register(r);
+  E.on('start', (e) => starts.push(e));
+  E.attach({ story: s, text });
+  s.clock({ abs: absOf(2026, 7, 9), hours: 11 }); E.dayTurn();
+  result('attach: the runner writes nothing into a story with no episode started (no eps rows, no start heard), across a day turn', JSON.stringify(s.doc) === before && !starts.length, { eps: s.doc.eps, starts });
+}
+
 // --- doors: nothing starts but a yes ------------------------------------------------------------------------------------
 {
   const { s, E } = world();

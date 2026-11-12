@@ -7,10 +7,11 @@
 //   5 co-op (needs RELAY): a guest's layer, slice step 8
 //   APP=http://localhost:5631 RELAY=ws://localhost:8631 node scripts/c1-layer-test.mjs [--out dir] [--no-coop]
 import { createRequire } from 'node:module';
-import { mkdirSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readdirSync, existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { section, HELPERS } from './slice/c1-layer.mjs';
+const N_PLACES = JSON.parse(readFileSync(new URL('../src/story-places.json', import.meta.url), 'utf8')).places.length + 37; // e: (was 40: every story place + the 37 starred sites, Round 2 adds places)
 
 const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i > 0 ? process.argv[i + 1] : d; };
 const APP = (process.env.APP || 'http://localhost:5631').replace(/\/$/, '');
@@ -64,7 +65,7 @@ try {
   {
     const on = await A.evaluate(() => { const g = window.__game, l = g.storyLayer, w = g.world; return { st: l.state(), clear: (w.storyClear || []).length, lawns: (w.storyClear || []).every((s) => s[4] < 0), feed: g.storySeams.feed.names(), pub: w.portagesPublic() === w.portages, stub: l.stub }; });
     on.mods = await loaded(A, LAYER_MODS);
-    result('2 flag on: the layer attached (40 places, this release), World.load\'s clearings (lawns), the place adapter in the feed', on.st.places === 40 && !on.st.stale && on.clear >= 80 && on.lawns && on.feed.includes('place') && on.pub && on.stub === false, on);
+    result('2 flag on: the layer attached (every story place and starred site, this release), World.load\'s clearings (lawns), the place adapter in the feed', on.st.places === N_PLACES && !on.st.stale && on.clear >= 80 && on.lawns && on.feed.includes('place') && on.pub && on.stub === false, on);
   }
   // 3 the slice section -----------------------------------------------------------------------------------------------
   for (const s of section.steps.filter((x) => !x.guest)) {

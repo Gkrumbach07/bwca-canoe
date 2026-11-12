@@ -102,6 +102,7 @@ export class Episodes {
     this.recs = new Map();
     this.c = {};
     this.holds = new Map();
+    this.wins = new Map();    // id → the window as judged at the last day turn (memory only: a load judges it afresh)
     this.handlers = new Map();
     this.offs = [];
     this.lastDay = null;
@@ -152,7 +153,7 @@ export class Episodes {
   // --- time ----------------------------------------------------------------------------------------------------------
   dateNow() { const s = this.story; if (s && typeof s.date === 'function') return s.date(); return { year: 2026, month: 6, day: 15, dow: 2, doy: 166, hours: 9 }; }
   tick() { const s = this.story; if (!s) return; const t = s.time(); if (t.abs !== this.lastDay) this.dayTurn(); }
-  // windows are judged at day turn (and once at attach): eps.<id>.win, a window that closed on a started episode
+  // windows are judged at day turn (and once at attach), kept in memory (wins); a window that closed on a started episode
   dayTurn(force = false) {
     const s = this.story; if (!s || !s.doc) return;
     const t = s.time();
@@ -163,18 +164,18 @@ export class Episodes {
     for (const rec of this.recs.values()) changed = this.judge(rec, dt) || changed;
     if (changed) { this.emit('flyers', {}); this.dirty(); }
   }
+  // (nothing saved: the window is a function of the date and the story, judged again on load; a started episode out of its
+  // window has ep.<id>.shut, written once, the first day turn that finds it so)
   judge(rec, dt) {
-    const st = this.st(rec.id); if (!st) return false;
-    const was = st.win, now = inWindow(rec.window, dt, (w) => this.when(w));
+    const was = this.wins.get(rec.id), now = inWindow(rec.window, dt, (w) => this.when(w));
+    if (!now && this.live && this.started(rec.id) && !this.ended(rec.id) && !this.story.has(`ep.${rec.id}.shut`)) this.apply(rec.id, [`f:ep.${rec.id}.shut`], 'window');
     if (was === now) return false;
-    if (this.live) st.win = now; // (a guest's runner writes nothing)
+    this.wins.set(rec.id, now);
     this.emit('window', { id: rec.id, open: now });
-    if (was === true && !now && this.started(rec.id) && !this.ended(rec.id)) this.apply(rec.id, [`f:ep.${rec.id}.shut`], 'window');
     return true;
   }
   window(id) {
-    const st = this.doc && this.doc[id];
-    if (st && typeof st.win === 'boolean') return st.win;
+    if (this.wins.has(id)) return this.wins.get(id);
     const rec = this.recs.get(id); return rec ? inWindow(rec.window, this.dateNow(), (w) => this.when(w)) : false;
   }
   when(expr, args) { const s = this.story; if (!expr || expr === 'true') return true; try { return !!(s && s.when(expr, args)); } catch { return false; } }
@@ -204,8 +205,8 @@ export class Episodes {
   }
   onFact(key) {
     const m = /^ep\.([\w-]+)\.(yes|end)$/.exec(key || ''); if (!m) return;
-    const rec = this.recs.get(m[1]); if (!rec || !this.live) return;
-    const st = this.st(rec.id), s = this.story;
+    const rec = this.recs.get(m[1]), s = this.story; if (!rec || !this.live || !s.has(key)) return; // (attach asks of every record: only a fact that is there)
+    const st = this.st(rec.id);
     if (m[2] === 'yes' && !st.at) {
       st.at = s.time().abs; if (!st.how) st.how = 'door';
       if (typeof rec.bind === 'function' && !st.bind) { try { st.bind = rec.bind({ story: s, ...this.c }) || {}; } catch (e) { console.warn('episodes: bind', rec.id, e); st.bind = {}; } }
