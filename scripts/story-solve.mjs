@@ -487,6 +487,12 @@ async function slice3(main, rp) {
   const M3 = { max: Math.max(MAX, 30000) }; // (the arc's talks are wide: Marlys's hub alone has ten topics)
   const m3 = chain([...MAIN3.map((g) => g.when), END3], S1, M3);
   out.plan = m3.path;
+  if (!m3.ok) { // (where it stuck: what is on offer there, and each talk's choices)
+    const S = m3.S, ms = moves(S); out.stuck = { at: m3.fail, moves: ms.map((m) => m.id) };
+    console.log(`slice A3 stuck at '${m3.fail}': on offer ${ms.length}: ${ms.map((m) => m.id).join(' | ').slice(0, 1500)}`);
+    for (const m of ms.filter((q) => q.kind === 'cast')) { const T = new State(S); try { m.run(T); } catch (e) { console.log('  ', m.id, 'threw', e.message); continue; } console.log('  ', m.id, '→', T.conv ? `${T.conv.scene}@${T.conv.at}: ${choicesOf(T).map((c) => c.ask).join(', ')}` : 'no talk'); }
+    console.log('   read:NB39', S.s.nbHas('read', 'NB39'), 'marlys.met', S.s.has('marlys.met'));
+  }
   res(`slice A3 (the guiding years) end to end from the end of slice 1: ${m3.ok ? `${m3.path.length} moves` : `stuck at '${m3.fail}' (${m3.states} states${m3.capped ? ', capped' : ''})`}`, m3.ok, { at: m3.fail || null });
   const rp3 = m3.ok ? replay(m3.path, S1) : null;
   res('slice A3: the plan replays from the end of slice 1', !!(rp3 && rp3.ok && rp3.S.when(END3)), { at: rp3 && rp3.at });
