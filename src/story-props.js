@@ -379,10 +379,35 @@ function sandShape() {
   return { geo: b.build(), dots: [] };
 }
 // /e
+// x: begin (campaign stream x: 70 §2.3's rhubarb at Mummo's; 30 §9's white stone on a flat rock at C902's landing)
+const COL_X = { stalk: C(0x9a3a3a), stalkPale: C(0xb0605a), leaf: C(0x4f7f3a), leafDark: C(0x3f6a30), rock: C(0x8f8a82) };
+// rhubarb gone wild where a garden was: red stalks out of one crown, big crinkled leaves held flat at knee height
+function rhubarb({ rng }) {
+  const b = new PropBuilder(), n = 7 + Math.floor(rng() * 3);
+  for (let k = 0; k < n; k++) {
+    const a = (k / n) * Math.PI * 2 + rng() * 0.5, L = 0.35 + rng() * 0.2, lean = 0.55 + rng() * 0.2;
+    const tip = V(Math.cos(a) * L * lean, 0.32 + rng() * 0.18, Math.sin(a) * L * lean);
+    b.cyl(V(0, 0, 0), tip, 0.018, 0.012, 4, TILE.FIBRE, k % 2 ? COL_X.stalk : COL_X.stalkPale);
+    const r = 0.2 + rng() * 0.1, pts = [];
+    for (let j = 0; j < 7; j++) { const t = (j / 7) * Math.PI * 2, rr = r * (0.8 + rng() * 0.3); pts.push(V(tip.x + Math.cos(a) * r * 0.7 + Math.cos(t) * rr, tip.y + (rng() - 0.5) * 0.05, tip.z + Math.sin(a) * r * 0.7 + Math.sin(t) * rr)); }
+    b.face(pts, TILE.FIBRE, k % 3 ? COL_X.leaf : COL_X.leafDark, { ref: V(0, 1, 0) });
+    b.face(pts.slice().reverse(), TILE.FIBRE, COL_X.leafDark, { ref: V(0, -1, 0) });
+  }
+  return { geo: b.build(), dots: [{ y: 0.4, r: 0.6 }] };
+}
+// a low flat rock at a landing, a white stone's seat (its top for `on`)
+function flatRock({ rng }) {
+  const b = new PropBuilder();
+  const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.03, rng() * Math.PI, -0.02));
+  chunkStone(b, new THREE.Matrix4().compose(V(0, -0.08, 0), q, V(0.8, 0.22, 0.9)), rng, COL_X.rock);
+  return { geo: b.build(), dots: [{ y: 0.08, r: 0.7 }], top: 0.11 };
+}
+// x: end
 
 const REGISTRY = { stumpCut, quartzCobble, crib, landingRock, redPine, gradeMouth, slab, pole, drillRod,
   casing, coreRack, boxLid, trench, stockpile, stationStake, creekRun, beaverDam, digPit, surveyLath, surveyTag, shovelBlade, twoStumps, cafeTable, urn, coolers, launch, // (a2: the mining years' kits)
   lilacs, stoneStep, foundation, bedFrame, stoneRing, swimRock, enamelPot, sandShape, // e:
+  rhubarb, flatRock, // x:
 };
 // a2: the café's spots in a store's own frame (props.js's: a across, b toward the front wall and the door; every store's
 // inside is the same ±2.86 × ±3.86 m): the window table front left, the corner table front right clear of the board, the

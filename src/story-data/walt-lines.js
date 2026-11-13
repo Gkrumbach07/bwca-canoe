@@ -71,7 +71,8 @@ export const WALT_LINES = [
   // a2: the mining years (30 §4): the lines whose words are a quote inside a block, and the sections other than 30's
   // default (people). The Kettle line is the second quote of 30 §4.3's Pay paragraph (30:4.3.w2 is retired by the anchor)
   { id: 'w.kettle.orange', section: 'places', ref: '30:4.3.pay.2' },
-  { id: 'w.lead.pads', section: 'leads', ref: '30:4.1.30', done: 'f:kettle.visited' },
+  { id: 'w.lead.pads', section: 'leads', ref: 'd95.lead.pads', done: 'f:kettle.visited' },
+  { id: '30:4.2/len-saari-first-meeting.w3', section: 'odd' }, // x: Len's nothing-east line beside E-7 (rules-x.js) // (x: a drafted page line, docs/story/95; was Tauno's spoken 30:4.1.30 whole)
   { id: '30:4.1.w1', section: 'places' },
   { id: '30:4.1.w5', section: 'odd' },
   { id: '30:4.3.w1', section: 'places' },

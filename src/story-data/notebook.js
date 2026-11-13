@@ -90,6 +90,9 @@ export const UND = [
   { nb: 'NB35', when: 'f:ink.mummos | f:knows.mummos | nbphoto:P1', note: 'His grandmother\'s place. Basswood, past Prairie.', words: ['Mummo\'s'], nick: 'mummos' },
   { nb: 'NB21', when: 'f:ink.farend', note: 'Gull. The east end.', words: ['far end'], nick: 'farend' },
   { nb: 'NB53', when: 'f:ink.farend | f:bc.205-50', note: 'Bald Eagle to Gull. 205, then 50.', words: [] },
+  // x: the back door = Pietro (30 §4.7): 10 §11.2 has no note for it; a drafted one by id (docs/story/95), read through
+  // words.js where the note is drawn (noteId)
+  { nb: 'NB70', when: 'f:ink.backdoor | f:knows.backdoor', note: null, noteId: 'd95.und.backdoor', words: ['back door'], nick: 'backdoor' },
 ];
 // (every note is 10 §11.2's own words; the easy nicknames other than the Front Porch have no note written there yet, so
 // they underline nothing until the writers give one: a leftover for the owner, not invented here)

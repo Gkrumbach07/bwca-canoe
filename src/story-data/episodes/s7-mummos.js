@@ -32,7 +32,7 @@ export default {
   steps: [
     // Rose's $25 for the print (D's pay: handler: owed now, paid at the next trip-end tally with the line "$25 from
     // Rose.", 60 S7 "What it gives", until the writers give the tally its own words)
-    { when: 'f:ep.S7.shown', then: ['pay:25@S7.pay', 'f:ep.S7.paid'] },
+    { when: 'f:ep.S7.shown', then: ['pay:25@d95.S7.pay', 'f:ep.S7.paid'] }, // (x: the tally's drafted line, docs/story/95)
   ],
   // not steps (no yes needed): the main story's line when a player swims off the rock (60 S7 The place)
   rules: [
@@ -40,6 +40,14 @@ export default {
   ],
   ends: [{ id: 'rose', when: 'f:ep.S7.shown', line: 'S7.end' }],
   page: [
+    // x: begin (60 §0.3: the page lines were never written; drafted in the player's hand, docs/story/95; the notice's
+    // own words head the page once it is taken, episodes.js notice)
+    { when: 'f:ep.S7.rose', text: 'd95.S7.page.rose' },
+    { when: 'f:rose.said.whose', text: 'd95.S7.page.whose' },
+    { when: 'f:ep.S7.asked', text: 'd95.S7.page.where' },
+    { when: 'f:rose.said.boys', text: 'd95.S7.page.boys' },
+    { when: 'f:ep.S7.step | f:ep.S7.ashore', text: 'd95.S7.page.step' },
+    // x: end
     { when: 'here:NB35', text: 'S7.the-place.w1' },
   ],
   titles: [{ when: 'f:ep.S7.asked | read:NB35', title: 'Mummo\'s' }, { when: 'true', title: 'Rose G.' }],

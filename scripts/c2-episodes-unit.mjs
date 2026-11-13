@@ -145,7 +145,7 @@ function world({ y = 2026, m = 6, d = 9, h = 11 } = {}) {
   const r = s.rules.rules.get('ep.S9.door3'); void r;
   s.markRead('NB06', 'unit'); s.readHere('NB06', 'unit'); s.set('mg.snag.landed', true, 'unit');
   const p9 = E.page('S9');
-  const ok7 = s.get('ep.S7.end') === 'rose' && pays.includes('25@S7.pay') && s.has('ep.S7.paid') && p1.end === text('S7.end') && p1.first === 'Lilacs at Mummo\'s.' && p1.title === 'Mummo\'s' && p0.lines.includes(text('S7.the-place.w1'));
+  const ok7 = s.get('ep.S7.end') === 'rose' && pays.includes('25@d95.S7.pay') && s.has('ep.S7.paid') && p1.end === text('S7.end') && p1.first === 'Lilacs at Mummo\'s.' && p1.title === 'Mummo\'s' && p0.lines.includes(text('S7.the-place.w1'));
   const ok9 = s.get('ep.S9.end') === 'pot' && s.has('ep.S9.pot') && gives.includes('item.junespot') && p9.first === 'Brought up June\'s pot.' && p9.title === 'Coffee Lake';
   result('ends: S7 with the print shown (its page\'s last line, $25 through pay:), S9 with the pot (give:item.junespot)', ok7 && ok9, { p0, p1, p9, pays, gives });
   const before = stamps.length; s.emit('fact', { key: 'ep.S7.end' }); // (a second hearing stamps nothing)
