@@ -138,7 +138,7 @@ const second = [
   ...PIECES.map((p) => ({ ask: p.ask, when: `${pieceWhen(p)} & !f:denny.reveal.first=${p.k}`, to: 'silence' })),
   { ask: '32:5.15.c7', say: ['32:5.15.7'], end: true },
 ];
-export const CONF_BEATS = 10; // 32 §5.15's confession: its paragraphs, one beat each (informant-cast.js splits 32:5.15.conf)
+export const CONF_BEATS = 9; // 32 §5.15's confession: its paragraphs, one beat each (informant-cast.js splits 32:5.15.conf)
 export const REVEAL = {
   id: 'reveal', who: 'denny',
   nodes: {
