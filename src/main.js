@@ -1343,6 +1343,23 @@ async function main() {
     } catch (e) { console.warn('story A2: the mining years', e); }
   }
   // /a2
+  // a3: the guiding years (story Round 4, stream A3; docs/story/31-guiding-years.md), only under STORY_ON: Marlys, Hap,
+  // Nate, Sheila and Rick at Moose Lake 25, the bunkhouse and the boathouse loft, bunk 3's night (camp.js RestDial
+  // stopsAt), the squad's night (stream m's storyMech.squadNight), the pages (guiding-items.js). With the flag off none
+  // of it is fetched
+  if (STORY_ON && story.v === 2 && window.__game.storyTalk) {
+    try {
+      const [{ guidingCast }, { loadWords }] = await Promise.all([import('./guiding-cast.js'), import('./story-data/words.js')]);
+      const { topics, cast, texts } = window.__game.storyTalk, sm = window.__game.storySeams || {};
+      const Wg = await loadWords(['guiding']); texts.add(Wg.guiding);
+      guidingCast.attach({ story, cast, npcs, talk, topics, outfitter, player, day, world, scene, tiles, actors, pointer, hud, layer: sm.layer || null, inventory, pencil: sm.pencil || null, camp, energy, fishing, wind, veil, profile, record });
+      const updA3 = outfitter.update.bind(outfitter);
+      outfitter.update = (dt) => { updA3(dt); try { guidingCast.update(dt); } catch (e) { if (!guidingCast.warned) { guidingCast.warned = true; console.warn('story A3: the guiding years', e); } } };
+      window.__game.storyGuiding = { guidingCast, on: true };
+      console.log('story A3: the guiding years');
+    } catch (e) { console.warn('story A3: the guiding years', e); }
+  }
+  // /a3
   // e: the episodes (docs/build/campaign-design.md §10, Part 4 Round 2 stream E), only under STORY_ON: the one runner
   // (episodes.js) with S7 and S9 (and A2's arc at the join), the flyers on the boards (outside the count), the snag on
   // June's pot (fishing.snags), Rose at Moose Lake 25's window, "Look at this" (show.js), the Stories side of the book,
