@@ -371,12 +371,14 @@ async function seasonA() {
     const asked = [];
     let c = await seeChoices(A);
     const first = c;
-    for (const q of ['Does it work?', 'Whose was it?', 'What\'s BRM-14?', 'How much?']) {
+    // (ux round 2: P1 offers "Whose was it?" (once) and "I'll take it." only)
+    for (const q of ['Whose was it?']) {
       const r = await choose(A, q); const said = await hear(A, 8); c = await A.evaluate(() => window.__t.convo());
       asked.push({ q, ok: r.ok, why: r.why, said, after: c && c.choices });
     }
-    const once = asked.find((a) => a.q === 'What\'s BRM-14?'), whose = asked.find((a) => a.q === 'Whose was it?');
-    result('A.p1b every P1 question answered; "Whose was it?" and "What\'s BRM-14?" once only; "How much?" → the keeper\'s one line, then take / wait', asked.every((a) => a.ok) && !(once.after || []).some((t) => t.startsWith('What\'s BRM')) && !(asked[3].after || []).some((t) => t.startsWith('Whose was it')), { first, asked });
+    const two = !!(first && first.choices && first.choices.length === 2 && first.choices[0].startsWith('Whose was it') && first.choices[1].startsWith('I\'ll take it'));
+    const left = (asked[0].after || []);
+    result('A.p1b P1 offers "Whose was it?" and "I\'ll take it." only; asked once, only "I\'ll take it." is left', two && asked[0].ok && left.length === 1 && left[0].startsWith('I\'ll take it'), { first, asked });
     const r = await choose(A, 'I\'ll take it.'); const said = await hear(A, 6);
     for (let k = 0; k < 10; k++) { const cc = await A.evaluate(() => window.__t.convo()); if (!cc) break; await A.keyboard.press('Digit1'); await A.waitForTimeout(80); }
     await A.evaluate(() => { const o = window.__game.outfitter; if (o.open) o.hide(); });
