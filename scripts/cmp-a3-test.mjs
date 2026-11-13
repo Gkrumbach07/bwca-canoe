@@ -76,7 +76,7 @@ const HELPERS_A3 = () => {
   A.endTalk = () => { const D = g.dialogue; if (D && D.convo) D.close(false); L.step(4); };
   A.facts = (ks) => Object.fromEntries(ks.map((k) => [k, g.story.has(k) ? g.story.get(k) : false]));
   A.inv = (id) => g.inventory.count(id, { reachable: false });
-  A.walt = () => (g.story.doc.walt || []).map((w) => (typeof w === 'string' ? w : w.id));
+  A.walt = () => g.story.walt();
 };
 
 const step = async (page, title, fn) => { log(`-- ${title}`); try { await fn(); } catch (e) { result(`${title}: threw`, false, { e: String(e && e.stack || e).slice(0, 600) }); } };
@@ -171,7 +171,7 @@ try {
         const up = GC.debug.climb(); for (let k = 0; k < 60 && !(g.player.seat && g.player.seat.phase === 'sat'); k++) { L.step(5); await L.wait(20); }
         const seat = g.player.seat ? { id: g.player.seat.id, phase: g.player.seat.phase, y: +g.player.seat.y.toFixed(2) } : null;
         GC.debug.box(2009); GC.debug.box(2020); L.step(6);
-        return { up, seat, facts: A.facts(['gy.register', 'knows.message']), pages: ['page:register2019', 'page:message', 'page:clipping2019'].map((id) => A.inv(id)), walt: A.walt().filter((w) => /GY-12/.test(w)) };
+        return { up, seat, facts: A.facts(['gy.register', 'knows.message']), pages: ['register2019', 'message', 'clipping2019'].map((id) => (g.story.has(`nb.page.${id}`) ? 1 : 0)), walt: A.walt().filter((w) => /GY-12/.test(w)) };
       });
       result('7 up the ladder into the loft; the 2020 box: the register, the message, the clipping; the two W.H.s', r.seat && r.seat.id === 'a3:loft' && r.facts['gy.register'] && r.pages.every((n) => n > 0) && r.walt.includes('31:GY-12.5'), r);
       await a.evaluate(() => { const g = window.__game; if (g.player.seat) g.player.stand(); window.__L.step(40); });

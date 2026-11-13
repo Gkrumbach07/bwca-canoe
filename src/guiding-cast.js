@@ -130,7 +130,8 @@ class GuidingCast {
   // --- the people -------------------------------------------------------------------------------------------------------
   spotOf(at, who, L) {
     const A = L.axes.a, B = L.axes.b, f = L.stepsFoot || L.door;
-    if (at === 'a3:counter' && L.counter) return { x: L.counter.x + A.x * 1.4, z: L.counter.z + A.z * 1.4, y: L.floorY, heading: L.counter.heading };
+    // Marlys pricing stock: in front of the food shelf (the counter's own spot is the keeper's)
+    if (at === 'a3:counter') { const sh = (L.shelves || []).find((q) => q.kind === 'food') || L.counter; if (sh) return { x: sh.x + B.x * 0.4, z: sh.z + B.z * 0.4, y: L.floorY, heading: sh.heading }; }
     if (at === 'a3:store' && L.counter) return { x: L.counter.x - A.x * 1.6 + B.x * 1.2, z: L.counter.z - A.z * 1.6 + B.z * 1.2, y: L.floorY, heading: L.counter.heading };
     if (at === 'a3:bench') { const q = (L.seats && (L.seats[1] || L.seats[0])) || null; if (q) return { x: q.x, z: q.z, y: q.y, heading: q.heading, sit: true }; return f ? { x: f.x + A.x * 2.4, z: f.z + A.z * 2.4, heading: Math.atan2(-B.z, B.x) } : null; }
     if (at === 'a3:rail' && f) return { x: f.x - A.x * 1.6 + B.x * 0.4, z: f.z - A.z * 1.6 + B.z * 0.4, heading: Math.atan2(-B.z, B.x) };
@@ -447,6 +448,8 @@ class GuidingCast {
   gusTick() {
     const s = this.story, N = this.c.npcs, o = this.c.outfitter, v = o && o.visit; if (!N || !v || v.ep !== EP || !v.inside || typeof N.at !== 'function') return;
     if (this.gusAt && performance.now() - this.gusAt < 20000) return;
+    if (this.c.talk && this.c.talk.convo) return; // (never over a conversation: a keeper's bark takes the talk)
+    const p = this.c.player; if (p && [...this.live.values()].some((st) => Math.hypot(st.x - p.x, st.z - p.z) < 5)) return;
     const g = G.GUS_LINES.find((x) => !s.has(`gy.gus.${x.id.split('.').pop()}`) && s.when(x.when, this.args(EP))); if (!g) return;
     const k = (N.at(EP) || []).find((q) => q.keeper); if (!k) return;
     const w = T(g.id); if (!w) return;

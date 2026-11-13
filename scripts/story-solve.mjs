@@ -62,6 +62,9 @@ import { waltSites } from '../src/walt-sites.js';
 import { FARM as FARM_SC, SLAB, LEN, MARY, TASHA, KEEPER as KEEPER_A2, farmEntry, slabEntry, lenEntry, maryEntry, tashaEntry, STATIONS, A2_SENSORS } from '../src/story-data/mining.js';
 import ARC from '../src/story-data/episodes/arc-mining.js';
 import { RULES_BEATS } from '../src/story-data/rules-beats.js';
+// a3: the guiding years' data (Round 4): the scenes, their entries, the sensors, the leads' asks
+import * as GY from '../src/story-data/guiding.js';
+import { ASKS as ASKS_GY } from '../src/story-data/leads-guiding.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const argv = process.argv.slice(2);
@@ -69,9 +72,11 @@ const arg = (k, d) => { const i = argv.indexOf(`--${k}`); return i >= 0 ? (argv[
 const QUIET = !!arg('quiet', false), PLAN = !!arg('plan', false), MAX = Number(arg('max', 6000));
 const JSON_OUT = arg('json', null);
 for (const [k, v] of Object.entries(PENCIL_SENSORS)) registerSensor(k, v);
-for (const [k, v] of Object.entries(A2_SENSORS)) registerSensor(k, v); // (join c2: the arc's flags, as mining-cast.js registers them)
+for (const [k, v] of Object.entries(A2_SENSORS)) registerSensor(k, v);
+for (const [k, v] of Object.entries(GY.GY_SENSORS)) registerSensor(k, v); // a3 // (join c2: the arc's flags, as mining-cast.js registers them)
 // slice 2 on (the section below turns it on): its moves, its worlds, its scenes. Off, slice 1 is searched as before
 let R2 = false;
+let R3 = false; // a3: the guiding years' subgraph (slice A3, below)
 void TALK_SENSORS; // (topics.js registers the scenes' own condition names on import)
 const warn = console.warn; console.warn = () => {}; // (refused writes warn by design)
 process.on('exit', () => { console.warn = warn; });
@@ -150,6 +155,11 @@ class State {
     s.sensor('kettlerun', () => !!W().kettleday);
     for (const k of ['tashaHere', 'bigNew', 'belt']) s.sensor(k, () => false);
     if (R2) s.sensor('climax', (arc) => !this.r2.held.includes(String(arc)));
+    // a3: the guiding years' world: the date (Hap's summer), a thing carried, the night's own flags
+    s.sensor('date', (a) => { const m = /^(\d\d)-(\d\d)\.\.(\d\d)-(\d\d)$/.exec(String(a)); const d = W().date || `${String(W().month).padStart(2, '0')}-15`; return m ? d >= `${m[1]}-${m[2]}` && d <= `${m[3]}-${m[4]}` : false; });
+    s.sensor('has', (a) => W().has === String(a));
+    s.sensor('southnight', () => !!W().south);
+    for (const k of ['northwind2', 'lampLit', 'truckLooked', 'nightNow']) s.sensor(k, () => !!W()[k]);
   }
   // every atom of the state (facts, notebook marks, the pencil's rings/inks/names/seen, leads), for relevance and keys
   atoms() {
@@ -182,7 +192,8 @@ class State {
 }
 
 // --- scenes (the same data topics.js SceneRun plays) --------------------------------------------------------------------
-const SCENES = { porch: PORCH, josie: JOSIE, p1: P1, farm: FARM_SC, slab: SLAB, len: LEN, mary: MARY, tasha: TASHA }; // (join c2: + the mining arc's)
+const SCENES = { porch: PORCH, josie: JOSIE, p1: P1, farm: FARM_SC, slab: SLAB, len: LEN, mary: MARY, tasha: TASHA, // (join c2: + the mining arc's)
+  hap: GY.HAP, marlys: GY.MARLYS, nate: GY.NATE, sheila: GY.SHEILA, statement: GY.STATEMENT, rick: GY.RICK, night: GY.NIGHT }; // a3
 const argsOf = (S, ep) => ({ ep, home: ep === HOME, farm: ep === FARM, homefarm: HOME === FARM, first: true, cold: false, raining: false, snowing: false, porch: !(S.W && S.W.noPorch), manner: 'warm', keeper: 'Ruth Aho' });
 function sceneAct(S, list, args) {
   for (const a of list || []) {
@@ -202,6 +213,9 @@ function hook(S, name, args) {
   else if (name === 'ride') S.r2.slab = true;
   else if (name === 'home') S.r2.slab = false;
   else if (name === 'bottles') set('kettle.bottles');
+  // a3: the guiding years' hooks (guiding-cast.js): the night asked (its day), the south night named, the print back
+  else if (name === 'night') s.rules.apply({ id: 'hook', then: ['f:marlys.night=20600'] }, args);
+  else if (name === 'arrange') { if (S.W.south || (S.conv && S.conv.world && S.conv.world.south)) s.rules.apply({ id: 'hook', then: ['f:drift.arranged=20601'] }, args); }
 }
 function enterNode(S, id) {
   for (let guard = 0; guard < 20 && S.conv; guard++) {
@@ -317,6 +331,7 @@ function moves(S) {
     }
   }
   if (R2) moves2(S, out);
+  if (R3) moves3(S, out); // a3
   return out;
 }
 
@@ -381,6 +396,114 @@ function moves2(S, out) {
   }
 }
 State.prototype.inWorldPeek = function (w, fn) { const was = this.W; this.W = { ...NEUTRAL, ...w }; try { return fn(); } finally { this.W = was; } };
+
+// --- a3: the guiding years (Round 4, stream A3; docs/story/31-guiding-years.md) ------------------------------------------------
+// The worlds the arc stands in at Moose Lake 25: Hap's summer Saturday (and Nate on the rail), Rick at dawn, Sheila's
+// Thursday afternoon (a south night ahead or none), Marlys's Tuesday, and the evening in bunk 3
+const W3 = {
+  hap: { ep: HOME, daylight: true, month: 7, date: '07-11', hour: 11, dow: 'sat' },
+  rick: { ep: HOME, daylight: false, month: 7, date: '07-12', hour: 6, dow: 'sun' },
+  nate: { ep: HOME, daylight: true, month: 7, date: '07-14', hour: 10, dow: 'tue' },
+  sheila: { ep: HOME, daylight: true, month: 8, date: '08-20', hour: 14, dow: 'thu', south: true },
+  sheilaNone: { ep: HOME, daylight: true, month: 7, date: '07-16', hour: 14, dow: 'thu', south: false },
+  marlys: { ep: HOME, daylight: true, month: 8, date: '08-18', hour: 10, dow: 'tue' },
+  night: { ep: HOME, daylight: false, month: 8, date: '08-18', hour: 22, dow: 'tue' },
+};
+const WHO3 = { hap: W3.hap, rick: W3.rick, nate: W3.nate, sheila: W3.sheila, marlys: W3.marlys };
+// the world's own moves: places stood at (story-places.json triggers and guiding-cast.js's watchers), the loft, stream m's
+// drift test, the print matched at the lunch rock
+const GY_WORLD = [
+  { id: 'stand at the tow landing (P194, the Sucker end)', sets: ['f:gy.tow'], when: 'f:nb.found' },
+  { id: 'walk P194 to Inlet Bay', sets: ['f:gy.prairie'], when: 'f:gy.tow' },
+  { id: 'walk the Moose Lake dock to its end', sets: ['f:gy.dock'], when: 'true' },
+  { id: 'Mummo\'s from the water (Inlet Bay)', sets: ['f:gy.mummos'], when: 'true' },
+  { id: 'jig the reef past the second island: a walleye', sets: ['f:gy.reef=walleye'], when: 'true' },
+  { id: 'the print held against the view at the lunch rock', sets: ['f:gy.lunch', 'f:gy.lunch.photo'], when: 'f:hap.day & !f:hap.photo' },
+  { id: 'up the boathouse ladder: the 2020 box (the register)', sets: ['f:gy.register'], when: 'f:marlys.loft' },
+  { id: 'the rafter by the loft window', sets: ['f:gy.rafter'], when: 'f:marlys.loft' },
+  { id: 'the squad night: the spare swamped mid-Birch goes north (stream m)', sets: ['f:drift.done'], when: 'f:drift.arranged' },
+  { id: 'the alders: the white stone (stream m)', sets: ['f:drift.alders'], when: 'f:drift.arranged' },
+];
+const GY_WORLD_SETTERS = GY_WORLD.map((g) => [g.sets.map((x) => x.split('=')[0]), g.when]);
+function talk3(T, scene, at, w) { T.W = { ...w }; T.conv = { scene, at, args: argsOf(T, w.ep), world: w }; enterNode(T, at); T.W = { ...NEUTRAL }; }
+const later3 = (s) => (k) => (s.since('trips', k) || 0) >= 1;
+function moves3(S, out) {
+  const s = S.s;
+  for (const [who, w] of Object.entries(WHO3)) {
+    const sl = slot2(S, who, w); if (!sl) continue;
+    if (who === 'hap') out.push({ id: `hap on the porch: ${GY.hapEntry(s, { later: later3(s) })}`, kind: 'cast', scene: 'hap', run: (T) => talk3(T, 'hap', GY.hapEntry(T.s, { later: later3(T.s) }), w) });
+    if (who === 'marlys') out.push({ id: `marlys at the counter: ${GY.marlysEntry(s, {})}`, kind: 'cast', scene: 'marlys', run: (T) => talk3(T, 'marlys', GY.marlysEntry(T.s, {}), w) });
+    if (who === 'rick') out.push({ id: `rick in the store: ${GY.rickEntry(s)}`, kind: 'cast', scene: 'rick', run: (T) => talk3(T, 'rick', GY.rickEntry(T.s), w) });
+    if (who === 'nate') out.push({ id: `nate at the tow dock: ${GY.nateEntry(s)}`, kind: 'cast', scene: 'nate', run: (T) => talk3(T, 'nate', GY.nateEntry(T.s), w) });
+    if (who === 'sheila') {
+      out.push({ id: `sheila at the landing (a south night ahead): ${GY.sheilaEntry(s, {})}`, kind: 'cast', scene: 'sheila', run: (T) => talk3(T, 'sheila', GY.sheilaEntry(T.s, {}), w) });
+      if (s.get('choice.sheila') === 'in' && !s.has('sheila.statement')) out.push({ id: 'sheila at the landing with Marlys: the statement', kind: 'cast', scene: 'statement', run: (T) => talk3(T, 'statement', 'told', w) });
+    }
+  }
+  // the night in bunk 3, hour by hour (guiding-cast.js: the Rest dial stops at each of her hours)
+  if (s.has('marlys.night') && !s.has('door.guiding.climax')) {
+    const next = GY.NIGHT_HOURS.find((h) => !s.has(`gy.night.${h.node.slice(1)}`));
+    if (next) out.push({ id: `bunk 3, ${next.node.slice(1, 3)}:${next.node.slice(3)}: Marlys`, kind: 'cast', scene: 'night', run: (T) => talk3(T, 'night', next.node, W3.night) });
+  }
+  // Gus's rings (leads-guiding.js ASKS)
+  for (const a of ASKS_GY) {
+    if (a.once && s.has(`lead.asked.${a.id}`)) continue;
+    if (!S.inWorldPeek(W3.marlys, () => S.when(a.if, { ep: HOME }))) continue;
+    out.push({ id: `ask Gus: ${a.id}`, kind: 'topic', run: (T) => T.inWorld(W3.marlys, () => { T.Ld.ask(a.id, { by: 'Gus', ep: HOME }); }) });
+  }
+  for (const g of GY_WORLD) if (!g.sets.every((k) => s.when(k)) && S.when(g.when)) out.push({ id: g.id, kind: 'world', run: (T) => T.s.rules.apply({ id: 'a3:world', then: g.sets }, {}) });
+}
+// the arc's main line (Part 4 Round 4: "Gives L2 A (Hap) and the 'went north' hinge"), its branches and re-entries
+const MAIN3 = [
+  { id: 'Hap on the porch: the first sit (the arc\'s door open)', when: 'f:hap.met & f:door.guiding.open' },
+  { id: 'Hap\'s day (August 1986) told; the print on loan', when: 'f:hap.day' },
+  { id: 'the tow landing\'s real side (stood at, or Rick)', when: 'f:gy.tow | f:gy.tow.told' },
+  { id: 'the tow set right (any of the three answers)', when: 'f:hap.tow.right' },
+  { id: 'the real talk: the lake (L2A, the yield)', when: 'f:hap.farend & f:key.L2A & f:door.guiding.yield' },
+  { id: 'Sheila\'s page two', when: 'f:sheila.report' },
+  { id: 'the drift test arranged', when: 'f:drift.arranged' },
+  { id: 'the hinge: went north', when: 'f:drift.done & f:knows.north' },
+  { id: 'Marlys met', when: 'f:marlys.met' },
+  { id: 'the loft asked', when: 'f:marlys.loft' },
+  { id: 'the 2019 register found', when: 'f:gy.register & f:knows.message' },
+  { id: 'the night asked', when: 'f:marlys.night' },
+  { id: 'the night played: the climax and the choice', when: 'f:door.guiding.climax & f:door.guiding.done' },
+];
+const END3 = 'f:door.guiding.done & f:hap.farend & f:knows.north & f:gy.register & f:sheila.report & f:ep.guiding.end';
+const BRANCH3 = [
+  { id: 'the tow told bluntly ("It was never on the left, Hap."), the next weekend', via: ['f:hap.day', 'f:gy.tow.told', 'f:hap.tow.blunt'], when: 'f:hap.farend' },
+  { id: 'the tow left to him ("Still on the left."), Nate on the rail the next weekend', via: ['f:hap.day', 'f:gy.tow.told', 'f:hap.tow.kind'], when: 'f:hap.farend' },
+  { id: 'Sheila brought in, then the statement ("Wade?")', via: ['f:gy.register', 'f:marlys.night', 'f:choice.sheila=in'], when: 'f:sheila.statement & f:knows.wade.office' },
+  { id: 'Let it lie', via: ['f:gy.register', 'f:marlys.night'], when: 'f:choice.sheila=lie & f:door.guiding.done' },
+  { id: 'the night before the drift: GY-14 tells her after', via: ['f:gy.register', 'f:marlys.night', 'f:door.guiding.done & !f:drift.done'], when: 'f:marlys.north' },
+  { id: 'the drift first: the close at six ("Then the box was the right thing.")', via: ['f:drift.done', 'f:gy.register', 'f:marlys.night'], when: 'f:marlys.north & f:door.guiding.done' },
+];
+function on3() { R3 = true; relCache.clear(); }
+async function slice3(main, rp) {
+  const out = report.sliceA3 = { witnesses: [], plan: null, branches: [], warn: [] };
+  if (!main.ok || !rp || !rp.ok) { res('slice A3: slice 1\'s end to start from', false); return; }
+  on3();
+  const S1 = rp.S;
+  const m3 = chain([...MAIN3.map((g) => g.when), END3], S1);
+  out.plan = m3.path;
+  res(`slice A3 (the guiding years) end to end from the end of slice 1: ${m3.ok ? `${m3.path.length} moves` : `stuck at '${m3.fail}' (${m3.states} states${m3.capped ? ', capped' : ''})`}`, m3.ok, { at: m3.fail || null });
+  const rp3 = m3.ok ? replay(m3.path, S1) : null;
+  res('slice A3: the plan replays from the end of slice 1', !!(rp3 && rp3.ok && rp3.S.when(END3)), { at: rp3 && rp3.at });
+  for (const g of MAIN3) {
+    const n = m3.ok ? firstTrue(m3.path, g.when, S1) : -1;
+    out.witnesses.push({ id: g.id, when: g.when, moves: n, last: n > 0 ? m3.path[n - 1] : null });
+    res(`slice A3 witness: ${g.id}${n > 0 ? ` (${n} moves; made by "${m3.path[n - 1]}")` : ''}`, n >= 0, { when: g.when });
+  }
+  for (const b of BRANCH3) {
+    const c = chain([...b.via, b.when], S1), ok = c.ok && replay(c.path, S1).ok;
+    out.branches.push({ id: b.id, ok, moves: c.ok ? c.path.length : null, at: c.fail || null });
+    res(`slice A3 branch: ${b.id}${c.ok ? ` (${c.path.length} moves)` : ` (stuck at '${c.fail}')`}`, ok);
+  }
+  // L2 with key A: a second key besides (WARN: L2's other keys are other arcs'), and no single person: Hap or Mary
+  const L2 = rp3 && rp3.ok ? rp3.S.s.lock(2) : null;
+  say(`slice A3: lock 2 after the arc: ${L2 ? L2.keys.join(', ') : '—'}`);
+  if (PLAN && m3.ok) { console.log('\nSlice A3, as the solver plays it (from the end of slice 1):'); m3.path.forEach((m, i) => console.log(`${String(i + 1).padStart(3)}. ${m}`)); }
+}
 // where the cast's schedule puts a person in that world (cast.js: the first slot whose when holds); the walkout's
 // porch foot needs a porch or the truck (CAST noPorch)
 function castSlot(S, who, w) {
@@ -496,7 +619,7 @@ const actAtoms = (list, who = null) => {
     if (m[1] === 'f') out.push(`f:${m[2].split('=')[0]}`);
     else if (m[1] === 'und') out.push(`und:${m[2]}`);
     else if (m[1] === 'lead') out.push(`lead:${m[2].split('=')[0]}`);
-    else if (m[1] === 'do') out.push(...(m[2] === 'decline' ? ['f:tauno.porch.declined1', 'f:tauno.porch.declined2'] : m[2] === 'take' ? ['f:bundle.taken', 'f:bundle.later'] : m[2] === 'shelf' ? ['f:bundle.shelf'] : m[2] === 'bottles' ? ['f:kettle.bottles'] : []));
+    else if (m[1] === 'do') out.push(...(m[2] === 'decline' ? ['f:tauno.porch.declined1', 'f:tauno.porch.declined2'] : m[2] === 'take' ? ['f:bundle.taken', 'f:bundle.later'] : m[2] === 'shelf' ? ['f:bundle.shelf'] : m[2] === 'bottles' ? ['f:kettle.bottles'] : m[2] === 'night' ? ['f:marlys.night'] : m[2] === 'arrange' ? ['f:drift.arranged'] : []));
   }
   return out;
 };
@@ -516,10 +639,20 @@ const SCENE_ENTRIES = {
   len: { first: 'true', hub: 'f:len.met' },
   mary: { first: 'true', hub: 'f:mary.met', table: 'f:kettle.lid & !f:mary.lid.given', papers: 'f:mary.lid.given & !f:mary.table' },
   tasha: { meet: 'f:kettle.notice & !f:tasha.met', hub: 'f:tasha.met', done: 'f:kettle.fill.up & f:kettle.fill.trench & f:kettle.fill.pond & f:kettle.secchi' },
+  // a3: the guiding years' scenes, where guiding.js's entries start them
+  hap: { first: '!f:hap.met', hub: 'f:hap.met', tow: 'f:hap.day & (f:gy.tow | f:gy.tow.told) & !f:hap.tow.asked', blunt2: 'f:hap.tow.blunt', kind2: 'f:hap.tow.kind', far: 'f:hap.tow.right & !f:hap.farend' },
+  marlys: { tent: '!f:marlys.met', intro: '!f:marlys.met', again: 'f:marlys.met', ask: 'f:gy.register & !f:marlys.night' },
+  nate: { first: '!f:nate.met', again: 'f:nate.met' },
+  sheila: { first: '!f:sheila.met', again: 'f:sheila.met', overdue: 'northwind2', found: 'f:sheila.overdue.found' },
+  statement: { told: 'f:choice.sheila=in & !f:sheila.statement' },
+  rick: { first: '!f:rick.met', hub: 'f:rick.met' },
+  night: { n1750: 'f:marlys.night', n1805: 'f:gy.night.1750', n2200: 'f:gy.night.1805', n2340: 'f:gy.night.2200', n0100: 'f:gy.night.2340', n0200: 'f:gy.night.0100', n0600: 'f:gy.night.0200' },
 };
 const ENTRY_READS = { porch: ['f:tauno.porch.done', 'f:tauno.porch.declined2', 'f:door.crews.taken', 'f:door.crews.declined', 'f:crews.seen', 'f:tauno.turn', 'f:tauno.killed', 'f:tauno.doors', 'f:tauno.said.u1.*', 'f:nb.found'], josie: ['f:bundle.shelf', 'f:bundle.later', 'f:rehook.R1b'], p1: [],
   farm: ['f:tauno.doors', 'f:tauno.farm.met', 'f:kettle.visited', 'f:door.mining.yield', 'f:tauno.ride', 's:trips'], slab: ['f:tauno.ride', 'f:tauno.slab', 'f:tauno.said.q.*'], len: ['f:len.met'],
-  mary: ['f:mary.met', 'f:kettle.lid', 'f:mary.lid.given', 'f:mary.table'], tasha: ['f:kettle.notice', 'f:tasha.met', 'f:kettle.fill.*', 'f:kettle.secchi', 'f:kettle.done'] }; // (join c2: + slice 2's)
+  mary: ['f:mary.met', 'f:kettle.lid', 'f:mary.lid.given', 'f:mary.table'], tasha: ['f:kettle.notice', 'f:tasha.met', 'f:kettle.fill.*', 'f:kettle.secchi', 'f:kettle.done'], // (join c2: + slice 2's)
+  hap: ['f:hap.met', 'f:hap.day', 'f:gy.tow', 'f:gy.tow.told', 'f:hap.tow.*', 's:trips'], marlys: ['f:marlys.met', 'f:gy.register', 'f:marlys.night', 'f:nb.found', 'f:tauno.porch.done'], nate: ['f:nate.met'], // a3
+  sheila: ['f:sheila.met', 'f:sheila.overdue.found'], statement: ['f:choice.sheila'], rick: ['f:rick.met'], night: ['f:marlys.night', 'f:gy.night.*'] };
 const SCENE_SET = {}; // scene → every atom it can set (a conversation begun is kept only if its scene can touch the goal)
 function sceneSetters(name, def, who) {
   const casts = who && CAST[who] ? CAST[who].where.flatMap((w) => condAtoms(w.when)) : [];
@@ -586,6 +719,9 @@ async function buildSetters() {
   setter(['f:ep.S7.yes', 'f:ep.S7.found'], ['f:ep.S7.shown'], 'show:S7', 'f:ep.S7.yes & f:ep.S7.found', 1);
   setter(['f:nb.found'], ['f:mg.snag.hooked'], 'snag', 'f:nb.found', 1);
   setter(['f:mg.snag.hooked'], ['f:mg.snag.landed', 'f:mg.snag.snapped'], 'snag:fight', 'f:mg.snag.hooked', 1);
+  // a3: the guiding years' scenes and moves (moves3)
+  for (const [n, d, who] of [['hap', GY.HAP, 'hap'], ['marlys', GY.MARLYS, 'marlys'], ['nate', GY.NATE, 'nate'], ['sheila', GY.SHEILA, 'sheila'], ['statement', GY.STATEMENT, 'sheila'], ['rick', GY.RICK, 'rick'], ['night', GY.NIGHT, 'marlys']]) sceneSetters(n, d, who);
+  for (const [sets, cond] of GY_WORLD_SETTERS) setter(condAtoms(cond), sets, `a3:${sets[0]}`, cond, 1);
 }
 const famMatch = (set, atom) => {
   if (set.has(atom)) return true;
@@ -987,6 +1123,8 @@ if (main.ok) {
 
 // 6 slice 2 (Round 2, the join): from where slice 1 ends
 if (!arg('r1', false)) await slice2(main, rp);
+// a3: the guiding years (Round 4), from where slice 1 ends
+if (!arg('r1', false) && !arg('no-a3', false)) await slice3(main, rp);
 
 report.ms = Date.now() - t0;
 if (PLAN && report.plan) { console.log('\nThe slice, as the solver plays it:'); report.plan.forEach((m, i) => console.log(`${String(i + 1).padStart(3)}. ${m}`)); }
