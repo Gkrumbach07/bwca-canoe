@@ -119,7 +119,7 @@ export function ailiStep(s, season = null) {
   return n;
 }
 const W1 = 'ailistep>=1', W2 = 'ailistep>=2', W3 = 'ailistep>=3';
-const DAY = (k) => `f:aili.said.${k} & days.since(aili.said.${k})>=1`; // "These topics open one a day, in this order"
+const DAY = (k) => `f:aili.said.${k} & dates.since(aili.said.${k})>=1`; // "These topics open one a day, in this order" (polish: the next calendar day)
 const COFFEE = { id: '33:6.2.4', strip: 'Good. It should. He reproofed it every spring on the clothesline and swore at it.' };
 const GIFT = ['f:aili.stone', 'f:door.family.yield', { when: 'f:knows.stones', then: ['walt:33:6.4.w.1'] }, { when: '!f:knows.stones', then: ['walt:33:6.4.w.2'] }];
 
@@ -154,10 +154,10 @@ export const AILI = {
       { ask: '33:6.3.c14', when: W1, say: ['33:6.3.14'], then: ['do:shut'], end: true },
       { ask: '33:6.13.c8', once: 'gordtrap', when: 'f:gord.told', say: ['33:6.13.9', '33:5.wash'], then: ['f:aili.gordtrap', 'do:shut'], end: true },
       // 6.5 the kitchen table: step 2, Eino's name on the Walt page, a day since the stone
-      { ask: '33:6.5.c1', once: 'eino', when: `${W2} & (f:tauno.turn | f:knows.eino) & days.since(aili.stone)>=1`, to: 'eino' },
+      { ask: '33:6.5.c1', once: 'eino', when: `${W2} & (f:tauno.turn | f:knows.eino) & dates.since(aili.stone)>=1`, to: 'eino' },
       // 6.6 the guest book: step 3, a day after the kitchen table
-      { ask: '33:6.6.c2', once: 'book', when: `${W3} & days.since(aili.kitchen)>=1 & (f:gy.register | f:wade.met)`, to: 'book' },
-      { ask: '33:6.6.c1', once: 'book', when: `${W3} & days.since(aili.kitchen)>=1 & !(f:gy.register | f:wade.met)`, to: 'book' },
+      { ask: '33:6.6.c2', once: 'book', when: `${W3} & dates.since(aili.kitchen)>=1 & (f:gy.register | f:wade.met)`, to: 'book' },
+      { ask: '33:6.6.c1', once: 'book', when: `${W3} & dates.since(aili.kitchen)>=1 & !(f:gy.register | f:wade.met)`, to: 'book' },
       { ask: '33:6.2.c12', say: ['33:6.2.14'], end: true }] },
     came: { hub: 'talk0', go: [{ ask: '33:6.2.c8', once: 'came', say: ['33:6.2.10'] }] },
     his: { hub: 'talk0', go: [{ ask: '33:6.2.c10', once: 'nothing', say: ['33:6.2.12'], to: 'his2' }] },

@@ -16,7 +16,7 @@
 //   env.derived(name, arg) → value           stage · tier · bigCount · north · end · lock · porch · door
 //   env.ppl(who) → { met, trust, fear, cold, told } | null
 //   env.nb(kind, id) → bool                  read · here · und · nbphoto
-//   env.lead(id) → state | null              env.since(kind, key) → days | trips since that fact (clamped at 0) | null
+//   env.lead(id) → state | null              env.since(kind, key) → days | dates (calendar) | trips since that fact (clamped at 0) | null
 //   env.sensor(name, arg, args) → value      the live world (hour, wind, at, …): never saved
 //
 // Index keys (story-rules.js re-runs only the rules that touch a change): `f:<key>` a fact, `f:<prefix>*` a family,
@@ -24,7 +24,7 @@
 // `arg` an event's own data (only read in an `on:` rule).
 
 const OPS = ['>=', '<=', '!=', '>', '<', '='];
-const CALLS = /^(any|count|days\.since|trips\.since|dayhash)$/;
+const CALLS = /^(any|count|days\.since|dates\.since|trips\.since|dayhash)$/;
 
 // --- the sensors: names the runtime reads from the live world, each with what it takes -----------------------------
 // (`kind`: 'flag' bare, 'arg' name:arg, 'cmp' name>=n, 'argcmp' name:arg>=n). The lint uses this list; a stream adds its
@@ -123,7 +123,7 @@ export function classify(raw) {
     return { k: 'any', prefix: pre.replace(/\*$/, ''), op: inner ? inner.op : null, v: inner ? parseValue(inner.v) : null, key: `f:${pre.replace(/\*$/, '')}*` };
   }
   if ((m = /^count\(([^)]+)\)(>=|<=|!=|>|<|=)(\d+)$/.exec(s))) return { k: 'count', prefix: m[1].replace(/\*$/, ''), op: m[2], v: +m[3], key: `f:${m[1].replace(/\*$/, '')}*` };
-  if ((m = /^(days|trips)\.since\(([^)]+)\)(>=|<=|!=|>|<|=)(\d+(?:\.\d+)?)$/.exec(s))) return { k: 'since', unit: m[1], fact: m[2], op: m[3], v: +m[4], key: 's', also: `f:${m[2]}` };
+  if ((m = /^(days|dates|trips)\.since\(([^)]+)\)(>=|<=|!=|>|<|=)(\d+(?:\.\d+)?)$/.exec(s))) return { k: 'since', unit: m[1], fact: m[2], op: m[3], v: +m[4], key: 's', also: `f:${m[2]}` };
   if ((m = /^dayhash\((\w+),(\d+)\)=(\d+)$/.exec(s))) return { k: 'sensor', name: 'dayhash', arg: { who: m[1], n: +m[2] }, op: '=', v: +m[3], key: 's' };
   if ((m = /^stage(>=|<=|!=|>|<|=)(S\d)$/.exec(s))) return { k: 'stage', op: m[1], v: stageN(m[2]), key: 'd' };
   if ((m = /^S(\d)-S(\d)$/.exec(s))) return { k: 'stagein', lo: +m[1], hi: +m[2], key: 'd' };

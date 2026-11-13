@@ -86,6 +86,15 @@ test('facts: declared, grow-only, exclusive refused', () => {
   assert.equal(f.abs, 20600); assert.equal(f.src, '?'); assert.ok(f.tick > 0);
   assert.equal(factRow('tauno.porch.done').kind, 'bool');
 });
+test('polish: dates.since counts the turn of the day (an evening fact is a day old the next morning), days.since 24 h', () => {
+  const s = make({ abs: 20600 });
+  s.clock({ abs: 20600, hours: 19 }); s.set('nb.found');
+  s.clock({ abs: 20601, hours: 9 });
+  assert.equal(s.when('dates.since(nb.found)>=1'), true);
+  assert.equal(s.when('days.since(nb.found)>=1'), false);
+  s.clock({ abs: 20600, hours: 23 });
+  assert.equal(s.when('dates.since(nb.found)>=1'), false);
+});
 test('facts: ticks order, the since() clamp after a rewind', () => {
   const s = make({ abs: 20600 });
   s.set('nb.found');

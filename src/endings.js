@@ -388,7 +388,12 @@ class Endings {
     s.tallyLines = (o) => {
       const out = prev(o) || [];
       try {
-        if (N.consultingDue(s) && !(this.lot && this.lot.letter === 'M')) { // (not on the ending's own trip: its $25,000 is there)
+        // polish: "the ending's own trip" is the tally that pays the $25,000 (in these lines, or still owed on the trip
+        // that is on); the lot's staging was the test before, and the lot stays staged ~10 s after the come-out, so a
+        // tally read in those seconds dropped the line
+        const money = (l) => l && Number(l.pay) === N.MONEY && l.title === N.TALLY.money;
+        const D = s.doc && s.doc.dir, owed = !!(D && Array.isArray(D.pay) && D.pay.some((q) => !q.paid && Number(q.amt) === N.MONEY && q.rule === 'n:money'));
+        if (N.consultingDue(s) && !out.some(money) && !owed) {
           const p = s.profile || (s.ctx && s.ctx.profile) || this.c.profile; if (p && typeof p.earn === 'function') p.earn(N.CONSULTING, 'story');
           out.push({ id: `story:n.consulting:${s.time().abs}`, title: N.TALLY.consulting, pay: N.CONSULTING, kind: 'story', from: null });
         }

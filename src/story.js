@@ -439,6 +439,7 @@ export class StoryV2 {
     if (!r) return null;
     if (unit === 'trips') return Math.max(0, this.tripN() - (r[3] || 0));
     if (r[1] == null) return null;
+    if (unit === 'dates') return Math.max(0, this.time().abs - r[1]); // polish: calendar days (the day's turn), not 24 h
     return Math.max(0, this.nowAbs() - (r[1] + (r[2] || 0) / 24)); // (clamped: a checkpoint can rewind the clock past a stamp)
   }
   // `{told.denny.lake}`-style lookups for rule actions

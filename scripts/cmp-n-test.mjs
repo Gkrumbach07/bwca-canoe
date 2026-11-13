@@ -106,6 +106,10 @@ async function ending(E) {
     trail.push(await hear(page));
   }
   await page.waitForTimeout(3000);
+  // polish: the come-out lands ~4 s after Dan (afterDan 1.5 s + finish 2.5 s) and the lot unstages 6 s later: wait for it,
+  // so the twenty-days-on reads see the world after the ending's own trip (the $25,000 tally), not a lot mid-unstage
+  await page.waitForFunction(() => { const st = window.__game.storyEndings.staged(); return !st || st.done; }, null, { timeout: 15000, polling: 250 }).catch(() => {});
+  await page.waitForTimeout(800);
   const after = await page.evaluate(async () => { const g = window.__game, s = g.story, L = window.__L; for (let k = 0; k < 4; k++) { L.step(5); await L.wait(100); } return { end: s.get('end'), J: s.has('end.J'), JN: s.has('end.JN'), M: s.has('end.M'), done: s.get('run.done'), lot: s.get('end.lot'), staged: g.storyEndings.staged(), stage: s.stage, active: s.readSensor('run.active'), pay: (s.doc.dir && s.doc.dir.pay || []).map((p) => [p.amt, p.text]) }; });
   const want = { J: [true, false, false], JN: [true, true, false], M: [false, false, true] }[E];
   result(`${E} 5: the scene played by keys writes end=${E} (end.J ${want[0]}, end.JN ${want[1]}, end.M ${want[2]}), run.done; the run is over (S7)${E === 'M' ? '; $25,000 owed on the tally' : ''}`,

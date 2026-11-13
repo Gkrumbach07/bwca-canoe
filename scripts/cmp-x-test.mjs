@@ -82,9 +82,11 @@ try {
       K.rain.force({ from: A.abs(d1), days: 1 }); A.at(d1, 19); E.dayTurn(true);
       const again = K.flyers(31).length, took2 = again ? K.takeNotice() : false;
       const pages = E.pages().map((p) => ({ id: p.id, title: p.title, lines: p.lines }));
-      return { one, up, took, after, again, took2, notice: s.has('kettle.notice'), pages, posting: (s.doc.eps && s.doc.eps.mining) || null };
+      return { forced: A.abs(d0), one, up, took, after, again, took2, notice: s.has('kettle.notice'), pages, posting: (s.doc.eps && s.doc.eps.mining) || null };
     });
-    result('2a the Kettle notice: one forced wet day is the spell; the notice up on Farm\'s board that evening, taken (kettle.notice)', r.one && r.one.a === r.one.b && r.up === 1 && r.took && r.after === 0 && r.notice, r);
+    // polish: the forced day can join a natural wet day beside it (one 4-hour wet day is a spell, and the latest spell
+    // holding now counts): the spell is the one that holds the forced day, not necessarily one day long
+    result('2a the Kettle notice: the forced wet day makes the spell (alone or joined to a natural wet day); the notice up on Farm\'s board that evening, taken (kettle.notice)', r.one && r.one.a <= r.forced && r.forced <= r.one.b && r.up === 1 && r.took && r.after === 0 && r.notice, r);
     result('2b a later rain re-posts the notice (the Kettle day not done), and it can be taken again', r.again === 1 && r.took2, r);
     const K = (r.pages || []).find((p) => p.id === 'mining');
     result('2c Stories keeps the taken notice\'s words on its own page ("Field help, Kettle creek")', K && /Field help, Kettle creek/.test(K.title) && /FIELD HELP, ONE DAY/.test(K.lines[0] || ''), { K, pages: r.pages });

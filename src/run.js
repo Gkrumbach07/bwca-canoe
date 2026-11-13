@@ -455,6 +455,13 @@ export class Run {
     // Maggie's talk; never once the run has arrived on a lot, or while a talk is open)
     if (s.has('run.arrived') || (s.endings && s.endings.lot) || (this.g.talk && this.g.talk.convo)) return;
     // p: end
+    // polish: begin (the dawn lot still opened it: the tired cue lands on the frame the player steps onto the lot, before
+    // run.arrived is written. N14 teaches the tie-off, a verb of the canoe: the book falls open only while paddling, and
+    // never within 400 m of the meeting's lot; left unread, it falls open at the next tired cue on the water)
+    const p = this.g.player, m = this.meetAt();
+    if (!p || p.mode !== 'paddle') return;
+    if (m && Math.hypot(m.x - p.x, m.z - p.z) < 400) return;
+    // polish: end
     s.set('run.n14', true, 'run');
     this.openN14();
   }

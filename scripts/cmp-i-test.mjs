@@ -15,7 +15,7 @@
 //   N the note: no case at all, tier 4 three weeks gone: the note at the counter, the reveal from its silence
 //   (and no page errors)
 //
-//   APP=http://localhost:5360 node scripts/cmp-i-test.mjs [--only off|A|R|N] [--shots dir]
+//   APP=http://localhost:5360 node scripts/cmp-i-test.mjs [--only off|A|R|R1|R2|R3|N] [--shots dir]
 import { createRequire } from 'node:module';
 import { readdirSync, existsSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -71,7 +71,7 @@ const HELPERS_I = () => {
   I.cabin = async () => { const c = I.IC().cabinAt(); if (!c) return null; await L.near(c.x + 6, c.z + 6); I.tick(); return c; };
   I.lake = (name) => { const L0 = g.world.lakes.find((l) => l && l.name === name); return L0 ? { lake: L0.id, name: L0.name } : null; };
   // the map's lake-pick (map-book.js pickLake: the map open, a click on a lake answers): answered as a click would
-  I.pick = async (v) => { const M = g.journal && g.journal.map; for (let k = 0; k < 40 && !(M && M.pick); k++) await L.wait(50); if (!M || !M.pick) { if (g.story.ui.stub) g.story.ui.debug.answer(v); return 'stub'; } const done = M.pick; M.pick = null; done(v); await L.wait(80); try { g.journal.close(); } catch { /* */ } L.step(4); return 'map'; };
+  I.pick = async (v) => { const M = g.journal && g.journal.map; for (let k = 0; k < 200 && !(M && M.pick); k++) await L.wait(50); /* polish: 10 s, ben opens the map slowly */ if (!M || !M.pick) { if (g.story.ui.stub) g.story.ui.debug.answer(v); return 'stub'; } const done = M.pick; M.pick = null; done(v); await L.wait(80); try { g.journal.close(); } catch { /* */ } L.step(4); return 'map'; };
   I.facts = (ks) => Object.fromEntries(ks.map((k) => [k, g.story.has(k) ? g.story.get(k) : false]));
   I.inv = (id) => g.inventory.count(id, { reachable: false });
   I.walt = () => g.story.walt();
@@ -140,8 +140,12 @@ try {
     await step('A4 the word at the counter: heard', async () => {
       const lk = await a.evaluate(() => window.__i.lake('Kelso Lake') || window.__i.lake('Smoke Lake'));
       await toDenny(a, ctx.d0 + 3); await hear(a);
-      await say(a, 'Where are you headed next?'); await a.evaluate((v) => window.__i.pick(v), lk); await hear(a); await a.evaluate(() => window.__i.endTalk());
-      const r = await a.evaluate(async ([d, id]) => { const g = window.__game, I = window.__i, T = window.__t, L = window.__L; I.at(d + 4, 10); let n = 0; const off = g.story.on('store:enter', () => { n++; }); const S = g.outfitter.layout(38); await L.near(S.centre.x + 20, S.centre.z + 20); T.walkOut(38); T.walkIn(38); L.step(10); off && off(); const walked = { n, counter: I.IC().lastCounter || null, heard: g.story.get(`canary.heard.${id}`) ?? null }; return { ...walked, told: g.story.get(`canary.denny.${id}`) ?? null, home: g.profile.home, today: Math.floor(g.story.nowAbs()), byHand: walked.heard == null ? I.IC().debug.counter(38) : null }; }, [ctx.d0, lk.lake]);
+      await say(a, 'Where are you headed next?'); const how = await a.evaluate((v) => window.__i.pick(v), lk); await hear(a); await a.evaluate(() => window.__i.endTalk());
+      // polish: the next day is the told day + 1, read off the tell's own stamp (A4 failed with told = today: the day step
+      // was taken from d0, not from the day the tell landed on)
+      await a.waitForFunction((id) => window.__game.story.get(`canary.denny.${id}`) != null, lk.lake, { timeout: 15000, polling: 250 }).catch(() => null);
+      log('A4 tell', how, await a.evaluate((id) => ({ told: window.__game.story.get(`canary.denny.${id}`) ?? null, today: Math.floor(window.__game.story.nowAbs()), doy: window.__game.day.doy, h: +window.__game.day.hours.toFixed(2) }), lk.lake));
+      const r = await a.evaluate(async ([d, id]) => { const g = window.__game, I = window.__i, T = window.__t, L = window.__L; const t0 = g.story.get(`canary.denny.${id}`); I.at(t0 != null ? g.day.doy + (t0 - Math.floor(g.story.nowAbs())) + 1 : d + 4, 10); let n = 0; const off = g.story.on('store:enter', () => { n++; }); const S = g.outfitter.layout(38); await L.near(S.centre.x + 20, S.centre.z + 20); T.walkOut(38); T.walkIn(38); L.step(10); off && off(); const walked = { n, counter: I.IC().lastCounter || null, heard: g.story.get(`canary.heard.${id}`) ?? null }; return { ...walked, told: g.story.get(`canary.denny.${id}`) ?? null, home: g.profile.home, today: Math.floor(g.story.nowAbs()), byHand: walked.heard == null ? I.IC().debug.counter(38) : null }; }, [ctx.d0, lk.lake]);
       result('A4 a second lake told; the next day Josie: "Party came off {lake}…" (heard)', r.heard != null && r.counter && /Party came off/.test(r.counter.text) && r.counter.text.includes(lk.name), { lk, r });
     });
     await step('A5 tells 2 and 3; the reveal opens', async () => {
@@ -169,13 +173,14 @@ try {
     });
     await a.close();
   }
-  if (!ONLY || ONLY === 'R') {
+  if (!ONLY || /^R/.test(ONLY)) {
     const CH = [
       ['R1 Turn him', 'When they ask, you tell them what I tell you.', ['The river.', 'He knew.', 'He won\'t.'], 'turn', 'denny.turned'],
       ['R2 Tell the boys', 'Bob and Frank are going to know.', ['Go on.'], 'told', 'denny.toldon'],
       ['R3 Leave it', 'I\'m not going to say anything.', [], 'left', 'denny.left'],
     ];
     for (const [title, choice, after, val, fact] of CH) {
+      if (ONLY && ONLY !== 'R' && !title.startsWith(ONLY)) continue; // (polish: --only R1 | R2 | R3, one fresh page each)
       // (a reload between: a fresh page and a fresh season each choice)
       const p = await open(`${APP}/?story=1`);
       await newSeason(p, 38, 200);

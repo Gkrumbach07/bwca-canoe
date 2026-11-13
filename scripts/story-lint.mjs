@@ -208,7 +208,7 @@ const FORMS = [
   [/^hour:\d{1,2}(\.\d+)?(-\d{1,2}(\.\d+)?)?$/, 'sensor'], [/^date:\d\d-\d\d(\.\.\d\d-\d\d)?$/, 'sensor'],
   [new RegExp(`^(wind|moon|rain\\.days)${CMP}${N}$`), 'sensor'], [/^wind:[NSEW]{1,3}(\.\.[NSEW]{1,3})?$/, 'sensor'],
   [new RegExp(`^(trips|trip\\.day|year|peers)${CMP}\\d+$`), 'count'],
-  [new RegExp(`^(days|trips)\\.since\\(${ID}\\)${CMP}\\d+$`), 'count'],
+  [new RegExp(`^(days|dates|trips)\\.since\\(${ID}\\)${CMP}\\d+$`), 'count'],
   [new RegExp(`^dayhash\\(${WHO},\\d+\\)=\\d+$`), 'hash'],
   [/^pair:P\d+,P\d+$/, 'event'], [new RegExp(`^${WHO}\\s+in\\s+\\[[\\w,\\s-]+\\]$`), 'event'],
 ];
@@ -298,7 +298,7 @@ export function actionIdCheck(kind, arg) {
 }
 // the fact keys an atom reads: f:key, and days.since(key) / trips.since(key) (the lint's own atom strings, or the
 // compiler's index keys 'f:key')
-export const factReads = (atoms) => atoms.flatMap((a) => { let m; if ((m = /^f:([\w.-]+)/.exec(a))) return [m[1]]; if ((m = /^(?:days|trips)\.since\(([\w.-]+)\)/.exec(a))) return [m[1]]; return []; });
+export const factReads = (atoms) => atoms.flatMap((a) => { let m; if ((m = /^f:([\w.-]+)/.exec(a))) return [m[1]]; if ((m = /^(?:days|dates|trips)\.since\(([\w.-]+)\)/.exec(a))) return [m[1]]; return []; });
 
 // K1a's compiler, when it is there (the one parser): compile(expr) → { atoms } or { atoms: Set }
 let cond = null;

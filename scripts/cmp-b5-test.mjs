@@ -164,13 +164,19 @@ try {
     await shot('b5-camp');
     // something shared from your pack: the rig hands you a chocolate bar if the season's food has none
     await page.evaluate(() => { const g = window.__game; if (!window.__b5.C().food()) { try { const r = typeof g.inventory.toHandNew === 'function' ? g.inventory.toHandNew('snack:chocolate') : null; if (!(r && r.ok)) g.inventory.place('snack:chocolate', 1, {}); } catch { /* */ } } });
-    const t1 = await page.evaluate(() => window.__b5.talk(() => window.__b5.C().debug.camp()));
+    const roundBefore = await page.evaluate(() => window.__game.story.has('boys.round'));
+    const t1 = { ...(await page.evaluate(() => window.__b5.talk(() => window.__b5.C().debug.camp()))), roundBefore };
     log('talk', JSON.stringify(t1));
     const said = await hear(4);
-    const r = await picks(['Fair enough.', 'Tell me about the flare.']);
+    // polish: 32 §5.9.2 "The round at camp, if it hasn't been bought": bought in the yard (4b), the camp goes straight to the
+    // fire, with no "Fair enough." on offer; the round shared only on a run that comes to camp first (--from 5)
+    const bought = !!t1.roundBefore;
+    const offered = await page.evaluate(() => { const g = window.__game, c = g.dialogue && g.dialogue.convo; return ((c && c.node && c.node.choices) || []).map((o) => o.text); }).catch(() => []);
+    const r = await picks(bought ? ['Tell me about the flare.'] : ['Fair enough.', 'Tell me about the flare.']);
     await hear(10); await page.evaluate(() => window.__b5.endTalk());
     const f = await page.evaluate(() => window.__b5.facts(['boys.visited', 'boys.round', 'boys.nicknames']));
-    result('5b "Look what the wind brought." → the round shared, the flare (the nicknames)', r.ok && f['boys.visited'] && f['boys.round'] && f['boys.nicknames'], { said: said.slice(0, 3), r: r.ok ? 'ok' : r, f });
+    const noRound = !bought || !offered.some((x) => /^Fair enough/.test(x));
+    result(`5b "Look what the wind brought." → ${bought ? 'the round already bought (the yard): no "Fair enough." at camp' : 'the round shared'}, the flare (the nicknames)`, r.ok && noRound && f['boys.visited'] && f['boys.round'] && f['boys.nicknames'], { said: said.slice(0, 3), bought, offered, r: r.ok ? 'ok' : r, f });
   });
   await step('6 the bet', async () => {
     await page.evaluate(() => { const B = window.__b5, L = window.__L; B.at(B.doy(8, 12), 17.1); B.tick(2); if (window.__game.story.has('boys.bet.moved')) B.at(B.doy(8, 13), 17.1); { const S = B.C().site(); L.standAt(S.x + 4, S.z + 4); } B.tick(4); B.talk(() => window.__b5.C().debug.camp()); });
