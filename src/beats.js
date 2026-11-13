@@ -217,6 +217,9 @@ export class Beats {
   noteBeat(evt, d = {}) {
     if (!this.live() || !this.onTrip()) return;
     if (evt === 'fact' && /^legacy\./.test(d.key || '')) return;
+    // final join: a mini-campaign's background count (7c's M1 bear fed at the chain's camps, ep.M1_k.fed.<n>) happens
+    // away from the player: not a story beat of the day (it took the day's beat on a quiet trip: c2-director 10a/14d)
+    if (evt === 'fact' && /^ep\.[^.]+\.fed\./.test(d.key || '')) return;
     const c = this.cur(); if (!c) return;
     const k = this.today(), what = evt === 'fact' ? `f:${d.key}` : `${evt}:${d.id ?? ''}`;
     const L = c.days[k] || (c.days[k] = []);
