@@ -46,6 +46,12 @@ export const PLACES = {
   'lake.littlesag': { lake: 'littlesag', r: 1300, label: 'Little Saganaga' },
   'lake.fourtown': { lake: 'fourtown', r: 1200, label: 'Fourtown' },
   's7.inletbay': { layer: 's7.mummos', x: -17483, z: 3724, r: 450, label: 'Inlet Bay' }, // e: Rose's ring (60 S7 "Where are the lilacs?")
+  // s: S1 and S8's rings (campaign stream S, Round 4; sides-s.js PLACES_S): the Stuart Portage (Leon), Moose Lake for
+  // Sheila (Ollie), Emil's creek (Hap, Vern), Insula's far shore (Tom's files)
+  's1.stuart': { layer: 's1.stuart', x: -57740, z: -1500, r: 1500, label: 'the Stuart Portage' }, // s:
+  's1.sheila': { store: 25, r: 400, label: 'Moose Lake' }, // s:
+  's8.creek': { layer: 's8.creek', x: -6150, z: 19985, r: 300, label: 'a creek' }, // s:
+  's8.farshore': { x: -6000, z: 20050, r: 900, label: 'the far shore' }, // s:
 };
 
 // (the join: every lead's Walt line is now the docs' own words by id: 20:11.2.w1, 20:7.1.lead.tauno, and T's U5 lines

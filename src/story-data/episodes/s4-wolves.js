@@ -38,8 +38,8 @@ export default {
     { when: 'f:ep.S4.told & !f:ep.S4.counted', then: ['f:ep.S4.moved'] },
   ],
   ends: [
-    { id: 'report', when: 'f:ep.S4.report', line: 'S0.last.3' },
-    { id: 'without', when: 'f:ep.S4.shut & !f:ep.S4.st1 & !f:ep.S4.st2 & !f:ep.S4.st3', line: 'S0.last.3' },
+    { id: 'report', when: 'f:ep.S4.report', line: 'side.last.3' }, // j1: s's anchor (side.last) kept for 60 §0.3's list
+    { id: 'without', when: 'f:ep.S4.shut & !f:ep.S4.st1 & !f:ep.S4.st2 & !f:ep.S4.st3', line: 'side.last.3' }, // j1: s's anchor (side.last) kept for 60 §0.3's list
   ],
   page: [
     { when: 'f:kari.met', text: 'd95.7a.S4.page.kari' },

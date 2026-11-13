@@ -1462,6 +1462,21 @@ async function main() {
     } catch (e) { console.warn('story 7a', e); }
   }
   // 7a: end
+  // s: S1 and S8 (campaign stream S, Round 4; docs/story/60-side-stories.md), only under STORY_ON and after E's runner:
+  // Ollie on the Stuart Portage and the loaded carry (minigames/timed-carry.js), Tom Becker's ranger crew and the Ostbys
+  // (parties.js FIXED_PARTIES), the keepers' topics, the sled and the clearing (story-places.json s1.*, s8.*). With the
+  // flag off none of it is fetched
+  if (STORY_ON && story.v === 2 && window.__game.storyEpisodes) {
+    try {
+      const [{ connect: connectSides }, { T, SceneRun, texts }, { loadWords }] = await Promise.all([import('./feed-sides.js'), import('./topics.js'), import('./story-data/words.js')]);
+      const st = window.__game.storyTalk || {}, sm = window.__game.storySeams || {}, E = window.__game.storyEpisodes;
+      const S = await connectSides({ story, layer: sm.layer || window.__game.storyLayer || null, topics: st.topics || null, texts: st.texts || texts, T, SceneRun, loadWords, talk, npcs, actors, tiles, pointer, player, inventory, hud, world, parties, trip,
+        episodes: E.episodes, minigames: E.minigames, guest: () => !!(window.__game.coop && window.__game.coop.guest) });
+      window.__game.storySides = { ...S, on: true };
+      console.log('story S: sides S1, S8');
+    } catch (e) { console.warn('story S: sides', e); }
+  }
+  // /s
   // gl-d: the trip-end tally and the board (the game-loop round, stream D; docs/build/game-loop-brief.md). Pay lands on
   // the trip's card as it counts up (record.js ended → tasks.settle), never at the board; no cap on notices held
   // (the owner's call 2026-11-05), each with a deadline that fits it; the new kinds (task-kinds-2.js: creel, campsite, beaver, iceout, colour,

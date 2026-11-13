@@ -2803,6 +2803,422 @@
           ]
         }
       ]
+    },
+    {
+      "id": "s1.stuart",
+      "name": "The Stuart Portage (563 r), the road end at EP 19",
+      "doc": "docs/story/60-side-stories.md S1 (The place; 90 §13 check 1: the road end at EP 19)",
+      "x": -57783,
+      "z": -196,
+      "r": 60,
+      "ep": "S1",
+      "props": [],
+      "verbs": [],
+      "triggers": [
+        {
+          "on": "readHere",
+          "nb": "NB30",
+          "r": 150,
+          "when": "f:nb.found",
+          "then": []
+        },
+        {
+          "on": "enter",
+          "r": 60,
+          "when": "true",
+          "then": [
+            "f:ep.S1.road"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "s1.mid",
+      "name": "The Stuart Portage (563 r), the wet middle",
+      "doc": "docs/story/60-side-stories.md S1 (The place: long, wet in the middle; N12 read on the carry)",
+      "x": -57762,
+      "z": -1456,
+      "r": 150,
+      "ep": "S1",
+      "props": [],
+      "verbs": [],
+      "triggers": [
+        {
+          "on": "readHere",
+          "nb": "NB30",
+          "r": 150,
+          "when": "f:nb.found",
+          "then": []
+        }
+      ]
+    },
+    {
+      "id": "s1.river",
+      "name": "The Stuart Portage (563 r), the landing rock on the Stuart River",
+      "doc": "docs/story/60-side-stories.md S1 (The place: Ollie sits on the landing rock ten minutes each walk evening)",
+      "x": -57693,
+      "z": -2811,
+      "lake": "Stuart River",
+      "shore": true,
+      "search": 80,
+      "clear": 3,
+      "ep": "S1",
+      "props": [
+        {
+          "id": "s1.rock",
+          "kit": "landingRock",
+          "at": [
+            2.5,
+            -0.3
+          ],
+          "wet": "edge",
+          "show": "true"
+        }
+      ],
+      "verbs": [],
+      "triggers": [
+        {
+          "on": "readHere",
+          "nb": "NB30",
+          "r": 150,
+          "when": "f:nb.found",
+          "then": []
+        }
+      ]
+    },
+    {
+      "id": "s8.rock",
+      "name": "Lake Insula, \"the Kitchen\": the lunch rock on the narrows, the sled",
+      "doc": "docs/story/60-side-stories.md S8 (The place; check 9: a bare granite point on a narrows 0.5 km from C1655, scripts/cmp-s-data.mjs)",
+      "x": -6125,
+      "z": 18850,
+      "lake": "Lake Insula",
+      "shore": true,
+      "search": 150,
+      "clear": 5,
+      "ep": "S8",
+      "props": [
+        {
+          "id": "s8.lunchrock",
+          "kit": "landingRock",
+          "at": [
+            0,
+            0.4
+          ],
+          "wet": "edge",
+          "show": "true"
+        },
+        {
+          "id": "s8.sled",
+          "kit": "sled",
+          "at": [
+            0.6,
+            3.2
+          ],
+          "show": "!f:ep.S8.gone",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Old sled"
+            }
+          ]
+        },
+        {
+          "id": "s8.spinner",
+          "kit": "spinner",
+          "at": [
+            -1.2,
+            2.8
+          ],
+          "show": "here:NB37",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Spinner"
+            }
+          ]
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "s8.sled",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:ep.S8.sled"
+          ]
+        }
+      ],
+      "triggers": [
+        {
+          "on": "readHere",
+          "nb": "NB37",
+          "r": 60,
+          "when": "f:nb.found",
+          "then": []
+        },
+        {
+          "on": "enter",
+          "r": 45,
+          "when": "true",
+          "then": [
+            "f:ep.S8.rock"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "s8.creek",
+      "name": "Lake Insula, Emil's creek: the mouth straight across from the lunch rock, a beaver house",
+      "doc": "docs/story/60-side-stories.md S8 (The place: 1.1 km across on a straight line from the rock; check 9)",
+      "x": -6150,
+      "z": 19985,
+      "lake": "Lake Insula",
+      "shore": true,
+      "search": 200,
+      "clear": 3,
+      "ep": "S8",
+      "props": [
+        {
+          "id": "s8.lodge",
+          "kit": "beaverLodge",
+          "at": [
+            -7,
+            -4
+          ],
+          "wet": true,
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Beaver house"
+            }
+          ]
+        }
+      ],
+      "verbs": [],
+      "triggers": [
+        {
+          "on": "enter",
+          "r": 40,
+          "when": "true",
+          "then": [
+            "f:ep.S8.mouth"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "s8.clearing",
+      "name": "Emil's clearing: 200 m up the creek in the 2011 Pagami Creek burn, in fifteen-year jack pine",
+      "doc": "docs/story/60-side-stories.md S8 (The set piece; check 9: inside the burn, off every route; the readings are S8.the-set-piece-a.c1–c4)",
+      "x": -6150,
+      "z": 20185,
+      "r": 45,
+      "clear": 6,
+      "ep": "S8",
+      "props": [
+        {
+          "id": "s8.stump1",
+          "kit": "stumpCut",
+          "at": [
+            -9,
+            -17
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "f:ep.S8.taught",
+              "name": "Cut stump, knee high. Cut long ago, standing in snow."
+            },
+            {
+              "when": "true",
+              "name": "Stump"
+            }
+          ]
+        },
+        {
+          "id": "s8.stump2",
+          "kit": "stumpCut",
+          "at": [
+            -6,
+            -10
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "f:ep.S8.taught",
+              "name": "Cut stump, knee high. Cut long ago, standing in snow."
+            },
+            {
+              "when": "true",
+              "name": "Stump"
+            }
+          ]
+        },
+        {
+          "id": "s8.pipe",
+          "kit": "stovepipe",
+          "at": [
+            -3.5,
+            -4
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "f:ep.S8.taught",
+              "name": "Stovepipe, rusted through."
+            },
+            {
+              "when": "true",
+              "name": "Pipe"
+            }
+          ]
+        },
+        {
+          "id": "s8.hollow",
+          "kit": "squareHollow",
+          "at": [
+            0,
+            0
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "f:ep.S8.taught",
+              "name": "A square hollow. Something stood here."
+            },
+            {
+              "when": "true",
+              "name": "Hollow"
+            }
+          ]
+        },
+        {
+          "id": "s8.spring",
+          "kit": "bedSpring",
+          "at": [
+            1.2,
+            1
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "f:ep.S8.taught",
+              "name": "Bedspring"
+            },
+            {
+              "when": "true",
+              "name": "Bedspring"
+            }
+          ]
+        },
+        {
+          "id": "s8.tin",
+          "kit": "tobaccoTin",
+          "at": [
+            1.2,
+            1
+          ],
+          "on": "s8.spring",
+          "show": "!f:ep.S8.tin",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Tobacco tin"
+            }
+          ]
+        },
+        {
+          "id": "s8.row",
+          "kit": "rustRow",
+          "at": [
+            -2.6,
+            1.5
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "f:ep.S8.taught",
+              "name": "Rusted things in a row along one side."
+            },
+            {
+              "when": "true",
+              "name": "Rusty junk"
+            }
+          ]
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "s8.stump1",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:ep.S8.looked"
+          ]
+        },
+        {
+          "prop": "s8.stump2",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:ep.S8.looked"
+          ]
+        },
+        {
+          "prop": "s8.pipe",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:ep.S8.looked"
+          ]
+        },
+        {
+          "prop": "s8.hollow",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:ep.S8.looked"
+          ]
+        },
+        {
+          "prop": "s8.spring",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:ep.S8.looked"
+          ]
+        },
+        {
+          "prop": "s8.row",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:ep.S8.looked"
+          ]
+        },
+        {
+          "prop": "s8.tin",
+          "verb": "Take",
+          "when": "!f:ep.S8.tin",
+          "then": [
+            "f:ep.S8.tin",
+            "f:ep.S8.looked",
+            "give:item.ertin"
+          ]
+        }
+      ],
+      "triggers": [
+        {
+          "on": "enter",
+          "r": 22,
+          "when": "true",
+          "then": [
+            "f:ep.S8.clearing"
+          ]
+        }
+      ]
     }
   ],
   "portages": [
@@ -4225,6 +4641,196 @@
         "lakeId": 4,
         "off": 7,
         "tried": 26
+      },
+      "s1.stuart": {
+        "props": {},
+        "lanes": [],
+        "x": -57783,
+        "z": -196,
+        "n": [
+          0,
+          1
+        ],
+        "u": [
+          1,
+          0
+        ],
+        "lakeId": null,
+        "off": 0,
+        "tried": 1
+      },
+      "s1.mid": {
+        "props": {},
+        "lanes": [],
+        "x": -57762,
+        "z": -1456,
+        "n": [
+          0,
+          1
+        ],
+        "u": [
+          1,
+          0
+        ],
+        "lakeId": null,
+        "off": 0,
+        "tried": 1
+      },
+      "s1.river": {
+        "props": {
+          "s1.rock": {
+            "x": -57695.7,
+            "z": -2811.6,
+            "heading": 2.4658,
+            "sd": -0.3,
+            "y": 406.5
+          }
+        },
+        "lanes": [],
+        "x": -57693.9,
+        "z": -2809.8,
+        "n": [
+          -0.6255,
+          0.7802
+        ],
+        "u": [
+          -0.7802,
+          -0.6255
+        ],
+        "lakeId": 3433,
+        "off": 2,
+        "tried": 26
+      },
+      "s8.rock": {
+        "props": {
+          "s8.lunchrock": {
+            "x": -6128.3,
+            "z": 18848.8,
+            "heading": -1.3256,
+            "sd": 0.3,
+            "y": 461.5
+          },
+          "s8.sled": {
+            "x": -6125.5,
+            "z": 18848.7,
+            "heading": -1.3256,
+            "sd": 2.6,
+            "y": 461.5
+          },
+          "s8.spinner": {
+            "x": -6126.3,
+            "z": 18847.1,
+            "heading": -1.3256,
+            "sd": 2.3,
+            "y": 461.5
+          }
+        },
+        "lanes": [],
+        "x": -6128.7,
+        "z": 18848.9,
+        "n": [
+          0.9701,
+          -0.2427
+        ],
+        "u": [
+          0.2427,
+          0.9701
+        ],
+        "lakeId": 25,
+        "off": 4,
+        "tried": 32
+      },
+      "s8.creek": {
+        "props": {
+          "s8.lodge": {
+            "x": -6153.7,
+            "z": 19970.3,
+            "heading": -2.1351,
+            "sd": -2.5,
+            "y": 459.9
+          }
+        },
+        "lanes": [],
+        "x": -6154.1,
+        "z": 19978.4,
+        "n": [
+          0.845,
+          0.5348
+        ],
+        "u": [
+          -0.5348,
+          0.845
+        ],
+        "lakeId": 25,
+        "off": 8,
+        "tried": 79
+      },
+      "s8.clearing": {
+        "props": {
+          "s8.stump1": {
+            "x": -6159,
+            "z": 20168,
+            "heading": -3.1416,
+            "sd": 94.9,
+            "y": 472.3
+          },
+          "s8.stump2": {
+            "x": -6156,
+            "z": 20175,
+            "heading": -3.1416,
+            "sd": 94.6,
+            "y": 472.5
+          },
+          "s8.pipe": {
+            "x": -6153.5,
+            "z": 20181,
+            "heading": -3.1416,
+            "sd": 95.1,
+            "y": 472.5
+          },
+          "s8.hollow": {
+            "x": -6150,
+            "z": 20185,
+            "heading": -3.1416,
+            "sd": 93.9,
+            "y": 472.3
+          },
+          "s8.spring": {
+            "x": -6148.8,
+            "z": 20186,
+            "heading": -3.1416,
+            "sd": 93.4,
+            "y": 472.3
+          },
+          "s8.tin": {
+            "x": -6148.8,
+            "z": 20186,
+            "heading": -3.1416,
+            "sd": 93.4,
+            "y": 472.3
+          },
+          "s8.row": {
+            "x": -6152.6,
+            "z": 20186.5,
+            "heading": -3.1416,
+            "sd": 96.9,
+            "y": 472.5
+          }
+        },
+        "lanes": [],
+        "x": -6150,
+        "z": 20185,
+        "n": [
+          0,
+          1
+        ],
+        "u": [
+          1,
+          0
+        ],
+        "lakeId": null,
+        "off": 0,
+        "tried": 1
       }
     },
     "portages": {

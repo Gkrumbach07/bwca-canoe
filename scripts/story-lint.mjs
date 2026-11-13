@@ -651,7 +651,7 @@ if (!dataFiles.length) {
         if (!outside && alone.length) errs.push(`${at}: feeds ${F}, the only producer of a lock's only key (${alone.map((x) => x.k.id).join(', ')})`);
         if (!outside && !readers.length && !rules.some((r) => r.ep !== E.id && new RegExp(`f:${F.replace(/\./g, '\\.')}\\b`).test(r.when || ''))) { /* (gates nothing: fine) */ }
       }
-      const ids = [E.flyer && E.flyer.text, ...(E.page || []).map((p) => p.text), ...(E.ends || []).map((e) => e.line), E.first, ...(E.wants || []).flatMap((w) => w.say || []), ...(E.photo || []).map((p) => p.words), ...(E.doors || []).map((d) => d.line)].filter(Boolean);
+      const ids = [E.flyer && E.flyer.text, ...(E.page || []).map((p) => p.text), ...(E.ends || []).map((e) => e.line), E.first, ...(E.wants || []).flatMap((w) => w.say || []), ...(E.photo || []).map((p) => p.words), ...(E.doors || []).map((d) => d.line), ...(E.ends || []).map((e) => e.first)].filter(Boolean).map((id) => String(id).replace(/#\d$/, '')); // s: an end's own stamp; 'S1.first#1' one alternative of its item
       for (const id of ids) { const t = tp.T(id); if (t == null) errs.push(`${at}: no text '${id}'`); else if (BAN.test(t)) errs.push(`${at}: '${id}' names a being or sacred place (§10.2)`); }
       for (const w of [E.window && E.window.when, E.flyer && E.flyer.when, ...(E.page || []).map((p) => p.when), ...(E.wants || []).map((x) => x.when), ...(E.titles || []).map((x) => x.when), E.rose && E.rose.when].filter(Boolean)) { const c = checkCond(a2words ? w.replace(a2words, '$1f:nb.found') : w, at); errs.push(...(Array.isArray(c) ? c : c.errs)); } // (join c2: an arc's flags, A2_SENSORS, read as either-way facts, as check 6 does)
     }

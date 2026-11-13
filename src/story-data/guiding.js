@@ -23,6 +23,7 @@
 //   door.guiding.open|yield|climax|done · choice.sheila = in | lie (exclusive) · drift.arranged (abs day; m runs the night)
 
 // the condition names the scenes read from the live world (guiding-cast.js registers them as sensors)
+import { HAP_S8 } from './sides-s.js'; // j1: S8's three Hap topics (stream s) join his hub
 export const GY_SENSORS = { southnight: 'flag', northwind2: 'flag', lampLit: 'flag', truckLooked: 'flag', nightNow: 'flag' };
 
 // --- the people's hours (31 §4 "Who is where, when"; 13 #8) -------------------------------------------------------------
@@ -135,6 +136,7 @@ export const HAP_HUB = [
       // GY-06b, GY-06c after the real talk / any time
       { ask: '31:GY-06b.c1', once: 'brother', when: 'f:hap.farend & f:knows.eino', to: 'let' },
       { ask: '31:GY-06c.c1', when: '(nickseen:frontporch & !f:ink.frontporch & !f:knows.frontporch) | (nickseen:kitchen & !f:ink.kitchen & !f:knows.kitchen) | (nickseen:longroom & !f:ink.longroom & !f:knows.longroom)', to: 'names' }];
+HAP_HUB.push(...HAP_S8); // j1: (stream s, sides-s.js) beside his own, under his once keys
 export const HAP = {
   id: 'hap', who: 'hap',
   nodes: {
