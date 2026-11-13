@@ -232,13 +232,15 @@ class FamilyCast {
     let start = null, gift = o.give ? (o.give.item ? 'pot' : 'print') : null;
     const cold = s.get('choice.aili') === 'know' && ((s.doc.ppl.aili || {}).coldSeason === this.season());
     if (who === 'aili') { start = ailiEntry(s, this.ailiCtx({ gift })); }
-    else if (who === 'jon') start = jonEntry(s, { coldSeason: cold, saturday: s.when('dow:sat'), saunaSaid: s.has('jon.sauna') });
-    else if (who === 'liisa') start = liisaEntry(s, { monday: s.when(SCHEDULE.aili.cook), nextSeason: s.has('end') && (s.fact('end') || {}).abs != null && s.nowAbs() - s.fact('end').abs > 120 });
+    else if (who === 'jon') start = jonEntry(s, { coldSeason: cold, saturday: s.when('dow:sat'), saunaSaid: s.has('jon.sauna'), farSeen: !!this.farSeen, truck: this.truckNow() });
+    else if (who === 'liisa') start = liisaEntry(s, { truck: this.truckNow(), monday: s.when(SCHEDULE.aili.cook), nextSeason: s.has('end') && (s.fact('end') || {}).abs != null && s.nowAbs() - s.fact('end').abs > 120 });
     else if (who === 'gord') start = gordEntry(s);
     if (!start) return false;
     st.talked = true; s.meet(who, 'a4');
     if (who === 'aili') { this.visit(); if (start === 'sit' || start === 'coffee') this.opener = null; }
     if (who === 'jon' && start === 'sauna') s.set('jon.sauna', true, 'a4');
+    if (who === 'jon' && start === 'far') this.farSeen = false;
+    if ((who === 'jon' || who === 'liisa') && start === 'truck') this.truck = null;
     const run = this.run(def, who, { vars: this.vars(), hooks: this.hooks(who), ...(who === 'aili' ? { show: (r, from) => show.choice('aili', r, from) } : {}) });
     const first = () => {
       if (who === 'aili' && o.give) return show.answer(o.give, { kind: 'item', id: o.give.item }, () => run.choices(start), () => run.node(o.give.to || start));
@@ -354,9 +356,23 @@ class FamilyCast {
   // --- Jon's Sand Point chase (33 §6.7; stream m's motorboat, trail mode) ---------------------------------------------------
   // tier 2 or higher; Jon met; a trip on and you on the water at King Williams Narrows or Sand Point: his grey boat comes out
   // of a bay as you pass and settles in 300–500 m behind. Lost (islands, the lee, a narrows) or peeled off at dusk
+  // 6.11 a watcher's truck at the EP 12 lot or the Crane landing today (the company and press stream sets
+  // familyCast.truck = { day } when its truck sits there; the next pass of the counter or the dock says it)
+  truckNow() { const t = this.truck, s = this.story; return !!(t && s && s.tier >= 4 && (t.day == null || t.day === today(s))); }
   chaseTick(p) {
     const s = this.story, MB = this.c.motorboat;
     if (this.chase) { this.chaseWatch(p); return; }
+    // 6.11 the far point (tier 4, Jon won over): his grey boat off a point a kilometre away, two rods out, fishing; it never
+    // comes closer. Once a trip onto Sand Point
+    if (MB && s.has('jon.won') && s.tier >= 4 && !this.farBoat && Math.hypot(p.x - PLACES.sandpoint.x, p.z - PLACES.sandpoint.z) < PLACES.sandpoint.r && (p.onFoot === false || p.mode === 'paddle')) {
+      const n = s.tripN(); if (this.farTrip !== n) {
+        const w = this.c.world; let at = null;
+        for (let k = 0; k < 12 && !at; k++) { const a = (k / 12) * Math.PI * 2, q = { x: p.x + Math.cos(a) * 1000, z: p.z + Math.sin(a) * 1000 }; if (!w || typeof w.isWater !== 'function' || w.isWater(q.x, q.z)) at = q; }
+        const mb = at ? MB.spawn({ kind: 'guide', at, driver: { look: CAST.jon.look, name: 'Jon' }, force: true, key: 'a4:jonfar' }) : null;
+        if (mb && !mb.why) { mb.anchor(); mb.fishing = true; this.farBoat = mb; this.farTrip = n; this.farSeen = true; }
+      }
+    }
+    if (this.farBoat && Math.hypot(p.x - PLACES.sandpoint.x, p.z - PLACES.sandpoint.z) > PLACES.sandpoint.r + 1500) { try { this.farBoat.remove(); } catch { /* gone */ } this.farBoat = null; }
     if (!MB || s.has('jon.chase') || !s.has('jon.met') || s.tier < 2 || s.has('jon.won')) return;
     const trip = this.c.trip; if (trip && !trip.active) return;
     if (p.onFoot !== false && p.mode !== 'paddle') return;

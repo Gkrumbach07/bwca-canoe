@@ -298,6 +298,9 @@ export const JON = {
       { ask: '33:6.8.never.1', once: 'never', say: ['33:6.8.never.2'] }] },
     alive: { hub: 'won', go: [{ ask: '33:6.8.c10', once: 'asked', say: ['33:6.8.12'] }] },
     cold: { say: ['a4:jon.cold'], end: true },
+    // 6.11 his protection (tier 4): back from Sand Point with his boat seen off the far point; a truck at the landing
+    far: { say: ['33:6.11.3'], then: ['f:jon.far'], to: 'won' },
+    truck: { say: ['33:6.11.2'], then: ['f:jon.truck'], end: true },
     sauna: { say: ['33:6.8.17'], end: true },
     endJ: { say: ['33:9/the-journalist-walt-kept.2'], then: ['f:jon.endline'], end: true },
     endJN: { say: ['33:9/the-journalist-walt-named.2', '33:9/the-journalist-walt-named.4'], then: ['f:jon.endline'], end: true },
@@ -311,6 +314,8 @@ export function jonEntry(s, ctx = {}) {
   if (!s.has('jon.met')) return 'first';
   if (s.get('choice.aili') === 'know' && ctx.coldSeason) return 'cold';
   if (s.has('jon.chase') && !s.has('jon.denied') && !s.has('jon.won')) return 'denial';
+  if (s.has('jon.won') && ctx.truck) return 'truck';
+  if (s.has('jon.won') && ctx.farSeen) return 'far';
   if (s.has('jon.won')) return ctx.saturday && !ctx.saunaSaid ? 'sauna' : 'won';
   return 'short';
 }
@@ -341,6 +346,8 @@ export const LIISA = {
       { ask: '33:6.9.c9', once: 'when', say: ['33:6.9.21'] },
       { ask: '33:6.9.c10', say: ['33:6.9.22'], then: ['do:holdCan'], end: true }] },
     after: { say: ['33:6.10.2'], then: ['f:liisa.after'], to: 'hub' },
+    // 6.11 a watcher's truck at the landing on a day you told her (company and press's trucks: family-cast.truck)
+    truck: { say: ['33:6.11.1'], then: ['f:liisa.truck'], to: 'hub' },
     endJ: { say: ['33:9/the-journalist-walt-kept.3'], then: ['f:liisa.endline'], to: 'hub' },
     endJN: { say: ['33:9/the-journalist-walt-named.3'], then: ['f:liisa.endline'], to: 'hub' },
     endM: { say: ['33:9/the-companys-money-7.4'], then: ['f:liisa.endline'], end: true },
@@ -354,6 +361,7 @@ export function liisaEntry(s, ctx = {}) {
   if (!s.has('liisa.met')) return s.has('door.family.open') ? 'first' : null;
   if (s.get('choice.aili') === 'know' && !s.has('liisa.after')) return 'after';
   if (!s.has('cards.seen') && liisaReady(s)) return ctx.monday ? 'can' : 'notMonday';
+  if (ctx.truck && s.has('jon.protect')) return 'truck';
   return 'hub';
 }
 

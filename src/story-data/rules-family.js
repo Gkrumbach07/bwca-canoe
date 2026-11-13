@@ -6,8 +6,9 @@ export const RULES_FAMILY = [
   // on a second day's visit; the first meeting carrying the bundle writes aili.tent)
   { id: 'a4.sit', when: 'f:aili.met & (f:aili.tent | f:aili.day2)', then: ['f:aili.sit', 'ppl:aili.trust=1'] },
   { id: 'a4.stone', when: 'f:aili.stone', then: ['ppl:aili.trust=2'] },
-  // 33 §8 tiers: asking Aili about Walt is one of tier 1's places (the asked fact); the arc started is tier 2's trigger
-  // (rules-core.js tier2 reads door.family.open)
+  // 33 §8 tiers: asking Aili about Walt is one of tier 1's places (as asking Len is, Round 0's rule); the arc started is
+  // tier 2's trigger (rules-core.js tier2 reads door.family.open)
+  { id: 'a4.tier1', when: 'f:asked.aili.walt', then: ['f:tier.1'] },
   // 33 §6.7 the chase happened (any way it went): the Walt line waits for the denial (the scene's); the second boat
   // photographed is kept for it (jon.second)
   // 33 §6.9 the cards: lock 4 key D and a "went north" piece are the can's (family.js LIISA can)
