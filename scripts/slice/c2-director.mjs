@@ -178,7 +178,7 @@ export const steps = [
       g.story.doc.nb.here = { ...g.story.doc.nb.here, ...here };
       const a = d.evening();
       if (!real) g.episodes = was;
-      return { real, p0, a, active: g.trip.active, f: { abs: f.abs, camp: f.camp.id }, why: d.state().log.slice(-2) };
+      return { real, p0, a, active: g.trip.active, f: { abs: f.abs, camp: f.camp.id }, why: d.state().log.slice(-2), days: d.beats().tripBeats() };
     }, STUBS.episodes);
     result('14d an open episode\'s place in reach: its line is the day\'s beat' + (r.real ? ` (E's runner: ${r.p0 ? `${r.p0.ep} at ${r.p0.place}, ${r.p0.line}` : 'no open place'})` : ' [E stub: a stand-in episode, its rumour 70.6.1.9]'), r.a && r.a.kind === 'episode' && (r.real ? !!r.p0 && r.a.line === r.p0.line : r.a.line === STUBS.episodes.line), r);
   } },
