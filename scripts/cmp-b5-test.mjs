@@ -21,7 +21,7 @@ import { HELPERS } from './slice/c1-layer.mjs';
 
 const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i > 0 ? process.argv[i + 1] : d; };
 const APP = (process.env.APP || 'http://localhost:5320').replace(/\/$/, '');
-const SHOTS = arg('shots', null);
+const SHOTS = arg('shots', null), FROM = Number(arg('from', 0));
 if (SHOTS) mkdirSync(SHOTS, { recursive: true });
 function findPw() { if (process.env.PW) return process.env.PW; const base = path.join(homedir(), '.npm/_npx'); for (const d of existsSync(base) ? readdirSync(base) : []) { const p = path.join(base, d, 'node_modules/playwright-core'); if (existsSync(p)) return p; } return 'playwright-core'; }
 function findChrome() { if (process.env.CHROME) return process.env.CHROME; for (const base of [path.join(homedir(), 'Library/Caches/ms-playwright'), path.join(homedir(), '.cache/ms-playwright')]) { const shells = existsSync(base) ? readdirSync(base).filter((d) => d.startsWith('chromium_headless_shell-')).sort() : []; for (const s of shells.reverse()) for (const d of readdirSync(path.join(base, s))) { const p = path.join(base, s, d, 'chrome-headless-shell'); if (existsSync(p)) return p; } } return undefined; }
@@ -80,7 +80,7 @@ async function choose(prefix) {
 }
 async function picks(list) { const out = []; for (const p of list) { const r = await choose(p); out.push(r); if (!r.ok) return { ok: false, at: p, r }; } return { ok: true, out }; }
 const shot = async (name) => { if (SHOTS) { try { await page.screenshot({ path: path.join(SHOTS, `${name}.png`) }); } catch { /* */ } } };
-const step = async (name, fn) => { log(`-- ${name}`); try { await fn(); } catch (e) { result(`${name}: threw`, false, { e: String(e && e.stack || e).slice(0, 700) }); } };
+const step = async (name, fn) => { if (parseInt(name, 10) < FROM) return; log(`-- ${name}`); try { await fn(); } catch (e) { result(`${name}: threw`, false, { e: String(e && e.stack || e).slice(0, 700) }); } };
 
 try {
   await page.goto(`${APP}/?story=1`, { timeout: 180000 });
@@ -154,7 +154,7 @@ try {
     const st = await page.evaluate(async () => {
       const B = window.__b5, g = window.__game, L = window.__L; B.at(B.doy(8, 11), 18);
       await L.tp(15072, 6830 - 60); await L.settle(); for (let k = 0; k < 60; k++) { L.step(5); await L.wait(40); }
-      await L.tp(15082, 6850); await L.settle(); B.tick(8);
+      await L.tp(15082, 6850); await L.settle(); B.tick(2); { const S = B.C().site(); L.standAt(S.x + 4, S.z + 4); } B.tick(8); // (ashore at their site, on foot)
       const T = Math.round(g.story.nowAbs() - 0.5); let fixed = [];
       try { fixed = g.parties.campsAt(Math.floor(g.story.nowAbs()), 18).filter((q) => q.party && q.party.fixed).map((q) => ({ fixed: q.party.fixed, site: q.site ? [Math.round(q.site.x), Math.round(q.site.z)] : null })); } catch (e) { fixed = String(e); }
       void T; return { staged: B.staged(), fixed };
@@ -173,7 +173,7 @@ try {
     result('5b "Look what the wind brought." → the round shared, the flare (the nicknames)', r.ok && f['boys.visited'] && f['boys.round'] && f['boys.nicknames'], { said: said.slice(0, 3), r: r.ok ? 'ok' : r, f });
   });
   await step('6 the bet', async () => {
-    await page.evaluate(() => { const B = window.__b5; B.at(B.doy(8, 12), 17.1); B.tick(4); B.talk(() => window.__b5.C().debug.camp()); });
+    await page.evaluate(() => { const B = window.__b5, L = window.__L; B.at(B.doy(8, 12), 17.1); { const S = B.C().site(); L.standAt(S.x + 4, S.z + 4); } B.tick(4); B.talk(() => window.__b5.C().debug.camp()); });
     const said = await hear(6);
     await page.evaluate(() => window.__b5.endTalk());
     await page.evaluate(async () => { const L = window.__L; for (let k = 0; k < 10; k++) { L.step(5); await L.wait(60); } window.__b5.tick(4); });
