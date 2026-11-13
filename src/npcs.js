@@ -111,7 +111,9 @@ const LOOK_R = 4.5;           // metres within which a visitor looks at you
 const KEEPER_LOOK_R = 8;      // the keeper watches you anywhere in the store
 const DECK_CLEAR = 1.2;       // m: no store spot on the dock this near your berth's deck point (a party loaded 0.9 m off it)
 const COUNTER_CLEAR = 3.0;    // m: (ux) no store spot this near the counter while a talk is open there (counterTalk)
-const FACED_CLEAR = 1.1;      // m: (ux) no store spot this near the shelf you face, near it (facedHot)
+const FACED_CLEAR = 1.0;      // m: (ux) no store spot this near the shelf you face (its box: facedHot, boxDist)
+// (ux) metres from (x, z) to a store hotspot's box (props.js hot(): x, z, hx, hz, heading; outfitter.js reachTo's sum)
+const boxDist = (h, x, z) => { const c = Math.cos(h.heading || 0), s = Math.sin(h.heading || 0), dx = x - h.x, dz = z - h.z, a = dx * c - dz * s, b = dx * s + dz * c; return Math.hypot(Math.max(0, Math.abs(a) - (h.hx || 0)), Math.max(0, Math.abs(b) - (h.hz || 0))); };
 const STEP_CLEAR = 1.6;       // m: no store spot this near the main path's step's target (act: the shelf, the staffer)
 const BODY_KEEP = 0.62;       // metres the walker is held off a standing person (their body and his)
 const SEAT_KEEP = 0.7;        // and off a sitting one's knees
@@ -1701,7 +1703,8 @@ export class People {
     // the aisle before it while it lasts (the opening talk was held in a crowd of ten, three in the camera's way)
     const counterTalk = this.counterTalk(ep, L);
     if (counterTalk) for (const o of this.smart.at(where)) o.slots.forEach((sl, k) => { if (Math.hypot(sl.x - L.counter.x, sl.z - L.counter.z) < COUNTER_CLEAR) (blocked || (blocked = new Set())).add(`${o.id}#${k}`); });
-    { const q = this.facedHot(L); if (q) for (const o of this.smart.at(where)) o.slots.forEach((sl, k) => { if (Math.hypot(sl.x - q.x, sl.z - q.z) < FACED_CLEAR) (blocked || (blocked = new Set())).add(`${o.id}#${k}`); }); }
+    const facedQ = this.facedHot(L);
+    { const q = facedQ; if (q) for (const o of this.smart.at(where)) o.slots.forEach((sl, k) => { if (boxDist(q, sl.x, sl.z) < FACED_CLEAR) (blocked || (blocked = new Set())).add(`${o.id}#${k}`); }); }
     const m = this.smart.assign(where, people, clock, blocked);
     for (const [v, f] of figs) {
       if (f.held) { // talked to: stop, and turn to you
@@ -1725,7 +1728,7 @@ export class People {
         const q = this.spareSpot(L, figs, f) || this.besideLane(L, f);
         if (q) { f.at = null; f.act = 'wait'; f.goal = { ...q, spec: { pose: 'stand', lean: 0.02 } }; if (snap) this.settle(f); else f.path = this.route(L, f, f.goal); }
         f.fresh = false;
-      } else if (counterTalk && !f.path && f.spec && f.spec.pose !== 'sit' && Math.hypot(f.x - L.counter.x, f.z - L.counter.z) < COUNTER_CLEAR) { // (ux) out of the talk's way
+      } else if (!f.path && f.spec && f.spec.pose !== 'sit' && ((counterTalk && Math.hypot(f.x - L.counter.x, f.z - L.counter.z) < COUNTER_CLEAR) || (facedQ && boxDist(facedQ, f.x, f.z) < FACED_CLEAR + 0.2))) { // (ux) out of the talk's way, or the shelf's you face
         const q = this.spareSpot(L, figs, f) || this.besideLane(L, f);
         if (q) { f.at = null; f.act = 'wait'; f.goal = { ...q, spec: { pose: 'stand', lean: 0.02 } }; f.path = this.route(L, f, f.goal); }
         f.fresh = false;
@@ -1745,20 +1748,17 @@ export class People {
     const h = D.headOf(c.speaker, this._ctV || (this._ctV = new THREE.Vector3()));
     return !!(h && Math.hypot(h.x - L.counter.x, h.z - L.counter.z) < 6);
   }
-  // (ux) the store's hotspot (a shelf, the board, the counter) you stand within 3.5 m of and face, kept 6 s after
+  // (ux) the store's hotspot (a shelf, the board, the counter) your line of sight meets within 3 m, kept 6 s after
   facedHot(L) {
     const p = this.player, now = performance.now(), hot = L && Array.isArray(L.hot) ? L.hot : null;
     const held = this._faced && this._faced.L === L && now < this._faced.until ? this._faced.q : null;
     if (!hot || !p.onFoot || !p.forward) return held;
-    let best = null, bc = 0.86;
-    for (const h of hot) {
-      if (h.key === 'counter' && this.dialogue && this.dialogue.talking) continue;
-      const dx = h.x - p.x, dz = h.z - p.z, d = Math.hypot(dx, dz);
-      if (d > 3.5 || d < 1e-3) continue;
-      const c = (dx * p.forward.x + dz * p.forward.z) / d;
-      if (c > bc) { bc = c; best = h; }
+    const fw = p.forward;
+    for (let t = 0.5; t <= 3.0; t += 0.25) {
+      const x = p.x + fw.x * t, z = p.z + fw.z * t;
+      const h = hot.find((q) => !(q.key === 'counter' && this.dialogue && this.dialogue.talking) && boxDist(q, x, z) < 0.25);
+      if (h) { this._faced = { L, q: h, until: now + 6000 }; return h; }
     }
-    if (best) { this._faced = { L, q: { x: best.x, z: best.z, key: best.key }, until: now + 6000 }; return this._faced.q; }
     return held;
   }
   stepAt(L) {

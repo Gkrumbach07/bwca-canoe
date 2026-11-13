@@ -100,16 +100,42 @@ try {
     const dx = q.x - L.centre.x, dz = q.z - L.centre.z, n = Math.hypot(dx, dz) || 1;
     const front = { x: q.x - dx / n * 0.8, z: q.z - dz / n * 0.8 }, me = { x: q.x - dx / n * 2.3, z: q.z - dz / n * 2.3 };
     let placed = null;
-    if (v) { const f = v.person.figs[v.fig]; f.x = front.x; f.z = front.z; f.path = null; placed = v.person.name; }
+    if (v) { const f = v.person.figs[v.fig]; f.x = front.x; f.z = front.z; f.path = null; f.at = null; f.spec = { pose: 'browse', lean: 0.02 }; placed = v.person.name; }
+    const SM = g.npcs.smart, as = SM.assign.bind(SM); window.__blk = null; SM.assign = (w, pp, c, b) => { if (b) window.__blk = [...b]; return as(w, pp, c, b); };
     const yaw = Math.atan2(-(q.z - me.z), q.x - me.x);
     window.__t.standAt(me.x, me.z, yaw); g.chase.viewYaw = yaw; g.chase.forwardYaw = yaw; g.chase.viewPitch = -0.15;
     for (let k = 0; k < 300; k++) { g.step(1 / 30, 1); window.__t.standAt(me.x, me.z, yaw); g.chase.viewYaw = yaw; g.chase.forwardYaw = yaw; if (k % 30 === 0) await new Promise((r) => setTimeout(r, 10)); }
     const near = g.npcs.bodies.filter((b) => b.who && !b.lent && b.group.visible && !b.who.person.keeper && !b.who.person.extra).map((b) => { const f = b.who.person.figs[b.who.fig]; return f ? { n: b.who.person.name, d: +Math.hypot(f.x - front.x, f.z - front.z).toFixed(2), walking: !!f.path } : null; }).filter((x) => x && x.d < 0.7);
     const t = g.pointer.target;
-    return { placed, near, target: t ? `${t.kind}:${t.label}` : null };
+    const slots = []; for (const o of g.npcs.smart.at(`store:25`)) o.slots.forEach((sl, k) => { if ((window.__blk || []).includes(`${o.id}#${k}`) && Math.hypot(sl.x - front.x, sl.z - front.z) < 1.6) slots.push(`${o.id}#${k}`); });
+    return { placed, near, blockedNear: slots.length, target: t ? `${t.kind}:${t.label}` : null };
   });
   await shot('4-shelf');
   result('4 the shelf you face is cleared: the browser in front of the tackle shelf moved off', !shelf.none && shelf.placed && shelf.near.filter((x) => !x.walking).length === 0, shelf);
+
+  // 6 Tauno at the walkout turns to you; his tag
+  const tau = await ev(async () => {
+    const g = window.__game, s = g.story, T = window.__t, ep = 25;
+    await g.player.teleport(g.outfitter.landing(ep).x, g.outfitter.landing(ep).z); await T.settle();
+    s.debug.do('found', { abs: s.time().abs }); s.markRead('NB45', 'rig'); g.day.setClock(g.day.year, g.day.doy + 1, 10); T.step(4);
+    T.walkOut(ep); T.walkIn(ep); T.walkOut(ep); T.step(30);
+    const t = T.tauno(); if (!t) return { none: 'not staged', staged: T.staged() };
+    const key = `cast:tauno:${t.ep}`;
+    // stand off to his side, so he must turn
+    const fig = (() => { for (const list of g.npcs.rosters.values()) for (const v of list) if (v.key === key) return v.figs[0]; return null; })();
+    if (!fig) return { none: 'no figure' };
+    const side = fig.heading + Math.PI / 2, px = fig.x + Math.cos(side) * 1.8, pz = fig.z - Math.sin(side) * 1.8;
+    T.standAt(px, pz, Math.atan2(-(fig.z - pz), fig.x - px)); T.step(4);
+    const want = () => Math.atan2(-(g.player.z - fig.z), g.player.x - fig.x), off0 = Math.abs(Math.atan2(Math.sin(want() - fig.heading), Math.cos(want() - fig.heading)));
+    const opened = T.talkTo(key), open0 = g.dialogue.talking, cv0 = g.dialogue.convo ? g.dialogue.convo.name : null;
+    for (let k = 0; k < 75; k++) { g.step(1 / 30, 1); if (k % 15 === 0) await new Promise((r) => setTimeout(r, 10)); }
+    const off1 = Math.abs(Math.atan2(Math.sin(want() - fig.heading), Math.cos(want() - fig.heading)));
+    const tag = document.querySelector('#talk .tag');
+    return { opened: !!opened, open0, cv0, onFoot: g.player.onFoot, talking: g.dialogue.talking, off0: +off0.toFixed(2), off1: +off1.toFixed(2), tag: tag && tag.classList.contains('on') ? tag.textContent : null, name: g.dialogue.convo && g.dialogue.convo.name };
+  });
+  await shot('6-tauno');
+  result('6 Tauno turns to face you as you talk; his name tag shows', !tau.none && tau.talking && tau.off0 > 1.0 && tau.off1 < 0.35 && tau.tag && tau.tag === tau.name, tau);
+  await ev(() => { const g = window.__game; while (g.dialogue.convo) g.dialogue.close(); });
 
   // 5 the shopping steps let go once you set out (no food, no leeches bought)
   const off = await ev(async () => {
@@ -128,30 +154,6 @@ try {
     return { mode: p.mode, d: Math.round(Math.hypot(p.x - L.x, p.z - L.z)), cur: cur ? cur.id : null, next: cur ? cur.next : null, path: pa, tracker: g.tracker.state().text };
   });
   result('5 set out without food or leeches: the shopping steps let go, the card goes to the trip', off.mode === 'paddle' && off.d > 80 && !/^story:onboard/.test(off.cur || '') && off.path && off.path.food === 'skipped' && off.path.leeches === 'skipped', off);
-
-  // 6 Tauno at the walkout turns to you; his tag
-  const tau = await ev(async () => {
-    const g = window.__game, s = g.story, T = window.__t, ep = 25;
-    await g.player.teleport(g.outfitter.landing(ep).x, g.outfitter.landing(ep).z); await T.settle();
-    s.debug.do('found', { abs: s.time().abs }); s.markRead('NB45', 'rig'); g.day.setClock(g.day.year, g.day.doy + 1, 10); T.step(4);
-    T.walkOut(ep); T.walkIn(ep); T.walkOut(ep); T.step(30);
-    const t = T.tauno(); if (!t) return { none: 'not staged', staged: T.staged() };
-    const key = `cast:tauno:${t.ep}`;
-    // stand off to his side, so he must turn
-    const fig = (() => { for (const list of g.npcs.rosters.values()) for (const v of list) if (v.key === key) return v.figs[0]; return null; })();
-    if (!fig) return { none: 'no figure' };
-    const side = fig.heading + Math.PI / 2, px = fig.x + Math.cos(side) * 1.8, pz = fig.z - Math.sin(side) * 1.8;
-    T.standAt(px, pz, Math.atan2(-(fig.z - pz), fig.x - px)); T.step(4);
-    const want = () => Math.atan2(-(g.player.z - fig.z), g.player.x - fig.x), off0 = Math.abs(Math.atan2(Math.sin(want() - fig.heading), Math.cos(want() - fig.heading)));
-    T.talkTo(key);
-    for (let k = 0; k < 75; k++) { g.step(1 / 30, 1); if (k % 15 === 0) await new Promise((r) => setTimeout(r, 10)); }
-    const off1 = Math.abs(Math.atan2(Math.sin(want() - fig.heading), Math.cos(want() - fig.heading)));
-    const tag = document.querySelector('#talk .tag');
-    return { talking: g.dialogue.talking, off0: +off0.toFixed(2), off1: +off1.toFixed(2), tag: tag && tag.classList.contains('on') ? tag.textContent : null, name: g.dialogue.convo && g.dialogue.convo.name };
-  });
-  await shot('6-tauno');
-  result('6 Tauno turns to face you as you talk; his name tag shows', !tau.none && tau.talking && tau.off0 > 1.0 && tau.off1 < 0.35 && tau.tag && tau.tag === tau.name, tau);
-  await ev(() => { const g = window.__game; while (g.dialogue.convo) g.dialogue.close(); });
 
   // 7 the beam's material
   const beam = await ev(async () => { const m = await import('/src/watchers.js').catch(() => null); const W = m && m.watchers; if (!W) return { none: true }; const T = window.__game.THREE; W.c = W.c || {}; const sc = W.c.scene; W.c.scene = window.__game.scene; W.beam({ id: 'test', x: 0, z: 0, light: true, cone: 0 }, { day: false }, false); const b = W.beams.get('test'); const r = b ? { shader: b.material.type, additive: b.material.blending === T.AdditiveBlending, fog: b.material.fog } : null; if (b) { b.visible = false; b.userData.dot.visible = false; } W.c.scene = sc; return r; });
