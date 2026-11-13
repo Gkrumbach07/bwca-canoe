@@ -76,8 +76,8 @@ try {
       const S = window.__s, D = S.sides().debug, L = window.__L;
       S.at(tue, 19.33);
       const pos = D.ollieAt(), p = D.at(pos ? pos.d : 0);
-      await L.near(p.x + 20, p.z + 20);
-      for (let k = 0; k < 20 && !S.sides().ollie(); k++) { S.at(tue, 19.33); await S.tick(300); }
+      await L.near(p.x + 20, p.z + 20); window.__t.standAt(p.x + 20, p.z + 20); // (a teleport inland goes to the nearest water: stand on the trail)
+      for (let k = 0; k < 20 && !S.sides().ollie(); k++) { S.at(tue, 19.33); window.__t.standAt(p.x + 20, p.z + 20); await S.tick(300); }
       const o = S.sides().ollie();
       return { len: Math.round(D.LEN), idx: D.stuartIndex, pos, staged: !!o, at: o ? [Math.round(o.x), Math.round(o.z)] : null };
     }, tue);
