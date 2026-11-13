@@ -308,7 +308,8 @@ class BoysCast {
       const r = rock && Number.isFinite(rock.prop.x) ? rock.prop : { x: this.site().landing.x, z: this.site().landing.z };
       if (den) den.moveTo(r.x + 0.6, r.z + 0.3, 0);
       this.say(C.people.bob.speaker, CUP_ROCK);
-    } else if (C.cup === 'out' && t.h >= 20.5) {
+      if (typeof this.onRock === 'function') { try { this.onRock({ denny: den, rock: r, camp: C }); } catch (e) { console.warn('boys: onRock', e); } } // (stream i: the reveal on the rock when it's ready)
+    } else if (C.cup === 'out' && t.h >= 20.5 && !this.rockHeld) { // (rockHeld: stream i keeps Denny on the rock for the reveal)
       C.cup = 'back';
       if (den && den.home) den.moveTo(den.home.x, den.home.z, 0);
       if (den) this.say(den.speaker, [CUP_BACK]);
