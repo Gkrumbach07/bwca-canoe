@@ -587,12 +587,13 @@ const MAINI = [
   { id: 'the choice made', when: 'f:choice.denny' },
 ];
 const ENDI = 'f:denny.revealed & f:key.L2E & f:choice.denny & f:case.denny.canary';
+const UPTO_I = MAINI.slice(0, 5).map((g) => g.when); // (the main line to the reveal opened)
 const BRANCHI = [
-  { id: 'Turn him ("The river.", "He knew.", "He won\'t.")', via: ['f:denny.reveal.open'], when: 'f:choice.denny=turn & f:denny.turned' },
-  { id: 'Tell the boys (Denny tells them)', via: ['f:denny.reveal.open'], when: 'f:choice.denny=told & f:denny.toldon & f:denny.told.scene' },
-  { id: 'Leave it', via: ['f:denny.reveal.open'], when: 'f:choice.denny=left & f:denny.left' },
+  { id: 'Turn him ("The river.", "He knew.", "He won\'t.")', via: UPTO_I, when: 'f:choice.denny=turn & f:denny.turned' },
+  { id: 'Tell the boys (Denny tells them)', via: UPTO_I, when: 'f:choice.denny=told & f:denny.toldon & f:denny.told.scene' },
+  { id: 'Leave it', via: UPTO_I, when: 'f:choice.denny=left & f:denny.left' },
   { id: 'the note, with no case at all: the reveal from its silence', via: ['f:denny.note'], when: 'f:denny.revealed & f:key.L2E & f:choice.denny & !f:case.denny.canary', block: (T) => T.s.has('case.denny.canary') || T.s.has('denny.tell2') },
-  { id: 'the pad (a3\'s register and Denny\'s card), Bob\'s Rochester: the reveal without the canary', via: ['f:case.denny.message=hard', 'f:case.denny.rochester=hard', 'f:denny.reveal.open'], when: 'f:denny.revealed & !any(canary.denny.*)', block: (T) => T.s.keys('canary.denny.').length > 0 },
+  { id: 'the pad (a3\'s register and Denny\'s card), Bob\'s Rochester: the reveal without the canary', via: ['f:gy.register', 'f:denny.card', 'f:case.denny.message=hard', 'f:case.denny.rochester=hard', 'f:denny.met.1', 'f:denny.met.2', 'f:denny.reveal.open'], when: 'f:denny.revealed & !any(canary.denny.*)', block: (T) => T.s.keys('canary.denny.').length > 0 },
   { id: 'the deduction (Frank\'s Kek, Denny\'s river, N34): Frank cleared, the river decoded', via: ['f:frank.kek', 'f:denny.rings', 'read:NB78'], when: 'f:denny.deduced & f:frank.cleared', block: (T) => T.s.has('boys.nicknames') || T.s.has('denny.sparky') },
   { id: 'the Isabella camp\'s receipt with Denny\'s rings: a soft piece', via: ['f:denny.rings'], when: 'f:case.denny.isabella=soft & f:isabella.receipt' },
   { id: 'Frank told a lake; it came back empty: cleared, then accused and sorry', via: ['any(canary.frank.*)', 'f:frank.cleared'], when: 'f:frank.cleared & f:canary.clear.frank' },
