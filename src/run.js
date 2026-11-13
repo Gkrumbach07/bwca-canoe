@@ -157,6 +157,9 @@ export class Run {
     const inv = this.g.inventory; if (!inv) return;
     const want = (this.story.has('pit.can.1') ? 1 : 0) + (this.story.has('pit.can.2') ? 1 : 0);
     if (hasCans(inv) < want) giveCans(inv, want - hasCans(inv));
+    // j1: the lift's checkpoint was written on Eino's note, before the cans were taken: written again (at the pit, the
+    // same moment) so a reset to it never takes the cans away (join 1's night rig lost them at a reset)
+    if (key && this.active && this.cp.cp && this.cp.cp.kind === 'lift') { try { this.cp.write('lift', 'pit', { force: true }); } catch (e) { console.warn('run: the lift checkpoint', e); } }
     // "They fit his pack. Of course they do." (§5.4): Walt's pack along: the cans go into it, once
     void key;
   }
@@ -194,6 +197,7 @@ export class Run {
     if (reason === 'caught' && leg) this.catches[leg] = (this.catches[leg] || 0) + 1;
     this.seed = hash32(`${cp.id}:${this.catches[leg] || 0}`);
     this.stealth.reset(); this.tied = null; this.underFlag = false; this.atEnds.clear();
+    this.giveCan(null); // j1: the cans are bound: a reset never leaves the player without the ones taken
     const s = this.story, denny = !!(s && (s.get('choice.denny') === 'turn' || s.has('denny.turned')));
     watchers.startRun(this.route || routeFor(this.meeting), { seed: this.seed, denny });
     this.legId = cp.leg || this.legId;

@@ -43,6 +43,7 @@ try {
   await page.evaluate(async () => {
     const g = window.__game, s = g.story, L = window.__L;
     s.found({ abs: s.time().abs - 30, key: 2, lake: 'Lake One' }); await L.wait(100); L.step(6);
+    window.__j1resets = []; s.on('run:reset', (e) => window.__j1resets.push(e && e.reason));
     s.set('tauno.pit', true, 'rig'); s.set('knows.stones', true, 'rig'); s.meet('maggie', 'rig');
     s.doc.meeting = { ep: 30, firstDawn: s.time().abs + 1 };
     g.trip.start({ ep: 31, foodDays: 3, canoe: 'aluminium' });
@@ -118,11 +119,11 @@ try {
       }
       out.push({ leg: leg.id, at: R.debug.leg().id, hour: +g.day.hours.toFixed(2), caught: R.caught, state: R.state, active: R.active });
     }
-    return { legs: out, caught: R.caught, active: R.active, facts: Object.keys(s.doc.facts).filter((k) => /^run\.|^ev\.watchers/.test(k)) };
+    return { legs: out, caught: R.caught, resets: window.__j1resets, cans: g.inventory.count('ammocan', { reachable: false }), active: R.active, facts: Object.keys(s.doc.facts).filter((k) => /^run\.|^ev\.watchers/.test(k)) };
   });
   const order = r3.legs.map((l) => l.leg);
   result(`3 the night down the designed route: ${order.length} legs in order (${order.join(' → ')}), the run on all night, ${r3.caught} catch(es)`,
-    r3.legs.length >= 8 && r3.legs.every((l) => l.active) && r3.active, r3);
+    r3.legs.length >= 8 && r3.legs.every((l) => l.active) && r3.active && r3.cans === 2, r3);
 
   // 4 the dawn lot at Lake One 30 at first light with the cans ------------------------------------------------------------
   const r4 = await page.evaluate(async () => {
@@ -148,12 +149,13 @@ try {
     const shown = !!(g.camp.dial && (g.camp.dial.open || g.camp.dial.visible || (g.camp.dial.el && !g.camp.dial.el.hidden)));
     return { rest, bench, tent, opened, shown };
   });
-  await page.keyboard.press('Escape'); await page.evaluate(() => window.__L.step(4));
+  await page.evaluate(() => { const d = window.__game.camp.dial; if (d && d.isOpen) d.close(); window.__L.step(4); });
   result('5 the bench: Rest refused on the run but on the bench (ctx.bench), no Rest in a tent; camp\'s bench dial opens', r5.rest === false && r5.bench === true && r5.tent === false && r5.opened === true, r5);
 
   // 6 an ending: Maggie's scene by keys (J) -------------------------------------------------------------------------------
   const trail = [];
-  await page.evaluate(() => window.__game.storyEndings.debug.maggie());
+  const opened = await page.evaluate(async () => { const g = window.__game, L = window.__L; const ok = g.storyEndings.debug.maggie(); for (let k = 0; k < 4; k++) { L.step(3); await L.wait(60); } return { ok, convo: !!window.__t.convo(), dialogue: !!(g.dialogue && g.dialogue.convo) }; });
+  log('maggie', JSON.stringify(opened));
   trail.push(await choose(page, 'That\'s it.'));
   trail.push(await choose(page, 'I don\'t know.'));
   trail.push(await hear(page, 20));
