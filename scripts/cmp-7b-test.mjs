@@ -114,7 +114,7 @@ try {
     await key(page, 'KeyE', 6);
     const e1 = await W(page, () => { window.__L.step(30); const g = window.__game, p = g.player, c = p.carry && p.carry.drop; const out = { mode: p.mode, prompt: p.prompt && p.prompt.text, d: c ? +Math.hypot(c.x - p.x, c.z - p.z).toFixed(2) : null };
       if (p.mode === 'swim') { out.swimIn = p.swimIn(); window.__L.step(30); out.mode2 = p.mode; } out.item = g.inventory.count('mapcase', { reachable: false }); if (!out.item) { const I = g.inventory; out.hand = I.toHandNew ? JSON.stringify(I.toHandNew('mapcase')).slice(0, 120) : null; out.item2 = I.count('mapcase', { reachable: false }); } return out; });
-    result('S5e E beside the canoe: back in it (paddling)', e1.mode === 'paddle', { e0, e1 });
+    result('S5e E beside the canoe: back in it (paddling); the map case in your things', e1.mode === 'paddle' && (e1.item > 0 || e1.item2 > 0), { e0, e1 });
     // Pete with the case: "Is that—" … "It's yours."
     await W(page, async () => { window.__e.at(2026, 202, 11); await window.__e.toStore(51); });
     await W(page, async () => { await window.__s7.staged('pete'); window.__s7.talk('pete', 51); window.__L.step(4); });
@@ -125,7 +125,7 @@ try {
     // Gull's east bay with the chart in the book, looking at the notch
     const n = await W(page, async () => {
       const g = window.__game, L = window.__L, S = window.__s7;
-      const bay = window.__e.place('gull.sign'); await L.tp(bay.x - 250, bay.z + 30); L.step(30); g.storyLayer.poll(); L.step(10);
+      const bay = window.__e.place('gull.sign'); await window.__e.ashore('gull.sign', 3); L.step(10); g.storyLayer.poll(); L.step(10);
       const no = window.__e.prop('gull.notch') || { x: -19340, z: 26805 };
       const yaw = Math.atan2(-(no.z - g.player.z), no.x - g.player.x); g.player.speed = 0; L.look(L.yawTo(no), 0.05); L.step(10); L.look(L.yawTo(no), 0.05); L.step(4); void yaw;
       S.d().notchTick(); L.step(4);

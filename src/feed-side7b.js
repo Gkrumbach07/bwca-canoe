@@ -30,8 +30,8 @@ import { propMaterial } from './prop-kit.js';
 import { env } from './audio-kit.js';
 
 // --- the things (defined only under the flag) --------------------------------------------------------------------------
-if (!itemDef('mapcase')) defineItem({ id: 'mapcase', name: 'Leather map case, swollen, a pilot\'s', short: 'Map case', kind: 'gear', w: 1, h: 2, kg: 0.6, price: 0, sold: false, unique: true, identity: 'Leather map case, swollen, a pilot\'s', story: '7b' });
-if (!itemDef('rye1928')) defineItem({ id: 'rye1928', name: 'Rye, 1928, seal on', short: 'Rye, 1928', kind: 'gear', w: 1, h: 2, kg: 1.2, price: 0, sold: false, unique: true, identity: 'Rye, 1928, seal on', story: '7b' });
+if (!itemDef('mapcase')) defineItem({ id: 'mapcase', name: 'Leather map case, swollen, a pilot\'s', short: 'Map case', kind: 'gear', w: 1, h: 2, kg: 0.6, price: 0, sold: false, unique: true, hand: true, identity: 'Leather map case, swollen, a pilot\'s', story: '7b' });
+if (!itemDef('rye1928')) defineItem({ id: 'rye1928', name: 'Rye, 1928, seal on', short: 'Rye, 1928', kind: 'gear', w: 1, h: 2, kg: 1.2, price: 0, sold: false, unique: true, hand: true, identity: 'Rye, 1928, seal on', story: '7b' });
 if (!itemDef('page:pilotchart')) definePage({ id: 'pilotchart', title: 'The pilot\'s chart', ref: 'S5.chart.page', by: 'Arne Haldane' });
 if (!itemDef('page:ledger1928')) definePage({ id: 'ledger1928', title: 'A runner\'s book, 1928', ref: 'S6.ledger', by: 'the outfit' });
 
