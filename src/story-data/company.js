@@ -93,7 +93,7 @@ export const DAN = {
       { ask: 'd95.p.lid.sell', then: ['do:sellLid', 'f:dan.lid', 'f:kettle.lid.sold'], say: [{ id: '40:3.2.4', by: 'Dan' }], end: true },
       { ask: '30.lid.keep.1', say: [{ id: '30.lid.keep.2', by: 'Dan' }], end: true }] },
     blade: { say: [{ id: 'd95.p.blade.offer', by: 'Dan' }], go: [
-      { ask: 'd95.p.blade.sell', then: ['do:sellBlade', 'f:dan.blade'], say: [{ id: '40:3.2.2', by: 'Dan', when: 'f:never.p' }, { id: '40:3.2.1', by: 'Dan' }], end: true },
+      { ask: 'd95.p.blade.sell', then: ['do:sellBlade', 'f:dan.blade'], say: [{ id: '40:3.2.1', by: 'Dan' }], end: true },
       { ask: '30.lid.keep.1', say: [{ id: '30.lid.keep.2', by: 'Dan' }], end: true }] },
   },
 };
@@ -208,12 +208,12 @@ export const MAGGIE = {
     hub: { go: [...HUB, { ask: '40:6.4.c6', once: 'i.heard', say: [{ hook: 'heard1' }, { hook: 'heard2' }] }] },
     // a return visit (6.5): her opener by the last thing that happened, then the hub
     again: { say: [{ first: [
-      { ...M('40:6.5.5'), when: 'any(year.turned*) & !f:maggie.year' },
+      { ...M('40:6.5.5'), when: 'any(year.turned.*) & !f:maggie.year' },
       { ...M('40:6.5.3'), when: 'f:ev.adrift & !f:maggie.adrift & !f:maggie.slept' },
       { ...M('40:6.5.4'), when: 'tier>=4 & !f:maggie.truck' },
       { ...M('40:6.5.2'), when: 'bigNew' },
       M('40:6.5.1')] }],
-    then: [{ when: 'any(year.turned*)', then: ['f:maggie.year'] }, { when: 'f:ev.adrift', then: ['f:maggie.slept'] }, { when: 'tier>=4', then: ['f:maggie.truck'] }, 'do:bigSeen'],
+    then: [{ when: 'any(year.turned.*)', then: ['f:maggie.year'] }, { when: 'f:maggie.lied', then: ['f:maggie.bunk'] }, { when: 'f:ev.adrift', then: ['f:maggie.slept'] }, { when: 'tier>=4', then: ['f:maggie.truck'] }, 'do:bigSeen'],
     to: 'hub2' },
     hub2: { go: [{ ask: '40:6.4.c4', once: 'i.hog', when: '!f:maggie.lied', say: [M('40:6.4.7')], then: ['f:maggie.lied', 'f:maggie.bunk'] },
       { ask: '40:6.4.c7', when: '!f:maggie.ostrander', to: 'stakes' }, ...HUB] },
@@ -230,8 +230,7 @@ export const MAGGIE = {
       { ask: '40:6.9.c3', once: 'm.make', say: [M('40:6.9.9')] },
       { ask: '40:6.9.c4', once: 'm.give', say: [M('40:6.9.10')] },
       { ask: '40:6.9.c5', once: 'm.where', say: [M('40:6.9.11')] },
-      { ask: '40:6.9.c6', once: 'm.who', say: [M('40:6.9.12')] },
-      { ask: '40.pad.keeper', when: 'f:never.p', to: 'hub' }] },
+      { ask: '40:6.9.c6', once: 'm.who', say: [M('40:6.9.12')] }] },
   },
 };
 export const MAGGIE_BYE = { first: '40:6.4.34', meet: '40:6.9.13' }; // her closing lines (§6.4 "Close", §6.9 "Closing the topic")

@@ -1270,6 +1270,19 @@ if (!arg('r1', false) && !arg('no-a3', false)) await slice3(main, rp);
   say(`endings: ${E.rows.length} branches, J/JN/M ${E.ok ? 'all reachable' : 'NOT all reachable'}; JN needs "went north" (by design)`);
 }
 // n: end
+// p: begin — the company and the press (Round 6, stream p; scripts/story-solve-company.mjs): the call (and "Not yet." with
+// the fallback), the midpoint and tier 3, the search, Wade, Josie's slip, Maggie (L1 D), the meeting set on the pad, the
+// adrift and tier 4, Dan's card, offer and set-up, Brekke's three answers (the needle capped at 4), the endings from it
+{
+  const { solveCompany } = await import('./story-solve-company.mjs');
+  const R = solveCompany(); report.company = { steps: R.steps, fails: R.fails };
+  for (const st of R.steps) res(`company: ${st.id}`, st.ok);
+  const { solveEndings } = await import('./story-solve-endings.mjs');
+  const E = solveEndings({ from: R.doc });
+  res('company: the endings (J and M) from the leech order\'s meeting', E.rows.some((r) => r.J) && E.rows.some((r) => r.M));
+  say(`company: ${R.steps.length} steps, ${R.fails.length ? R.fails.join('; ') : 'all reachable'}`);
+}
+// p: end
 report.ms = Date.now() - t0;
 if (PLAN && report.plan) { console.log('\nThe slice, as the solver plays it:'); report.plan.forEach((m, i) => console.log(`${String(i + 1).padStart(3)}. ${m}`)); }
 if (PLAN && report.slice2 && report.slice2.plan) { console.log('\nSlice 2, as the solver plays it (from the end of slice 1):'); report.slice2.plan.forEach((m, i) => console.log(`${String(i + 1).padStart(3)}. ${m}`)); }
