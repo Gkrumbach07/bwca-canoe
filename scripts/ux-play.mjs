@@ -465,6 +465,9 @@ try {
     if (b.beat === 'cut.11' && b.t > 12) break;
   }
   log('night one beats', beats.map((b) => b.beat).join(','));
+  const ask = await ev(() => { const el = document.getElementById('nightone'), pg = el && el.querySelector('.no-page'); return { ask: !!(el && el.classList.contains('ask')), hint: el ? (el.querySelector('.no-hint') || {}).textContent : null, pageW: pg ? Math.round(pg.getBoundingClientRect().width) : null }; });
+  await shot('n1-cut11-held');
+  result('16b night one: the held last page says "any key or a click"', ask.ask && /any key/.test(ask.hint || ''), ask);
   await page.keyboard.press('Space');
   for (let k = 0; k < 60; k++) { await ev(() => window.__p.step(30)); const done = await ev(() => { const g = window.__game; return !g.walt.cut.active && !g.veil.active && !g.camp.night; }); if (done) break; }
   await page.waitForTimeout(1500);
