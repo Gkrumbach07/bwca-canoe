@@ -137,8 +137,10 @@ try {
       let arrived = false; mb.on('arrived', () => { arrived = true; });
       for (let i = 0; i < 120 && !arrived; i++) { L.step(5, 1 / 15); await L.wait(5); }
       // a guide boat close by: its driver drawn, sat at the tiller
-      const near = MB.spawn({ kind: 'guide', at: { x: path[0][0], z: path[0][1] }, force: true, driver: { name: 'Jon' } });
-      await L.tp(path[0][0] + 12, path[0][1]); await L.settle(); L.step(20, 1 / 30);
+      // (away from the store: its people hold the shared figure pool there, npcs.lend)
+      await L.tp(-14000, 3800); await L.settle();
+      const near = MB.spawn({ kind: 'guide', at: { x: g.player.x + 14, z: g.player.z }, force: true, driver: { name: 'Jon' } });
+      L.step(30, 1 / 30);
       const st = { refused, arrived, at: [Math.round(mb.x), Math.round(mb.z)], end: path[1].map(Math.round), driver: !!mb.driver, mode: mb.mode, nearDrawn: !!(near.driver && near.driver.bind), sitN: near.driver ? near.driver.sitN || 0 : 0 };
       return st;
     });
