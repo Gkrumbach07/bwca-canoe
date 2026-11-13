@@ -135,6 +135,7 @@ the game that inks itself from the player's own feet.
 | 2. The flowage | ~330 m along pond 4747 | A beaver pond 2–4 m higher than Gull, its shore a band of dead standing timber and sedge. The east bank has a faint tread: an old crew line, with **orange-dab blazes** grown over to smudges on the fire-killed trunks. | **Three ways:** set the canoe in and paddle or pole the pond (fastest; the canoe is then at the pond's head); wade the edge with the canoe on a line (slow, wet, cold after September); or carry along the east bank. Any works. Walt "kept to the east bank" when the flowage was high. |
 | 3. The climb | ~490 m east and up 15 m to the knob | Doghair jack pine fifteen years old, 3–4 m tall, so close the canoe catches if carried. The tread is a gap more than a trail. The grey trunks the 2011 fire killed stand over it. Ahead, the one dark mass of green in all that grey: **the island of cedar** the fire missed. | Walk. A canoe carried overhead through stretch 3 is slow and loud (branches on the hull). A player who brought the canoe up the pond leaves it at the pond's head; nothing up here needs it. |
 
+<!-- id: 50:3.1.w.blaze pick last page -->
 The orange dabs read as blazes only to someone Tauno has told (bible 5.2 lock 5, key B). Without that, the dot on a
 blazed trunk says **"Burnt pine"**. With it: **"Old blaze"**, and the Walt page, once: "Orange on the blazes. Crew
 line. Tauno said."
@@ -198,6 +199,16 @@ was carried in except nails, a saw, a hatchet and the canvas.
 Left to right from the front door. **Dot** is what the dot names; **E** is the verb, if any. Items never explain their
 use.
 
+<!-- id: 50:4.3.w.boots row=Spare_boots last page -->
+<!-- id: 50:4.3.w.corebox row=A_core_box last page -->
+<!-- id: 50:4.3.w.sun row=The_pencil_sun last page -->
+<!-- id: 50:4.3.w.floor row=The_floorboard last page -->
+<!-- id: 50:4.3.t.shelf row=The_shelf tick n=1 -->
+<!-- id: 50:4.3.t.box1 row=A_core_box tick n=1 -->
+<!-- id: 50:4.3.t.box2 row=A_core_box tick n=2 -->
+<!-- id: 50:4.3.t.back row=The_photograph tick n=1 -->
+<!-- id: 50:4.3.t.years row=The_pencil_marks tick n=1 -->
+<!-- id: 50:4.3.t.tally row=The_pencil_marks tick n=2 -->
 | Thing | Dot | E | What it is |
 |---|---|---|---|
 | The cot | "Cot" | Sit | A frame of drill rod, canvas core-sample bags sewn into a sling. A mouse nest in one end, last year's. Off a designated site, as anywhere: the game neither forbids nor encourages sleeping near it (bible 6.5). During the run the cot offers nothing. |
@@ -258,6 +269,7 @@ Not the company. Not to A., she's had enough.
 
 [Page 3 is Walt's wish. It does not decide for the player, and no ending scores the player against it.]
 
+<!-- id: 50:4.4.w.pages pick page -->
 The Walt page, after reading all three: "He carried them up in the rain with his brother. 'Saturday.' Where V. dug,
 toward the Christmas sunrise. He wanted it in a newspaper." (`10-notebook.md` 11.3 adds one line per page as each slots
 into its stub; this summary line comes after the third.)
@@ -276,6 +288,7 @@ Back Sunday.
 — J.
 ```
 
+<!-- id: 50:4.5.w.june pick page -->
 The Walt page: "A note from June, behind the photo. He kept it twenty-some years and brought it up here."
 
 [It gives nothing to the case. It is here because a man who builds a hidden cabin out of drill rod also keeps his
@@ -287,9 +300,12 @@ The camp was never Walt's way out; the door was Birch (bible 2.5). It was the pl
 on the run north if a blow came, and it is where he kept count of the plan. The player sees three things:
 
 1. **The shelf inventory** (above): food, light, fire, dry socks, a tarp for one. A layover kit, not a home.
+<!-- id: 50:4.6.w.marks pick last page -->
 2. **The October marks** down the door frame: `'12 '13 '14 '15 '16 '17`. One a year, every October, from the first
    season of building to the last visit. There is no '18: "Didn't go on to the far end. Not with company on the lake."
    (N42). The Walt page: "He marked every October here. The last one is '17."
+<!-- id: 50:4.6.w.tally pick n=1 page -->
+<!-- id: 50:4.6.w.tally2 pick n=2 page -->
 3. **The tally** across the frame: `50 · 63 · 121✓ · 214✓`. It is the run north from the back cover (P530 50 r, P27
    63 r, P24 121 r, P26 214 r). The ticks are the stashes already laid by October 2017: the dry bag at the top of the
    121 (N25, August 2017) and the Grumman at the far end of the 214 (N26, September 2017). **50** has no tick: the
@@ -339,6 +355,7 @@ plain to anyone looking and meaningless to anyone who isn't.
 
 ### 5.2 The dot and the verbs
 
+<!-- id: 50:5.2.frozen row=15_November n=2 -->
 | State | Dot | E |
 |---|---|---|
 | The player holds no lock-6 key | (nothing: it is ground) | — |
@@ -375,6 +392,7 @@ Eino.
 [Picking it up plays one held moment, no cutscene: the note in the player's hands by whatever light there is, the
 wind in the cedars down the ridge, two breaths. Then it goes into the book.]
 
+<!-- id: 50:5.3.w.eino pick page -->
 The Walt page: "Eino's note, on top of the cans. 'Saturday.' They were coming back for them together."
 
 **Picking up the note starts the run** (section 6). There is no prompt, no title card. The first sign is sound: from
@@ -411,6 +429,7 @@ headlamp on the run shows a light (section 6.4).
 On opening, the book adds a page, **"The papers"**, in the player's words, and each document can be looked at in
 close-up. Contents (bible 5.1), with the close-up text:
 
+<!-- id: 50:5.5.p.fieldbooks pick page -->
 **1. Four field books.** Pocket books, canvas covers stained orange at the edges, August 1976 to August 1977. The
 player's page: "Four field books. Creek readings below the pad, 1976 and '77. Three hands." Close-up of the 19 August
 1976 page:
@@ -430,6 +449,7 @@ Stn   pH    Cu     Ni
 E.H.  W.H.  T.K.
 ```
 
+<!-- id: 50:5.5.p.report pick page -->
 **2. The pencilled draft.** Typed onionskin, one corner charred brown and gone. The player's page: "A typed report
 with pencil all over it. Stations 7 to 12 moved to 'background'. Initialled C.B. Somebody pulled it out of a fire."
 Close-up:
@@ -444,6 +464,7 @@ BELOW PAD (Stations 7–12)      [the whole heading struck through in pencil]
   Field bk to be recopied 8/18–8/20.  — C.B.
 ```
 
+<!-- id: 50:5.5.p.ledger pick page -->
 **3. The green ledger.** A small green clothbound cash book, 1975–77. The player's page: "A cash book. Money to 'L.P.'
 and 'H.V.', two years of it. The last line is the second of September, 1977." Two spreads; close-up of one:
 
@@ -458,6 +479,7 @@ and 'H.V.', two years of it. The last line is the second of September, 1977." Tw
  9/02/77   L.P.    200
 ```
 
+<!-- id: 50:5.5.p.memo pick page -->
 **4. The carbon.** A carbon copy on thin yellow paper, letterhead faint. The player's page: "A memo from 1977. 'Re:
 Haapala, E.' Six weeks before he drowned." Close-up:
 
@@ -471,9 +493,11 @@ Re: Haapala, E. — has been spoken to re: field books.
 If he persists D.S. will handle it.
 ```
 
+<!-- id: 50:5.5.p.core pick page -->
 **5. The core.** A split piece of drill core, grey-green with brassy flecks, wrapped in a grey wool sock. The player's
 page: "A piece of rock in a sock. I don't know what it is." (Only Tauno knows: section 9.1.)
 
+<!-- id: 50:5.5.p.none pick page -->
 None of it says who killed Eino. The player's page ends, once all five are seen: "None of it says who was on the lake
 that morning."
 
@@ -622,6 +646,7 @@ Walt's own plan: "Back door to the Front Porch in one dark." The meeting Maggie 
 (≥11.6 km), 7 carries, 544 rods. Times below are for an October night (dusk about 18:30, full dark 19:15, first light
 about 07:00) and a steady player who isn't caught.
 
+<!-- id: 50:6.7.w.paddle row=2._P530 n=1 page -->
 | Leg | From → to (x/z) | Distance / carry | Who is there | The beat | Checkpoints |
 |---|---|---|---|---|---|
 | **0. The bay** | Dam (−19835, 26740) → the bay mouth | ~600 m | **One**, off the mouth, no light | **The start.** Coming down the carry at dusk the player sees a canoe sitting off the bay mouth with no light. A radio clicks over the water. The bay is a dead end: there is only one way out, past him. Ways past: wait for full dark and slip along the east shore's sedge in his shadow; hug the burned north shore and its deadfall; or wait for the wind. One holds the mouth until the player is past or until 20:00, then follows. | **The pit** (at the lift) |

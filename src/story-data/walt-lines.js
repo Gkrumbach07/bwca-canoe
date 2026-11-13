@@ -84,6 +84,12 @@ export const WALT_LINES = [
   { id: '30:4.9.page.4', section: 'years' },
   { id: '30:4.6/the-thursday-lunch-tier.w1', section: 'odd' },
   // /a2
+  // f: begin (Round 3 stream F) 50 §2.4's lines are a table's (kind line, not page): their section
+  { id: '50:2.4.1', section: 'farend' },
+  { id: '50:2.4.2', section: 'farend' },
+  { id: '50:2.4.3', section: 'farend' },
+  { id: '50:2.4.4', section: 'farend' },
+  // f: end
 ];
 
 // a text id with no row: its section by its id's prefix (the longest that matches), else 'odd'. Leads are a person's or a

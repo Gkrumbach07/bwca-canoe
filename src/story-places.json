@@ -1070,6 +1070,1130 @@
           "then": []
         }
       ]
+    },
+    {
+      "id": "gull.sign",
+      "name": "Gull Lake, the east bay: the beaver dam at the creek mouth (the far end's landing)",
+      "doc": "50 §2; 03 §2 step 1; 90 §4",
+      "x": -19790,
+      "z": 26772,
+      "lake": "Gull Lake",
+      "clear": 6,
+      "r": 40,
+      "props": [
+        {
+          "id": "gull.dam",
+          "kit": "creekDam",
+          "at": [
+            -5,
+            -1
+          ],
+          "opts": {
+            "w": 14
+          },
+          "show": "true",
+          "wet": "any"
+        },
+        {
+          "id": "gull.stump",
+          "kit": "stumpCut",
+          "at": [
+            3,
+            3
+          ],
+          "show": "true",
+          "wet": "any",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Stump"
+            }
+          ]
+        },
+        {
+          "id": "gull.stone",
+          "kit": "quartzCobble",
+          "on": "gull.stump",
+          "at": [
+            3,
+            3
+          ],
+          "show": "true",
+          "wet": "any",
+          "dot": [
+            {
+              "when": "true",
+              "name": "White stone"
+            }
+          ]
+        },
+        {
+          "id": "gull.rod",
+          "kit": "rodStanding",
+          "at": [
+            1.4,
+            1.6
+          ],
+          "show": "lowwater",
+          "wet": "any",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Old pipe"
+            }
+          ]
+        },
+        {
+          "id": "gull.step",
+          "kit": "mudStep",
+          "at": [
+            2,
+            2.2
+          ],
+          "show": "lowwater",
+          "wet": "any"
+        }
+      ],
+      "verbs": [],
+      "triggers": [
+        {
+          "on": "enter",
+          "r": 700,
+          "then": [
+            "f:gull.eastbay"
+          ]
+        },
+        {
+          "on": "enter",
+          "r": 25,
+          "then": [
+            "f:gull.dam"
+          ]
+        },
+        {
+          "on": "enter",
+          "r": 25,
+          "when": "lowwater",
+          "then": [
+            "f:gull.stump.lowwater",
+            "f:gull.rod.seen"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "gull.burntpoint",
+      "name": "Gull Lake, the burnt point (the headland closing the east bay)",
+      "doc": "03 §2a; 10 NB55; lock 3 key C",
+      "x": -21250,
+      "z": 26550,
+      "lake": "Gull Lake",
+      "r": 260,
+      "props": [],
+      "verbs": [],
+      "triggers": [
+        {
+          "on": "readHere",
+          "nb": "NB55",
+          "r": 300,
+          "then": [
+            "f:nb.burntpoint"
+          ]
+        },
+        {
+          "on": "stand",
+          "s": 6,
+          "r": 260,
+          "when": "read:NB55",
+          "then": [
+            "f:nb.burntpoint"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "gull.notch",
+      "name": "The notch on the rise behind Gull's creek mouth",
+      "doc": "03 §2a; 90 §13 check 5",
+      "x": -19340,
+      "z": 26805,
+      "clear": 24,
+      "r": 30,
+      "far": 2400,
+      "props": [
+        {
+          "id": "gull.notch",
+          "kit": "notchCleft",
+          "at": [
+            0,
+            0
+          ],
+          "show": "true",
+          "opts": {
+            "gap": 7,
+            "h": 11
+          }
+        }
+      ],
+      "verbs": [],
+      "triggers": []
+    },
+    {
+      "id": "pond4747.eastbank",
+      "name": "The flowage behind Gull's dam, the east bank (pond 4747)",
+      "doc": "50 §3.1; 03 §2 step 2; lock 5 key C",
+      "x": -19768,
+      "z": 26960,
+      "r": 70,
+      "props": [
+        {
+          "id": "gull.blaze.1",
+          "kit": "burntSnag",
+          "at": [
+            -2,
+            -55
+          ],
+          "opts": {
+            "dab": true
+          },
+          "show": "true",
+          "dot": [
+            {
+              "when": "f:tauno.blazes",
+              "name": "Old blaze"
+            },
+            {
+              "when": "true",
+              "name": "Burnt pine"
+            }
+          ]
+        },
+        {
+          "id": "gull.blaze.2",
+          "kit": "burntSnag",
+          "at": [
+            1,
+            30
+          ],
+          "opts": {
+            "dab": true
+          },
+          "show": "true",
+          "dot": [
+            {
+              "when": "f:tauno.blazes",
+              "name": "Old blaze"
+            },
+            {
+              "when": "true",
+              "name": "Burnt pine"
+            }
+          ]
+        },
+        {
+          "id": "gull.blaze.3",
+          "kit": "burntSnag",
+          "at": [
+            5,
+            88
+          ],
+          "opts": {
+            "dab": true
+          },
+          "show": "true",
+          "dot": [
+            {
+              "when": "f:tauno.blazes",
+              "name": "Old blaze"
+            },
+            {
+              "when": "true",
+              "name": "Burnt pine"
+            }
+          ]
+        }
+      ],
+      "verbs": [],
+      "triggers": [
+        {
+          "on": "enter",
+          "r": 70,
+          "then": [
+            "f:ev.blazes=pond4747"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "waltcamp",
+      "name": "The knob behind Gull's flowage: Walt's camp under the cedar",
+      "doc": "50 §4; 03 §2 step 3; lock 6 key A",
+      "x": -19385,
+      "z": 27355,
+      "clear": 7,
+      "r": 40,
+      "hideFromMap": true,
+      "props": [
+        {
+          "id": "waltcamp.cabin",
+          "kit": "waltcamp",
+          "at": [
+            0,
+            0
+          ],
+          "yaw": 0.9425,
+          "show": "true",
+          "solid": true
+        },
+        {
+          "id": "waltcamp.cot",
+          "kit": "spot",
+          "at": [
+            0.18,
+            -0.84
+          ],
+          "yaw": 0.9425,
+          "show": "true",
+          "opts": {
+            "y": 0.62,
+            "r": 0.45
+          },
+          "dot": [
+            {
+              "when": "true",
+              "name": "Cot"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.boots",
+          "kit": "spot",
+          "at": [
+            -0.06,
+            -0.94
+          ],
+          "yaw": 0.9425,
+          "show": "true",
+          "opts": {
+            "y": 0.33999999999999997,
+            "r": 0.18
+          },
+          "dot": [
+            {
+              "when": "true",
+              "name": "Boots"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.stove",
+          "kit": "spot",
+          "at": [
+            1.31,
+            -0.01
+          ],
+          "yaw": 0.9425,
+          "show": "true",
+          "opts": {
+            "y": 0.57,
+            "r": 0.32
+          },
+          "dot": [
+            {
+              "when": "true",
+              "name": "Stove"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.shelf",
+          "kit": "spot",
+          "at": [
+            1.08,
+            0.7
+          ],
+          "yaw": 0.9425,
+          "show": "true",
+          "opts": {
+            "y": 0.97,
+            "r": 0.4
+          },
+          "dot": [
+            {
+              "when": "true",
+              "name": "Shelf"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.corebox",
+          "kit": "spot",
+          "at": [
+            0.97,
+            0.85
+          ],
+          "yaw": 0.9425,
+          "show": "true",
+          "opts": {
+            "y": 0.62,
+            "r": 0.2
+          },
+          "dot": [
+            {
+              "when": "true",
+              "name": "Core box"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.photo",
+          "kit": "photograph",
+          "at": [
+            0.94,
+            0.83
+          ],
+          "yaw": 0.9425,
+          "show": "!f:camp.photo",
+          "lift": 1.1500000000000001,
+          "dot": [
+            {
+              "when": "true",
+              "name": "Photograph"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.note",
+          "kit": "noteSquare",
+          "at": [
+            0.94,
+            0.83
+          ],
+          "yaw": 0.9425,
+          "show": "f:camp.photo & !f:camp.june",
+          "lift": 1.1500000000000001,
+          "dot": [
+            {
+              "when": "true",
+              "name": "Note"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.marks",
+          "kit": "spot",
+          "at": [
+            -0.9,
+            -1.17
+          ],
+          "yaw": 0.9425,
+          "show": "true",
+          "opts": {
+            "y": 1.3,
+            "r": 0.25
+          },
+          "dot": [
+            {
+              "when": "true",
+              "name": "Pencil marks"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.hatchet",
+          "kit": "spot",
+          "at": [
+            -1.02,
+            -0.98
+          ],
+          "yaw": 0.9425,
+          "show": "true",
+          "opts": {
+            "y": 1.5,
+            "r": 0.18
+          },
+          "dot": [
+            {
+              "when": "true",
+              "name": "Hatchet"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.sun",
+          "kit": "spot",
+          "at": [
+            0.77,
+            1.36
+          ],
+          "yaw": 0.9425,
+          "show": "true",
+          "opts": {
+            "y": 1.45,
+            "r": 0.22
+          },
+          "dot": [
+            {
+              "when": "true",
+              "name": "Pencil sun"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.floor",
+          "kit": "floorboard",
+          "at": [
+            0.83,
+            0.3
+          ],
+          "yaw": 0.9425,
+          "show": "!f:nb.torn",
+          "dot": [
+            {
+              "when": "true",
+              "name": "White stone"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.floor.up",
+          "kit": "floorboard",
+          "at": [
+            0.83,
+            0.3
+          ],
+          "yaw": 0.9425,
+          "show": "f:nb.torn",
+          "opts": {
+            "lifted": true
+          },
+          "dot": [
+            {
+              "when": "true",
+              "name": "White stone"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.can",
+          "kit": "coffeeCan",
+          "at": [
+            0.75,
+            0.24
+          ],
+          "yaw": 0.9425,
+          "show": "f:nb.torn",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Coffee can"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.cedar.1",
+          "kit": "cedar",
+          "at": [
+            4,
+            -5
+          ],
+          "show": "true"
+        },
+        {
+          "id": "waltcamp.cedar.2",
+          "kit": "cedar",
+          "at": [
+            7.5,
+            -1
+          ],
+          "show": "true"
+        },
+        {
+          "id": "waltcamp.cedar.3",
+          "kit": "cedar",
+          "at": [
+            2,
+            -8.5
+          ],
+          "show": "true"
+        },
+        {
+          "id": "waltcamp.cedar.4",
+          "kit": "cedar",
+          "at": [
+            8,
+            -6.5
+          ],
+          "show": "true"
+        },
+        {
+          "id": "waltcamp.cedar.5",
+          "kit": "cedar",
+          "at": [
+            5,
+            -11
+          ],
+          "show": "true"
+        },
+        {
+          "id": "waltcamp.cedar.6",
+          "kit": "cedar",
+          "at": [
+            10.5,
+            -3.5
+          ],
+          "show": "true"
+        },
+        {
+          "id": "waltcamp.cedar.7",
+          "kit": "cedar",
+          "at": [
+            12,
+            -8
+          ],
+          "show": "true"
+        },
+        {
+          "id": "waltcamp.cedar.8",
+          "kit": "cedar",
+          "at": [
+            -2.5,
+            -9
+          ],
+          "show": "true"
+        },
+        {
+          "id": "waltcamp.stump.1",
+          "kit": "oldStump",
+          "at": [
+            -21,
+            -12
+          ],
+          "show": "true",
+          "dotWhen": "f:ep.S8.done",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Cut stump"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.stump.2",
+          "kit": "oldStump",
+          "at": [
+            -27,
+            -16.5
+          ],
+          "show": "true",
+          "dotWhen": "f:ep.S8.done",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Cut stump"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.chips.1",
+          "kit": "coreChips",
+          "at": [
+            2.49,
+            1
+          ],
+          "yaw": 0.9425,
+          "show": "true",
+          "dotWhen": "f:tauno.pit",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Core chips"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.chips.2",
+          "kit": "coreChips",
+          "at": [
+            5.24,
+            3
+          ],
+          "yaw": 0.9425,
+          "show": "true",
+          "dotWhen": "f:tauno.pit",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Core chips"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.chips.3",
+          "kit": "coreChips",
+          "at": [
+            9.28,
+            5.94
+          ],
+          "yaw": 0.9425,
+          "show": "true",
+          "dotWhen": "f:tauno.pit",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Core chips"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.chips.4",
+          "kit": "coreChips",
+          "at": [
+            14.94,
+            10.05
+          ],
+          "yaw": 0.9425,
+          "show": "true",
+          "dotWhen": "f:tauno.pit",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Core chips"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.chips.5",
+          "kit": "coreChips",
+          "at": [
+            22.23,
+            15.34
+          ],
+          "yaw": 0.9425,
+          "show": "true",
+          "dotWhen": "f:tauno.pit",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Core chips"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.chips.6",
+          "kit": "coreChips",
+          "at": [
+            31.12,
+            21.81
+          ],
+          "yaw": 0.9425,
+          "show": "true",
+          "dotWhen": "f:tauno.pit",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Core chips"
+            }
+          ]
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "waltcamp.cot",
+          "verb": "Sit",
+          "when": "true",
+          "then": [
+            "f:camp.cot"
+          ]
+        },
+        {
+          "prop": "waltcamp.shelf",
+          "verb": "Look",
+          "when": "!f:camp.shelf",
+          "then": [
+            "f:camp.shelf"
+          ]
+        },
+        {
+          "prop": "waltcamp.shelf",
+          "verb": "Take",
+          "when": "f:camp.shelf & !f:camp.shelf.taken",
+          "then": [
+            "f:camp.shelf.taken",
+            "give:item.waltmatches",
+            "give:item.woolsocks",
+            "give:item.oldtin"
+          ]
+        },
+        {
+          "prop": "waltcamp.corebox",
+          "verb": "Look",
+          "when": "!f:camp.corebox",
+          "then": [
+            "f:camp.corebox"
+          ]
+        },
+        {
+          "prop": "waltcamp.photo",
+          "verb": "Pick up",
+          "when": "true",
+          "then": [
+            "f:camp.photo",
+            "give:page.flycamp"
+          ]
+        },
+        {
+          "prop": "waltcamp.note",
+          "verb": "Read",
+          "when": "true",
+          "then": [
+            "f:camp.june",
+            "give:page.junenote",
+            "walt:50:4.5.w.june"
+          ]
+        },
+        {
+          "prop": "waltcamp.marks",
+          "verb": "Look",
+          "when": "!f:camp.marks",
+          "then": [
+            "f:camp.marks",
+            "walt:50:4.6.w.marks"
+          ]
+        },
+        {
+          "prop": "waltcamp.floor",
+          "verb": "Lift",
+          "when": "f:knows.stonesign",
+          "then": [
+            "f:nb.torn",
+            "f:find.big.camp",
+            "walt:50:4.3.w.floor"
+          ]
+        }
+      ],
+      "triggers": [
+        {
+          "on": "enter",
+          "r": 14,
+          "then": [
+            "f:camp.found"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cellar",
+      "name": "The ridge above the knob: the old pit (the cellar)",
+      "doc": "50 §5; 03 §2 step 4; 90 §13 check 6",
+      "x": -18885,
+      "z": 27725,
+      "clear": 3.5,
+      "r": 30,
+      "hideFromMap": true,
+      "props": [
+        {
+          "id": "cellar.pit",
+          "kit": "pit",
+          "at": [
+            0,
+            0
+          ],
+          "show": "!f:pit.cleared",
+          "dotWhen": "any(key.L6*)",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Old pit"
+            }
+          ]
+        },
+        {
+          "id": "cellar.lid",
+          "kit": "pitLid",
+          "at": [
+            0,
+            0
+          ],
+          "show": "f:pit.cleared & !f:pit.lifted",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Lid"
+            }
+          ]
+        },
+        {
+          "id": "cellar.hole",
+          "kit": "pitOpen",
+          "at": [
+            0,
+            0
+          ],
+          "show": "f:pit.lifted",
+          "dotWhen": "f:world.pit.empty",
+          "dot": [
+            {
+              "when": "true",
+              "name": "An empty pit."
+            }
+          ]
+        },
+        {
+          "id": "cellar.can.1",
+          "kit": "ammoCan",
+          "at": [
+            -0.2,
+            0
+          ],
+          "lift": -0.7,
+          "show": "f:pit.lifted & !f:pit.can.1",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Can"
+            }
+          ]
+        },
+        {
+          "id": "cellar.can.2",
+          "kit": "ammoCan",
+          "at": [
+            0.2,
+            0.05
+          ],
+          "lift": -0.7,
+          "show": "f:pit.lifted & !f:pit.can.2",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Can"
+            }
+          ]
+        },
+        {
+          "id": "cellar.note",
+          "kit": "fieldNote",
+          "at": [
+            -0.2,
+            0
+          ],
+          "lift": -0.48,
+          "show": "f:pit.lifted & !f:pit.note",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Note"
+            }
+          ]
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "cellar.pit",
+          "verb": "Clear the moss",
+          "when": "any(key.L6*) & !iceseason & peers=0",
+          "then": [
+            "f:pit.cleared"
+          ]
+        },
+        {
+          "prop": "cellar.lid",
+          "verb": "Lift",
+          "when": "true",
+          "then": [
+            "f:pit.lifted"
+          ]
+        },
+        {
+          "prop": "cellar.note",
+          "verb": "Pick up",
+          "when": "true",
+          "then": [
+            "f:pit.note",
+            "give:page.einonote",
+            "walt:50:5.3.w.eino"
+          ]
+        },
+        {
+          "prop": "cellar.can.1",
+          "verb": "Take",
+          "when": "f:pit.note",
+          "then": [
+            "f:pit.can.1"
+          ]
+        },
+        {
+          "prop": "cellar.can.2",
+          "verb": "Take",
+          "when": "f:pit.note",
+          "then": [
+            "f:pit.can.2"
+          ]
+        }
+      ],
+      "triggers": []
+    },
+    {
+      "id": "stash.paddle",
+      "name": "Pietro Lake, the P530 landing: the spare paddle under the cedar",
+      "doc": "50 §6.9; 10 NB66; lock 4 key E",
+      "portage": "far.p530",
+      "end": [
+        -22705,
+        26855
+      ],
+      "r": 25,
+      "props": [
+        {
+          "id": "stash.paddle.cedar",
+          "kit": "cedar",
+          "at": [
+            4.5,
+            13
+          ],
+          "show": "true"
+        },
+        {
+          "id": "stash.paddle",
+          "kit": "sparePaddle",
+          "at": [
+            2.4,
+            10
+          ],
+          "show": "!f:stash.paddle",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Paddle"
+            }
+          ]
+        },
+        {
+          "id": "stash.paddle.stone",
+          "kit": "quartzCobble",
+          "at": [
+            2.8,
+            10
+          ],
+          "lift": 0.04,
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "White stone"
+            }
+          ]
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "stash.paddle",
+          "verb": "Take",
+          "when": "true",
+          "then": [
+            "f:stash.paddle",
+            "f:stash.paddle.found",
+            "give:item.sparepaddle"
+          ]
+        }
+      ],
+      "triggers": [
+        {
+          "on": "enter",
+          "r": 9,
+          "then": [
+            "f:stash.paddle.found"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "stash.drybag",
+      "name": "Camdre Lake, the top of the 121 (P24): the dry bag in the rocks",
+      "doc": "50 §6.9; 10 NB61, NB68",
+      "portage": "far.p24",
+      "end": [
+        -22275,
+        24745
+      ],
+      "r": 25,
+      "props": [
+        {
+          "id": "stash.drybag",
+          "kit": "dryBag",
+          "at": [
+            3,
+            3.5
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Dry bag"
+            }
+          ]
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "stash.drybag",
+          "verb": "Open",
+          "when": "!f:stash.drybag",
+          "then": [
+            "f:stash.drybag",
+            "give:item.scanner"
+          ]
+        }
+      ],
+      "triggers": []
+    },
+    {
+      "id": "stash.grumman",
+      "name": "Rock Island Lake, the north end of the 214 (P26): the old Grumman in the alders",
+      "doc": "50 §6.9; 10 NB62",
+      "portage": "far.p26",
+      "end": [
+        -20475,
+        22625
+      ],
+      "r": 25,
+      "props": [
+        {
+          "id": "stash.grumman",
+          "kit": "grumman",
+          "at": [
+            5,
+            3
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Canoe"
+            }
+          ]
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "stash.grumman",
+          "verb": "Get under",
+          "when": "run.active",
+          "then": [
+            "f:stash.grumman.under"
+          ]
+        }
+      ],
+      "triggers": [
+        {
+          "on": "enter",
+          "r": 10,
+          "then": [
+            "f:stash.grumman"
+          ]
+        }
+      ]
     }
   ],
   "portages": [
@@ -1129,6 +2253,26 @@
       "v3": "P693",
       "rods": 6,
       "doc": "20-opening.md §11.1: P693, 6 rods, into Bald Eagle"
+    },
+    {
+      "id": "far.p530",
+      "v3": "P530",
+      "rods": 50,
+      "name": "Pietro Lake – Gull Lake",
+      "doc": "50 §6.7 leg 2, §6.9 (the spare paddle)"
+    },
+    {
+      "id": "far.p24",
+      "v3": "P24",
+      "rods": 121,
+      "name": "Camdre Lake – Clearwater Lake",
+      "doc": "50 §6.7 leg 3, §6.9 (the dry bag)"
+    },
+    {
+      "id": "far.p26",
+      "v3": "P26",
+      "name": "Clearwater Lake – Rock Island Lake",
+      "doc": "50 §6.7 leg 5, §6.9 (the Grumman); drawn 217 rods, Walt's 214"
     }
   ],
   "resolved": {
@@ -1582,6 +2726,515 @@
         "lakeId": 61,
         "off": 0,
         "tried": 6
+      },
+      "gull.sign": {
+        "props": {
+          "gull.dam": {
+            "x": -19795,
+            "z": 26771,
+            "heading": -3.1416,
+            "sd": -1.9,
+            "y": 460
+          },
+          "gull.stump": {
+            "x": -19787,
+            "z": 26775,
+            "heading": -3.1416,
+            "sd": 3.5,
+            "y": 461.7
+          },
+          "gull.stone": {
+            "x": -19787,
+            "z": 26775,
+            "heading": -3.1416,
+            "sd": 3.5,
+            "y": 461.7
+          },
+          "gull.rod": {
+            "x": -19788.6,
+            "z": 26773.6,
+            "heading": -3.1416,
+            "sd": 2.4,
+            "y": 461.7
+          },
+          "gull.step": {
+            "x": -19788,
+            "z": 26774.2,
+            "heading": -3.1416,
+            "sd": 2.8,
+            "y": 461.7
+          }
+        },
+        "lanes": [],
+        "x": -19790,
+        "z": 26772,
+        "n": [
+          0,
+          1
+        ],
+        "u": [
+          1,
+          0
+        ],
+        "lakeId": 186,
+        "off": 0,
+        "tried": 1
+      },
+      "gull.burntpoint": {
+        "props": {},
+        "lanes": [],
+        "x": -21250,
+        "z": 26550,
+        "n": [
+          0,
+          1
+        ],
+        "u": [
+          1,
+          0
+        ],
+        "lakeId": 186,
+        "off": 0,
+        "tried": 1
+      },
+      "gull.notch": {
+        "props": {
+          "gull.notch": {
+            "x": -19340,
+            "z": 26805,
+            "heading": -3.1416,
+            "sd": 322.4,
+            "y": 481.1
+          }
+        },
+        "lanes": [],
+        "x": -19340,
+        "z": 26805,
+        "n": [
+          0,
+          1
+        ],
+        "u": [
+          1,
+          0
+        ],
+        "lakeId": null,
+        "off": 0,
+        "tried": 1
+      },
+      "pond4747.eastbank": {
+        "props": {
+          "gull.blaze.1": {
+            "x": -19770,
+            "z": 26905,
+            "heading": -3.1416,
+            "sd": 10,
+            "y": 467.8
+          },
+          "gull.blaze.2": {
+            "x": -19767,
+            "z": 26990,
+            "heading": -3.1416,
+            "sd": 18.5,
+            "y": 465.9
+          },
+          "gull.blaze.3": {
+            "x": -19763,
+            "z": 27048,
+            "heading": -3.1416,
+            "sd": 25.8,
+            "y": 466.5
+          }
+        },
+        "lanes": [],
+        "x": -19768,
+        "z": 26960,
+        "n": [
+          0,
+          1
+        ],
+        "u": [
+          1,
+          0
+        ],
+        "lakeId": null,
+        "off": 0,
+        "tried": 1
+      },
+      "waltcamp": {
+        "props": {
+          "waltcamp.cabin": {
+            "x": -19385,
+            "z": 27355,
+            "heading": -3.1416,
+            "sd": 443.5,
+            "y": 479
+          },
+          "waltcamp.cot": {
+            "x": -19384.8,
+            "z": 27354.2,
+            "heading": -3.1416,
+            "sd": 443.2,
+            "y": 479
+          },
+          "waltcamp.boots": {
+            "x": -19385.1,
+            "z": 27354.1,
+            "heading": -3.1416,
+            "sd": 443.2,
+            "y": 479
+          },
+          "waltcamp.stove": {
+            "x": -19383.7,
+            "z": 27355,
+            "heading": -3.1416,
+            "sd": 443.1,
+            "y": 479
+          },
+          "waltcamp.shelf": {
+            "x": -19383.9,
+            "z": 27355.7,
+            "heading": -3.1416,
+            "sd": 443.1,
+            "y": 479
+          },
+          "waltcamp.corebox": {
+            "x": -19384,
+            "z": 27355.9,
+            "heading": -3.1416,
+            "sd": 443.2,
+            "y": 479
+          },
+          "waltcamp.photo": {
+            "x": -19384.1,
+            "z": 27355.8,
+            "heading": -3.1416,
+            "sd": 443.2,
+            "y": 479
+          },
+          "waltcamp.note": {
+            "x": -19384.1,
+            "z": 27355.8,
+            "heading": -3.1416,
+            "sd": 443.2,
+            "y": 479
+          },
+          "waltcamp.marks": {
+            "x": -19385.9,
+            "z": 27353.8,
+            "heading": -3.1416,
+            "sd": 442.6,
+            "y": 479
+          },
+          "waltcamp.hatchet": {
+            "x": -19386,
+            "z": 27354,
+            "heading": -3.1416,
+            "sd": 442.6,
+            "y": 479
+          },
+          "waltcamp.sun": {
+            "x": -19384.2,
+            "z": 27356.4,
+            "heading": -3.1416,
+            "sd": 443.3,
+            "y": 479
+          },
+          "waltcamp.floor": {
+            "x": -19384.2,
+            "z": 27355.3,
+            "heading": -3.1416,
+            "sd": 443.2,
+            "y": 479
+          },
+          "waltcamp.floor.up": {
+            "x": -19384.2,
+            "z": 27355.3,
+            "heading": -3.1416,
+            "sd": 443.2,
+            "y": 479
+          },
+          "waltcamp.can": {
+            "x": -19384.2,
+            "z": 27355.2,
+            "heading": -3.1416,
+            "sd": 443.2,
+            "y": 479
+          },
+          "waltcamp.cedar.1": {
+            "x": -19381,
+            "z": 27350,
+            "heading": -3.1416,
+            "sd": 441.7,
+            "y": 479
+          },
+          "waltcamp.cedar.2": {
+            "x": -19377.5,
+            "z": 27354,
+            "heading": -3.1416,
+            "sd": 441,
+            "y": 478.5
+          },
+          "waltcamp.cedar.3": {
+            "x": -19383,
+            "z": 27346.5,
+            "heading": -3.1416,
+            "sd": 441.3,
+            "y": 478.7
+          },
+          "waltcamp.cedar.4": {
+            "x": -19377,
+            "z": 27348.5,
+            "heading": -3.1416,
+            "sd": 441.4,
+            "y": 478.8
+          },
+          "waltcamp.cedar.5": {
+            "x": -19380,
+            "z": 27344,
+            "heading": -3.1416,
+            "sd": 441.3,
+            "y": 478.8
+          },
+          "waltcamp.cedar.6": {
+            "x": -19374.5,
+            "z": 27351.5,
+            "heading": -3.1416,
+            "sd": 440.4,
+            "y": 478.5
+          },
+          "waltcamp.cedar.7": {
+            "x": -19373,
+            "z": 27347,
+            "heading": -3.1416,
+            "sd": 440.2,
+            "y": 478.8
+          },
+          "waltcamp.cedar.8": {
+            "x": -19387.5,
+            "z": 27346,
+            "heading": -3.1416,
+            "sd": 439.2,
+            "y": 478.7
+          },
+          "waltcamp.stump.1": {
+            "x": -19406,
+            "z": 27343,
+            "heading": -3.1416,
+            "sd": 422.7,
+            "y": 478.4
+          },
+          "waltcamp.stump.2": {
+            "x": -19412,
+            "z": 27338.5,
+            "heading": -3.1416,
+            "sd": 415.3,
+            "y": 478
+          },
+          "waltcamp.chips.1": {
+            "x": -19382.5,
+            "z": 27356,
+            "heading": -3.1416,
+            "sd": 442.6,
+            "y": 479
+          },
+          "waltcamp.chips.2": {
+            "x": -19379.8,
+            "z": 27358,
+            "heading": -3.1416,
+            "sd": 441.4,
+            "y": 478.5
+          },
+          "waltcamp.chips.3": {
+            "x": -19375.7,
+            "z": 27360.9,
+            "heading": -3.1416,
+            "sd": 439,
+            "y": 477.8
+          },
+          "waltcamp.chips.4": {
+            "x": -19370.1,
+            "z": 27365.1,
+            "heading": -3.1416,
+            "sd": 433,
+            "y": 477.8
+          },
+          "waltcamp.chips.5": {
+            "x": -19362.8,
+            "z": 27370.3,
+            "heading": -3.1416,
+            "sd": 424.6,
+            "y": 477.3
+          },
+          "waltcamp.chips.6": {
+            "x": -19353.9,
+            "z": 27376.8,
+            "heading": -3.1416,
+            "sd": 414,
+            "y": 477
+          }
+        },
+        "lanes": [],
+        "x": -19385,
+        "z": 27355,
+        "n": [
+          0,
+          1
+        ],
+        "u": [
+          1,
+          0
+        ],
+        "lakeId": null,
+        "off": 0,
+        "tried": 1
+      },
+      "cellar": {
+        "props": {
+          "cellar.pit": {
+            "x": -18885,
+            "z": 27725,
+            "heading": -3.1416,
+            "sd": 185.4,
+            "y": 484.8
+          },
+          "cellar.lid": {
+            "x": -18885,
+            "z": 27725,
+            "heading": -3.1416,
+            "sd": 185.4,
+            "y": 484.8
+          },
+          "cellar.hole": {
+            "x": -18885,
+            "z": 27725,
+            "heading": -3.1416,
+            "sd": 185.4,
+            "y": 484.8
+          },
+          "cellar.can.1": {
+            "x": -18885.2,
+            "z": 27725,
+            "heading": -3.1416,
+            "sd": 185.4,
+            "y": 484.8
+          },
+          "cellar.can.2": {
+            "x": -18884.8,
+            "z": 27725.1,
+            "heading": -3.1416,
+            "sd": 185.5,
+            "y": 484.8
+          },
+          "cellar.note": {
+            "x": -18885.2,
+            "z": 27725,
+            "heading": -3.1416,
+            "sd": 185.4,
+            "y": 484.8
+          }
+        },
+        "lanes": [],
+        "x": -18885,
+        "z": 27725,
+        "n": [
+          0,
+          1
+        ],
+        "u": [
+          1,
+          0
+        ],
+        "lakeId": null,
+        "off": 0,
+        "tried": 1
+      },
+      "stash.paddle": {
+        "props": {
+          "stash.paddle.cedar": {
+            "x": -22709.9,
+            "z": 26904.8,
+            "heading": -2.928,
+            "sd": 5.9
+          },
+          "stash.paddle": {
+            "x": -22708.5,
+            "z": 26901.4,
+            "heading": -2.928,
+            "sd": 3.4
+          },
+          "stash.paddle.stone": {
+            "x": -22708.9,
+            "z": 26901.5,
+            "heading": -2.928,
+            "sd": 3.4
+          }
+        },
+        "lanes": [],
+        "x": -22707.7,
+        "z": 26894,
+        "n": [
+          0.2119407852136902,
+          0.9772825095963831
+        ],
+        "u": [
+          -0.9772825095963831,
+          0.2119407852136902
+        ],
+        "lakeId": 250,
+        "portage": 895,
+        "end": 0,
+        "off": 36
+      },
+      "stash.drybag": {
+        "props": {
+          "stash.drybag": {
+            "x": -22266.2,
+            "z": 24723.3,
+            "heading": -0.2963,
+            "sd": 4.1
+          }
+        },
+        "lanes": [],
+        "x": -22269.2,
+        "z": 24722.9,
+        "n": [
+          0.2919683259040944,
+          -0.9564279882295168
+        ],
+        "u": [
+          0.9564279882295168,
+          0.2919683259040944
+        ],
+        "lakeId": 1058,
+        "portage": 444,
+        "end": 0,
+        "off": 20
+      },
+      "stash.grumman": {
+        "props": {
+          "stash.grumman": {
+            "x": -20498.1,
+            "z": 22626.7,
+            "heading": 2.3182,
+            "sd": 2.8
+          }
+        },
+        "lanes": [],
+        "x": -20494.7,
+        "z": 22630.3,
+        "n": [
+          -0.7334784689195485,
+          0.6797126860898176
+        ],
+        "u": [
+          -0.6797126860898176,
+          -0.7334784689195485
+        ],
+        "lakeId": 2577,
+        "portage": 446,
+        "end": 1,
+        "off": 18
       }
     },
     "portages": {
@@ -1717,7 +3370,549 @@
             101
           ]
         ]
+      },
+      "far.p530": {
+        "i": 895,
+        "name": "Pietro Lake – Gull Lake",
+        "rods": 50,
+        "shown": 52,
+        "off": 0,
+        "ends": [
+          [
+            -22705,
+            26855,
+            250
+          ],
+          [
+            -22755,
+            27145,
+            186
+          ]
+        ]
+      },
+      "far.p24": {
+        "i": 444,
+        "name": "Camdre Lake – Clearwater Lake",
+        "rods": 121,
+        "shown": 124,
+        "off": 0,
+        "ends": [
+          [
+            -22275,
+            24745,
+            1058
+          ],
+          [
+            -21965,
+            24185,
+            154
+          ]
+        ]
+      },
+      "far.p26": {
+        "i": 446,
+        "name": "Clearwater Lake – Rock Island Lake",
+        "rods": 217,
+        "shown": 217,
+        "off": 13,
+        "ends": [
+          [
+            -21195,
+            23415,
+            154
+          ],
+          [
+            -20475,
+            22625,
+            2577
+          ]
+        ]
+      }
+    },
+    "carries": {
+      "story:gullcarry": {
+        "id": "story:gullcarry",
+        "hidden": true,
+        "rods": 160,
+        "lengthM": 805,
+        "pts": [
+          [
+            -19787,
+            26770
+          ],
+          [
+            -19784,
+            26780
+          ],
+          [
+            -19781,
+            26790
+          ],
+          [
+            -19778,
+            26800
+          ],
+          [
+            -19779.2,
+            26808.4
+          ],
+          [
+            -19780.4,
+            26816.8
+          ],
+          [
+            -19781.6,
+            26825.2
+          ],
+          [
+            -19782.8,
+            26833.6
+          ],
+          [
+            -19784,
+            26842
+          ],
+          [
+            -19784.5,
+            26851.5
+          ],
+          [
+            -19785,
+            26861
+          ],
+          [
+            -19785.5,
+            26870.5
+          ],
+          [
+            -19786,
+            26880
+          ],
+          [
+            -19782.8,
+            26888
+          ],
+          [
+            -19779.6,
+            26896
+          ],
+          [
+            -19776.4,
+            26904
+          ],
+          [
+            -19773.2,
+            26912
+          ],
+          [
+            -19770,
+            26920
+          ],
+          [
+            -19770.4,
+            26928
+          ],
+          [
+            -19770.8,
+            26936
+          ],
+          [
+            -19771.2,
+            26944
+          ],
+          [
+            -19771.6,
+            26952
+          ],
+          [
+            -19772,
+            26960
+          ],
+          [
+            -19771.4,
+            26968
+          ],
+          [
+            -19770.8,
+            26976
+          ],
+          [
+            -19770.2,
+            26984
+          ],
+          [
+            -19769.6,
+            26992
+          ],
+          [
+            -19769,
+            27000
+          ],
+          [
+            -19769.4,
+            27008
+          ],
+          [
+            -19769.8,
+            27016
+          ],
+          [
+            -19770.2,
+            27024
+          ],
+          [
+            -19770.6,
+            27032
+          ],
+          [
+            -19771,
+            27040
+          ],
+          [
+            -19775.7,
+            27048
+          ],
+          [
+            -19780.5,
+            27056
+          ],
+          [
+            -19785.2,
+            27064
+          ],
+          [
+            -19790,
+            27072
+          ],
+          [
+            -19786.5,
+            27079.5
+          ],
+          [
+            -19783,
+            27087
+          ],
+          [
+            -19779.5,
+            27094.5
+          ],
+          [
+            -19776,
+            27102
+          ],
+          [
+            -19769.3,
+            27110
+          ],
+          [
+            -19762.7,
+            27118
+          ],
+          [
+            -19756,
+            27126
+          ],
+          [
+            -19749,
+            27130.5
+          ],
+          [
+            -19742,
+            27135
+          ],
+          [
+            -19735,
+            27139.5
+          ],
+          [
+            -19728,
+            27144
+          ],
+          [
+            -19721,
+            27148.5
+          ],
+          [
+            -19714,
+            27153
+          ],
+          [
+            -19707,
+            27157.5
+          ],
+          [
+            -19700,
+            27162
+          ],
+          [
+            -19692.9,
+            27166.3
+          ],
+          [
+            -19685.7,
+            27170.6
+          ],
+          [
+            -19678.6,
+            27174.9
+          ],
+          [
+            -19671.4,
+            27179.1
+          ],
+          [
+            -19664.3,
+            27183.4
+          ],
+          [
+            -19657.1,
+            27187.7
+          ],
+          [
+            -19650,
+            27192
+          ],
+          [
+            -19642.9,
+            27196.3
+          ],
+          [
+            -19635.7,
+            27200.6
+          ],
+          [
+            -19628.6,
+            27204.9
+          ],
+          [
+            -19621.4,
+            27209.1
+          ],
+          [
+            -19614.3,
+            27213.4
+          ],
+          [
+            -19607.1,
+            27217.7
+          ],
+          [
+            -19600,
+            27222
+          ],
+          [
+            -19593.3,
+            27226.5
+          ],
+          [
+            -19586.7,
+            27231.1
+          ],
+          [
+            -19580,
+            27235.6
+          ],
+          [
+            -19573.3,
+            27240.1
+          ],
+          [
+            -19566.7,
+            27244.7
+          ],
+          [
+            -19560,
+            27249.2
+          ],
+          [
+            -19553.3,
+            27253.7
+          ],
+          [
+            -19546.7,
+            27258.3
+          ],
+          [
+            -19540,
+            27262.8
+          ],
+          [
+            -19533.3,
+            27267.3
+          ],
+          [
+            -19526.7,
+            27271.9
+          ],
+          [
+            -19520,
+            27276.4
+          ],
+          [
+            -19513.3,
+            27280.9
+          ],
+          [
+            -19506.7,
+            27285.5
+          ],
+          [
+            -19500,
+            27290
+          ],
+          [
+            -19492.9,
+            27294
+          ],
+          [
+            -19485.8,
+            27298
+          ],
+          [
+            -19478.7,
+            27302
+          ],
+          [
+            -19471.6,
+            27306
+          ],
+          [
+            -19464.5,
+            27310
+          ],
+          [
+            -19457.5,
+            27314
+          ],
+          [
+            -19450.4,
+            27318
+          ],
+          [
+            -19443.3,
+            27322
+          ],
+          [
+            -19436.2,
+            27326
+          ],
+          [
+            -19429.1,
+            27330
+          ],
+          [
+            -19422,
+            27334
+          ],
+          [
+            -19414.2,
+            27338
+          ],
+          [
+            -19406.5,
+            27342
+          ],
+          [
+            -19398.7,
+            27346
+          ],
+          [
+            -19391,
+            27350
+          ]
+        ],
+        "launch": [
+          {
+            "x": -19797,
+            "z": 26764,
+            "lake": 17792
+          },
+          {
+            "x": -19391,
+            "z": 27350,
+            "lake": 0,
+            "road": true
+          }
+        ]
       }
     }
-  }
+  },
+  "carries": [
+    {
+      "id": "story:gullcarry",
+      "doc": "50 §3; 03 §2; bible 6.5 3.5",
+      "hidden": true,
+      "lake": "Gull Lake",
+      "launch": [
+        -19797,
+        26764
+      ],
+      "way": [
+        [
+          -19787,
+          26770
+        ],
+        [
+          -19778,
+          26800
+        ],
+        [
+          -19784,
+          26842
+        ],
+        [
+          -19786,
+          26880
+        ],
+        [
+          -19770,
+          26920
+        ],
+        [
+          -19772,
+          26960
+        ],
+        [
+          -19769,
+          27000
+        ],
+        [
+          -19771,
+          27040
+        ],
+        [
+          -19790,
+          27072
+        ],
+        [
+          -19776,
+          27102
+        ],
+        [
+          -19756,
+          27126
+        ],
+        [
+          -19700,
+          27162
+        ],
+        [
+          -19600,
+          27222
+        ],
+        [
+          -19500,
+          27290
+        ],
+        [
+          -19422,
+          27334
+        ],
+        [
+          -19391,
+          27350
+        ]
+      ]
+    }
+  ]
 }

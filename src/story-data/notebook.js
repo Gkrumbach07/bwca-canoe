@@ -90,6 +90,14 @@ export const UND = [
   { nb: 'NB35', when: 'f:ink.mummos | f:knows.mummos | nbphoto:P1', note: 'His grandmother\'s place. Basswood, past Prairie.', words: ['Mummo\'s'], nick: 'mummos' },
   { nb: 'NB21', when: 'f:ink.farend', note: 'Gull. The east end.', words: ['far end'], nick: 'farend' },
   { nb: 'NB53', when: 'f:ink.farend | f:bc.205-50', note: 'Bald Eagle to Gull. 205, then 50.', words: [] },
+  // f: begin (Round 3 stream F: the far end's pages, 10 §11.2's own notes)
+  { nb: 'NB54', when: 'f:nb.longway', note: 'Up the dam. East bank.', words: [] },
+  { nb: 'NB55', when: 'f:nb.burntpoint | f:gene.slide.matched', note: 'The creek mouth under the notch.', words: [] },
+  { nb: 'NB61', when: 'f:stash.drybag', note: 'Dry bag.', words: [] },
+  { nb: 'NB62', when: 'f:stash.grumman', note: 'Canoe.', words: [] },
+  { nb: 'NB66', when: 'f:stash.paddle.found', note: 'Spare paddle. Stone.', words: [] },
+  { nb: 'TP2', when: 'f:nb.torn & (f:tauno.e7sketch | f:maggie.e7sketch) & at:waltcamp', note: '620 m. Towards the sunrise in December.', words: [] },
+  // f: end
 ];
 // (every note is 10 §11.2's own words; the easy nicknames other than the Front Porch have no note written there yet, so
 // they underline nothing until the writers give one: a leftover for the owner, not invented here)

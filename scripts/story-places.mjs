@@ -179,7 +179,7 @@ function stage(pl, s) {
   for (const pr of pl.props || []) {
     const q = R.props[pr.id]; if (!q) continue;
     q.sd = +sdAt(q.x, q.z).toFixed(1);
-    const want = pr.wet === true ? q.sd < -0.4 : pr.wet === 'edge' ? q.sd > -3 && q.sd < 2.5 : q.sd > 2;
+    const want = pr.wet === 'any' ? true : pr.wet === true ? q.sd < -0.4 : pr.wet === 'edge' ? q.sd > -3 && q.sd < 2.5 : q.sd > 2; // (f: 'any', the dam's own: a 10 m cell can't tell its banks)
     if (!want) bad.push(`${pr.id} at ${q.sd} m from the water line`);
   }
   return { R, bad };
@@ -294,6 +294,21 @@ const OUT = { for: FOR, v: 'v9', places: {}, portages: {} }, SITES = { for: FOR,
       Object.assign(R, { x: s.x, z: s.z, lakeId: s.lakeId, site: s.site, landing: L ? L.landing : null });
       OUT.places[pl.id] = R; continue;
     }
+    // f: begin (Round 3 stream F) a place at a carry's end (the run's stashes): the anchor is that end's landing, n into the
+    // trail (inland), u across it; the props stand at [across, in] from it
+    if (pl.portage) {
+      const P = OUT.portages[pl.portage], q = P && v9.portages[P.i];
+      if (!q) { bad.push(`${pl.id}: no carry ${pl.portage}`); continue; }
+      const k = Math.hypot(q.launch[0].x - pl.end[0], q.launch[0].z - pl.end[1]) <= Math.hypot(q.launch[1].x - pl.end[0], q.launch[1].z - pl.end[1]) ? 0 : 1;
+      const T0 = k === 0 ? q.pts[0] : q.pts[q.pts.length - 1], L = { x: T0[0], z: T0[1], lake: q.launch[k].lake }; // (the trail's end on the shore; the launch is out on the water)
+      const inn = k === 0 ? q.pts[Math.min(3, q.pts.length - 1)] : q.pts[Math.max(0, q.pts.length - 4)];
+      const dx = inn[0] - L.x, dz = inn[1] - L.z, d = Math.hypot(dx, dz) || 1, n = [dx / d, dz / d], u = [-n[1], n[0]];
+      const st = stage(pl, { x: L.x, z: L.z, n, u });
+      Object.assign(R, { x: r1(L.x + n[0] * 3), z: r1(L.z + n[1] * 3), n, u, lakeId: L.lake, portage: P.i, end: k, off: Math.round(Math.hypot(L.x - pl.end[0], L.z - pl.end[1])) }, st.R);
+      if (st.bad.length) bad.push(`${pl.id}: ${st.bad.join('; ')}`);
+      OUT.places[pl.id] = R; continue;
+    }
+    // f: end
     const ids = lakeIds(pl.lake);
     // the anchor: the shore point nearest the doc's x/z where the staging holds (every prop on its side of the water line
     // and the lanes on land the whole way: 20 §11.2's grade runs "dead straight south-west and uphill" into the trees)
@@ -361,6 +376,41 @@ const OUT = { for: FOR, v: 'v9', places: {}, portages: {} }, SITES = { for: FOR,
   }
 }
 // /a2
+
+// f: begin (Round 3 stream F) the hidden carry (50 §3, 03 §2): its way resolved to a trail of ~8 m steps on dry ground,
+// its lake end launched onto the creek mouth, its knob end no launch (a road end's flag); and the far end's checks
+{
+  OUT.carries = {};
+  const bad = [];
+  for (const c of PJ.carries || []) {
+    const way = c.way, pts = [];
+    for (let i = 0; i < way.length; i++) {
+      const [ax, az] = way[i]; pts.push([r1(ax), r1(az)]);
+      if (i + 1 < way.length) { const [bx, bz] = way[i + 1], d = Math.hypot(bx - ax, bz - az), n = Math.floor(d / 8); for (let k = 1; k < n; k++) pts.push([r1(ax + (bx - ax) * k / n), r1(az + (bz - az) * k / n)]); }
+    }
+    let len = 0; for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+    const wet = pts.filter(([x, z], i) => i > 1 && sdAt(x, z) < 0.5).map(([x, z]) => `${x},${z} (${sdAt(x, z).toFixed(1)})`);
+    if (wet.length) bad.push(`${c.id}: wet at ${wet.slice(0, 6).join('; ')}`);
+    const lc = cell(c.launch[0], c.launch[1]), lid = lc && lc.sd < 0 ? lc.lake : 0;
+    if (!lid || !lakeIds(c.lake).includes(lid)) bad.push(`${c.id}: the launch (${c.launch}) is not on ${c.lake} (${lid}: ${lakeName(lid)})`);
+    const end = pts[pts.length - 1];
+    OUT.carries[c.id] = { id: c.id, hidden: true, rods: Math.round(len / 5.0292), lengthM: Math.round(len), pts,
+      launch: [{ x: c.launch[0], z: c.launch[1], lake: lid }, { x: end[0], z: end[1], lake: 0, road: true }] };
+    if (len < 780 || len > 980) bad.push(`${c.id}: ${Math.round(len)} m (50 §3.1: about 880 m)`);
+  }
+  result('far: the hidden carry dry from the dam to the knob, ~880 m, launched onto Gull', bad.length === 0, { carries: Object.fromEntries(Object.entries(OUT.carries).map(([k, v]) => [k, { m: v.lengthM, rods: v.rods, n: v.pts.length }])), bad });
+  const P = (id) => OUT.places[id], bear = (a, b) => ((Math.atan2(b.x - a.x, -(b.z - a.z)) * 180 / Math.PI) + 360) % 360;
+  const camp = P('waltcamp'), pit = P('cellar'), notch = P('gull.notch'), point = P('gull.burntpoint'), sign = P('gull.sign');
+  if (camp && pit) {
+    const pond = { x: -19826, z: 27127 }, bp = bear(camp, pit), bo = bear(camp, pond), d = Math.hypot(pit.x - camp.x, pit.z - camp.z);
+    result('check 6: the pit at ~126° from the knob (the midwinter sunrise), pond 4747 at ~297°', Math.abs(bp - 126) <= 4 && Math.abs(bo - 297) <= 10 && d > 560 && d < 680, { pit: +bp.toFixed(1), m: Math.round(d), pond: +bo.toFixed(1) });
+  }
+  if (notch && point && sign) {
+    const a = bear(point, sign), b = bear(point, notch), d = Math.hypot(notch.x - sign.x, notch.z - sign.z);
+    result('check 5: the story notch behind the creek mouth on the burnt point\'s line (03 §2a)', Math.abs(a - b) <= 4 && d > 350 && d < 700, { mouth: +a.toFixed(1), notch: +b.toFixed(1), behind: Math.round(d) });
+  }
+}
+// f: end
 
 PJ.resolved = OUT;
 if (WRITE) {
