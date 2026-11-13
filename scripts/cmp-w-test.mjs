@@ -127,7 +127,7 @@ try {
   });
   await shot('ice-out-2028');
   result('4 the run frozen in: the turn by itself, up at seven at ice-out 2028, the trip still under way, rested; year.turned.2028; year:open auto',
-    on4 && r4.on && !r4.iced && r4.year === 2028 && r4.doy < 182 && Math.abs(r4.hours - 7) < 0.2 && r4.energy >= 0.99 && r4.turned && r4.kept && r4.ev.includes('wake*') && r4.ev.includes('year:open*') && r4.yo.some((y) => y[0] === 2028 && y[1]) && !r4.ticket, { on4, ...r4 });
+    on4 && r4.on && !r4.iced && r4.year === 2028 && r4.doy < 182 && Math.abs(r4.hours - 7) < 0.2 && r4.energy >= 0.99 && r4.turned && r4.kept && r4.ev.includes('wake*') && r4.ev.includes('year:open*') && !r4.ev.includes('iced') && r4.yo.some((y) => y[0] === 2028 && y[1]) && !r4.ticket, { on4, ...r4 });
 } catch (e) {
   log('ERROR', e && e.stack ? e.stack : e);
   results.push({ name: 'run', pass: false });

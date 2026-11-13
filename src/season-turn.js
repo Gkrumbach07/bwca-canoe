@@ -70,9 +70,9 @@ export class SeasonTurn {
     const tr = this.t.trip, p = this.t.player;
     if (!tr || !tr.active || !tr.adventure || tr.evacuating || (p && p.teleporting) || this.guest) return;
     const s = tr.state;
-    if (!this.frozen()) return;
+    if (!this.frozen() || this.turning) return; // (w: not while a turn's card runs: the run's turn by itself is under way)
     // w: begin (the run caught by the ice: the turn by itself, no ticket; a field hook says so)
-    const F = this.turning ? null : this.fieldNow();
+    const F = this.fieldNow();
     if (F) { this.auto('ice', F); return; }
     // w: end
     if (s.iced) return;
