@@ -240,6 +240,7 @@ them three times in a row reads as unfriendly and costs a visit's worth; she say
 - Saying Walt's name in the store when someone else is at the counter. She pours their coffee and doesn't look at
   the player again until the other person leaves.
 
+<!-- id: 33:5.w1 page it also -->
 **The teaching moment** (once, the first time she redirects). The Walt page writes, in the player's words: *Aili, his
 sister. Crane Lake, the motel at the Little Vermilion landing. She'll talk about anything but him.* That is the only
 time the game tells the player how she works. After that they learn it from her.
@@ -390,6 +391,7 @@ time.]`
   dad did that. Go."
 - ▸ "What does it mean?" → AILI: "It means he'd be back." *[She picks up a rag.]* "Go. I'll see you next time."
 - ▸ "Thank you." → AILI: "Go on. You're losing light."
+<!-- id: 33:6.4.w page it each also -->
 - ▸ *(say nothing)* → `[She nods once. The scene ends.]`
   *Gives:* **the landing sign, lock 4 key A.** If the player has already seen stones at starred sites (key B), the Walt
   page joins them: *The white stones at his sites. Aili: their dad's sign. "He'd be back."* If not: *A white stone on
@@ -518,6 +520,7 @@ No fail. Everything after is the same, except one line.
   islands." *(tell)*
 - ▸ *(say nothing)* → JON: "Wind's coming round to the north tomorrow. Whatever you're doing, do it early."
   *(Not a tell. He's a guide.)*
+<!-- id: 33:6.7.w page it each also -->
 *Gives:* the Walt page under things that don't add up: *A grey boat followed me up Sand Point. Jon says he was on
 Crane. He knew where I camped.* If the second boat was photographed: *There was another boat. Two men, no rods.*
 
@@ -557,6 +560,7 @@ Crane. He knew where I camped.* If the second boat was photographed: *There was 
 - JON: "When you go out of here, tell Liisa at the counter which day. Not where. Which day. If there's a truck at the
   landing that shouldn't be, I'll know." *(After Liisa's season ends, the keeper takes the day instead: "Jon says
   tell him the day. Just the day.")*
+<!-- id: 33:6.8.w page it each also -->
 *Gives:* **Jon's yield**, the company's people on Sand Point: the rented boat and the man in clean boots on the Crane
 dock (joined on the Walt page to Wade if the player has met him: *Clean boots. Jon saw him on the Crane dock with a
 radio.*); the 2020 car (texture for Maggie: the family was watched). Jon's protection is on (6.11). Jon joins the canary
@@ -584,6 +588,7 @@ started.
   shuttle or not?"
 - ▸ **"Tell me about him."** → LIISA: "I was hoping you'd tell me. Nobody tells me anything. They just get quiet in
   a really specific way."
+<!-- id: 33:6.9.w page it each also -->
 *Gives:* the Walt page: *Liisa, Aili's granddaughter, the counter. Christmas cards in a coffee can.* Opens ▸ **"Tell
 her one of his stories."**
 
@@ -635,10 +640,12 @@ player reads, in their words:]`
 | 5 | Dryden, Ont., Dec 2024 |
 | 6 | Atikokan, Ont., Dec 2025 |
 
+<!-- id: 33:6.9.cards page it each also -->
 *Gives:* **Liisa's cards.** Lock 4 key D: *Every card has the same drawing: a stone on a stump.* And one 5.6 piece:
 *Christmas cards to Aili with no words, all from Ontario, every year since the year after the canoe.* (The cards and
 any one other piece turn the Walt page's line for him to "went north"; the drift test turns it alone.)
 
+<!-- id: 33:6.9.thought it also -->
 **The can stays here.** It cannot leave the motel's lot. Walking toward the road or the dock with it is refused with
 one short thought: *Not mine to take.* The only way off the porch is through the scene below.
 
@@ -661,6 +668,7 @@ takes the second branch without its spoken line: the player simply holds out the
 - AILI: "You don't know anything." *[She takes the can and puts it back behind the boots and straightens it.]*
   "Drink your coffee."
 - `[She goes into the house. There is no coffee. The scene ends there.]`
+<!-- id: 33:6.10.know page it each also -->
 - *Effects:* Aili is **cold for the rest of the season**: she sells bait, she says "Leeches are in the tank," she
   pours the motel mug, she never says "Sit". The next season she is back at step 1 ("Sit"), but the knowledge
   stays: **she knows the player knows.** The endings' Walt-safety choice lands on her (bible 7.1, 7.2). Jon is cold
@@ -674,12 +682,14 @@ takes the second branch without its spoken line: the player simply holds out the
   she understands exactly what they are doing.]`
 - AILI: "Thank you." *[She takes it. She doesn't put it back behind the boots. She takes it into the house.]*
 - *(next visit)* AILI: "Coffee? Sit." *[The good mug. Nothing else said about it, ever.]*
+<!-- id: 33:6.10.thanks page it each also -->
 - *Effects:* coffee goes on. **If the stone has not yet been given** (the cards came before the lilacs or the pot),
   this kindness is the gift she never asked for: next visit she says the stone line (6.4) and moves to step 2. She
   never confirms anything. From now on the can is **not on the porch shelf**; it is somewhere in the house, and Liisa
   doesn't know where.
   *The Walt page:* *I gave Aili the can back. I said Liisa thought she'd want them in the house. She said thank you.*
 
+<!-- id: 33:6.10.after page it also -->
 **After either branch**, the Walt page adds one line the player didn't write so much as notice: *"I don't have anything
 of his." She didn't. They're hers.*
 
@@ -730,6 +740,7 @@ him; nothing gates it except the topics below.
     - ▸ "Where's the camp?" → GORD: "North. People up there like being left alone. I'm the same, on Thursdays."
     - ▸ "What was his name?" → GORD: "Didn't give one I'd remember. Cash doesn't have a name. That's why people like
       it."
+<!-- id: 33:6.13.w page it each also -->
 *Gives:* the 5.6 piece: *Gord, the Atikokan outfitter: an old American paid cash for a winter camp a few falls back.
 Didn't fish. Said thank you twice.* Gord never names a lake, a year or a town.
 
@@ -821,6 +832,7 @@ Crane Lake can still find the stone by pattern or by low water, and learn that W
 
 ### To the other arcs
 
+<!-- id: 33:8.guiding page it also -->
 - **The guiding years.** Marlys offered Aili the box; Aili's "I don't want it in the house either" (6.6) is the other
   half of that line. Sheila's office made the 2019 call that Aili answered. If both arcs are done, the Walt page joins
   them: *Marlys offered her his things. She said no. She kept the guest book.*

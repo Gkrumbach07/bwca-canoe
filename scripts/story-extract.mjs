@@ -430,6 +430,18 @@ export function extractDoc(key, src, known) {
       notes.quotes.push({ of: pending.id, text: b.t === 'code' ? b.text : plain(b.text), ln: b.ln });
       pending = null; continue;
     }
+    // a4: begin (campaign Round 6, stream a4: 33-family's Walt-page lines are italics in prose, *…*, not quoted): `it` takes
+    // the block's italic words only (labels ending in ':', *(…)* conditions and two-word labels left out), with `each`
+    // one id per italic run (id.1, id.2, …); `also` leaves the block to be read as usual too, so no other id moves
+    if (pending && pending.mode === 'id' && pending.flags.includes('it')) {
+      const a = pending; pending = null;
+      const segs = [...b.text.matchAll(/(?<![*\w])\*(?!\*)([^*]+?)\*(?!\*)/g)].map((m) => clean(m[1]))
+        .filter((q) => q && !/:$/.test(q) && !/^\(/.test(q) && q.split(/\s+/).length >= 3);
+      if (a.flags.includes('each')) segs.forEach((q, k) => put(`${a.id}.${k + 1}`, { k: kindOf(a.flags), text: q }, b.ln));
+      else if (segs.length) put(a.id, { k: kindOf(a.flags), text: segs.join(' ') }, b.ln);
+      if (!a.flags.includes('also')) continue;
+    }
+    // a4: end
     if (pending && (pending.mode === 'id' || b.t === 'item')) {
       const a = pending;
       if (a.mode === 'id') pending = null;
