@@ -22,3 +22,4 @@ reads them from the stream's own drafts table until a writer's anchor replaces t
 | (story-places.json) | "Tow landing" · "Flat rock on the point" · "Old fire ring, under the moss" · "Pine stub" | The dot names of the tow landing at P194's Sucker end and the lunch rock's props (GY-04, GY-07, §9.1) |
 | (guiding-cast.js) | "Bunkhouse registers, {year}." | A banker's box in the loft that isn't the 2020 one, looked into (the dot names each box by its year only) |
 | (guiding-cast.js) | "Old wall map" | Hog Creek's pencilled wall map (GY-18; the doc names it only in prose) |
+| (guiding.js WALLS, leads-guiding.js ASKS) | "The old guide photo?" · "Little Gabbro? Bald Eagle?" · "Hap says Insula?" · "Hap says Ottertrack?" · "The Stuart Portage?" | The player's question to a keeper where the doc gives only the keeper's answer (Farm's photo, GY-17; Gus's rings, GY-06, GY-06c, GY-09b). "Hap's day?" is the doc's own (GY-04 Gives). |
