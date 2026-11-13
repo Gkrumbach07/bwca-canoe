@@ -52,7 +52,13 @@ async function newSeason(page, home, doy, story = true) {
         return !!g.outfitter.layout(ep);
       },
       days: async (n, h = 10) => { g.day.setClock(g.day.year, g.day.doy + n, h); for (let k = 0; k < 6; k++) { L.step(5); await L.wait(30); } try { g.story.update(); } catch { /* */ } },
-      talk: (ep, picks) => { const D = G.debug; let n = D.open(ep); const said = []; if (!n) return { ok: false, said }; n = D.through(n); said.push(n && n.say); for (const p of picks) { n = D.pick(n, p); n = D.through(n); said.push(n && n.say); } return { ok: true, said, last: n && n.choices ? n.choices.map((c) => c.text) : null }; },
+      talk: (ep, picks) => {
+        const D = G.debug, said = [];
+        const thru = (n) => { let k = 0; while (n && n.say) { said.push(n.say); if (n.choices && n.choices.length === 1 && n.choices[0].text === '…' && k++ < 12) n = n.choices[0].go(); else break; } return n; };
+        let n = D.open(ep); if (!n) return { ok: false, said };
+        n = thru(n); for (const p of picks) { n = thru(D.pick(n, p)); }
+        return { ok: true, said, last: n && n.choices ? n.choices.map((c) => c.text) : null };
+      },
       toPlace: async (x, z) => { await L.tp(x, z); await L.settle(); for (let k = 0; k < 40; k++) { L.step(5); await L.wait(80); if (g.world.isReady(x, z)) break; } },
     };
   });
