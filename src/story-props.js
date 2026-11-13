@@ -16,6 +16,7 @@
 // surveyLath, surveyTag, shovelBlade, twoStumps, cafeTable, urn, coolers, launch.
 import * as THREE from 'three';
 import { PropBuilder, TILE, chunkStone } from './prop-kit.js';
+import { FAR_KITS } from './story-props-far.js'; // f: the far end's kits (Round 3)
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const C = (hex) => new THREE.Color(hex);
@@ -395,6 +396,9 @@ export function cafeSpots(L) {
   const tab = (a, b) => ({ ...W(a, b), y, ax: { x: B.x, z: B.z }, seats: [{ ...W(a, b - 0.62), y, heading: head(0, 1) }, { ...W(a, b + 0.62), y, heading: head(0, -1) }] });
   return { window: tab(-1.65, 3.05), corner: tab(1.5, 2.95), urn: { ...W(2.45, -2.65), y: y + 0.95 } };
 }
+// f: begin (Round 3 stream F: the far end's kits, story-props-far.js)
+for (const [k, f] of Object.entries(FAR_KITS)) if (!REGISTRY[k]) REGISTRY[k] = f;
+// f: end
 export const KITS = Object.freeze(Object.keys(REGISTRY));
 export function kit(name) { const f = REGISTRY[name]; return f ? { build: (ctx = {}) => f({ rng: Math.random, opts: {}, ...ctx }) } : null; }
 // a seeded rng for a prop (the same stump every load)

@@ -397,6 +397,7 @@ export function extractDoc(key, src, known) {
 
   // ---- anchors
   let pending = null;
+  let rowAnchors = []; // f: `<!-- id: X row=<first cell words, _ for spaces> [n=K|last] page -->` before a table: one quote of that row
   // ---- the notebook
   let nbCur = null, nbLoose = null;
   // ---- choices by list indent, so a nested reply knows the choice it answers
@@ -410,6 +411,22 @@ export function extractDoc(key, src, known) {
     if (b.t === 'h' && skipLevel && b.level <= skipLevel) skipLevel = 0;
     if (b.t === 'h' && !skipLevel && SKIP_HEAD.test(b.text)) skipLevel = b.level;
     if (skipLevel && b.t !== 'anchor' && !(pending && pending.mode === 'id')) continue;
+    // f: begin (Round 3 stream F) row anchors: several may stand before one table, each naming a row by its first cell
+    // and taking one quote from it (n=K, the K-th; `last`, the last), the table then read as it always is (its dots)
+    // (`pick`: the same before a paragraph or a list item, no row: one quote of it, the block then read as it always is)
+    if (b.t === 'anchor' && b.mode === 'id' && b.flags.some((f) => f.startsWith('row=') || f === 'pick')) { rowAnchors.push(b); continue; }
+    if (rowAnchors.length && b.t !== 'anchor') {
+      for (const a of rowAnchors) {
+        const rf = a.flags.find((f) => f.startsWith('row=')), want = rf ? rf.slice(4).replace(/_/g, ' ').toLowerCase() : null;
+        const row = b.t === 'table' && want ? b.rows.find((r) => plain(r[0] || '').toLowerCase().includes(want)) : null;
+        const src = row ? row.join(' | ') : !want && b.text ? b.text : '';
+        const qs = [...src.matchAll(/"([^"]+)"/g)].map((m) => clean(m[1]));
+        const nf = a.flags.find((f) => /^n=\d+$/.test(f)), q = a.flags.includes('last') ? qs[qs.length - 1] : qs[(nf ? +nf.slice(2) : 1) - 1];
+        if (q) put(a.id, { k: kindOf(a.flags), text: q }, a.ln); else notes.unwired.push({ id: a.id, if: `no row "${want}" or quote` });
+      }
+      rowAnchors = [];
+    }
+    // f: end
     if (b.t === 'anchor') { pending = { ...b, n: 0 }; continue; }
     if (b.t === 'h') {
       setHeading(b);
