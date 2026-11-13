@@ -203,6 +203,12 @@ use.
 <!-- id: 50:4.3.w.corebox row=A_core_box last page -->
 <!-- id: 50:4.3.w.sun row=The_pencil_sun last page -->
 <!-- id: 50:4.3.w.floor row=The_floorboard last page -->
+<!-- id: 50:4.3.t.shelf row=The_shelf tick n=1 -->
+<!-- id: 50:4.3.t.box1 row=A_core_box tick n=1 -->
+<!-- id: 50:4.3.t.box2 row=A_core_box tick n=2 -->
+<!-- id: 50:4.3.t.back row=The_photograph tick n=1 -->
+<!-- id: 50:4.3.t.years row=The_pencil_marks tick n=1 -->
+<!-- id: 50:4.3.t.tally row=The_pencil_marks tick n=2 -->
 | Thing | Dot | E | What it is |
 |---|---|---|---|
 | The cot | "Cot" | Sit | A frame of drill rod, canvas core-sample bags sewn into a sling. A mouse nest in one end, last year's. Off a designated site, as anywhere: the game neither forbids nor encourages sleeping near it (bible 6.5). During the run the cot offers nothing. |

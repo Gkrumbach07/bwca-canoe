@@ -79,6 +79,10 @@ export async function applyStoryWorld(world, data = null) {
   const clear = storyClearings(S.places);
   world.storyClear = clear;
   world.storyPlaces = S;
-  for (const c of (PLACES.carries || [])) world.addStoryPortage(c); // (Round 3: the hidden carry, `hidden: true`)
+  // f: begin (Round 3 stream F) the hidden carry, as resolved for this release (story-places.mjs: its trail on dry ground,
+  // its launch onto Gull's creek mouth, its knob end a road end's no-launch), keyed by its id, never by index
+  const RC = !S.stale && PLACES.resolved && PLACES.resolved.carries ? PLACES.resolved.carries : {};
+  for (const c of (PLACES.carries || [])) { const q = RC[c.id]; if (q) world.addStoryPortage({ ...q, hidden: true, rods: null }); }
+  // f: end
   return { ...S, clear };
 }

@@ -81,6 +81,7 @@ class StoryLayer {
       for (const pr of pl.props || []) this.propIx.set(pr.id, { place: pl, prop: pr });
       this.bin(pl);
     }
+    this.farReach = Math.max(0, ...this.list.map((pl) => pl.far || 0)); // f: the farthest a place is built from
     return this;
   }
   bin(pl) {
@@ -249,13 +250,14 @@ class StoryLayer {
   poll() {
     const t = this.t, p = this.me(); if (!t || !p) return;
     const host = !this.guest(), now = performance.now() / 1000;
-    const cands = this.near(p.x, p.z, LAYER.drop + LAYER.cell);
+    const cands = this.near(p.x, p.z, LAYER.drop + LAYER.cell + (this.farReach || 0)); // (f: + the farthest place's own `far`)
     const reading = host && this.reading ? (() => { try { return this.reading(); } catch { return null; } })() : null;
     for (const pl of cands) {
       if (!Number.isFinite(pl.x)) continue;
       const d = Math.hypot(pl.x - p.x, pl.z - p.z);
-      if (d <= LAYER.build) this.buildPlace(pl); else if (d > LAYER.drop) this.dropPlace(pl.id);
-      if (d <= LAYER.build) this.reseat(pl);
+      const far = pl.far || 0; // f: a place seen from far off (the notch: a skyline from the bay) builds from its own `far`
+      if (d <= Math.max(LAYER.build, far)) this.buildPlace(pl); else if (d > Math.max(LAYER.drop, far + 250)) this.dropPlace(pl.id);
+      if (d <= Math.max(LAYER.build, far)) this.reseat(pl);
       if (!host) continue;
       // enter / stand: once per visit (the radius left and come back to is a new visit)
       const inR = (r) => d <= r;
@@ -274,7 +276,7 @@ class StoryLayer {
       } else if (was && d > pl.r + 10) this.inside.delete(pl.id);
     }
     if (reading) this.readHere(reading, p);
-    for (const id of [...this.built.keys()]) { const pl = this.place(id); if (pl && Math.hypot(pl.x - p.x, pl.z - p.z) > LAYER.drop) this.dropPlace(id); }
+    for (const id of [...this.built.keys()]) { const pl = this.place(id); if (pl && Math.hypot(pl.x - p.x, pl.z - p.z) > Math.max(LAYER.drop, (pl.far || 0) + 250)) this.dropPlace(id); }
   }
 
   // --- the props in the world ---------------------------------------------------------------------------------------------
@@ -299,12 +301,12 @@ class StoryLayer {
       const ground = this.groundAt(pr.x, pr.z), level = t.world.levelAt ? t.world.levelAt(pr.x, pr.z) : ground;
       const isWet = Number.isFinite(level) && t.world.isWater && t.world.isWater(pr.x, pr.z);
       const r = k.build({ rng: rngFor(pr.id), opts: pr.opts || {}, level: isWet ? Math.max(0, level - ground) : 0 });
-      const base = pr.on ? m.get(pr.on) : null, y = base ? base.y + (base.top || 0) : ground;
+      const base = pr.on ? m.get(pr.on) : null, y = (base ? base.y + (base.top || 0) : ground) + (pr.lift || 0); // (f: lift: on a shelf, down in a hole)
       let mesh = null;
       if (r.geo) {
         mesh = new THREE.Mesh(r.geo, t.material || propMaterial()); // (t.material: the Node checks, which have no canvas for the atlas)
         mesh.name = `story ${pr.id}`; mesh.castShadow = true; mesh.receiveShadow = true;
-        mesh.position.set(pr.x, y, pr.z); mesh.rotation.y = (pr.heading || 0) + Math.PI;
+        mesh.position.set(pr.x, y, pr.z); mesh.rotation.y = (pr.heading || 0) + Math.PI + (pr.yaw || 0); // (f: yaw: the camp's frame)
         mesh.matrixAutoUpdate = false; mesh.updateMatrix(); mesh.updateMatrixWorld(true);
         t.scene.add(mesh);
       }
@@ -348,6 +350,7 @@ class StoryLayer {
       const pl = this.place(pid); if (!pl) continue;
       for (const [id, b] of m) {
         const q = this.prop(id); if (!q || !q.prop.dot || !q.prop.dot.length) continue;
+        if (q.prop.dotWhen && (this.guest() || !this.when(q.prop.dotWhen))) continue; // f: no dot at all until it means something (the pit is ground)
         const reach = (b.wet ? LAYER.reachWet : LAYER.reach) + Math.max(0, ...b.dots.map((d) => d.r));
         if (near.flat(q.prop.x, q.prop.z) > reach) continue;
         let hit = null;

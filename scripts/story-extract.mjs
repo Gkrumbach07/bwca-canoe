@@ -420,7 +420,7 @@ export function extractDoc(key, src, known) {
         const rf = a.flags.find((f) => f.startsWith('row=')), want = rf ? rf.slice(4).replace(/_/g, ' ').toLowerCase() : null;
         const row = b.t === 'table' && want ? b.rows.find((r) => plain(r[0] || '').toLowerCase().includes(want)) : null;
         const src = row ? row.join(' | ') : !want && b.text ? b.text : '';
-        const qs = [...src.matchAll(/"([^"]+)"/g)].map((m) => clean(m[1]));
+        const qs = [...src.matchAll(a.flags.includes('tick') ? /`([^`]+)`/g : /"([^"]+)"/g)].map((m) => clean(m[1])); // (tick: the `code` words, a pencilled line or a stencil)
         const nf = a.flags.find((f) => /^n=\d+$/.test(f)), q = a.flags.includes('last') ? qs[qs.length - 1] : qs[(nf ? +nf.slice(2) : 1) - 1];
         if (q) put(a.id, { k: kindOf(a.flags), text: q }, a.ln); else notes.unwired.push({ id: a.id, if: `no row "${want}" or quote` });
       }
