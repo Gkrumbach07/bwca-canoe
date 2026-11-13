@@ -2194,6 +2194,322 @@
           ]
         }
       ]
+    },
+    {
+      "id": "s2.ridge",
+      "name": "Big Moose Lake, the west site under the ridge (C634 proposed): the snag off the point, the ridge behind",
+      "doc": "docs/story/60-side-stories.md S2 (The place; check 2)",
+      "x": -65403,
+      "z": 5075,
+      "lake": "Big Moose Lake",
+      "shore": true,
+      "clear": 0,
+      "search": 120,
+      "ep": "S2",
+      "props": [
+        {
+          "id": "s2.snag",
+          "kit": "snag",
+          "at": [
+            4,
+            -7
+          ],
+          "wet": true,
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Snag"
+            }
+          ]
+        },
+        {
+          "id": "s2.berry",
+          "kit": "serviceberry",
+          "at": [
+            26,
+            40
+          ],
+          "show": "!f:ep.S2.night",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Serviceberry"
+            }
+          ]
+        },
+        {
+          "id": "s2.berry.stripped",
+          "kit": "serviceberry",
+          "at": [
+            26,
+            40
+          ],
+          "opts": {
+            "stripped": true
+          },
+          "show": "f:ep.S2.night",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Serviceberry, stripped"
+            }
+          ]
+        },
+        {
+          "id": "s2.birches",
+          "kit": "twoBirches",
+          "at": [
+            0,
+            46
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Two birches"
+            }
+          ]
+        },
+        {
+          "id": "s2.log",
+          "kit": "hollowLog",
+          "at": [
+            -9,
+            37
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Hollow log"
+            }
+          ]
+        }
+      ],
+      "verbs": [],
+      "triggers": [
+        {
+          "on": "readHere",
+          "nb": "NB36",
+          "r": 70,
+          "when": "f:nb.found",
+          "then": []
+        },
+        {
+          "on": "enter",
+          "r": 60,
+          "when": "f:ep.S2.night",
+          "then": [
+            "f:ep.S2.back"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "s3.longrock",
+      "name": "Fourtown Lake, Walt's site C1000, the long rock: the fire ring's loose top stone",
+      "doc": "docs/story/60-side-stories.md S3 (The place; check 3)",
+      "x": -43324,
+      "z": 3061,
+      "lake": "Fourtown Lake",
+      "shore": true,
+      "clear": 0,
+      "search": 120,
+      "ep": "S3",
+      "props": [
+        {
+          "id": "s3.stone",
+          "kit": "ringStone",
+          "at": [
+            2,
+            9
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "f:ep.S3.square & !f:ep.S3.tin",
+              "name": "Loose stone"
+            },
+            {
+              "when": "true",
+              "name": "Fire ring"
+            }
+          ]
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "s3.stone",
+          "verb": "Lift",
+          "when": "f:ep.S3.square & !f:ep.S3.tin",
+          "then": [
+            "f:ep.S3.tin",
+            "give:item.redlens"
+          ]
+        }
+      ],
+      "triggers": [
+        {
+          "on": "readHere",
+          "nb": "NB26",
+          "r": 70,
+          "when": "f:nb.found",
+          "then": []
+        }
+      ]
+    },
+    {
+      "id": "s3.northbay",
+      "name": "Fourtown Lake, the north bay: rotten birch along the shore",
+      "doc": "docs/story/60-side-stories.md S3 (The place)",
+      "x": -44245,
+      "z": -485,
+      "lake": "Fourtown Lake",
+      "shore": true,
+      "clear": 0,
+      "search": 160,
+      "ep": "S3",
+      "props": [
+        {
+          "id": "s3.birchlog",
+          "kit": "rottenBirch",
+          "at": [
+            5,
+            4
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Rotten birch"
+            }
+          ]
+        }
+      ],
+      "verbs": [],
+      "triggers": []
+    },
+    {
+      "id": "s4.st1",
+      "name": "Nina Moose Lake, the north end near C649: Kari's survey station 1",
+      "doc": "docs/story/60-side-stories.md S4 (The place)",
+      "x": -64122,
+      "z": -8174,
+      "lake": "Nina Moose Lake",
+      "shore": true,
+      "clear": 0,
+      "search": 120,
+      "ep": "S4",
+      "props": [
+        {
+          "id": "s4.stake1",
+          "kit": "stationStake",
+          "at": [
+            2,
+            4
+          ],
+          "show": "f:ep.S4.yes"
+        }
+      ],
+      "verbs": [],
+      "triggers": []
+    },
+    {
+      "id": "s4.st2",
+      "name": "Lake Agnes, the inlet (the Agnes end of P484): Kari's survey station 2",
+      "doc": "docs/story/60-side-stories.md S4 (The place)",
+      "x": -64316,
+      "z": -11789,
+      "lake": "Lake Agnes",
+      "shore": true,
+      "clear": 0,
+      "search": 160,
+      "ep": "S4",
+      "props": [
+        {
+          "id": "s4.stake2",
+          "kit": "stationStake",
+          "at": [
+            2,
+            4
+          ],
+          "show": "f:ep.S4.yes"
+        }
+      ],
+      "verbs": [],
+      "triggers": []
+    },
+    {
+      "id": "s4.st3",
+      "name": "Lake Agnes, Walt's site C698 and its sand landing: Kari's survey station 3",
+      "doc": "docs/story/60-side-stories.md S4 (The place; NB12, NB44)",
+      "x": -62674,
+      "z": -14661,
+      "lake": "Lake Agnes",
+      "shore": true,
+      "clear": 0,
+      "search": 120,
+      "ep": "S4",
+      "props": [
+        {
+          "id": "s4.stake3",
+          "kit": "stationStake",
+          "at": [
+            3,
+            5
+          ],
+          "show": "f:ep.S4.yes"
+        }
+      ],
+      "verbs": [],
+      "triggers": [
+        {
+          "on": "readHere",
+          "nb": "NB44",
+          "r": 70,
+          "when": "f:nb.found",
+          "then": []
+        }
+      ]
+    },
+    {
+      "id": "s4.meadow",
+      "name": "The rendezvous meadow, an old beaver meadow inside the Weeny Lake primitive area (pma-1), west of Agnes",
+      "doc": "docs/story/60-side-stories.md S4 (The place; check 4: no PMA directly west of Agnes, so the nearest real one in the Moose River country, pma-1)",
+      "x": -68000,
+      "z": -16300,
+      "ep": "S4",
+      "props": [],
+      "verbs": [],
+      "triggers": []
+    },
+    {
+      "id": "s4.kill",
+      "name": "A kill in the Agnes pack's range (ravens over it)",
+      "doc": "docs/story/60-side-stories.md S4 (The set pieces)",
+      "x": -65300,
+      "z": -13600,
+      "ep": "S4",
+      "props": [
+        {
+          "id": "s4.bones",
+          "kit": "killBones",
+          "at": [
+            0,
+            0
+          ],
+          "show": "f:ep.S4.yes",
+          "dot": [
+            {
+              "when": "true",
+              "name": "A kill. A deer, mostly hair."
+            }
+          ]
+        }
+      ],
+      "verbs": [],
+      "triggers": []
     }
   ],
   "portages": [
@@ -3235,6 +3551,226 @@
         "portage": 446,
         "end": 1,
         "off": 18
+      },
+      "s2.ridge": {
+        "props": {
+          "s2.snag": {
+            "x": -65382.2,
+            "z": 5070.8,
+            "heading": 1.4656,
+            "sd": -6.2,
+            "y": 423.3
+          },
+          "s2.berry": {
+            "x": -65426.6,
+            "z": 5043.9,
+            "heading": 1.4656,
+            "sd": 41.9,
+            "y": 428.9
+          },
+          "s2.berry.stripped": {
+            "x": -65426.6,
+            "z": 5043.9,
+            "heading": 1.4656,
+            "sd": 41.9,
+            "y": 428.9
+          },
+          "s2.birches": {
+            "x": -65435.3,
+            "z": 5069.2,
+            "heading": 1.4656,
+            "sd": 45.4,
+            "y": 428.5
+          },
+          "s2.log": {
+            "x": -65427.3,
+            "z": 5079.1,
+            "heading": 1.4656,
+            "sd": 37.3,
+            "y": 429
+          }
+        },
+        "lanes": [],
+        "x": -65389.6,
+        "z": 5074,
+        "n": [
+          -0.9945,
+          -0.105
+        ],
+        "u": [
+          0.105,
+          -0.9945
+        ],
+        "lakeId": 99,
+        "off": 13,
+        "tried": 22
+      },
+      "s3.longrock": {
+        "props": {
+          "s3.stone": {
+            "x": -43313.2,
+            "z": 3056.4,
+            "heading": 1.3033,
+            "sd": 6,
+            "y": 407.4
+          }
+        },
+        "lanes": [],
+        "x": -43305,
+        "z": 3060.7,
+        "n": [
+          -0.9644,
+          -0.2643
+        ],
+        "u": [
+          0.2643,
+          -0.9644
+        ],
+        "lakeId": 84,
+        "off": 19,
+        "tried": 29
+      },
+      "s3.northbay": {
+        "props": {
+          "s3.birchlog": {
+            "x": -44243.7,
+            "z": -493.1,
+            "heading": 0.4954,
+            "sd": 4.2,
+            "y": 408
+          }
+        },
+        "lanes": [],
+        "x": -44246.2,
+        "z": -487.2,
+        "n": [
+          -0.4754,
+          -0.8798
+        ],
+        "u": [
+          0.8798,
+          -0.4754
+        ],
+        "lakeId": 84,
+        "off": 3,
+        "tried": 43
+      },
+      "s4.st1": {
+        "props": {
+          "s4.stake1": {
+            "x": -64139.7,
+            "z": -8179.4,
+            "heading": -2.2935,
+            "sd": 3.8,
+            "y": 383.8
+          }
+        },
+        "lanes": [],
+        "x": -64141.4,
+        "z": -8183.5,
+        "n": [
+          0.75,
+          0.6614
+        ],
+        "u": [
+          -0.6614,
+          0.75
+        ],
+        "lakeId": 216,
+        "off": 22,
+        "tried": 31
+      },
+      "s4.st2": {
+        "props": {
+          "s4.stake2": {
+            "x": -64316,
+            "z": -11787.1,
+            "heading": -1.5551,
+            "sd": 3.8,
+            "y": 365.7
+          }
+        },
+        "lanes": [],
+        "x": -64320,
+        "z": -11789,
+        "n": [
+          0.9999,
+          -0.0157
+        ],
+        "u": [
+          0.0157,
+          0.9999
+        ],
+        "lakeId": 95,
+        "off": 4,
+        "tried": 53
+      },
+      "s4.st3": {
+        "props": {
+          "s4.stake3": {
+            "x": -62671.1,
+            "z": -14644.9,
+            "heading": 0.0155,
+            "sd": 4.7,
+            "y": 366.5
+          }
+        },
+        "lanes": [],
+        "x": -62674,
+        "z": -14639.9,
+        "n": [
+          -0.0155,
+          -0.9999
+        ],
+        "u": [
+          0.9999,
+          -0.0155
+        ],
+        "lakeId": 95,
+        "off": 21,
+        "tried": 24
+      },
+      "s4.meadow": {
+        "props": {},
+        "lanes": [],
+        "x": -68000,
+        "z": -16300,
+        "n": [
+          0,
+          1
+        ],
+        "u": [
+          1,
+          0
+        ],
+        "lakeId": null,
+        "off": 0,
+        "tried": 1
+      },
+      "s4.kill": {
+        "props": {
+          "s4.bones": {
+            "x": -65300,
+            "z": -13600,
+            "heading": -3.1416,
+            "sd": 405.3,
+            "y": 396.7
+          }
+        },
+        "lanes": [],
+        "x": -65300,
+        "z": -13600,
+        "n": [
+          0,
+          1
+        ],
+        "u": [
+          1,
+          0
+        ],
+        "lakeId": null,
+        "off": 0,
+        "tried": 1
       }
     },
     "portages": {

@@ -38,6 +38,7 @@ const NAMED = {
   company: () => import('./text/company.json'),
   finale: () => import('./text/finale.json'),
   side: () => import('./text/side.json'),
+  drafted: () => import('./text/drafted.json'), // x: the build's drafted lines (docs/story/95-drafted-lines.md)
 };
 export async function loadWords(names = ['opening', 'world']) {
   const out = {};

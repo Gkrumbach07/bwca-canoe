@@ -110,6 +110,18 @@ export const FACTS = [
   { key: 'cans.', kind: 'any', doc: '50 §5.5 the cans opened (cans.opened, cans.memo.read: endings.js openCans)' },
   { key: 'phone.', kind: 'any', doc: '50 §9.2 the permit-box phone: phone.dan (the number on Dan\'s card dialled)' },
   // /n
+  // 7a: begin (Round 7 stream 7a: 60 S2, S3, S4; the run's red lens and tie-off, shared with stream r)
+  { key: 'duane.', kind: 'any', doc: '60 S2 Duane Halvorsen: his scene (duane.met, duane.said.<choice>)' },
+  { key: 'elaine.', kind: 'any', doc: '60 S3 Elaine Sundquist: her scene (elaine.met, elaine.said.<choice>)' },
+  { key: 'kari.', kind: 'any', doc: '60 S4 Kari Vang: her scene (kari.met, kari.said.<choice>)' },
+  { key: 'lyle.', kind: 'any', doc: '60 S4 Lyle Brandvold: his scene (lyle.met, lyle.said.<choice>)' },
+  { key: 'lens.', kind: 'bool', doc: '60 S3 / 50 6.5 the red lens: lens.red (fitted to the headlamp once), lens.red.found (the tin lifted)', world: true },
+  { key: 'tieoff.', kind: 'bool', doc: '60 S2 / 50 6.2 tie off: tieoff.learned (the first tie-off: S2 or the run, stream r)', world: true },
+  { key: 'tracks.', kind: 'bool', doc: '60 S4 / 40 / 50 3 the dot reads tracks: tracks.read (Kari taught it)', world: true },
+  { key: 'mg.nightwatch.', kind: 'bool', doc: '60 S2 the night at two: mg.nightwatch.done (minigames/nightwatch.js)' },
+  { key: 'mg.skywatch.', kind: 'bool', doc: '60 S3 a night on Fourtown: mg.skywatch.seen | onelight (minigames/skywatch.js)' },
+  { key: 'mg.howl.', kind: 'bool', doc: '60 S4 the howl survey: mg.howl.answered | silent | marked (minigames/howl.js)' },
+  // 7a: end
 ];
 
 // the arcs whose yields are the big findings (§3.3 story.big), and the doors the player can be offered

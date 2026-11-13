@@ -4,5 +4,11 @@
 import S7 from './s7-mummos.js';
 import S9 from './s9-coffee.js';
 import mining from './arc-mining.js'; // a2: the mining years' arc (the join)
+// 7a: begin
+import S2 from './s2-squatch.js';
+import S3 from './s3-lights.js';
+import S4 from './s4-wolves.js';
+const SIDE7A = [S2, S3, S4];
+// 7a: end
 
-export const EPISODES = [S7, S9, mining];
+export const EPISODES = [S7, S9, mining, ...SIDE7A]; // (7a: ...SIDE7A)
