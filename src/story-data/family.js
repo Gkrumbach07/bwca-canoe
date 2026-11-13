@@ -155,8 +155,8 @@ export const AILI = {
       // 6.5 the kitchen table: step 2, Eino's name on the Walt page, a day since the stone
       { ask: '33:6.5.c1', once: 'eino', when: `${W2} & (f:tauno.turn | f:knows.eino) & days.since(aili.stone)>=1`, to: 'eino' },
       // 6.6 the guest book: step 3, a day after the kitchen table
-      { ask: '33:6.6.c2', once: 'book', when: `${W3} & days.since(aili.kitchen)>=1 & (f:gy.register | f:wade.met)`, to: 'book' },
-      { ask: '33:6.6.c1', once: 'book', when: `${W3} & days.since(aili.kitchen)>=1 & !(f:gy.register | f:wade.met)`, to: 'book' },
+      { ask: '33:6.6.c2', once: 'book', when: `${W3} & days.since(aili.kitchen)>=1 & (f:marlys.met | f:wade.met)`, to: 'book' },
+      { ask: '33:6.6.c1', once: 'book', when: `${W3} & days.since(aili.kitchen)>=1 & !(f:marlys.met | f:wade.met)`, to: 'book' },
       { ask: '33:6.2.c12', say: ['33:6.2.14'], end: true }] },
     came: { hub: 'talk0', go: [{ ask: '33:6.2.c8', once: 'came', say: ['33:6.2.10'] }] },
     his: { hub: 'talk0', go: [{ ask: '33:6.2.c10', once: 'nothing', say: ['33:6.2.12'], to: 'his2' }] },

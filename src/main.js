@@ -1381,6 +1381,23 @@ async function main() {
     } catch (e) { console.warn('story m: mechanics', e); }
   }
   // m: end
+  // a4: begin (campaign Round 6, stream a4: the family; docs/story/33-family.md), only under STORY_ON: Aili's motel beside
+  // the Little Vermilion store and Aili by her calendar, Jon (the dock, the Sand Point chase on stream m's motorboat), Liisa
+  // and the can, the back porch's climax, Gord on Thursdays, Danielle and the Carp end re-sited on the US side
+  // (docs/story/dlc-quetico.md); family-cast.js. With the flag off none of it is fetched
+  if (STORY_ON && story.v === 2 && window.__game.storyTalk) {
+    try {
+      const [{ familyCast }, { loadWords }] = await Promise.all([import('./family-cast.js'), import('./story-data/words.js')]);
+      const { topics, cast, texts } = window.__game.storyTalk, sm = window.__game.storySeams || {}, mech = window.__game.storyMech || {};
+      const Wf = await loadWords(['family']); texts.add(Wf.family);
+      familyCast.attach({ story, cast, npcs, talk, topics, outfitter, player, day, world, scene, tiles, actors, pointer, hud, layer: sm.layer || null, profile, inventory, pencil: sm.pencil || null, motorboat: mech.motorboat || null, photo, veil, texts, trip, wind });
+      const updA4 = outfitter.update.bind(outfitter);
+      outfitter.update = (dt) => { updA4(dt); try { familyCast.update(dt); } catch (e) { if (!familyCast.warnedU) { familyCast.warnedU = true; console.warn('story a4: the family', e); } } };
+      window.__game.storyFamily = { familyCast, on: true };
+      console.log('story a4: the family');
+    } catch (e) { console.warn('story a4: the family', e); }
+  }
+  // a4: end
   // gl-d: the trip-end tally and the board (the game-loop round, stream D; docs/build/game-loop-brief.md). Pay lands on
   // the trip's card as it counts up (record.js ended → tasks.settle), never at the board; no cap on notices held
   // (the owner's call 2026-11-05), each with a deadline that fits it; the new kinds (task-kinds-2.js: creel, campsite, beaver, iceout, colour,

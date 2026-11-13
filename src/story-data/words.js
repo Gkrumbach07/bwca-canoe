@@ -19,6 +19,10 @@ export function loadText() {
   return loading;
 }
 export const text = (id) => all.get(id) || null;
+// a4: begin (campaign Round 6): build drafts (95-drafted-lines.md) a stream's scenes and the Walt page need, by anchor;
+// an id the extract already has keeps the writers' words
+export function addWords(map) { for (const [id, e] of Object.entries(map || {})) if (!all.has(id)) all.set(id, e); }
+// a4: end
 export const nbText = () => nb || {};
 export function say(id, vars = {}) {
   const e = all.get(id);
