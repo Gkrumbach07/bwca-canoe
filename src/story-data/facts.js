@@ -98,6 +98,12 @@ export const FACTS = [
   { key: 'rose.', kind: 'any', doc: '60 S7 Rose Gornik: her scene (rose.said.<choice>)' },
   { key: 'mg.snag.', kind: 'bool', doc: '§10 the snag minigame: mg.snag.hooked | landed | snapped (minigames/snag.js through episodes)' },
   // /e
+  // f: begin (Round 3 stream F: the far end; docs/story/50-finale.md §2–§5, 6.9). gull.*, nb.*, knows.*, ev.*, ink.* are above
+  { key: 'camp.', kind: 'bool', doc: '50 §4 Walt\'s camp: camp.found (reached: the carry inks) | corebox | photo | june | marks | shelf | shelf.taken | boots | sun | cot' },
+  { key: 'pit.', kind: 'bool', doc: '50 §5 the cellar: pit.seen | cleared (the moss) | lifted (the lid broke) | note (Eino\'s: the run starts, stream R) | can.1 | can.2 (R gives the cans)' },
+  { key: 'stash.', kind: 'bool', doc: '50 §6.9 the run\'s stashes found: stash.paddle (taken) | paddle.found | drybag | grumman | grumman.under' },
+  { key: 'find.', kind: 'bool', doc: '§7.2 a big finding (find.big.camp: the torn pages under the floorboard)' },
+  // f: end
 ];
 
 // the arcs whose yields are the big findings (§3.3 story.big), and the doors the player can be offered
