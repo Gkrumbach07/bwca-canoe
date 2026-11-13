@@ -9,7 +9,7 @@
 //   M5 the host's tasks: a notice the host takes shows taken (open) in the guest's tasks (journal and tracker)
 //   M6 a guest's deed is the host's: a picture credited near the host lands in the host's feed (by: guest)
 //   M7 the pit with a friend in: no verb; N42 on the Walt page once with an L6 key (and mirrored to the guest)
-//   M8 a join refused while the run is on ("Out on the water tonight."), the room fine again after
+//   M8 a join taken while the run is on (owner 2026-11-13: company on the run)
 //   M9 the guest leaves: back home, their own story as it was (their fact, none of the host's), story2 untouched
 //   APP=... RELAY=... node scripts/coop/story-mirror.mjs [--out dir]
 import { createRequire } from 'node:module';
@@ -131,17 +131,17 @@ try {
   const g7b = await B.evaluate(() => window.__game.story.walt().includes('c.walt.n42'));
   result('M7 the pit has no verb with a friend in; N42 written once with an L6 key, in the host\'s and the guest\'s book', g7.peers >= 1 && g7.verbs === 0 && !g7.noKey && g7.n42 === 1 && g7.lines[0] === 'Not with company on the lake.' && g7b, { ...g7, guestSees: g7b });
 
-  // M8 the run on: a third browser's join is refused; off again, the room takes joins
+  // M8 the run on: a third browser's join is taken (owner 2026-11-13: company on the run)
   await A.evaluate(() => { const g = window.__game; g.__rigRunOff = g.story.sensor('run.active', () => true); });
-  await sleep(2500); // (the next clock carries shut: 'run')
+  await sleep(2500);
   const C = await fresh('third');
   await go(C, 'story=1');
   const j1 = await C.evaluate((code) => window.__game.coop.join(code, { name: 'Cy', shirt: 1 }).then(() => 'in', (e) => e.message), code);
+  await sleep(4000);
+  const c1 = await C.evaluate(() => ({ role: window.__game.coop.role, live: window.__game.coop.live }));
   await A.evaluate(() => { const g = window.__game; g.__rigRunOff(); });
-  await sleep(2500);
-  const j2 = await C.evaluate((code) => window.__game.coop.join(code, { name: 'Cy', shirt: 1 }).then(() => 'in', (e) => e.message), code);
-  result('M8 a join refused while the run is on ("Out on the water tonight."), taken again after', j1 === 'Out on the water tonight.' && j2 === 'in', { j1, j2 });
-  if (j2 === 'in') { await C.evaluate(() => { try { window.__game.coop.disconnect(); } catch { /* */ } }); }
+  result('M8 a join taken while the run is on, still in a few seconds later', j1 === 'in' && c1.role === 'guest' && c1.live, { j1, ...c1 });
+  if (j1 === 'in') { await C.evaluate(() => { try { window.__game.coop.disconnect(); } catch { /* */ } }); }
 
   // M9 the guest leaves: home, their own story as it was
   const visiting = await raw2(B);

@@ -23,7 +23,7 @@
 //     'rescue'        { fee, abs, to }               the rescue sent for, paid
 //     'season:close'  { year, abs, ep }              the open-water season ends (the winter card's dark, before the clock moves)
 //     'year:open'     { year, abs, ep, permit, from }  up at seven on next year's permit's day (the clock moved)
-import { dateOfAbs } from './trip.js';
+import { dateOfAbs, absDay } from './trip.js';
 import { dateWords } from './permits.js';
 import { itemDef } from './items.js'; // (w: the winter's spoils)
 
@@ -34,6 +34,7 @@ export const TURN = {
   iced: 0.5,       // season.ice at or over this: frozen (player.js walks you over it from here)
   fallFrom: 182,   // and from 1 July on (day of the year): the freeze-up, not the spring's last ice
   iceOut: 120,     // w: the ice-out day of the year where no landing's lake says (permits.js ICE_ELSE)
+  follow: 60,      // days: a host's clock this far ahead of a guest's is a winter turned (a permit's skip is 28 at most)
 };
 const GUIDE_ID = 'late:ice';
 
@@ -56,8 +57,6 @@ export class SeasonTurn {
   get coop() { const g = typeof window !== 'undefined' ? window.__game : null; return g ? { coop: g.coop || null, ct: g.coopTrip || null } : {}; }
   get grouped() { const c = this.coop; return !!(c.ct && c.ct.grouped); }
   get guest() { const c = this.coop; return !!(c.coop && c.coop.role === 'guest'); }
-  // w: friends in the room (host or guest): §3.9, the turn is not offered while peers > 0
-  get peers() { const c = this.coop; try { return c.coop && typeof c.coop.peers === 'function' ? c.coop.peers().length : 0; } catch { return 0; } }
   get today() { const P = this.t.permits; return P ? P.today : 0; }
   // (loop-r4 join: the freeze-up only, never the spring: a trip that reaches a lake still holding its ice in May, a later
   // lake's ice-out than the landing's, was told "Ice is making: the lakes are closing" and offered the $75 rescue)
@@ -112,7 +111,7 @@ export class SeasonTurn {
   canTurn() {
     const tr = this.t.trip;
     if (tr && tr.active) return 'trip';
-    if (this.grouped || this.guest || this.peers > 0) return 'company';
+    if (this.grouped || this.guest) return 'company'; // (owner 2026-11-13: a host with friends in turns it for everybody)
     if (this.turning || (this.t.permits && this.t.permits.skipping)) return 'busy';
     return null;
   }
@@ -237,6 +236,31 @@ export class SeasonTurn {
     };
     this.autoP = veil && typeof veil.card === 'function' ? veil.card(c).then(done) : (run(), Promise.resolve(done()));
     return this.autoP;
+  }
+  // The turn for everybody (owner 2026-11-13): a guest whose host's clock jumps a winter ahead (coop.js applyClock) sees the
+  // same winter card, and in its dark takes the host's clock and wakes rested, fed, the winter's spoils thrown out. A
+  // guest plays in Sandbox (nothing of theirs is saved), so no permit, board or story moves here. → true: handled (and
+  // while the card runs, the host's clock messages wait for it).
+  follow(c) {
+    if (this.followP) return true;
+    const d = this.t.day; if (!d || !this.guest || !c) return false;
+    const abs = absDay(c.year, c.doy), today = absDay(d.year, d.doy);
+    if (abs - today < TURN.follow) return false;
+    const veil = this.t.veil, en = this.t.energy, to = dateOfAbs(abs);
+    const run = () => {
+      d.setClock(c.year, c.doy, c.hours);
+      if (en && typeof en.wakeFresh === 'function') en.wakeFresh({ fed: true });
+      this.spoils();
+    };
+    const card = {
+      kicker: 'winter',
+      text: 'The lakes close. The ice comes in, then the snow, and the long dark; the bunkhouse is shut till spring.',
+      sub: `Up at seven on ${dateWords(abs)}, ${to.year}, rested.`,
+      fadeIn: 1.6, hold: 5, fadeOut: 2.4, onDark: run,
+    };
+    const done = () => { this.followP = null; return true; };
+    this.followP = veil && typeof veil.card === 'function' ? veil.card(card).then(done, done) : (run(), Promise.resolve(done()));
+    return true;
   }
   // w: end
   stats() { const tr = this.t.trip; return { frozen: this.frozen(), iced: !!(tr && tr.state && tr.state.iced), turning: this.turning, fee: TURN.rescue }; }

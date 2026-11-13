@@ -85,7 +85,6 @@ export class Room extends DurableObject {
       const old = this.hostSocket();
       if (old) { try { old.send(JSON.stringify({ t: 'error', why: 'replaced' })); old.close(4001, 'replaced'); } catch { /* gone */ } }
     } else if (!hostKey) return refuse('no trip');
-    else { const sn = await this.snapshot(); if (sn && sn.shut) return refuse(String(sn.shut).slice(0, 16)); } // c: the host says no company (the story's run)
     const others = this.live().filter((ws) => !(role === 'host' && att(ws).host));
     if (others.length >= MAX_CLIENTS) return refuse('full');
 

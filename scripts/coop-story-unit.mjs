@@ -113,13 +113,12 @@ test('the pit with company: no verb, N42 once with an L6 key; alone the verb is 
   assert.equal(P.hs.readSensor('peers'), 0);
 });
 
-test('the run on: the clock shuts the room, a joiner is sent away', () => {
+test('the run on: a joiner is taken in like any other (owner 2026-11-13: company on the run)', () => {
   const P = pair();
-  assert.equal(P.host.clockExtra(), null);
   P.hs.sensor('run.active', () => true);
-  assert.deepEqual(P.host.clockExtra(), { shut: 'run' });
+  assert.equal(P.host.clockExtra, undefined, 'the clock carries nothing extra');
   for (const fn of P.host.peerFns) fn('join', { id: 2, name: 'Bo' });
-  assert.equal(P.guest.lostWhy, 'run');
+  assert.equal(P.guest.lostWhy, undefined, 'nobody sent away');
 });
 
 test('night one on a shared night: the guest\'s card, its wake waits for the host', async () => {

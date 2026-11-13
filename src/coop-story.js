@@ -22,9 +22,8 @@
 // - The pit with company (Part 3 call 1): while a friend is in the room (`peers` > 0) the pit (a story prop of kit
 //   'pit') has no verb, and the first time a player with an L6 key points at it with company, the Walt page gains N42's
 //   line, once. The host does the cellar night alone.
-// - No company on the run: while the run is on (`run.active`, stream R), the host's clock carries `shut: 'run'`, so the
-//   room (server/room) refuses a guest's join or Rejoin with 'run' ("Out on the water tonight."); a guest whose client
-//   sees it in the welcome's snapshot leaves before entering, and a guest the host hears join anyway is sent away.
+// - Company on the run (owner, 2026-11-13): a friend may join or Rejoin while the host's run is on. The run stays the
+//   host's (the watchers, the checkpoints and the cans are the host's story); the guest rides along in the mirror.
 // - The shared night waits for night one: when the host's night-one cutscene plays on a shared night, each guest sees
 //   one card, "{host} is reading by headlamp.", and their night (camp.wake) waits until the host's cutscene ends.
 //
@@ -34,7 +33,6 @@
 //   storyq   guest → host: {} (nothing heard yet: send it again)
 //   storyev  guest → host: { k: 'ev', evt, data } | { k: 'trig', place, on, i } | { k: 'shot', eye, dir }, with x, z
 //   storyn   host → all: { op: 'read' | 'done', name } (night one on a shared night)
-//   storyx   host → one: { why: 'run' } (the run is on: leave)
 //
 //   const cs = new CoopStory(coop, { story, layer, npcs, walt, camp, hud, inventory, minigames, ambient, book })
 //   cs.useFeed(feed) (when the feed has started) · cs.runOn() · cs.stats() (rigs) · cs.debug
@@ -52,7 +50,6 @@ export const PIT_KITS = new Set(['pit']);
 // the build's drafted words (docs/story/95-drafted-lines.md, stream c): the writers replace them there
 export const WORDS = {
   reading: '{host} is reading by headlamp.',   // c.coop.reading (design §6.1)
-  shut: 'Out on the water tonight.',          // c.coop.shut (design §8.3 "No company")
   nod: '…',                                    // a story person's look up at a stranger (as cast.js's Josie with no word)
 };
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -73,7 +70,7 @@ export class CoopStory {
     this.cast = new Map();          // host: key → { key, ep, name, role, look, spot } (story people stood)
     this.mirCast = new Map();       // guest: key → { rec, h }
     this.reading = null;            // guest: { at, name, done: Promise, resolve }
-    this.n = { pubs: 0, applies: 0, credits: 0, creditsIn: 0, creditsTaken: 0, refused: 0, stripped: 0, n42: 0, pitHid: 0, readCards: 0, sentAway: 0 };
+    this.n = { pubs: 0, applies: 0, credits: 0, creditsIn: 0, creditsTaken: 0, refused: 0, stripped: 0, n42: 0, pitHid: 0, readCards: 0 };
     this.log = [];
     this.debug = this.makeDebug();
     const { story } = t;
@@ -85,10 +82,8 @@ export class CoopStory {
     coop.on('storyq', (m) => { if (this.host && m.from != null) this.forceTo.add(m.from); });
     coop.on('storyev', (m) => { if (this.host) this.creditIn(m); });
     coop.on('storyn', (m) => { if (this.guest) this.nightOne(m); });
-    coop.on('storyx', (m) => { if (this.guest) this.sentAway(m); });
     coop.onPeers((what, peer) => this.peers(what, peer));
     coop.tick((now) => this.tick(now));
-    coop.clockExtra = () => (this.host && this.runOn() ? { shut: 'run' } : null);
     this.hookPeople();
     this.hookLayer();
     this.hookNight();
@@ -133,7 +128,6 @@ export class CoopStory {
     if (what === 'gone') { this.clearMirCast(); this.endReading(); return; }
     if (!this.host || !peer) { if (this.guest && (what === 'welcome' || (what === 'join' && peer && peer.host))) this.askT = 0; return; }
     if (what === 'join') {
-      if (this.runOn()) { this.coop.send({ t: 'storyx', to: peer.id, why: 'run' }); this.n.sentAway++; this.note(`sent away ${peer.name}: the run`); return; }
       this.forceTo.add(peer.id);
     }
   }
@@ -351,12 +345,6 @@ export class CoopStory {
     el.innerHTML = esc(text);
     el.classList.add('on');
     requestAnimationFrame(() => el.classList.add('lit'));
-  }
-
-  // --- sent away: the run is on ---------------------------------------------------------------------------------------------------
-  sentAway(m) {
-    this.note(`sent away: ${m.why}`);
-    if (typeof this.coop.lost === 'function') this.coop.lost(m.why || 'run');
   }
 
   stats() {
