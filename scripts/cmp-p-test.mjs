@@ -66,7 +66,14 @@ const PAGE = () => {
     has(list) { return Object.fromEntries(list.map((k) => [k, s.has(k) ? (s.get(k) ?? true) : false])); },
     st() { return C.debug.state(); },
     async to(ep, inside = false) {
-      const L = g.outfitter.layout(ep); if (!L) return false;
+      let L = g.outfitter.layout(ep);
+      if (!L) { // (a store far off is not built: jump to its entry point first, then wait for it)
+        const e = (g.world.entryPoints || []).find((q) => q.ep === Number(ep)) || (g.npcs.landingOf ? g.npcs.landingOf(ep) : null);
+        if (!e) return false;
+        await window.__L.tp(e.x, e.z); await window.__L.settle();
+        for (let i = 0; i < 150 && !(L = g.outfitter.layout(ep)); i++) { window.__L.step(10); await window.__L.wait(40); }
+        if (!L) return false;
+      }
       await window.__L.tp(L.door.x + L.axes.b.x * 6, L.door.z + L.axes.b.z * 6); await window.__L.settle();
       // the store built and its keeper stood (the counter's spot reads the keeper): a far jump loads it a little later
       for (let i = 0; i < 150; i++) { const k = (g.npcs.at(ep) || []).some((v) => v.keeper); if (g.storyCompany.debug.store(ep) && k) break; window.__L.step(10); await window.__L.wait(40); }
