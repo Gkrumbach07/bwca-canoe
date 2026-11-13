@@ -1542,6 +1542,24 @@ async function main() {
     } catch (e) { console.warn('story 7b', e); }
   }
   // 7b: end
+  // g: begin — the end games after the endings (story wave 2, stream g; campaign-design Part 3 #5-#6), only under
+  // STORY_ON: the owners' secret missions after the journalist ending (the keepers' talk, the giant fish's bite rule, the
+  // finds at real places, the photos) and, after the money ending, each owner's one small ask that brings their prices
+  // back (owner.<ep>.softened, read by n's shop.storyMul). With the flag off none of it is fetched
+  if (STORY_ON && story.v === 2 && window.__game.storyTalk) {
+    try {
+      const { endgames } = await import('./endgames.js');
+      const { topics, texts } = window.__game.storyTalk;
+      const E = window.__game.storyEpisodes || {};
+      endgames.attach({ story, npcs, topics, texts, tasks, profile, inventory, fishing, photo, pointer, scene, tiles, world, hud, kit, day, outfitter, player, episodes: E.episodes || null,
+        guest: () => !!(window.__game.coop && window.__game.coop.guest) });
+      const updG = outfitter.update.bind(outfitter);
+      outfitter.update = (dt) => { updG(dt); try { endgames.update(dt); } catch (e) { if (!endgames.warnedU) { endgames.warnedU = true; console.warn('story g: the end games', e); } } };
+      window.__game.storyEndgames = endgames;
+      console.log('story g: the end games');
+    } catch (e) { console.warn('story g: the end games', e); }
+  }
+  // g: end
   // gl-d: the trip-end tally and the board (the game-loop round, stream D; docs/build/game-loop-brief.md). Pay lands on
   // the trip's card as it counts up (record.js ended → tasks.settle), never at the board; no cap on notices held
   // (the owner's call 2026-11-05), each with a deadline that fits it; the new kinds (task-kinds-2.js: creel, campsite, beaver, iceout, colour,
