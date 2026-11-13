@@ -69,7 +69,8 @@ const PAGE = () => {
       const L = g.outfitter.layout(ep); if (!L) return false;
       await window.__L.tp(L.door.x + L.axes.b.x * 6, L.door.z + L.axes.b.z * 6); await window.__L.settle();
       // the store built and its keeper stood (the counter's spot reads the keeper): a far jump loads it a little later
-      for (let i = 0; i < 150; i++) { const K = g.outfitter.layout(ep), k = (g.npcs.at(ep) || []).some((v) => v.keeper); if (K && K.keeper && k) break; window.__L.step(10); await window.__L.wait(40); }
+      for (let i = 0; i < 150; i++) { const k = (g.npcs.at(ep) || []).some((v) => v.keeper); if (g.storyCompany.debug.store(ep) && k) break; window.__L.step(10); await window.__L.wait(40); }
+      window.__p.lastTo = { ep, store: g.storyCompany.debug.store(ep), d: Math.round(Math.hypot(g.player.x - L.door.x, g.player.z - L.door.z)) };
       if (inside) return window.__t.walkIn(ep); return true;
     },
     lot() { const p = g.player, eps = g.storyCompany.debug.lots(); let best = null; for (const e of eps) { const L = g.storyCompany.debug.lot(e); const d = Math.hypot(L.lot.x - p.x, L.lot.z - p.z); if (!best || d < best.d) best = { ep: e, d, x: L.lot.x, z: L.lot.z }; } return best; },
@@ -112,7 +113,7 @@ try {
     result('3 the camp search: ev.search and the Walt page line', d3.ok && !!d3.search && d3.walt, d3);
     // 4 Wade at the counter (Moose Lake 25, home)
     await a.evaluate(() => window.__p.to(25, false));
-    const d4a = await a.evaluate(() => { const C = window.__game.storyCompany; const e = C.debug.enter(25); return { e, st: C.debug.state() }; });
+    const d4a = await a.evaluate(() => { const C = window.__game.storyCompany; const e = C.debug.enter(25); return { e, st: C.debug.state(), to: window.__p.lastTo }; });
     await a.evaluate(() => window.__game.storyCompany.debug.wade());
     const c4 = await a.evaluate(() => window.__t.convo());
     const r4 = await choose(a, 'Do I know you?'); const said4 = await hear(a, 6);

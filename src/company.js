@@ -569,6 +569,7 @@ class Company {
       adrift() { return self.adrift(self.c.camp && self.c.camp.camp); },
       stranger(name = 'test carry') { self.carried({ name }); return !!self.stranger; },
       sightings() { return [...self.sight.keys()]; },
+      store(ep) { const L = storeLayout(ep); return !!(L && L.keeper); },
       lots() { return trailheadLayouts().map((L) => L.ep); },
       lot(ep) { return trailheadLayout(ep); },
       brekke() { const M = self.c.mining; return M && M.talk ? M.talk('brekke') : false; },
