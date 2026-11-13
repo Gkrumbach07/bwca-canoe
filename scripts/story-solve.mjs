@@ -798,7 +798,7 @@ const ENTRY_READS = { porch: ['f:tauno.porch.done', 'f:tauno.porch.declined2', '
   mary: ['f:mary.met', 'f:kettle.lid', 'f:mary.lid.given', 'f:mary.table'], tasha: ['f:kettle.notice', 'f:tasha.met', 'f:kettle.fill.*', 'f:kettle.secchi', 'f:kettle.done'], // (join c2: + slice 2's)
   hap: ['f:hap.met', 'f:hap.day', 'f:gy.tow', 'f:gy.tow.told', 'f:hap.tow.*', 's:trips'], marlys: ['f:marlys.met', 'f:gy.register', 'f:marlys.night', 'f:nb.found', 'f:tauno.porch.done'], nate: ['f:nate.met'], // a3
   sheila: ['f:sheila.met', 'f:sheila.overdue.found'], statement: ['f:choice.sheila'], rick: ['f:rick.met'], night: ['f:marlys.night', 'f:gy.night.*'],
-  dennyI: ['f:nb.found', 'f:case.denny.*', 'f:choice.denny', 'f:denny.met.*'], reveal: ['f:denny.reveal.open', 'f:denny.note', 'f:denny.revealed'], frankI: ['f:nb.found', 'f:choice.denny'] }; // (i: the informant's)
+  dennyI: ['f:nb.found', 'f:choice.denny', 'f:denny.met.*'], reveal: ['f:denny.reveal.open', 'f:denny.note', 'f:denny.revealed'], frankI: ['f:nb.found', 'f:choice.denny'] }; // (i: the informant's)
 const SCENE_SET = {}; // scene → every atom it can set (a conversation begun is kept only if its scene can touch the goal)
 function sceneSetters(name, def, who) {
   const casts = who && CAST[who] ? CAST[who].where.flatMap((w) => condAtoms(w.when)) : [];
@@ -877,7 +877,9 @@ async function buildSetters() {
   for (const [sets, cond] of I_SETS) setter(condAtoms(cond), sets, `i:${sets[0]}`, cond, 1);
   for (const nb of READ_NBI) setter(['f:nb.found'], [`read:${nb}`], `read:${nb}`, 'f:nb.found', 1);
   setter(['f:nb.found'], ['f:denny.met.*'], 'i:meet', 'f:nb.found', 1);
-  setter(['f:denny.met.*'], ['f:denny.reveal.open', 'f:denny.tell2'], 'i:met', 'f:denny.met.*', 0);
+  setter(['f:denny.met.*'], ['f:denny.reveal.open'], 'i:met', 'f:denny.met.*', 0);
+  setter(['f:gy.register', 'f:denny.met.*'], ['f:denny.tell2'], 'i:tell2', 'f:gy.register', 1); // (tell2Due: the register, or a third meeting)
+  setter(['f:case.denny.*'], ['f:denny.tell3'], 'i:tell3', 'count(case.denny.*)>=2', 1); // (tell3Due: two pieces)
   setter(['f:nb.found'], ['f:canary.denny.*'], 'i:canary', 'f:nb.found', 2);
   setter(['f:nb.found'], ['f:canary.frank.*'], 'i:canary.frank', 'f:nb.found', 2);
   setter(['f:frank.cleared'], ['f:frank.accused', 'f:frank.folder.asked'], 'i:frank', 'f:frank.cleared', 2);
