@@ -462,7 +462,7 @@ export async function connect(t) {
 
   const debug = {
     dbg, poll, bindM1, M1: () => M1, FOGP, cycle: cyc, rec: (b) => (rec(b) || {}).id || null,
-    stageSolo: () => { unstageSolo(); stageSolo(); return !!solo; }, soloTalk, solo: () => solo,
+    stageSolo: () => { unstageSolo(); stageSolo(); return !!solo; }, soloTalk, solo: () => solo, soloNodes: () => (solo ? soloNodes() : null), tomNodes: () => (tom ? tomNodes() : null),
     stageTom: (ep = 25) => { dbg.tomEp = ep; unstageTom(); stageTom(ep); return !!tom; }, tomTalk, tom: () => tom,
     watch: () => watch, fog: () => fog, skim: () => skim, m6: () => st('M6').long || null,
     turned, dayTurn: () => { lastDay = null; poll(); },

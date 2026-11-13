@@ -17,8 +17,8 @@ export default {
   ],
   started: `f:${P}.yes`,
   topics: [
-    { id: 'M6.ask', once: true, ask: 'm6.ask', when: `!f:${P}.yes & in:store`, say: 'm6.say' },
-    ...LONG_PROJECTS.map((p) => ({ id: `M6.p.${p.id}`, ask: `m6.ask.${p.id}`, when: `f:asked.walt.M6.ask & !f:${P}.yes & in:store`, say: `m6.say.${p.id}`, then: [`f:${P}.p.${p.id}`] })),
+    { id: 'M6.ask', once: true, ask: 'm6.ask', when: `!f:${P}.yes`, say: 'm6.say' },
+    ...LONG_PROJECTS.map((p) => ({ id: `M6.p.${p.id}`, ask: `m6.ask.${p.id}`, when: `f:asked.walt.M6.ask & !f:${P}.yes`, say: `m6.say.${p.id}`, then: [`f:${P}.p.${p.id}`] })),
   ],
   steps: [],
   ends: [
