@@ -807,6 +807,7 @@ the speaker turned toward the player. One line. Fade. **Nothing is shown**: no h
 Wade's lines (the first catch of a save always plays the first; after that, one of the rest, never the same twice in a
 row):
 
+<!-- list: run.wade -->
 1. "Evening. Long way from a site, aren't you."
 2. "No light on? That's how people get hurt out here."
 3. "That's a lot of weight for a canoe that size."
@@ -850,10 +851,13 @@ and Maggie back (bible 6.6). At that ice-out, Maggie's wagon is at the lot from 
 
 ### 6.15 Small lines around the run
 
+<!-- id: run.tauno.moon q -->
 - **Tauno, once, after a meeting is set** (on any porch): "If I was going to do something stupid on the water at night,
   I'd do it in the dark of the moon." (Gives nothing but the idea.)
 - **At the first tie-off**, from the book (N14), as above.
+<!-- id: run.walt.drybag page q -->
 - **On picking up the dry bag**, the Walt page: "Top of the 121, in the rocks. Old guide's habit. A scanner."
+<!-- id: run.walt.grumman page q -->
 - **Under the Grumman**, the Walt page: "Some kid'll need it someday. He meant me." (once)
 - **On the 214, lamp off, the first stumble**, no text: the sound of the pack on rock, and then, over the scanner if the
   player has it: "Two. Hear that?"

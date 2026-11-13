@@ -59,6 +59,7 @@ import { campKey, AREA_R } from './camp.js';
 import { BARRELS } from './hang.js';
 import { tentOf } from './tent.js';
 import { eatName } from './cook.js';
+const storyAllows = (v, ctx = {}) => { try { const s = typeof window !== 'undefined' && window.__game ? window.__game.story : null; return !s || typeof s.allows !== 'function' || s.allows(v, ctx) !== false; } catch { return true; } }; // r: the run's verbs (story.allows, 50 §6.2: absent, not greyed); flag off: no allows, all true
 
 const FIRE_PANEL = 4;        // m from the ring within which its object is in objects() (the card)
 const HULL_REACH = 3;        // m from the canoe's keel line (inventory.js HULL_REACH)
@@ -248,7 +249,7 @@ class Nearby {
     if (!e || e.box) return out;
     const d = itemDef(e.id);
     if (!d) return out;
-    if (d.slot === 'tent') {
+    if (d.slot === 'tent' && storyAllows('pitch')) { // r
       const tent = this.camp.tentByUid(e.uid), why = this.camp.pitchRefused(tent), pc = check(this.camp, 'pitchNeeds', tent);
       out.push({ id: 'pitch', label: 'Pitch', closeBook: true, enabled: !why, why, ...(pc ? { needs: pc.needs || null, next: pc.next || null } : {}), run: () => this.camp.beginPitch(e.uid) });
     }
@@ -256,7 +257,7 @@ class Nearby {
     const site = this.site(FIRE_PANEL);
     if (site && site.layout) {
       const key = campKey(site), ch = this.chores, bin = ch.fuelBin(key, site), grate = ch.grate(key, site);
-      if (d.kind === 'firewood' && bin && c !== bin) out.push(this.moveAction('fuel', 'Put it on the fire', c, e, bin, 'the ring is full'));
+      if (d.kind === 'firewood' && bin && c !== bin && storyAllows('light')) out.push(this.moveAction('fuel', 'Put it on the fire', c, e, bin, 'the ring is full'));
       if (d.kind === 'fish' && d.eat && d.eat.cook && grate && c !== grate) out.push(this.moveAction('grate', 'Put it on the grate', c, e, grate, 'the grate is full')); // (crafting: a meal goes into a pot; a fish may go on a stick)
       if ((!bin || !grate) && this.hooks.friendFeed) out.push(...(this.hooks.friendFeed(key, c, e, { bin: !!bin, grate: !!grate }) || [])); // co-op: a friend's ring (coop-share.js)
     }
@@ -356,12 +357,13 @@ class Nearby {
         if (tent) {
           const tt = camp.tentByUid(tent.uid), why = camp.pitchRefused(tt), pc = check(camp, 'pitchNeeds', tt);
           push(hit, { kind: 'item', ref: o.id, label: `the ${lower(tent.def.name)}, bagged`, e: { verb: 'Pick up', ...(roomOnYou(inv, tent.def.id) ? { why: null } : { why: 'no room on you', ...ROOM_FULL }), run: () => packs.pickUp(u) }, q: { verb: 'Pitch', why, ...(pc ? { needs: pc.needs || null, next: pc.next || null } : {}), run: () => camp.beginPitch(tent.uid) }, mesh: view && view.objs && view.objs.get(o.id) });
+          if (!storyAllows('pitch') && out.length && out[out.length - 1].target && out[out.length - 1].target.q && out[out.length - 1].target.q.verb === 'Pitch') out[out.length - 1].target.q = null; // r
           continue;
         }
         // fb4 A: the bagged tarp on the ground (a pile holding only it): E Pick up · Q Pitch the tarp (stream E's
         // tarp.verb(pile, entry) → { enabled, why, needs, next, label, run }: it arms the rig's ghost)
         const tarp = window.__game && window.__game.tarp, te = o.grid.length === 1 && !o.grid[0].box && o.grid[0].id === 'tarp' && tarp && typeof tarp.verb === 'function' ? o.grid[0] : null; // (only the tarp: a lone notebook on the ground read "the a small notebook, bagged · Q Pitch the tarp")
-        const tv = te ? check(tarp, 'verb', o, te) : null;
+        const tv = te && storyAllows('tarp') ? check(tarp, 'verb', o, te) : null; // r: no tarp on the run
         if (tv) {
           push(hit, { kind: 'item', ref: o.id, label: `the ${lower((itemDef(te.id) || {}).name || 'tarp')}, bagged`, e: { verb: 'Pick up', ...(roomOnYou(inv, te.id) ? { why: null } : { why: 'no room on you', ...ROOM_FULL }), run: () => this.takeOne(o) }, q: { verb: tv.label || 'Pitch the tarp', why: whyOf(tv), needs: tv.needs || null, next: tv.next || null, run: (o2) => tv.run(o2) }, mesh: view && view.objs && view.objs.get(o.id) });
           continue;

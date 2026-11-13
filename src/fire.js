@@ -486,6 +486,7 @@ export class Fires {
   // at: { x, y, z, a } (props.js c.layout.fire: the ash's centre, its ground height, the grate's bearing); a fire laid
   // there is lit on its own wood (hours: more on top, or none)
   kindle(key, at, now, hours = FIRE.burn, { flare = false } = {}) {
+    if (typeof window !== 'undefined' && window.__game && window.__game.story && typeof window.__game.story.allows === 'function' && window.__game.story.allows('light', { key }) === false) return this.fires.get(key) || null; // r: no fire on the run
     let f = this.fires.get(key);
     if (f && f.laid) { hours = f.laid + (hours || 0); f.laid = 0; }
     else if (f && now < f.until) { f.until = now + hours; return f; }

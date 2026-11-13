@@ -1040,6 +1040,17 @@ export class Energy {
       out: { ...this.out }, // 2026-10-31: the hours each need has been run out
     };
   }
+  // r: begin (the run's checkpoint, §8.5 step 4): the clock set back to a checkpoint, then the needs as they were there.
+  // restore() takes lastHours/lastNow from the clock, so no hours of need pass for the jump back and no chunk is counted
+  // twice (the fb2 F setClock-back trap); the chunks' rates start afresh. Food eaten since comes back (Owner call 2).
+  rewindTo(d) {
+    if (!d) return false;
+    this.restore(d);
+    for (const k in this.grow) this.grow[k] = 0;
+    this.lastChunks = null; this.spentAt = null; this.warned = false;
+    return true;
+  }
+  // r: end
   restore(d) {
     this.value = clamp(d.value ?? 1, 0, 1); this._food = Math.max(0, d.food ?? 0); this.fedUntil = d.fedUntil ?? -1; // with the inventory the food is its meals: the saved days are only the old count
     this.awakeSince = Number.isFinite(d.awakeSince) ? d.awakeSince : this.now;

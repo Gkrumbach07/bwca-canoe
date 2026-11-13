@@ -267,6 +267,7 @@ export class Trip {
   // fee (the late season's rescue off the ice, season-turn.js): already paid, said in the card
   evacuate(why = 'food', { fee = 0 } = {}) {
     if (!this.adventure || !this.active || this.evacuating) return false;
+    if (this.runHook && !fee && this.runHook('evac', why)) return true; // r: the run resets to its checkpoint instead (STORY_ON only: run.js sets runHook)
     this.evacuating = true;
     const o = this.outfitter, w = this.world;
     const to = this.nearestKnownOutfitter();
@@ -298,6 +299,7 @@ export class Trip {
 
   // --- a capsize: the cost in Adventure ------------------------------------------------------------------
   capsize() {
+    if (this.runHook && this.runHook('capsize')) return; // r: a swamping on the run resets to the checkpoint (run.js, STORY_ON)
     this.log('capsize');
     if (!this.adventure) return;
     const cold = (this.day.season && this.day.season.waterTemp != null ? this.day.season.waterTemp : 15) < 12, en = this.energy;

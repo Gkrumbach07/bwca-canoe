@@ -90,6 +90,10 @@ export const WALT_LINES = [
   { id: '50:2.4.3', section: 'farend' },
   { id: '50:2.4.4', section: 'farend' },
   // f: end
+  // r: begin (the run's Walt-page lines, 50 §6.15)
+  { id: 'run.walt.drybag', section: 'farend' },
+  { id: 'run.walt.grumman', section: 'farend' },
+  // r: end
 ];
 
 // a text id with no row: its section by its id's prefix (the longest that matches), else 'odd'. Leads are a person's or a

@@ -187,6 +187,7 @@ export const kv = {
   },
   flush() { return flushNow(); },
   freeze(test) { frozen = test; },
+  frozenTest() { return frozen; }, // r: the checkpoint's restore keeps a stale tab's freeze (story-cp)
   onTab(fn) { tabFns.push(fn); },
   tell(msg) { try { if (channel) channel.postMessage({ ...msg, tab: TAB }); } catch { /* none */ } },
   persist,

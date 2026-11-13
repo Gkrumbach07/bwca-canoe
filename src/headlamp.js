@@ -90,9 +90,14 @@ export class Headlamp {
     this.glow.name = 'headlamp glow'; this.glow.frustumCulled = false; this.glow.renderOrder = 15;
     this.bead.add(this.glow);
     this.on = false; this.level = 0;
+    this.lens = 'white'; this.red = false; this.wasRed = false; // r: Walt's red lens (S3) fitted: H gives red (setLens); the run's detection reads shows()
     this.onNote = null; // set by main: a line in the HUD
   }
 
+  // r: begin (the red lens, 50 §6.5; 7a fits it): red is enough for the tread and the rocks at a landing, not for pencil
+  setLens(l = 'white') { this.lens = l === 'red' ? 'red' : 'white'; this.red = this.lens === 'red'; return this.lens; }
+  shows() { return this.on ? (this.red ? 'red' : 'white') : 'off'; }
+  // r: end
   // switch it (no argument: the other way); returns whether it is on
   toggle(on = !this.on) {
     this.on = !!on;
@@ -109,6 +114,15 @@ export class Headlamp {
     // a cool night makes no difference to the lamp; dusk does: it reads only once the sky has gone (it is never
     // turned down, the eye just stops noticing it by day)
     L.intensity = LAMP.intensity * lv;
+    // r: begin (the red lens: the same light, red and about a third as strong; no program changes)
+    if (this.red !== this.wasRed) {
+      if (!this.white) this.white = { light: L.color.clone(), on: this.lensOn.clone(), glow: this.glowMat.uniforms.uColor.value.clone() };
+      this.wasRed = this.red;
+      if (this.red) { L.color.setRGB(1, 0.12, 0.06); this.lensOn.setRGB(4, 0.5, 0.25); this.glowMat.uniforms.uColor.value.setRGB(1.1, 0.2, 0.12); }
+      else { L.color.copy(this.white.light); this.lensOn.copy(this.white.on); this.glowMat.uniforms.uColor.value.copy(this.white.glow); }
+    }
+    if (this.red) L.intensity *= 0.35;
+    // r: end
     this.bead.material.color.copy(this.lensOff).lerp(this.lensOn, lv);
     // the glow is drawn every frame, on or off (its program is made behind the title card, not when H is first
     // pressed); from the eyes, or off, it has nothing to show
