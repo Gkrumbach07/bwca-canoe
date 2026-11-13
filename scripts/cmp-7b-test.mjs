@@ -87,6 +87,7 @@ try {
     const b = await W(page, async () => {
       const g = window.__game, L = window.__L, S = window.__s7;
       window.__e.at(2026, 201, 12); S.calm();
+      const ob = g.onboarding; if (ob && ob.noCanoe && ob.state) ob.state.loan = true; // (the rig's season has not had the staff talk that lends the canoe)
       const w0 = window.__e.prop('s5.wreck');
       await L.tp(w0.x, w0.z); for (let k = 0; k < 60 && !S.d().seated(); k++) { L.step(5); await L.wait(100); g.storyLayer.poll(); }
       const W0 = S.d().wreck(), n = window.__e.place('kek.plane').n || [0, 1];
@@ -126,9 +127,10 @@ try {
       const g = window.__game, L = window.__L, S = window.__s7;
       const bay = window.__e.place('gull.sign'); await L.tp(bay.x - 250, bay.z + 30); L.step(30); g.storyLayer.poll(); L.step(10);
       const no = window.__e.prop('gull.notch') || { x: -19340, z: 26805 };
-      const yaw = Math.atan2(-(no.z - g.player.z), no.x - g.player.x); g.chase.viewYaw = yaw; g.chase.forwardYaw = yaw; g.chase.viewPitch = 0.05; L.step(30);
+      const yaw = Math.atan2(-(no.z - g.player.z), no.x - g.player.x); g.player.heading = yaw; g.player.speed = 0; g.chase.viewYaw = yaw; g.chase.forwardYaw = yaw; g.chase.viewPitch = 0.05; L.step(30);
       S.d().notchTick(); L.step(4);
-      return { notch: g.story.has('s5.notch'), chart: g.story.has('ep.S5.chart'), L2D: g.story.has('key.L2D'), L3D: g.story.has('key.L3D'), d: Math.round(Math.hypot(bay.x - g.player.x, bay.z - g.player.z)) };
+      const f = g.camera.getWorldDirection(new g.camera.position.constructor()), bd = (Math.atan2(f.x, -f.z) * 180 / Math.PI + 360) % 360, bn = (Math.atan2(no.x - g.player.x, -(no.z - g.player.z)) * 180 / Math.PI + 360) % 360;
+      return { look: Math.round(bd), toNotch: Math.round(bn), page: g.story.has('nb.page.pilotchart'), notch: g.story.has('s5.notch'), chart: g.story.has('ep.S5.chart'), L2D: g.story.has('key.L2D'), L3D: g.story.has('key.L3D'), d: Math.round(Math.hypot(bay.x - g.player.x, bay.z - g.player.z)) };
     });
     result('S5g Gull\'s east bay, the chart in the book, looking at the notch: lock 2 key D and lock 3 key D', n.notch && n.chart && n.L2D && n.L3D, n);
     if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 's5.png') });
