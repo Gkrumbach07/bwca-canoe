@@ -87,9 +87,22 @@ try {
       if (g.pointer.on && pr && /Talk to|A word with/.test(pr)) bad.push(pr.slice(0, 60));
       await new Promise((r) => setTimeout(r, 10));
     }
-    return { bad, dots: [...dots].slice(0, 10) };
+    // and a visitor faced from 1.6 m, the dot on their chest: the dot says the talk, the bottom line does not
+    const b = g.npcs.bodies.find((x) => x.who && !x.lent && x.group.visible && !x.who.person.keeper && !x.who.person.extra && L.inside(x.who.person.figs[x.who.fig].x, x.who.person.figs[x.who.fig].z));
+    let faced = null;
+    if (b) {
+      const f = b.who.person.figs[b.who.fig];
+      for (const a of [0, 1.57, 3.14, 4.71, 0.8, 2.4, 3.9, 5.5]) {
+        const x = f.x + Math.cos(a) * 1.5, z = f.z - Math.sin(a) * 1.5; if (!L.inside(x, z)) continue;
+        const yaw = Math.atan2(-(f.z - z), f.x - x); window.__t.standAt(x, z, yaw); g.chase.viewYaw = yaw; g.chase.forwardYaw = yaw;
+        if (g.chase.mode !== 'first') g.chase.setMode('first'); g.chase.viewPitch = -0.12; g.step(1 / 30, 8);
+        const t = g.pointer.target; if (t && t.kind === 'person') { faced = { dot: `${t.kind}:${t.label}`, line: (p.prompt && p.prompt.text) || null }; break; }
+      }
+      if (g.chase.mode !== 'third') g.chase.setMode('third');
+    }
+    return { bad, dots: [...dots].slice(0, 10), faced };
   });
-  result('3 one prompt: with the dot on, the bottom line never names a talk (the dot does)', walk.bad.length === 0 && walk.dots.some((d) => /^person:/.test(d)), walk);
+  result('3 one prompt: with the dot on, the bottom line never names a talk (the dot does)', walk.bad.length === 0 && walk.faced && !/Talk to|A word with/.test(walk.faced.line || ''), walk);
 
   // 4 the shelf you face is cleared
   const shelf = await ev(async () => {
