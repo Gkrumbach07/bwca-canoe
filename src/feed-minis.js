@@ -26,6 +26,7 @@
 //                half, done, over (30 days); store visits as resupplies
 // A co-op guest: nothing moves (live() false), as feed-episodes.js.
 import { storeLayout } from './props.js';
+import * as PARTIES_M from './parties.js'; // (stream s's FIXED_PARTIES and fixedDay, read if there: the join)
 import { storyHook } from './party-camps.js';
 import { explored } from './explored.js';
 import { seasonAt } from './season.js';
@@ -384,6 +385,10 @@ export async function connect(t) {
     const T0 = absNow(); if (tomPassed === T0) return;
     let near = null;
     try { near = parties.campsAt(T0, dateNow().hours).find((c) => (c.party.fixed === 'tom' || /^fixed-tom-/.test(String(c.party.id))) && Math.hypot(c.site.x - player.x, c.site.z - player.z) < TOM_NEAR); } catch { near = null; }
+    // by day the crew is about the day's site (stream s: fixedDay(entry, abs) → the site index), not in camp
+    if (!near && typeof PARTIES_M.fixedDay === 'function' && Array.isArray(PARTIES_M.FIXED_PARTIES)) {
+      try { const e = PARTIES_M.FIXED_PARTIES.find((q) => q.id === 'tom'), i = e ? PARTIES_M.fixedDay(e, T0) : -1, c = i >= 0 ? world.campsites[i] : null; if (c && Math.hypot(c.x - player.x, c.z - player.z) < TOM_NEAR * 3) near = { site: c }; } catch { near = null; }
+    }
     if (!near) return;
     tomPassed = T0; note(`Tom: “${T(episodes.started(r.id) ? '70.7.2.23' : '70.7.2.22')}”`, 5);
   };
