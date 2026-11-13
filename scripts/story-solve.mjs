@@ -999,6 +999,16 @@ if (!arg('r1', false)) await slice2(main, rp);
   say(`endings: ${E.rows.length} branches, J/JN/M ${E.ok ? 'all reachable' : 'NOT all reachable'}; JN needs "went north" (by design)`);
 }
 // n: end
+// g: begin — the end games (wave 2, stream g; Part 3 #5-#6): after J every secret told and its episode ended, one a month;
+// after M every owner softened, one per SOFT_GAP days (scripts/story-solve-endgames.mjs)
+{
+  const { solveEndgames } = await import('./story-solve-endgames.mjs');
+  const Gr = solveEndgames(); report.endgames = Gr;
+  res(`end games: J: ${Gr.J.told} secrets told, one a month (last +${Gr.J.last} d)`, Gr.J.told > 0 && !Gr.fails.some((f) => f.startsWith('J')));
+  res(`end games: M: ${Gr.M.softened} owners softened in ${Gr.M.days} days`, Gr.M.softened > 0 && !Gr.fails.some((f) => f.startsWith('M')));
+  for (const f of Gr.fails) res(`end games: ${f}`, false);
+}
+// g: end
 report.ms = Date.now() - t0;
 if (PLAN && report.plan) { console.log('\nThe slice, as the solver plays it:'); report.plan.forEach((m, i) => console.log(`${String(i + 1).padStart(3)}. ${m}`)); }
 if (PLAN && report.slice2 && report.slice2.plan) { console.log('\nSlice 2, as the solver plays it (from the end of slice 1):'); report.slice2.plan.forEach((m, i) => console.log(`${String(i + 1).padStart(3)}. ${m}`)); }
