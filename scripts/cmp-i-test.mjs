@@ -141,7 +141,7 @@ try {
       const lk = await a.evaluate(() => window.__i.lake('Kelso Lake') || window.__i.lake('Smoke Lake'));
       await toDenny(a, ctx.d0 + 3); await hear(a);
       await say(a, 'Where are you headed next?'); await a.evaluate((v) => window.__i.pick(v), lk); await hear(a); await a.evaluate(() => window.__i.endTalk());
-      const r = await a.evaluate(async ([d, id]) => { const g = window.__game, I = window.__i, T = window.__t, L = window.__L; I.at(d + 4, 10); const S = g.outfitter.layout(38); await L.near(S.centre.x + 20, S.centre.z + 20); T.walkOut(38); T.walkIn(38); L.step(10); return { counter: I.IC().lastCounter, heard: g.story.get(`canary.heard.${id}`) }; }, [ctx.d0, lk.lake]);
+      const r = await a.evaluate(async ([d, id]) => { const g = window.__game, I = window.__i, T = window.__t, L = window.__L; I.at(d + 4, 10); let n = 0; const off = g.story.on('store:enter', () => { n++; }); const S = g.outfitter.layout(38); await L.near(S.centre.x + 20, S.centre.z + 20); T.walkOut(38); T.walkIn(38); L.step(10); off && off(); const walked = { n, counter: I.IC().lastCounter || null, heard: g.story.get(`canary.heard.${id}`) ?? null }; return { ...walked, told: g.story.get(`canary.denny.${id}`) ?? null, home: g.profile.home, today: Math.floor(g.story.nowAbs()), byHand: walked.heard == null ? I.IC().debug.counter(38) : null }; }, [ctx.d0, lk.lake]);
       result('A4 a second lake told; the next day Josie: "Party came off {lake}…" (heard)', r.heard != null && r.counter && /Party came off/.test(r.counter.text) && r.counter.text.includes(lk.name), { lk, r });
     });
     await step('A5 tells 2 and 3; the reveal opens', async () => {
