@@ -75,7 +75,7 @@ function runUnit(script, pattern) {
     ok = /^PASS/.test(line); how = line.slice(0, 120) || 'no such check';
   } else {
     const r = spawnSync(process.execPath, ['--test', `--test-name-pattern=${pattern}`, script], { cwd: ROOT, encoding: 'utf8', timeout: 300000 });
-    const pass = Number((/ℹ pass (\d+)/.exec(r.stdout || '') || [])[1] || 0), fail = Number((/ℹ fail (\d+)/.exec(r.stdout || '') || [])[1] || 0);
+    const pass = Number((/(?:ℹ|#) pass (\d+)/.exec(r.stdout || '') || [])[1] || 0), fail = Number((/(?:ℹ|#) fail (\d+)/.exec(r.stdout || '') || [])[1] || 0); // (polish: node 22 off a TTY reports TAP, '# pass n')
     ok = r.status === 0 && pass > 0 && fail === 0; how = `${path.basename(script)} /${pattern}/ ${pass} pass ${fail} fail`;
   }
   const out = { ok, how }; ranCache.set(k, out); return out;
