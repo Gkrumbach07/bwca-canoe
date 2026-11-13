@@ -171,10 +171,11 @@ try {
       for (let k = 0; k < 40; k++) { L.step(10); await L.wait(15); }
       const porch = f.F.debug.motel().porch, p = g.player, at = { x: +p.x.toFixed(1), z: +p.z.toFixed(1), d: +Math.hypot(p.x - porch.x, p.z - porch.z).toFixed(1) };
       // toward the road with it: refused (put back inside the lot)
-      L.standAt(porch.x + 60, porch.z, 0); for (let k = 0; k < 6; k++) { L.step(10); await L.wait(20); }
+      const M = f.F.debug.motel(), ux = (M.x - porch.x) / (Math.hypot(M.x - porch.x, M.z - porch.z) || 1), uz = (M.z - porch.z) / (Math.hypot(M.x - porch.x, M.z - porch.z) || 1); // (away from the water: through the motel to the yard and the road)
+      L.standAt(porch.x + ux * 60, porch.z + uz * 60, 0); for (let k = 0; k < 6; k++) { L.step(10); await L.wait(20); }
       const back = +Math.hypot(p.x - porch.x, p.z - porch.z).toFixed(1);
       // back onto the porch to put it on the shelf: Aili is home early
-      L.standAt(porch.x + 10, porch.z, 0); for (let k = 0; k < 4; k++) { L.step(10); await L.wait(20); }
+      L.standAt(porch.x + ux * 10, porch.z + uz * 10, 0); for (let k = 0; k < 4; k++) { L.step(10); await L.wait(20); }
       L.standAt(porch.x, porch.z, 0); for (let k = 0; k < 8 && !f.convo(); k++) { L.step(10); await L.wait(30); }
       const c = f.convo();
       const s2 = await f.say(['Liisa thought']); f.end(); L.step(20);
