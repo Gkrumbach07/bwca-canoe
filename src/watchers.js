@@ -65,6 +65,14 @@ export class Watchers {
       let ok = false;
       try { ok = !!s.when(r.when); } catch { ok = false; }
       if (!ok) continue;
+      // i: begin (stream i: a row that finds its own spots: place(story, abs, ctx) → [{ x, z, lake, from?, to? }] (the canary's
+      // watchers at the site Denny ringed; `drawnBy: 'i'`: informant-cast.js draws and moves them, a day drawer skips them)
+      if (typeof r.place === 'function') {
+        let P = []; try { P = r.place(s, abs, this.c) || []; } catch { P = []; }
+        for (const q of P) out.push({ id: `${r.id}:${q.lake ?? ''}`, x: q.x, z: q.z, lake: q.lake ?? null, from: q.from ?? r.hours[0], to: q.to ?? r.hours[1], drawnBy: r.drawnBy || null });
+        continue;
+      }
+      // i: end
       if (r.leaked) {
         for (const [k, rec] of s.keys('told.') || []) {
           void k;
