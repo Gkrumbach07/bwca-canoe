@@ -38,7 +38,7 @@ const SWIM_R = 7;               // m: a swim this near the flat rock is a swim o
 const ROSE_SCENE = {
   id: 'rose', who: 'rose',
   nodes: {
-    open: { say: ['S7.conv.1'], then: ['f:ep.S7.rose'], go: [
+    open: { say: [{ first: [{ id: 'd95.S7.rose.again', when: 'f:ep.S7.rose' }, 'S7.conv.1'] }], then: ['f:ep.S7.rose'], go: [ // (x: a later Tuesday's opener, drafted)
       { ask: 'S7.conv.c1', once: 'whose', say: ['S7.conv.2', 'S7.conv.3'] },
       { ask: 'S7.conv.c2', once: 'where', to: 'lilacs' },
     ] },
@@ -58,6 +58,7 @@ export async function connect(t) {
   const live = () => !!(story && story.doc) && !guest();
   // the words: the side stories' extract (side.json), through topics.js's T
   if (t.loadWords) { const W = await t.loadWords(['side']); if (W.side) texts.add(W.side); }
+  if (t.loadWords) { const Wx = await t.loadWords(['drafted']); if (Wx.drafted) texts.add(Wx.drafted); } // x: the drafted lines (95)
   const T = (id) => (topics && t.T ? t.T(id) : null);
   const note = (w, s = 5) => { if (w && hud && typeof hud.note === 'function') hud.note(w, s); };
   const apply = (then, why) => { if (live()) story.rules.apply({ id: `e:${why}`, then }, {}); };
@@ -213,7 +214,7 @@ export async function connect(t) {
     mesh.name = 'story rose.table'; mesh.position.set(sp.table.x, L.floorY, sp.table.z); mesh.rotation.y = sp.table.rot; mesh.castShadow = true; mesh.receiveShadow = true;
     mesh.matrixAutoUpdate = false; mesh.updateMatrix(); mesh.updateMatrixWorld(true);
     if (scene) scene.add(mesh);
-    const h = npcs && typeof npcs.extraAt === 'function' ? npcs.extraAt(25, { key: 'cast:rose:25', name: story.has('ep.S7.rose') ? 'Rose' : 'Rose G.', role: '', look: { age: 'old', shirt: 0x6a4c6e, pants: 0x3a3a40, hat: null, hair: 0xd8d4cc, female: true }, spot: sp.seat, talk: () => (roseTalk() ? true : null) }) : null;
+    const h = npcs && typeof npcs.extraAt === 'function' ? npcs.extraAt(25, { key: 'cast:rose:25', name: story.has('ep.S7.rose') ? 'Rose' : 'Rose G.', role: '', look: { age: 'old', shirt: 0x6a4c6e, pants: 0x3a3a40, hat: null, hair: 0xd8d4cc, female: true }, spot: { ...sp.seat, pose: 'sit', seat: 0.46 }, talk: () => (roseTalk() ? true : null) }) : null;
     rose = { h, mesh, at: sp };
   };
   const roseTick = () => {

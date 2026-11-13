@@ -4,11 +4,13 @@
 // is grow-only, and a rain comes and goes).
 //
 //   rain.days(abs) → hours of rain that day (light rain, rain, storm)          rain.isDay(abs) → ≥ KETTLE.rainDay hours
-//   rain.spells({ from, to }) → [{ a, b }]   two or more rain days running (abs days, a ≤ b), within [from, to]
-//   rain.spellAt(abs) → the spell whose notice window holds `abs` (from the first day to 5 days after the last) | null
-//   rain.force({ from, days }) · rain.clear()   a forecast two-day rain set by hand (the rigs; kept in story.doc.dir.a2rain)
+//   rain.spells({ from, to }) → [{ a, b }]   KETTLE.spellDays or more wet days running (abs days, a ≤ b), within [from, to]
+//                                            (x, owner 2026-11-12: one 4-hour wet day is a spell)
+//   rain.spellAt(abs) → the latest spell whose notice window holds `abs` (from the first day to 5 days after the last) | null
+//   rain.force({ from, days }) · rain.clear()   a forecast rain set by hand (the rigs; kept in story.doc.dir.a2rain)
 //   sensors: rain.days (the spell now or next: its length in days, 0 when none within a week), rained (rain in the last
-//   two days), kettlenotice / kettlerun / kettleday (kettle.js reads them through `rain`)
+//   two days), kettlenotice / kettlerun / kettleday (kettle.js reads them through `rain`), kettlespell (the spell's
+//   first day, or 0: which posting of the Kettle notice is up, episodes.js's flyer `posting`; x)
 //
 // Registered with the feed (story-feed.js), so it attaches only when the feed starts (STORY_ON) and never on a guest
 // (the guest's story is a mirror: its sensors read nothing it can act on).
@@ -19,7 +21,7 @@ import { KETTLE } from './story-data/mining.js';
 const RAIN_STATES = new Set([4, 5, 6]); // weather.js S.lightRain, S.rain, S.storm
 const DAY0 = (year) => Math.round(Date.UTC(year, 0, 1) / 86400000) - 1; // (abs day of the year's day 0: absDay(year, doy) = DAY0 + doy)
 const ymd = (abs) => { const d = new Date(abs * 86400000), y = d.getUTCFullYear(); return { year: y, doy: abs - DAY0(y) }; };
-for (const [k, v] of Object.entries({ rained: 'flag', kettlenotice: 'flag', kettlerun: 'flag', kettleday: 'flag' })) registerSensor(k, v);
+for (const [k, v] of Object.entries({ rained: 'flag', kettlenotice: 'flag', kettlerun: 'flag', kettleday: 'flag', kettlespell: 'arg' })) registerSensor(k, v); // (x: kettlespell)
 
 class Rain {
   constructor() { this.weather = null; this.story = null; this.cache = new Map(); }
@@ -40,19 +42,22 @@ class Rain {
     const out = []; let a = null;
     for (let d = from; d <= to + 1; d++) {
       if (d <= to && this.isDay(d)) { if (a == null) a = d; continue; }
-      if (a != null && d - a >= 2) out.push({ a, b: d - 1 });
+      if (a != null && d - a >= (KETTLE.spellDays || 1)) out.push({ a, b: d - 1 }); // (x: one wet day is enough)
       a = null;
     }
     return out;
   }
-  // the spell whose notice window holds `now` (fractional abs day): from 18:00 of its first day to 5 days after its last
+  // the spell whose notice window holds `now` (fractional abs day): from 18:00 of its first day to 5 days after its last.
+  // x: the latest such (with one wet day a spell, a second rain inside the first's window is the one that counts: the
+  // notice re-posts with it, and Tasha comes the morning after it quits)
   spellAt(now) {
     const day = Math.floor(now);
+    let hit = null;
     for (const S of this.spells({ from: day - KETTLE.notice.days - 12, to: day + 1 })) {
       const open = S.a + KETTLE.notice.from / 24, close = S.b + 1 + KETTLE.notice.days;
-      if (now >= open && now < close) return S;
+      if (now >= open && now < close) hit = S;
     }
-    return null;
+    return hit;
   }
   // the morning after the rain quits, a weekday (Tasha's sampling day): the abs day, or null
   kettleDay(S) {
@@ -64,7 +69,7 @@ class Rain {
   rained(now) { const day = Math.floor(now); return this.isDay(day) || this.isDay(day - 1) || this.isDay(day - 2); }
   force({ from, days = 2 } = {}) {
     const s = this.story; if (!s || !s.doc || s.mode === 'mirror') return false;
-    s.doc.dir.a2rain = { from: Math.floor(from), days: Math.max(2, days | 0) }; s.dirty();
+    s.doc.dir.a2rain = { from: Math.floor(from), days: Math.max(1, days | 0) }; s.dirty(); // (x: one day is a spell)
     return true;
   }
   clear() { const s = this.story; if (s && s.doc && s.doc.dir) { delete s.doc.dir.a2rain; s.dirty(); } }
@@ -82,6 +87,7 @@ feed.register('weather', (api) => {
     s.sensor('rained', () => rain.rained(now())),
     s.sensor('kettlenotice', () => !!rain.spellAt(now())),
     s.sensor('kettlerun', () => rain.running(now())),
+    s.sensor('kettlespell', () => { const S = rain.spellAt(now()); return S ? S.a : 0; }), // x: which posting is up
     s.sensor('kettleday', () => { const n = now(), S = rain.spellAt(n), d = rain.kettleDay(S); const h = (n - Math.floor(n)) * 24; return d != null && Math.floor(n) === d && h >= KETTLE.tasha.hours[0] && h < KETTLE.tasha.hours[1]; }),
   ];
   return () => { for (const off of offs) { try { off(); } catch { /* gone */ } } };

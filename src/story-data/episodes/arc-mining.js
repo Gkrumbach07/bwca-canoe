@@ -24,9 +24,17 @@ export default {
     { kind: 'place', yes: true, when: 'f:door.mining.open', at: 'porch:31' }, // (the bench sat on: the arc's yes)
   ],
   flyer: { ep: 31, text: '30:4.3.notice', when: 'f:tauno.said.pads & month:6-10 & kettlenotice & !f:kettle.done',
-    then: ['f:kettle.notice'], yes: false, keeper: ['30:4.3.keeper.1', '30:4.3.keeper.2'] },
+    then: ['f:kettle.notice'], yes: false, keeper: ['30:4.3.keeper.1', '30:4.3.keeper.2'],
+    // x: begin (owner 2026-11-12) the notice re-posts on each later rain until the Kettle day is done (posting: the
+    // spell's first day, feed-weather.js `kettlespell`); once taken its words keep a page in Stories under the tally's
+    // own name for the day, with one last line when the day is done (a drafted line, docs/story/95)
+    posting: 'kettlespell', title: '30:4.3.pay.1', page: [{ when: 'f:kettle.done', text: 'd95.kettle.page.done' }] },
+    // x: end
   steps: [],
   page: [],
+  // x: the director's "an open episode's place" (beats.js (3)): the Kettle pad, from "The pads" until the day is done, a
+  // party's line about the orange creek (30 §9's day's beat in Farm's reach)
+  places: [{ id: 'kettle', when: 'f:tauno.said.pads & !f:kettle.done', line: '30:9.beat.4' }],
   ends: [{ id: 'done', when: 'f:door.mining.done' }],
   first: null,
   feeds: [],
