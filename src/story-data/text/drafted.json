@@ -1,4 +1,4 @@
-{"$doc":"docs/story/95-drafted-lines.md","$hash":"7e2347b9bfc4","$body":"3627b567d237","$v":1,"text":{"d95.len.again":{"k":"block","text":"There they are. Sit, sit. Kim, another coffee over here."},
+{"$doc":"docs/story/95-drafted-lines.md","$hash":"f21ac351a889","$body":"bd584926906d","$v":1,"text":{"d95.len.again":{"k":"block","text":"There they are. Sit, sit. Kim, another coffee over here."},
 "d95.mary.again":{"k":"block","text":"You're in my light again. Sit. The bars are still lemon."},
 "d95.len.thanks":{"k":"block","text":"That's the crib. That's it exactly. And a casing, standing up like that. They'll go right up front at the open house. Thank you."},
 "d95.len.east.ask":{"k":"block","text":"Anything east of Bald Eagle? Gull, Pietro?"},
@@ -20,6 +20,7 @@
 "95:stream-r-the-run.1":{"k":"line","text":"Far off, down toward the bay: a radio, two clicks.","when":"Anchor: run.click"},
 "95:stream-r-the-run.2":{"k":"line","text":"Tied off in the canoe · cold, cramped","when":"Anchor: run.tied.kicker"},
 "95:stream-r-the-run.3":{"k":"line","text":"Scanner · {who}: {line}","when":"Anchor: run.scanner.prefix"},
+"c.walt.n42":{"k":"block","text":"Not with company on the lake."},
 "d95.7a.S2.page.duane":{"k":"block","text":"Duane, the Tattler. Weekends in the lot at Moose River North: a green pickup, a lawn chair, a plaster cast."},
 "d95.7a.S2.page.site":{"k":"block","text":"The west site on Big Moose, under the ridge. Two stars, a bad landing. Nobody wants it."},
 "d95.7a.S2.page.walt":{"k":"block","text":"Walt slept out there in his canoe, tied to a snag off the point."},

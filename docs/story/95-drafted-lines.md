@@ -180,6 +180,12 @@ supposed to say this exactly. The number's gone up." / "I'm asking you."; 50 §9
 | `c.coop.shut` | Out on the water tonight. | A guest's join or Rejoin refused while the host's run is on (campaign-design §8.3 "No company"); `src/coop.js` SHUT_WORDS and `src/coop-story.js` WORDS.shut. |
 | `c.coop.nod` | … | A story person (Tauno, the Farm people …) stood on a guest's screen, E on them: a look up, no words (as cast.js's Josie with no word). Josie says her own 70 §4.4 lines. |
 
+<!-- id: c.walt.n42 -->
+```
+Not with company on the lake.
+```
+Used: the Walt page row `c.walt.n42` (anchored at join 1 so the book reads it from drafted.json, like the others).
+
 ## Stream m (mechanics, campaign Round 4)
 
 | Anchor | Line | Where it is used |

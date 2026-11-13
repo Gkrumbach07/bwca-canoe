@@ -223,7 +223,7 @@ export const S7_POOLS = {
     '70.6.8.3': 'end:J|JN & f:world.trench.closed',
     '70.6.8.4': 'end:J|JN & f:world.sampling',
     '70.6.8.5': 'end:J|JN & f:world.file',
-    '70.6.8.6': 'end:JN & f:world.paper',
+    '70.6.8.6': 'end:JN & f:world.paper & f:nb.found', // j1: Walt lore needs the notebook (c1-talk-unit)
     '70.6.8.9': 'end:M & f:world.paper & days.since(world.paper)<=14',
     '70.6.8.10': 'end:M & f:world.stakes',
     '70.6.8.11': 'end:M & f:world.paper',
