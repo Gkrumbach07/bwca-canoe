@@ -84,6 +84,7 @@ Rescue squad, 38 years. Squad record on the Stuart: 49 minutes, canoe and pack, 
 He'll be at the road with his watch.
 ```
 
+<!-- id: S0.last q each -->
 When a side story ends, its page gets one last line in the same hand ("Ollie's back in June." / "The sled went to the
 yard in town." / "Kari left. She got most of it.").
 
@@ -383,6 +384,7 @@ system: two clock readings. The day-permit fine after dark is the existing rule.
 - **Window:** 1 June – 30 September.
 - **Trips:** one or two.
 - **Person:** Duane Halvorsen, 64.
+<!-- id: S2.first whole -->
 - **First stamped:** *A night afloat.*
 
 ### The hook
@@ -438,6 +440,7 @@ about one thing: the Big Moose ridge has a story every few summers. He believes,
   See Duane, weekends, green pickup in the lot.
   "The Truth Is Up North"
   ```
+<!-- id: S2.leon each -->
 - **Rumour:** 70 6.1 ("There's a tabloid in Duluth paying for Sasquatch pictures again…"). Leon: "Duane's harmless.
   He'll show you the footprint. Let him. It's his whole summer."
 - **Walt's entry:** N14 gives the site and the hour. A notebook player can sleep there without ever meeting Duane; the
@@ -524,6 +527,7 @@ Close: DUANE: "Batteries in your lamp? Good. Don't use it. You'll scare it."
 - *(the unexplained frame)* *[He doesn't say anything for a while.]* DUANE: "Where were you standing?"
   - ▸ "The site. Facing the ridge." → DUANE: "That's the one." → "Two hundred. And the cover. Your name on it or not,
     your call."
+    <!-- id: S2.sold each -->
     - ▸ **"Sell it."** → DUANE: "You won't regret it. You might. People will say things at the counter." *Gives:* $200.
       The print stays in the book marked *Sold to the Tattler*. For the rest of that season, barks at counters: "Saw
       your picture in the Tattler. Tall fella." / "Big Moose, huh? I'm not camping there." Duane, at later meetings:
@@ -554,6 +558,7 @@ that won't explain itself. Complete on its own.
 
 ### The window and how it ends without you
 
+<!-- id: S2.slowyear q -->
 The notice comes down on 1 October. Duane, if met in September: "Fella from Iowa sent in a picture of his
 brother-in-law in a ghillie suit. We ran it. It's been a slow year." The tabloid has bought someone else's photo. He is
 back with a new notice next June, and the ridge night can happen again (seeded animals). The unexplained frame is once
@@ -579,6 +584,7 @@ deadfall and a scripted bear at a serviceberry, both fauna that leave tracks. Th
 - **Window:** 1 September – 31 October, nights.
 - **Trips:** two to four.
 - **Person:** Elaine Sundquist, 68.
+<!-- id: S3.first whole -->
 - **First stamped:** *Logged the northern lights.*
 
 ### The hook
@@ -689,6 +695,7 @@ Elaine's sheet tell them which; the permit desk moves the calendar to that day (
 |---|---|---|
 | **Northern lights** | Two or three seeded strong nights a month, Sept – Oct, 23:00–02:00 | Green curtains low in the north, red at the top on the best. A print facing north |
 | **The train** | Clear nights, 1–2 h after dark, on the sheet's dates | A line of moving points climbing from the west. A print shows a dotted line |
+<!-- id: S3.lantern q each -->
 | **A fog lantern** | A calm night after a warm day, with a scheduled party at a north-end site | A light that floats and drifts. Paddle toward it: a party's lantern on a branch. They say: "Oh, hey. Are you the lights guy?" |
 | **Foxfire** | A wet week, any night | A faint green glow at ground level on the north shore. Ashore, E on the log: **Foxfire**, a glowing chunk that can be carried. It is dark by morning |
 | **The one light** | Below | Never explained |
@@ -705,6 +712,7 @@ One per night, rotating, never the same two nights running:
 |---|---|---|
 | **A beaver in the north bay** | A slap on the water, sharp as a rifle across 3 km of calm, then another closer as the beaver works the shore toward the long rock. With the lamp: a V on the black water, a head, gone. In the morning, a fresh-cut aspen at the waterline | Sound carries too |
 | **An owl** | A barred owl calls from the ridge behind the site, *who-cooks-for-you*, and another answers from across the lake. Sat still, the near one comes in and lands on a snag at the edge of the lamp's red | Sitting still pays |
+<!-- id: S3.voices q each -->
 | **Voices carrying** | A late party at a north-end site (a scheduled party when one is there; a scripted one otherwise), 3 km off, talking at their fire. The player hears every word, as clear as across a table: "…no, the *other* bag…" / "Is that somebody's light down there?" | The ear's half of Elaine's lesson: on a calm night the lake carries everything, both ways |
 | **A moose in the narrows** | Splashing in the dark, steady, crossing; against the sky's last glow a long head and a hump, swimming. It climbs out on the far side and shakes like a dog | Not every big shape in the dark is something to fear |
 
@@ -722,6 +730,7 @@ can't be a lantern.
 - Paddling toward it, it goes out at about 300 m.
 - A print shows a single point of light and nothing else. The camera's survey has no subject. The dot never names it.
 
+<!-- id: S3.match q -->
 Elaine says the one sentence the run needs, the first time a light is logged: "A match carries a mile over water on a
 calm night. A headlamp, five. That's the one thing I'd teach everybody who goes in." *[Once. 0.4.]*
 
@@ -795,6 +804,7 @@ Close: ELAINE: "Go on. Dark of the moon's next Tuesday. You know where I'll be. 
 - **The red lens** (item: *"Red glass, cut round, wrapped in oilcloth"*). Fitted to the headlamp, **H gives red instead
   of white**; taken off, white again (50 6.5). Nothing explains it.
 - **Light carries over water**, said once, by Elaine; and sound carries, learned by ear on the waiting nights.
+<!-- id: S3.first2 whole -->
 - **First stamped:** *Logged the northern lights*; *Saw the light on Fourtown* (the one light).
 - Main story: the run's red light (50 6.4–6.5). Not required: lamp off works.
 
@@ -816,6 +826,7 @@ makes the headlamp kinder to the night. Elaine's "Walt something" is an old guid
 
 ### The window and how it ends without you
 
+<!-- id: S3.iceout q -->
 On 1 November Elaine closes the sky book for the winter: "See you at ice-out." The aurora season is over for the game's
 purposes. The tin at C1000 stays under its stone for good. It opens only through Walt's line in the binder, so a
 player who hadn't logged two lights by then can pick the story up next September, when Elaine opens the book again.
@@ -842,6 +853,7 @@ Walt's binder line is read. The four night beats (beaver, owl, voices, moose), o
 - **Window:** 1 June – 15 October. Pups at the rendezvous meadow in August.
 - **Trips:** three to five.
 - **Person:** Kari Vang, 27.
+<!-- id: S4.first whole -->
 - **First stamped:** *Wolves answered*; *Counted the pups*.
 
 ### The hook
@@ -936,6 +948,7 @@ hands; their own breathy, bad howl). Then three game minutes of silence. If the 
 nightly within its range; best near 03:00), the answer comes from a bearing, loud or faint by distance; in August the
 pups' yips ride over it. The player turns to face the sound and the chip shows **Mark**: a pencilled bearing line
 appears on the sheet from where they stand. Three lines from three stations cross: the sheet gets a pencilled ring.
+<!-- id: S4.wall q -->
 - **Cliffs lie.** A station near a cliff can throw an echo: the first answer comes from the wrong side. Kari: "If it
   sounds like it came off a wall, it did."
 - The loons answer only on the night Walt's entry says they would (above).
@@ -1007,8 +1020,10 @@ PARENT: "We'd just like to hear them. From the site's fine."
 ### The choice: who learns where
 
 Kari asks for nothing to be told. Two people ask for a place.
+<!-- id: S4.kept each -->
 - **Tell no one.** Kari's count stands. Her report (below) thanks "a volunteer canoeist". Leon, at the counter: "Kari
   says you kept your mouth shut. That's rarer than wolves."
+<!-- id: S4.moved each -->
 - **Tell Lyle or the family.** Within a day the pack moves the pups to a new place; people at the meadow find it empty.
   If the count wasn't done, it can't be this year. Kari: "They moved. People came. It happens." *[No blame. She asks
   the player for nothing else.]* Leon (if Lyle): "Heard somebody put a photographer on the pups. Not you, I hope." Next
@@ -1024,6 +1039,7 @@ Thanks to a volunteer canoeist for three nights of bad howling and good bearings
 — K.V.
 ```
 
+<!-- id: S4.abandoned q -->
 *(If the meadow was given away: "Rendezvous abandoned 18 Aug (disturbance). Pups: not counted.")*
 
 ### What it gives
@@ -1051,6 +1067,7 @@ number and a decision about who gets to know.
 ### The window and how it ends without you
 
 Kari's grant ends on 15 October and she leaves. If the player helped, her report waits at Leon's counter; if not,
+<!-- id: S4.left q -->
 Leon: "Kari left. Said she got most of it." She does not come back. The wolves stay, and the howl still works for a
 player who learned it.
 
