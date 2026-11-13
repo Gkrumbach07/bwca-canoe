@@ -330,12 +330,13 @@ export async function connect7a(t) {
     const hit = nr.sphere(s.x, D.ground(s.x, s.z) + 0.6, s.z, 1.4); if (!hit) return null;
     const firstNight = has('ep.S2.yes') || here36();
     if (!firstNight && !has('tieoff.learned')) return null;
-    if (tied) return [{ dist: hit.t, miss: hit.miss, target: { kind: 'snag', ref: 'story:s2.snag', label: 'Snag', e: { verb: 'Sleep', run: () => { try { camp.sleep('canoe', 'first'); } catch (e) { console.warn('7a: sleep afloat', e); } } }, q: { verb: 'Untie', run: () => { tied = null; } } } }];
+    if (tied) return [{ dist: hit.t, miss: hit.miss, target: { kind: 'snag', ref: 'story:s2.snag', label: 'Snag', e: { verb: 'Sleep', run: () => { try { camp.sleep('canoe', 'first'); } catch (e) { console.warn('7a: sleep afloat', e); } } }, q: { verb: 'Untie', run: () => { try { if (tied && tied.h && tied.h.untie) tied.h.untie(); } catch { /* r's */ } tied = null; } } } }];
     return [{ dist: hit.t, miss: hit.miss, target: { kind: 'snag', ref: 'story:s2.snag', label: 'Snag', e: { verb: 'Tie off', run: () => tieOff(s) } } }];
   };
   const here36 = () => has('ep.S2.here36');
   const tieOff = (s) => {
-    if ((minigames.kinds() || []).includes('tieoff')) { const h = minigames.start('tieoff', { snag: { x: s.x, z: s.z }, why: 'S2' }); if (h) return; }
+    // j1: r's minigame holds the canoe and its rest; the fact (7a's row) and the snag's Sleep / Untie are still S2's
+    if ((minigames.kinds() || []).includes('tieoff')) { const h = minigames.start('tieoff', { snag: { x: s.x, z: s.z }, why: 'S2' }); if (h) { tied = { x: player.x, z: player.z, heading: player.heading, h }; if (!has('tieoff.learned')) apply(['f:tieoff.learned'], 'tieoff'); return; } }
     tied = { x: player.x, z: player.z, heading: player.heading };
     if (!has('tieoff.learned')) apply(['f:tieoff.learned'], 'tieoff');
   };
