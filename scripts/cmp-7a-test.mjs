@@ -220,7 +220,7 @@ try {
       E.at(2026, 226, 19.5); const m = E.place('s4.meadow');
       let px = m.x + 420, pz = m.z; for (let k = 0; k < 12 && g.world.isWater(px, pz); k++) { px += 30; pz += (k % 2 ? 40 : -40); }
       await g.world.tiles.ensure(px, pz, 130); L.standAt(px, pz, Math.atan2(-(m.z - 8 - pz), m.x + 22 - px)); for (let k = 0; k < 40 && !g.tiles.readyAt(px, pz); k++) { L.step(5); await L.wait(50); } L.standAt(px, pz, Math.atan2(-(m.z - 8 - pz), m.x + 22 - px)); L.step(10);
-      const diag = { at: [Math.round(g.player.x), Math.round(g.player.z)], m: [m.x, m.z], d: Math.round(Math.hypot(m.x - g.player.x, m.z - g.player.z)), month: g.story.date().month, doc: { ...S.d().doc() } };
+      const diag = { at: [Math.round(g.player.x), Math.round(g.player.z)], m: [m.x, m.z], d: Math.round(Math.hypot(m.x - g.player.x, m.z - g.player.z)), month: g.story.date().month, yes: g.story.has('ep.S4.yes'), moved: g.story.has('ep.S4.moved'), spooked: !!S.d().doc().spooked, all: g.side7a.draw.root.children.filter((c) => /7a (wolf|pup)$/.test(c.name)).length, names: g.side7a.draw.root.children.map((c) => c.name).slice(0, 12) };
       const drawn = g.side7a.draw.root.children.filter((c) => /7a (wolf|pup)$/.test(c.name) && c.visible).length;
       const shot = await S.shot({ x: m.x + 22, z: m.z - 8 }, 0);
       const said = S.show('kari', { kind: 'print', id: shot && shot.id, matches: shot ? shot.matches : [] });
@@ -229,8 +229,8 @@ try {
     result('S4c August: the meadow from 400 m: wolves and pups drawn; the print; Kari counts them ($40 owed)', md.drawn >= 4 && md.shot && md.shot.matches.includes('s4.pups') && md.counted && md.owed.includes(40), md);
     const end = await W(page, async () => {
       const g = window.__game, E = window.__e, L = window.__L;
-      E.at(2026, 289, 11); L.step(4); await E.toStore(16); window.__t.walkIn(16); L.step(20); await L.wait(2500); L.step(4);
-      return { shut: g.story.has('ep.S4.shut'), report: g.story.has('ep.S4.report'), page: g.story.has('nb.page.karireport'), end: g.story.get('ep.S4.end'), last: (window.__s7.page('S4') || {}).end };
+      E.at(2026, 289, 11); L.step(4); await E.toStore(16); window.__t.walkOut(16); L.step(6); const inside = window.__t.walkIn(16); L.step(20); await L.wait(2500); L.step(4);
+      return { inside, shut: g.story.has('ep.S4.shut'), report: g.story.has('ep.S4.report'), page: g.story.has('nb.page.karireport'), end: g.story.get('ep.S4.end'), last: (window.__s7.page('S4') || {}).end };
     });
     result('S4d 16 October: the window shut; Leon\'s counter: Kari\'s report; the end and its last line', end.shut && end.report && end.page && end.end === 'report' && /Kari left/.test(end.last || ''), end);
     await page.context().close();
