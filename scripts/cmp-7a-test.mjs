@@ -57,8 +57,8 @@ const HELPERS_7 = () => {
     if (q) { const yaw = Math.atan2(-(q.z - g.camera.position.z), q.x - g.camera.position.x); g.chase.viewYaw = yaw; g.chase.forwardYaw = yaw; if (y != null) g.chase.viewPitch = y; }
     for (let k = 0; k < 12; k++) L.step(1);
     const n0 = P.prints().length; P.shoot(); for (let k = 0; k < 8 && P.prints().length === n0; k++) L.step(1);
-    const r = P.prints()[0]; P.lower(); L.step(2);
-    return r ? { id: r.id, matches: g.storyEpisodes.episodes.matchesOf(r.id) } : null;
+    const r = P.prints()[0], why = { raised: P.raised, pending: P.pending, wind: P.wind, n0, n1: P.prints().length }; P.lower(); L.step(2);
+    return r && P.prints().length > n0 ? { id: r.id, matches: g.storyEpisodes.episodes.matchesOf(r.id) } : { id: null, matches: [], why };
   };
   // "Look at this" with a print or a thing: the want's lines, then its scene's node, walked by the first choice that
   // starts with each prefix in turn ('…' pressed through) → { said, facts }
