@@ -99,7 +99,7 @@ try {
     // Dive (the water's dot verb: its run), the first dive sees it; Space up (a real key)
     const c = await W(page, () => { const g = window.__game, S = window.__s7; const ok = S.d().startDive(); window.__L.step(200); const d = S.d().dive(); return { ok, mode: g.player.mode, phase: d && d.phase, seen: d && d.seen, cam: +(g.camera.position.y - S.d().wreck().level).toFixed(2) }; });
     // polish: the contact sheet's dive tile, under the water at the wreck (the s5 shot at Gull's bay caught a title card)
-    if (SHOTS) { await W(page, () => { const g = window.__game; if (g.hud && g.hud.title && typeof g.hud.title.hide === 'function') g.hud.title.hide(); window.__L.step(2); }).catch(() => null); await page.screenshot({ path: path.join(SHOTS, 's5-dive.png') }).catch(() => null); }
+    if (SHOTS) { await W(page, () => { const g = window.__game; const h = g.hud; if (h && h.el && h.el.place) { clearTimeout(h.titleTimer); h.pendingTitle = null; h.el.place.classList.remove('show'); } window.__L.step(2); }).catch(() => null); await page.waitForTimeout(1500); await W(page, () => window.__L.step(2)).catch(() => null); await page.screenshot({ path: path.join(SHOTS, 's5-dive.png') }).catch(() => null); }
     await key(page, 'Space', 2);
     const c2 = await W(page, () => { window.__L.step(90); const g = window.__game, S = window.__s7; return { dive: !!S.d().dive(), dives: S.d().doc().dives, seenDoc: S.d().doc().seen, mode: g.player.mode, first: window.__e.firsts() }; });
     result('S5c Dive: over the side (swimming, the canoe left floating), the view under the water, the wreck seen; Space: up', c.ok && c.mode === 'swim' && c.seen && c.cam < 0 && !c2.dive && c2.dives === 1 && c2.seenDoc && c2.first.some((f) => /wreck/i.test(f)), { c, c2 });
