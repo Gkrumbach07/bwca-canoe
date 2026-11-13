@@ -89,7 +89,7 @@ try {
   await page.waitForTimeout(400);
   await page.evaluate(() => document.querySelector('.startmap .pin[data-ep="38"]').click()); // (the pin can sit off the map's scroll: clicked by the DOM)
   await page.evaluate(() => { const w = window.__game.title.wizard; w.setDate(153); w.next(); });
-  await page.click('#btn-start');
+  await page.evaluate(() => document.getElementById('btn-start').click());
   await until(page, () => { const g = window.__game; return g.title.state === 'game' && !g.player.teleporting && !!g.outfitter.visit; }, null, 180000);
   await page.evaluate(() => { const g = window.__game; window.__t.step(30); if (g.outfitter.open) g.outfitter.hide(); });
   try { await T_STEPS[0].run({ page, result: (n, p, m) => log(p ? 'ok' : 'note', `(P1) ${n}`, JSON.stringify(m).slice(0, 300)), log, ctx: { home: 38 } }); } catch (e) { log('P1', String(e).slice(0, 200)); }
