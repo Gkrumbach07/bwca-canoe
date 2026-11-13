@@ -14,6 +14,9 @@
 // the named people (bible §4): each is its own namespace, `<person>.` (what happened with them), and has a people state
 export const PEOPLE = ['tauno', 'hap', 'len', 'ruth', 'aili', 'jon', 'liisa', 'bob', 'frank', 'denny', 'carol', 'gene', 'mary', 'marlys',
   'sheila', 'rene', 'ollie', 'gord', 'danielle', 'tom', 'maggie', 'dan', 'tasha', 'wade', 'brekke', 'josie', 'eino', 'walt', 'june', 'birch', 'pietro'];
+// a3: the guiding years' own people (31 §5.4 Nate Johnsrud, §5.5 Rick Pasanen)
+PEOPLE.push('rick', 'nate');
+// /a3
 
 const person = (who) => ({ key: `${who}.`, kind: 'any', doc: 'bible §4; the person\'s arc doc' });
 
@@ -98,6 +101,11 @@ export const FACTS = [
   { key: 'rose.', kind: 'any', doc: '60 S7 Rose Gornik: her scene (rose.said.<choice>)' },
   { key: 'mg.snag.', kind: 'bool', doc: '§10 the snag minigame: mg.snag.hooked | landed | snapped (minigames/snag.js through episodes)' },
   // /e
+  // a3: the guiding years (Round 4, stream A3; docs/story/31-guiding-years.md). Hap, Marlys, Sheila are bible people;
+  // Rick and Nate are the arc's own; gy. is the arc's places seen and the night's hours
+  { key: 'gy.', kind: 'any', doc: '31 the guiding years: places seen (gy.dock, gy.tow, gy.prairie, gy.mummos, gy.reef[=walleye], gy.lunch, gy.lunch.photo, gy.photo81, gy.hogmap), the loft (gy.register, gy.rafter, gy.crew89, gy.bolts), the night (gy.night.<hhmm>, gy.lamp.*, gy.truck.looked), gy.tow.told' },
+  { key: 'echo.canoes', kind: 'bool', doc: '31 GY-11, GY-09b: two canoes on the shore the wind could not put them on' },
+  // /a3
 ];
 
 // the arcs whose yields are the big findings (§3.3 story.big), and the doors the player can be offered

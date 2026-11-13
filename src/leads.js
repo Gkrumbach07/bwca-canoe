@@ -23,6 +23,10 @@ import { LEADS, ASKS, LINES, PLACES } from './story-data/leads-act1.js';
 import * as LM from './story-data/leads-mining.js';
 import { LAKES as LAKES1, INK as INK1 } from './story-data/leads-act1.js';
 mergeLeads(LM);
+// a3: the guiding years' leads, rings and nicknames (story-data/leads-guiding.js)
+import * as LG from './story-data/leads-guiding.js';
+mergeLeads(LG);
+// /a3
 export function mergeLeads(M) {
   for (const [k, v] of Object.entries(M.LAKES || {})) if (!(k in LAKES1)) LAKES1[k] = v;
   for (const [k, v] of Object.entries(M.PLACES || {})) if (!(k in PLACES)) PLACES[k] = v;

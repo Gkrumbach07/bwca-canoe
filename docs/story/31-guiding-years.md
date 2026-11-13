@@ -168,7 +168,9 @@ Hap's grandson. Drives Moose Lake's tow boat weekdays and his grandfather weeken
 same breath. Not in the country in October 2019 (he was at college in Duluth after Labor Day); he knows nothing of the
 night.
 
+<!-- id: 31:5.4.gives q -->
 - **Gives:** the tow landing's real side (a second way to know it); "He forgets the week. He doesn't forget a reef."
+<!-- id: 31:5.4.voice each -->
 - **Voice:** "I drive the tow weekdays and Grandpa weekends. Grandpa's harder." / "Thanks for doing his day. He talks
   about it at the home. They're sick of it. That's good."
 
@@ -199,6 +201,7 @@ let Marlys keep volunteering because the leeches sell better when she does.
 
 - **Gives:** rings for every place a lead names (he is the keeper who pencils this arc); the board's home-turf tasks;
   tier-1 texture; the after-ending reactions.
+<!-- id: 31:5.6.voice each -->
 - **Voice:** "Before my time. Bought the place in '21. It came with a lot of canoes and a lot of opinions." / "Fella
   in here asking which way you went. I told him out the door and left."
 
@@ -348,6 +351,7 @@ Topics:
 
 ### GY-04 · Set piece A: Hap's day (August 1986)
 
+<!-- id: 31:GY-04.again q -->
 **Where:** the porch, then Moose Lake's water. **Needs:** GY-03. Told once; the player can ask "Tell me the day
 again." any time, and he tells it shorter.
 
