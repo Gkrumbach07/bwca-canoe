@@ -155,7 +155,8 @@ try {
   // 6 an ending: Maggie's scene by keys (J) -------------------------------------------------------------------------------
   const trail = [];
   const opened = await page.evaluate(async () => { const g = window.__game, L = window.__L; const h = g.hud, P = g.player, why = { paper: !!(h && h.paper), big: !!(h && h.big), onFoot: !!P.onFoot, tp: !!P.teleporting, mode: P.mode };
-    if (h && h.paper) { try { (g.record && g.record.close) ? g.record.close() : null; } catch { /* */ } }
+    why.paperName = h && h.paper; // (a paper up eats a talk: the rig traps' "close a paper before E on a person")
+    for (let k = 0; k < 3 && h && h.paper; k++) { const c = h.papers.get(h.paper); try { if (c) c(); else h.closePaper(h.paper); } catch { /* */ } L.step(2); }
     if (h && h.big && typeof h.big.close === 'function') { try { h.big.close(); } catch { /* */ } }
     const ok = g.storyEndings.debug.maggie(); why.after = { paper: !!(h && h.paper), big: !!(h && h.big), onFoot: !!P.onFoot }; for (let k = 0; k < 4; k++) { L.step(3); await L.wait(60); } return { ok, why, convo: !!window.__t.convo(), dialogue: !!(g.dialogue && g.dialogue.convo) }; });
   log('maggie', JSON.stringify(opened));
