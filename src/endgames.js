@@ -525,6 +525,7 @@ class Endgames {
       place: (id) => { const S = G.secretOf(id); return S ? this.placeOf(S) : null; },
       prop: (id) => { const r = this.props.get(id); return r ? { e: r.e, y: r.y } : null; },
       find: (id) => { const S = G.secretOf(id); return S ? this.find(S) : false; },
+      give: (id) => { const S = G.secretOf(id); return S ? this.give(S) : false; },
       giant: (id, o = {}) => { const S = G.secretOf(id), at = S && this.placeOf(S); if (!at) return null; const h = (S.fish.hours[0][0] + S.fish.hours[0][1]) / 2; const G2 = this.giantFor({ x: at.x, z: at.z, depth: (S.fish.minDepth || 0) + 5, lure: S.fish.lures[0], hours: h, roll: 0, ...o }); return G2 ? G2.id : null; },
       land: (id) => this.landed(id, { length: G.secretOf(id).fish.cm }),
       shoot: (id) => { const S = G.secretOf(id), at = S && this.placeOf(S); if (!at) return []; const pr = this.props.get(id), tx = pr ? pr.e.x : at.x, tz = pr ? pr.e.z : at.z; return this.shot({ x: tx - 30, y: 0, z: tz }, { x: 1, y: 0, z: 0 }, { id: 'rig' }); },
