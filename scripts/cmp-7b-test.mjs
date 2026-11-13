@@ -107,19 +107,19 @@ try {
     await page.keyboard.down('KeyE');
     for (let k = 0; k < 12; k++) await W(page, () => window.__L.step(30));
     await page.keyboard.up('KeyE');
-    const d1 = await W(page, () => { window.__L.step(80); const g = window.__game; return { dive: !!window.__s7.d().dive(), case: g.story.has('s5.case'), ep: g.story.has('ep.S5.case'), item: g.inventory.count('mapcase', { reachable: false }), page: g.story.has('nb.page.pilotchart'), work: window.__s7.d().doc().work, mode: g.player.mode }; });
+    const d1 = await W(page, () => { window.__L.step(80); const g = window.__game; return { dive: !!window.__s7.d().dive(), case: g.story.has('s5.case'), ep: g.story.has('ep.S5.case'), item: g.inventory.count('pilotcase', { reachable: false }), page: g.story.has('nb.page.pilotchart'), work: window.__s7.d().doc().work, mode: g.player.mode }; });
     result('S5d Q dives again from the water; E held behind the seat: the case comes free (the chart page)', d0.on && d1.case && d1.ep && d1.page, { d0, d1 });
     // E: back in the canoe (the swim's own re-entry)
     const e0 = await W(page, () => { const g = window.__game, c = g.player.carry && g.player.carry.drop; if (c) { g.player.x = c.x + 1.5; g.player.z = c.z; } window.__L.step(4); return { d: c ? 1.5 : null }; });
     await key(page, 'KeyE', 6);
     const e1 = await W(page, () => { window.__L.step(30); const g = window.__game, p = g.player, c = p.carry && p.carry.drop; const out = { mode: p.mode, prompt: p.prompt && p.prompt.text, d: c ? +Math.hypot(c.x - p.x, c.z - p.z).toFixed(2) : null };
-      if (p.mode === 'swim') { out.swimIn = p.swimIn(); window.__L.step(30); out.mode2 = p.mode; } out.item = g.inventory.count('mapcase', { reachable: false }); if (!out.item) { const I = g.inventory; out.hand = I.toHandNew ? JSON.stringify(I.toHandNew('mapcase')).slice(0, 120) : null; out.item2 = I.count('mapcase', { reachable: false }); } return out; });
+      if (p.mode === 'swim') { out.swimIn = p.swimIn(); window.__L.step(30); out.mode2 = p.mode; } out.item = g.inventory.count('pilotcase', { reachable: false }); if (!out.item) { const I = g.inventory; out.hand = I.toHandNew ? JSON.stringify(I.toHandNew('pilotcase')).slice(0, 120) : null; out.item2 = I.count('pilotcase', { reachable: false }); } return out; });
     result('S5e E beside the canoe: back in it (paddling); the map case in your things', e1.mode === 'paddle' && (e1.item > 0 || e1.item2 > 0), { e0, e1 });
     // Pete with the case: "Is that—" … "It's yours."
     await W(page, async () => { window.__e.at(2026, 202, 11); await window.__e.toStore(51); });
     await W(page, async () => { await window.__s7.staged('pete'); window.__s7.talk('pete', 51); window.__L.step(4); });
     const h3 = await hear(page, 2); const c3 = await choose(page, 'It\'s yours.'); const h4 = await hear(page);
-    const f = await W(page, () => { const g = window.__game, S = window.__s7; window.__L.step(10); return { given: g.story.has('ep.S5.given'), end: g.story.get('ep.S5.end'), owed: S.owed(), wall: !!S.d().wall.mesh, item: g.inventory.count('mapcase', { reachable: false }), last: (S.page('S5') || {}).end }; });
+    const f = await W(page, () => { const g = window.__game, S = window.__s7; window.__L.step(10); return { given: g.story.has('ep.S5.given'), end: g.story.get('ep.S5.end'), owed: S.owed(), wall: !!S.d().wall.mesh, item: g.inventory.count('pilotcase', { reachable: false }), last: (S.page('S5') || {}).end }; });
     result('S5f "Is that—" … "It\'s yours.": the case is Pete\'s, $60 owed, the chart framed on the Round Lake wall, the end', /Is that/.test(h3.join(' ')) && c3.ok && /his hand/.test(h4.join(' ')) && f.given && f.end === 'given' && f.owed.includes(60) && f.wall && f.item === 0, { h3, c3, h4, f });
     await page.keyboard.press('Escape');
     // Gull's east bay with the chart in the book, looking at the notch

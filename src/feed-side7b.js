@@ -10,7 +10,7 @@
 //     the canoe (over the side: the canoe left floating where it was, drifting with any wind), Q Dive again from the water
 //     over it; under: the view goes down to the wreck, narrows as the breath goes, the heart comes up; hold E on the case
 //     (from the second dive); Space up; cold (wet through, the warmth down); Get in from the water is the swim's own E.
-//     The case: item mapcase and the chart (page:pilotchart). Pete: "It's yours" (the chart framed on the Round Lake wall,
+//     The case: item pilotcase (holds map sheets, as the vinyl mapcase does) and the chart (page:pilotchart). Pete: "It's yours" (the chart framed on the Round Lake wall,
 //     $60) or kept. Pete told "north" finds it on the next calm bright day; without you, the first after 20 August, by
 //     Labor Day at the latest: the chart on the wall either way (Look at it: the page). In Gull's east bay with the
 //     chart in the book, the notch looked at: s5.notch (rules-side7b.js: ep.S5.chart, lock 2 key D and lock 3 key D)
@@ -30,7 +30,9 @@ import { propMaterial } from './prop-kit.js';
 import { env } from './audio-kit.js';
 
 // --- the things (defined only under the flag) --------------------------------------------------------------------------
-if (!itemDef('mapcase')) defineItem({ id: 'mapcase', name: 'Leather map case, swollen, a pilot\'s', short: 'Map case', kind: 'gear', w: 1, h: 2, kg: 0.6, price: 0, sold: false, unique: true, hand: true, identity: 'Leather map case, swollen, a pilot\'s', story: '7b' });
+// (the pilot's case holds map sheets as the store's vinyl one does, items.js 'mapcase': 60 S5 "Map sheets kept in it don't get
+// wet in a capsize"; nothing says so)
+if (!itemDef('pilotcase')) defineItem({ id: 'pilotcase', name: 'Leather map case, swollen, a pilot\'s', short: 'Map case', kind: 'container', w: 1, h: 3, kg: 0.6, price: 0, sold: false, unique: true, hand: true, nest: true, mesh: 'mapcase', container: { cols: 2, rows: 6, accepts: ['map'] }, icon: 'mapcase', identity: 'Leather map case, swollen, a pilot\'s', story: '7b' });
 if (!itemDef('rye1928')) defineItem({ id: 'rye1928', name: 'Rye, 1928, seal on', short: 'Rye, 1928', kind: 'gear', w: 1, h: 2, kg: 1.2, price: 0, sold: false, unique: true, hand: true, identity: 'Rye, 1928, seal on', story: '7b' });
 if (!itemDef('page:pilotchart')) definePage({ id: 'pilotchart', title: 'The pilot\'s chart', ref: 'S5.chart.page', by: 'Arne Haldane' });
 if (!itemDef('page:ledger1928')) definePage({ id: 'ledger1928', title: 'A runner\'s book, 1928', ref: 'S6.ledger', by: 'the outfit' });
@@ -108,7 +110,7 @@ export async function connect7b(t) {
   };
   const hooks = {
     yes: (run) => { const id = PEOPLE[run.who] && PEOPLE[run.who].rec; if (id && episodes && !episodes.started(id)) episodes.yes(id, 'choice'); },
-    given: () => { try { if (inventory && inventory.count('mapcase', { reachable: false }) > 0) inventory.remove('mapcase', 1); } catch (e) { console.warn('7b: the case to Pete', e); } wall.build(); },
+    given: () => { try { if (inventory && inventory.count('pilotcase', { reachable: false }) > 0) inventory.remove('pilotcase', 1); } catch (e) { console.warn('7b: the case to Pete', e); } wall.build(); },
     sold: () => { try { if (inventory && inventory.count('page:ledger1928', { reachable: false }) > 0) inventory.remove('page:ledger1928', 1); } catch (e) { console.warn('7b: the book to Orrin', e); } const d = doc(); d.soldYear = dateNow().year; dirty(); },
     bottle: () => { try { if (inventory && inventory.count('rye1928', { reachable: false }) > 0) inventory.remove('rye1928', 1); } catch (e) { console.warn('7b: the bottle', e); } },
     ring: () => { try { if (topics && typeof topics.ring === 'function') topics.ring({ lake: 'Bootleg Lake', place: 's6.bootleg' }, { by: 'Orrin', label: 'Bootleg Lake' }); } catch (e) { console.warn('7b: the ring', e); } },
@@ -264,7 +266,7 @@ export async function connect7b(t) {
     try { if (energy) { energy.soaked = 1; if (energy.need && Number.isFinite(energy.need.warmth)) energy.need.warmth = Math.max(0, energy.need.warmth - ([5, 10].includes(dateNow().month) ? 0.12 : 0.05)); } } catch { /* */ }
     if (d.dives === 1) firstStamp('S5.first');
     if (result === 'brought') note(T('d95.7b.S5.up'), 4);
-    if (result === 'case') { apply(['f:s5.case', 'give:item.mapcase', 'give:page.pilotchart'], 'case'); }
+    if (result === 'case') { apply(['f:s5.case', 'give:item.pilotcase', 'give:page.pilotchart'], 'case'); }
   };
   // the canoe left floating drifts downwind while you swim (the capsize's own rate), and Q Dive again over the wreck
   const swimTick = (dt) => {
@@ -285,8 +287,8 @@ export async function connect7b(t) {
   // the case into your things once you are out of the water (a swimmer's hands have no room for it: give:item fails there)
   const caseTick = () => {
     if (!live() || !has('s5.case') || has('ep.S5.given') || doc().caseItem || !inventory) return;
-    if (inventory.count('mapcase', { reachable: false }) > 0) { doc().caseItem = true; dirty(); return; }
-    if (player && player.mode !== 'swim') { apply(['give:item.mapcase'], 'case.item'); if (inventory.count('mapcase', { reachable: false }) > 0) { doc().caseItem = true; dirty(); } }
+    if (inventory.count('pilotcase', { reachable: false }) > 0) { doc().caseItem = true; dirty(); return; }
+    if (player && player.mode !== 'swim') { apply(['give:item.pilotcase'], 'case.item'); if (inventory.count('pilotcase', { reachable: false }) > 0) { doc().caseItem = true; dirty(); } }
   };
   // the place door: the wreck read through calm water from the canoe (the first time it is seen)
   const seenTick = () => {
@@ -332,9 +334,10 @@ export async function connect7b(t) {
   const notchTick = () => {
     if (!live() || has('s5.notch') || !has('nb.page.pilotchart') || !camera || !player) return;
     const bay = PL('gull.sign'), n = P('gull.notch'); if (!bay || !n || !near(bay, 700)) return;
+    // looked at: the view (the camera) or the body (the way you stand or the bow points) within 22° of it
     const f = camera.getWorldDirection(new THREE.Vector3()), dx = n.x - player.x, dz = n.z - player.z, d = Math.hypot(dx, dz) || 1;
-    const cos = (f.x * dx + f.z * dz) / (Math.hypot(f.x, f.z) * d || 1);
-    if (cos > Math.cos(22 * Math.PI / 180)) apply(['f:s5.notch'], 'notch');
+    const cos = (f.x * dx + f.z * dz) / (Math.hypot(f.x, f.z) * d || 1), b = player.forward || { x: 0, z: 0 }, cosB = (b.x * dx + b.z * dz) / d;
+    if (Math.max(cos, cosB) > Math.cos(22 * Math.PI / 180)) apply(['f:s5.notch'], 'notch');
   };
 
   // --- S6: the cut line, the pit, the eye after -------------------------------------------------------------------------------
