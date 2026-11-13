@@ -114,3 +114,14 @@ it. Where a later document invents detail, it must not contradict anything here.
 - **A catch** restores food and energy to the checkpoint (the last night), keeping anything found.
 - **The late season:** permits self-issued and free from 1 October; ice can catch you (walk/carry out, or a costly
   evacuation); "Look at next year's permits" on the desk (forward in fall): choosing one ends the open-water season and skips to that date next year.
+
+## 2026-11-13: the first counter, prescribed
+
+- **"I'd much rather be prescribed into it: you've got to pick up the stuff … way too many options for this first
+  interaction and it gets confusing."** P1 (`20-opening.md` 1.2) offers the bundle with one question ("Whose was it?",
+  once) and "I'll take it." only. "Does it work?", "What's BRM-14?", "How much?" and "I'll wait for a rental." are no
+  longer offered, so the shelf branch (R1/R1b, section 9) stays only for seasons saved before this. The keeper's first
+  night out is one line with the job in it and one answer ("I'll do that."): the job is taken, and if it isn't done it
+  only lapses.
+- **The start day's weather** is always the same fair day: clear, broken cumulus from late morning, clear at dusk and
+  overnight. The two days after keep the season's own weather, at most light rain.

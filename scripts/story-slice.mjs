@@ -316,7 +316,7 @@ async function slice() {
     if (!(await A.evaluate(() => !!window.__t.convo()))) { via += '; api (no talk opened)'; await A.evaluate(() => { const g = window.__game; if (g.onboarding.pending(g.profile.home)) g.onboarding.start(g.profile.home); }); await A.waitForTimeout(150); }
     const first = await A.evaluate(() => window.__t.convo());
     const said = await hearShot(A, /high shelf|Pack and tent, all one bundle/, 'c1-01-bundle');
-    const r = await picks(A, ['What\'s BRM-14?', 'I\'ll take it.']);
+    const r = await picks(A, ['Whose was it?', 'I\'ll take it.']);
     await hear(A, 4);
     for (let k = 0; k < 8; k++) { const c = await A.evaluate(() => window.__t.convo()); if (!c) break; await A.keyboard.press('Digit1'); await A.waitForTimeout(80); }
     await A.evaluate(() => { const o = window.__game.outfitter; if (o.open) o.hide(); });

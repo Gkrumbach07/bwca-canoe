@@ -163,12 +163,12 @@ test('the turn: U1 reports, U2 pink, U3 Eino (tauno.turn: S3), U4 the word, U5 t
   for (const w of ['20:U2.w1', '20:U4.w1', '20:U4.w2', '20:U1.w1', 'w.turn.drift', 'w.door.family']) assert.ok(s.walt().includes(w), w);
   assert.ok(r.said.some((x) => x.endsWith('And you know where I am mornings.') || x === T('20:U5.2')), 'at Farm');
 });
-test('P1: the keeper by manner, Josie by the week and the back room; "I\'ll wait for a rental." leaves it on the shelf', () => {
+test('P1: the keeper by manner, Josie by the week and the back room; "Whose was it?" once, then "I\'ll take it." (ux round 2: no other choice)', () => {
   const { s, t } = fresh();
-  let shelved = 0, cont = 0;
+  let shelved = 0, took = 0, cont = 0;
   const run = new SceneRun(t, P1, { who: 'josie', args: { ep: 25 }, cont: () => { cont++; return { say: 'after', choices: [] }; },
     hooks: { keeper: () => ({ id: P1.keeper[1], by: 'Gus' }), week: () => P1.week[2].id, bundle: () => ({ text: T('20:1.2.14').replace(/behind the \{[^}]*\}/, T(P1.backroom[25]).replace(/^…\s*/, '').replace(/\.$/, '')) }), extra: () => P1.extra[25],
-      shelf: () => { shelved++; s.set('bundle.shelf', true); } } });
+      shelf: () => { shelved++; s.set('bundle.shelf', true); }, take: () => { took++; s.set('bundle.taken', true); } } });
   let node = run.node('open');
   assert.equal(node.by, 'Gus');
   const said = [];
@@ -176,11 +176,14 @@ test('P1: the keeper by manner, Josie by the week and the back room; "I\'ll wait
   said.push(node.say);
   assert.ok(said.some((x) => x.includes('in a box that came in on the trailer')), said.join(' / '));
   assert.ok(said.includes(T('20:1.3.10')));
-  node = node.choices.find((c) => c.text.startsWith('How much?')).go();
-  assert.equal(node.say, T('20:1.2.18'));
-  node = node.choices.find((c) => c.text.startsWith("I'll wait")).go();
+  assert.deepEqual(node.choices.map((c) => c.text), [T('20:1.2.c2'), T('20:1.2.c5')]);
+  node = node.choices[0].go();
+  assert.equal(node.say, T('20:1.2.16'));
+  if (node.choices.length === 1 && !/take it/.test(node.choices[0].text)) node = node.choices[0].go();
+  assert.deepEqual(node.choices.map((c) => c.text), [T('20:1.2.c5')], 'asked once: only "I\'ll take it." left');
+  node = node.choices[0].go();
   for (let k = 0; node && node.choices && node.choices.length === 1 && k < 4; k++) node = node.choices[0].go();
-  assert.ok(shelved === 1 && cont === 1 && s.has('bundle.shelf'));
+  assert.ok(took === 1 && shelved === 0 && cont === 1 && s.has('bundle.taken') && !s.has('bundle.shelf'));
 });
 
 // --- the keepers' topics -------------------------------------------------------------------------------------------------

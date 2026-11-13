@@ -237,7 +237,9 @@ async function p1(page, take = true) {
   await page.evaluate(() => { const g = window.__game; if (g.onboarding.pending(g.profile.home)) g.onboarding.start(g.profile.home); });
   for (let k = 0; k < 20 && !(await page.evaluate(() => { window.__L.step(3); return !!window.__t.convo(); })); k++) await page.waitForTimeout(80);
   await hear(page);
-  const r = await picks(page, [take ? 'I\'ll take it.' : 'I\'ll wait for a rental.']);
+  // (ux round 2: no "I'll wait for a rental." any more; the shelf is an old season's: cast.debug.shelve, then the close)
+  if (!take) { for (let k = 0; k < 10; k++) { if (!(await page.evaluate(() => window.__t.convo()))) break; await page.keyboard.press('Escape'); await page.waitForTimeout(80); } }
+  const r = take ? await picks(page, ['I\'ll take it.']) : await page.evaluate(() => { const g = window.__game; const ok = g.storyTalk.cast.debug.shelve(); g.onboarding.start(g.profile.home); return { ok }; });
   await hear(page, 4);
   for (let k = 0; k < 8; k++) { const c = await page.evaluate(() => window.__t.convo()); if (!c) break; await page.keyboard.press('Digit1'); await page.waitForTimeout(80); }
   await page.evaluate(() => { const o = window.__game.outfitter; if (o.open) o.hide(); window.__L.step(5); });
@@ -405,7 +407,7 @@ async function decline() {
     // the first night out without the bundle: no night one
     const why = await A.evaluate(() => { const g = window.__game, inv = g.inventory, W = ['waltpack', 'walttent', 'waltstove', 'waltnotebook']; const out = []; for (const k of inv.containers) { const r = typeof inv.root === 'function' ? inv.root(k) : k; if (W.includes(k.item)) out.push({ item: k.item, where: k.where, root: r && r.where }); for (const e of k.grid || []) if (W.includes(e.id)) out.push({ id: e.id, in: k.item, where: k.where, root: r && r.where, d: r && r.at ? Math.round(inv.dist(r.at)) : null }); } return out; });
     const night = await A.evaluate(() => { const g = window.__game; const r = g.walt.onSleep ? g.walt.onSleep({ hours: 9, at: { hours: 7 } }) : 'no onSleep'; window.__L.step(10); return { r: r === undefined ? 'undefined' : r, found: g.story.has('nb.found'), due: g.walt.nightOneDue ? g.walt.nightOneDue({ hours: 9, wakeAt: 7 }) : null, carried: g.walt.carried() }; });
-    result('D1 "I\'ll wait for a rental.": the shelf; a night out without Walt\'s things is no night one', r.ok && f['bundle.shelf'] && !f['bundle.taken'] && !night.found && !night.carried, { r, f, night, why });
+    result('D1 the bundle left on the shelf (an old season\'s: shelve): a night out without Walt\'s things is no night one', r.ok && f['bundle.shelf'] && !f['bundle.taken'] && !night.found && !night.carried, { r, f, night, why });
   });
   await run('D2', async () => {
     // (D1 found the notebook through the stove the shelf path hands over: a fresh season, the stove taken away, to play

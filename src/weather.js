@@ -161,13 +161,20 @@ export const WIND_DAY = {
 // that. In the intro, it should be very easy"): a season's first days are drawn like any others from the season's own
 // seed (main.js seeds the weather per season), so a start may be grey, wet or foggy; but over the first trip (starter.js
 // gentle: the season's start day and the two after, cut when the first trip ends) no thunderstorm, and no wind that puts
-// whitecaps on the water or the sea in the hull: a storm hour is steady rain, thunderheads are overcast, a front's floor
+// whitecaps on the water or the sea in the hull: a storm or steady rain hour is light rain, thunderheads are overcast, a front's floor
 // and gusts are held down, the day's breeze peaks at a gentle breeze at most and never blows all day.
 export const GENTLE = { peak: 4, floor: 1.2, min: 2.5, mul: 1.05, gust: 1.15 };
+// (ux round 2, the owner 2026-11-13: "you start in random weather. Make sure the weather is not pouring rain when you
+// start. It should start in a known weather pattern.") The start day itself, from midnight to `hours` past it (06:00 the
+// next morning), is always the same high-pressure day: clear through the morning, a fair sky of broken cumulus from late
+// morning into the evening, clear again at dusk and overnight, no fog, a light breeze. Over the rest of the window the
+// forecast's own weather (as above), its rain at most light rain: never a downpour on the first trip.
+export const START_DAY = { hours: 30, fair: [11, 19] };
 const DAY0 = (year) => Math.round(Date.UTC(year, 0, 1) / 86400000);
 export const absHour = (year, h) => DAY0(year) * 24 + h; // (trip.js absDay × 24 + the hour of that day)
-function gentled(o) {
-  const s = o.s === S.storm ? S.rain : o.s === S.building ? S.overcast : o.s;
+function gentled(o, h = Infinity) {
+  if (h < START_DAY.hours) { const hd = h % 24; return { s: hd >= START_DAY.fair[0] && hd < START_DAY.fair[1] && h < 24 ? S.fair : S.clear, from: o.from, min: Math.min(o.min, GENTLE.min), mul: Math.min(o.mul, GENTLE.mul), gust: Math.min(o.gust, GENTLE.gust) }; }
+  const s = o.s === S.storm || o.s === S.rain ? S.lightRain : o.s === S.building ? S.overcast : o.s;
   return { s, from: o.from, min: Math.min(o.min, GENTLE.min), mul: Math.min(o.mul, GENTLE.mul), gust: Math.min(o.gust, GENTLE.gust) };
 }
 export function windShape(hours) {
@@ -331,7 +338,7 @@ export class Weather {
     if (h < 0) { y = this._year(year - 1); h += daysInYear(year - 1) * 24; }
     h = Math.min(h, y.N - 1);
     const o = { s: y.st[h], from: y.from[h], min: y.min[h], mul: y.mul[h], gust: y.gust[h] };
-    return this.gentle && gh >= this.gentle.from && gh < this.gentle.to ? gentled(o) : o;
+    return this.gentle && gh >= this.gentle.from && gh < this.gentle.to ? gentled(o, gh - this.gentle.from) : o;
   }
   // the start round: is abs hour (or year, day of the year, hour) in the first trip's kind weather
   isGentle(year = this.day.year, doy = this.day.doy, hours = this.day.hours) {

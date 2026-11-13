@@ -12,7 +12,7 @@
 // Self-contained (no imports): it builds on any `kit` with the Voice's shape (audio-kit.js), so the game plays it
 // through the engine's one-shots and a rig renders it offline:
 //   kit: { ctx, t, input, osc(type, f, t0, t1), filter(type, f, Q), gain(v), noise('white'|'pink', node), until(t) }
-//   voiceOf({ key, name, female, age }) → { f0, form, rate, breath, wobble, seed }
+//   voiceOf({ key, name, female, age, pitch?, pace? }) → { f0, form, rate, breath, wobble, rasp, lilt, bright, seed }
 //   speak(kit, text, voice, { max = 2.2, gain = 1, mood = null }) → { end, syllables, secs }
 
 const FORMANTS = { // F1, F2, F3 (Hz) of an adult male voice; a voice's `form` scales them
@@ -31,19 +31,30 @@ const TINY = 0.0001;
 function rng32(seed) { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 function hash(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
 
-// A person's voice, from who they are: a woman's or a man's, a kid's or an old voice, and the rest from their key
-// (the same person always sounds the same)
-export function voiceOf({ key = '', name = '', female = false, age = 'adult' } = {}) {
+// A person's voice, from who they are: a woman's or a man's, a kid's, a young, middle-aged or old voice, and the rest
+// from their key (the same person always sounds the same). (ux round 2, the owner 2026-11-13: "change the pitch based on
+// who's talking so they don't all sound the same") Each voice takes its own place across about ten semitones of its
+// register (`pitch` -1 low .. 1 high, else from the key), its own throat size, pace, airiness, roughness, and `lilt`, how
+// far its pitch moves over a line (a flat talker to a sing-song one). The story's cast set `pitch` and `pace` by hand
+// (story-data/cast.js look.voice) so the people met together never sound alike.
+export function voiceOf({ key = '', name = '', female = false, age = 'adult', pitch = null, pace = null } = {}) {
   const R = rng32(hash(`voice:${key || name}`));
-  const kid = age === 'kid', old = age === 'old';
-  const f0 = kid ? 250 + R() * 50 : female ? 178 + R() * 52 : 98 + R() * 36;
+  const kid = age === 'kid', old = age === 'old', young = age === 'young', mid = age === 'mid';
+  const p = Math.max(-1, Math.min(1, Number.isFinite(pitch) ? pitch : R() * 2 - 1));
+  const centre = kid ? 265 : female ? 200 : 116;
+  const semis = p * 5 + (young ? 1.2 : old ? -1.4 : mid ? -0.4 : 0);
+  const f0 = centre * 2 ** (semis / 12);
+  const throat = (kid ? 1.3 : female ? 1.15 : 1) * (1 + 0.035 * p + (R() - 0.5) * 0.12);
+  const r1 = R(), r2 = R(), r3 = R(), r4 = R(), r5 = R();
   return {
-    f0: f0 * (old ? 0.92 : 1),
-    form: kid ? 1.28 + R() * 0.06 : female ? 1.12 + R() * 0.08 : 0.94 + R() * 0.1, // the size of the throat
-    rate: (kid ? 1.12 : old ? 0.86 : 1) * (0.9 + R() * 0.22),                         // syllables a second, ×
-    breath: (old ? 0.22 : 0.1) + R() * 0.08,                                          // how airy
-    wobble: old ? 0.028 + R() * 0.012 : 0.008 + R() * 0.008,                          // the vibrato's depth
-    bright: 1900 + R() * 700,                                                          // the murmur's low-pass
+    f0,
+    form: throat,                                                                                    // the size of the throat
+    rate: (kid ? 1.12 : old ? 0.84 : young ? 1.06 : 1) * (Number.isFinite(pace) ? pace : 0.84 + r1 * 0.32), // syllables a second, ×
+    breath: (old ? 0.2 : 0.05) + r2 * 0.14,                                                          // how airy
+    wobble: old ? 0.028 + r3 * 0.016 : 0.006 + r3 * 0.01,                                            // the vibrato's depth
+    rasp: (old ? 0.022 : 0.008) + r4 * 0.016,                                                        // the roughness in the pitch
+    lilt: 0.55 + r5 * 1.1,                                                                           // the pitch's travel over a line, ×
+    bright: (female || kid ? 2000 : 1700) + R() * 1100,                                              // the murmur's low-pass
     seed: hash(key || name),
   };
 }
@@ -96,7 +107,7 @@ export function speak(kit, text, voice, { max = 2.2, gain = 1, mood = null } = {
   const src = kit.osc('sawtooth', V.f0, t0, end0);
   const vib = kit.osc('sine', 4.6 + R() * 1.4, t0, end0), vd = kit.gain(V.f0 * V.wobble);
   vib.connect(vd); vd.connect(src.frequency);
-  const jit = kit.gain(V.f0 * 0.012); kit.noise('pink', jit); jit.connect(src.frequency); // a little roughness in the pitch
+  const jit = kit.gain(V.f0 * (V.rasp ?? 0.012)); kit.noise('pink', jit); jit.connect(src.frequency); // a little roughness in the pitch
   const pre = kit.filter('lowpass', 3400, 0.5); src.connect(pre);
   const buzz = kit.gain(1); pre.connect(buzz);
   const breath = kit.gain(V.breath * 0.9); kit.noise('pink', breath);
@@ -120,9 +131,10 @@ export function speak(kit, text, voice, { max = 2.2, gain = 1, mood = null } = {
   said.forEach((s, i) => {
     const d = dur(s), k = i / Math.max(1, N - 1);
     // the pitch: a slow fall over the phrase, a lift on a stressed syllable, a rise at a question's end
-    let f = base * (1.06 - 0.16 * k) * (1 + (R() - 0.5) * 0.09) * (s.stress ? 1.07 : 1);
-    if (question && lastWord && i >= N - 2) f *= i === N - 1 ? 1.32 : 1.12;
-    if (!question && lastWord && i === N - 1) f *= 0.9;
+    const L = V.lilt ?? 1;
+    let f = base * (1 + L * (0.06 - 0.16 * k)) * (1 + (R() - 0.5) * 0.09 * L) * (1 + (s.stress ? 0.07 * L : 0));
+    if (question && lastWord && i >= N - 2) f *= i === N - 1 ? 1 + 0.32 * Math.max(0.8, L) : 1.12;
+    if (!question && lastWord && i === N - 1) f *= 1 - 0.1 * L;
     const oc = s.onset.slice(-1), soft = oc === 'c' && /^[eiy]/.test(s.vowel);
     const on = oc === 'c' && !soft ? ONSET.k : ONSET[oc] || (s.onset ? ONSET[s.onset[0]] : null);
     let tv = t; // the vowel's start

@@ -51,7 +51,7 @@ try {
     const avail = S.available(home);
     const n = S.talk(home, () => null);
     const say = n ? n.say : null;
-    const end = (() => { let m = n; for (const p of ['I’ll go there', 'I’ll do that']) { const c = m && m.choices && m.choices.find((q) => q.text.startsWith(p)); m = c ? c.go() : null; } return m; })();
+    const end = (() => { let m = n; for (const p of ['I’ll go there', 'I’ll do that']) { const c = m && m.choices && m.choices.find((q) => q.text.startsWith(p)); if (c) m = c.go(); } /* (ux round 2: one answer, 'I’ll do that.') */ return m; })();
     if (S.pending) await S.pending;
     const t = S.taskOf(home);
     return { avail, say, end: end && end.say, tickets: P.tickets().length, owed: P.owed(), task: t ? { id: t.id, kind: t.kind, status: t.status } : null };

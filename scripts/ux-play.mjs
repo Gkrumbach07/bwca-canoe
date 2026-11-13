@@ -256,7 +256,7 @@ try {
   // --- the talk to its end with 1 ------------------------------------------------------------------------------------
   const op = await pressETalk();
   const transcript = [];
-  const PREFER = ['What\'s BRM-14?', 'I\'ll take it.'];
+  const PREFER = ['Whose was it?', 'I\'ll take it.', 'I’ll do that.'];
   for (let i = 0; i < 30; i++) {
     const t = await ev(() => window.__p.d().talking); if (!t) break;
     await page.waitForTimeout(350);

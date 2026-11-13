@@ -176,16 +176,13 @@ export const P1 = {
   extra: { 25: '20:1.3.10', 12: '20:1.3.16' },
   nodes: {
     open: { say: [{ hook: 'keeper' }, { hook: 'week' }], to: 'offer' },
+    // (ux round 2, the owner 2026-11-13: "I can refuse all the things that Josie says … I'd much rather be prescribed into
+    // it: you've got to pick up the stuff … way too many options for this first interaction and it gets confusing": the
+    // bundle is taken, one question asked on the way. 20 §1.2's other choices (Does it work? What's BRM-14? How much?
+    // I'll wait for a rental.) are no longer offered; the shelf (do:shelf, R1/R1b) stays only for seasons that left it.)
     offer: { say: ['20:1.2.13', { hook: 'bundle' }, { hook: 'extra' }], go: [
-      { ask: '20:1.2.c1', say: ['20:1.2.15'] },
       { ask: '20:1.2.c2', once: 'p1.whose', say: ['20:1.2.16'] },
-      { ask: '20:1.2.c3', once: 'p1.brm', say: ['20:1.2.17'] },
-      { ask: '20:1.2.c4', say: ['20:1.2.18'], to: 'much' },
-      { ask: '20:1.2.c5', say: ['20:1.2.19'], then: ['do:take'], end: true },
-      { ask: '20:1.2.c6', say: ['20:1.2.20'], then: ['do:shelf'], end: true }] },
-    much: { go: [
-      { ask: '20:1.2.c7', say: ['20:1.2.19'], then: ['do:take'], end: true },
-      { ask: '20:1.2.c8', say: ['20:1.2.20'], then: ['do:shelf'], end: true }] },
+      { ask: '20:1.2.c5', say: ['20:1.2.19'], then: ['do:take'], end: true }] },
   },
 };
 

@@ -1,6 +1,8 @@
 // Renders src/audio-speech.js offline (headless Chromium's OfflineAudioContext, no game, no Vite) to WAV files, for
 // listening: each sample a person and a line, and one demo file of them all in a row.
-//   node scripts/ux-voice-render.mjs [--out dir] [--max 2.2]
+//   node scripts/ux-voice-render.mjs [--out dir] [--max 2.2] [--lineup]
+// --lineup (ux round 2): the same line said by the people met first and the story's cast, each in their own voice (the
+// cast's pitch and pace from story-data/cast.js), so the spread can be heard in a row
 import { createRequire } from 'node:module';
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -15,7 +17,25 @@ function findPw() { if (process.env.PW) return process.env.PW; const base = path
 const { chromium } = createRequire(import.meta.url)(findPw());
 
 // [file, who, voice spec, line, options]
-const SAMPLES = [
+const LINEUP = process.argv.includes('--lineup');
+const { CAST } = await import(path.join(ROOT, 'src/story-data/cast.js'));
+const castV = (id) => { const l = CAST[id].look; return { key: `cast:${id}`, female: !!l.female, age: l.age, pitch: l.pitch, pace: l.pace }; };
+const LINE = 'Got a minute? There\'s old gear in the back, if you want it.';
+const LINEUP_SAMPLES = [
+  ['L01-josie', 'Josie (young woman)', castV('josie'), LINE],
+  ['L02-keeper-dale', 'A keeper, Dale (man, from his name)', { key: 'name:Dale' }, LINE],
+  ['L03-tauno', 'Tauno (old man)', castV('tauno'), LINE],
+  ['L04-wade', 'Wade (middle-aged man)', castV('wade'), LINE],
+  ['L05-maggie', 'Maggie (middle-aged woman)', castV('maggie'), LINE],
+  ['L06-dan', 'Dan (middle-aged man)', castV('dan'), LINE],
+  ['L07-aili', 'Aili (old woman)', castV('aili'), LINE],
+  ['L08-hap', 'Hap (old man)', castV('hap'), LINE],
+  ['L09-liisa', 'Liisa (young woman)', castV('liisa'), LINE],
+  ['L10-visitor-jake', 'A visitor, Jake (man)', { key: 'name:Jake' }, LINE],
+  ['L11-visitor-rosa', 'A visitor, Rosa (woman)', { key: 'name:Rosa', female: true }, LINE],
+  ['L12-kid', 'A kid', { key: 'name:Owen', age: 'kid' }, LINE],
+];
+const SAMPLES0 = [
   ['01-josie-minute', 'Josie (the summer help)', { key: 'cast:josie', female: true }, 'Got a minute? Come to the counter.'],
   ['02-josie-gear', 'Josie', { key: 'cast:josie', female: true }, 'There\'s old gear in the back nobody rents. If you\'re not going to need it, it\'s yours.'],
   ['03-tauno-brm', 'Tauno (old man)', { key: 'cast:tauno', age: 'old' }, 'That\'s BRM fourteen.'],
@@ -27,6 +47,7 @@ const SAMPLES = [
   ['09-ranger', 'A ranger (man)', { key: 'visitor:ranger', name: 'Bob' }, 'Fire danger\'s high this week. Keep it small and drown it.'],
   ['10-long-capped', 'Josie, a long line (cut at about two seconds)', { key: 'cast:josie', female: true }, 'He came in every June for thirty years, same canoe, same pack, and one summer he just didn\'t, and nobody ever asked why.'],
 ];
+const SAMPLES = LINEUP ? LINEUP_SAMPLES : SAMPLES0;
 
 const code = readFileSync(path.join(ROOT, 'src/audio-speech.js'), 'utf8').replace(/^export /gm, '');
 const browser = await chromium.launch({ executablePath: process.env.CHROME });
@@ -68,7 +89,7 @@ try {
     const k = r.peak > 0 ? 0.7 / r.peak : 1, pcm = r.pcm.map((x) => x * k);
     writeWav(path.join(OUT, `${file}.wav`), pcm, SR);
     for (const x of pcm) all.push(x); for (let i = 0; i < Math.round(SR * 0.6); i++) all.push(0);
-    console.log(file, who, `"${line}"`, `f0 ${r.voice.f0.toFixed(0)} Hz, form ${r.voice.form.toFixed(2)}, rate ${r.voice.rate.toFixed(2)}`, `${r.said.syllables} syllables, ${r.said.secs} s, raw peak ${r.peak.toFixed(3)}`);
+    console.log(file, who, `"${line}"`, `f0 ${r.voice.f0.toFixed(0)} Hz, form ${r.voice.form.toFixed(2)}, rate ${r.voice.rate.toFixed(2)}, lilt ${(r.voice.lilt ?? 1).toFixed(2)}`, `${r.said.syllables} syllables, ${r.said.secs} s, raw peak ${r.peak.toFixed(3)}`);
   }
   writeWav(path.join(OUT, '00-all.wav'), all, SR);
   console.log('wrote', OUT);

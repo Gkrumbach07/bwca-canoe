@@ -377,6 +377,9 @@ export class Cast {
       // why a walkout here would stage whom (each walkout slot: its condition, the budget's answer)
       why(ep) { const a = self.args(ep), B = self.c.beats; return Object.entries(CAST).flatMap(([who, R]) => R.where.filter((w) => w.at === 'walkout').map((w) => ({ who, id: w.id, when: self.when(w.when, a), push: w.push ? (B ? B.check(w.push) : null) : null }))).concat([{ live: self.staged(), trip: self.story && self.story.tripN() }]); },
       entry(who) { const st = [...self.live.values()].find((x) => x.who === who); return st ? self.entry(who, st) : null; },
+      // a season that left the bundle on the shelf (P1's "I'll wait for a rental.", no longer offered since ux round 2:
+      // seasons saved before it keep R1/R1b): the shelf as that choice left it (rigs' shelf branches)
+      shelve() { const ob = self.c.onboarding; if (!ob || typeof ob.shelf !== 'function') return false; ob.shelf(); self.story.rules.apply({ id: 'p1', then: ['f:bundle.shelf'] }, {}); return self.story.has('bundle.shelf'); },
     };
   }
 }

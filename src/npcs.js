@@ -229,7 +229,7 @@ const HATS = [0x9d8b61, 0x6a5a40, 0x4a4a3a, 0x7a6a4a, 0x3a4436];
 const FEMALE = new Set(['Ada', 'Agnes', 'Alma', 'Bea', 'Clara', 'Dot', 'Edna', 'Elna', 'Ellen', 'Esther', 'Greta', 'Hazel', 'Helga', 'Ida', 'Inga', 'Ione', 'Joanne', 'Lempi', 'Kaija', 'Lois', 'Mae', 'Myrna', 'Nora', 'Sigrid', 'Sonja', 'Tess', 'Thea', 'Vi', 'Wilma', 'Ruth', 'Bev', 'Lise', 'Marit', 'Deb', 'Marge', 'Lorna', 'Anneli', 'Priya', 'Kate', 'Sue', 'Jo', 'Rosa', 'Nell', 'Britt', 'Maya', 'Hanna', 'Lucy', 'Liv', 'Ingrid', 'Pat', 'Dana', 'Gail']);
 // a palette: { skin, shirt, cuff, pants, belt, pfd, pfdDark, boot, sole, lace, hair, beard, hat, band } and how the
 // figure wears it: hat (bool), bun (bool), scale
-export function dress(rng, { female = false, age = 'adult', shirt, pfd, pants, hat, hatChance = 0.5, beardChance = 0.35, hair } = {}) {
+export function dress(rng, { female = false, age = 'adult', shirt, pfd, pants, hat, hatChance = 0.5, beardChance = 0.35, hair, pitch = null, pace = null } = {}) {
   const skin = pickR(rng, SKIN);
   const hairC = hair != null ? hair : age === 'old' ? pickR(rng, [HAIR.white, HAIR.grey, HAIR.grey]) : pickR(rng, [HAIR.dark, HAIR.brown, HAIR.brown, HAIR.fair, HAIR.red, HAIR.black]);
   const sh = shirt != null ? shirt : pickR(rng, SHIRTS);
@@ -240,7 +240,7 @@ export function dress(rng, { female = false, age = 'adult', shirt, pfd, pants, h
     skin, shirt: sh, cuff: shade(sh, 1.18), pants: pants != null ? pants : pickR(rng, PANTS), belt: 0x3a2c20, pfd: vest, pfdDark: shade(vest, 0.66), strap: 0x2a2a2a,
     boot: pickR(rng, BOOTS), sole: 0x2a221c, lace: 0x3b2a1c, hair: hairC, beard: beard ? (age === 'old' ? hairC : shade(hairC, 1.15)) : skin, hat: hatC, band: shade(hatC, 0.55),
     wear: { hat: rng() < hatChance, bun: female && age !== 'kid' && rng() < 0.65, scale: age === 'kid' ? 0.62 : female ? 0.95 + rng() * 0.03 : 0.98 + rng() * 0.05 },
-    voice: { female: !!female, age }, // (ux: the murmur their lines are said in, audio-speech.js voiceOf)
+    voice: { female: !!female, age, ...(Number.isFinite(pitch) ? { pitch } : {}), ...(Number.isFinite(pace) ? { pace } : {}) }, // (ux: the murmur their lines are said in, audio-speech.js voiceOf; the cast's own pitch and pace)
   };
 }
 function shade(hex, k) { const c = new THREE.Color(hex); c.r = Math.min(1, c.r * k); c.g = Math.min(1, c.g * k); c.b = Math.min(1, c.b * k); return c.getHex(); }

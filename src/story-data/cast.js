@@ -13,11 +13,13 @@
 //     fact   written as they are placed (a re-hook's once-ever: rehook.R3 …)
 //     walk   the 1.1 porch: walking past is "[Keep walking]" (T1b at 12 m), then X1 (declined) at 26 m
 // Node only (no game imports): story-lint.mjs and the unit check read it.
+// (ux round 2) look.pitch (-1 low .. 1 high in their register) and look.pace: each one's murmur, set by hand so the
+// people met together never sound alike (audio-speech.js voiceOf, through npcs.js dress)
 export const CAST = {
   tauno: {
     name: 'Tauno Kangas', first: 'Tauno', known: 'knows.tauno', unknown: 'An old man', role: '',
     // 81, a seed-company cap, a canvas chore coat (npcs.js dress: shirt, pants, hat; grey hair)
-    look: { age: 'old', shirt: 0x6b5236, pants: 0x3a3a34, hat: 0x7a6a3a, hair: 0x8a8580, hatChance: 1 },
+    look: { pitch: -0.8, pace: 0.86, age: 'old', shirt: 0x6b5236, pants: 0x3a3a34, hat: 0x7a6a3a, hair: 0x8a8580, hatChance: 1 },
     noPorch: 'truck',
     where: [
       { id: 'porch', at: 'walkout', when: 'f:tauno.armed & !f:tauno.porch.declined1 & !f:tauno.porch.done & daylight', push: 'tauno.porch', scene: 'T1', bark: '20:T1.1', walk: true },
@@ -42,7 +44,7 @@ export const CAST = {
   },
   josie: {
     name: 'Josie Hautala', first: 'Josie', known: null, role: 'the summer help',
-    look: { age: 'young', female: true, shirt: 0x5f7f45, hat: null }, // (ux 2026-11-13: female was missing: her figure was dressed, and would have been voiced, as a man)
+    look: { pitch: 0.6, pace: 1.08, age: 'young', female: true, shirt: 0x5f7f45, hat: null }, // (ux 2026-11-13: female was missing: her figure was dressed, and would have been voiced, as a man)
     where: [
       // R1 (once) and R1b (once more, two trips on), then only if asked: "That old pack still in back?"
       { id: 'R1', at: 'counter:home', when: 'f:bundle.shelf & !f:bundle.later & !f:rehook.R1 & trips.since(bundle.shelf)>=1', push: 'R1', scene: 'R1', bark: '20:9.2#R1.0', fact: 'rehook.R1' },
@@ -56,7 +58,7 @@ export const CAST = {
   // (kettle.js: the Kettle turnaround; mining-cast.js: the EP 33 lot). Their scenes are story-data/mining.js's.
   len: {
     name: 'Len Saari', first: 'Len', known: 'len.met', unknown: 'An old man', role: '',
-    look: { age: 'old', shirt: 0x4a5f7a, pants: 0x3c3a36, hat: 0x2f3a4a, hair: 0x9a9690, hatChance: 0.7 },
+    look: { pitch: -0.2, age: 'old', shirt: 0x4a5f7a, pants: 0x3c3a36, hat: 0x2f3a4a, hair: 0x9a9690, hatChance: 0.7 },
     where: [
       { id: 'table', at: 'a2:corner', when: 'month:5-10 & dow:thu & hour:11-14', scene: 'a2:len' },
       { id: 'dock', at: 'a2:dock', when: 'month:5-10 & hour:7-12 & !dow:thu', scene: 'a2:len' },
@@ -64,17 +66,17 @@ export const CAST = {
   },
   mary: {
     name: 'Mary Pelto', first: 'Mary', known: 'mary.met', unknown: 'An old woman', role: '',
-    look: { age: 'old', female: true, shirt: 0x8a6a8a, pants: 0x4a4038, hat: null, hair: 0xb8b4ae, hatChance: 0 },
+    look: { pitch: -0.5, age: 'old', female: true, shirt: 0x8a6a8a, pants: 0x4a4038, hat: null, hair: 0xb8b4ae, hatChance: 0 },
     where: [{ id: 'window', at: 'a2:window', when: 'month:5-10 & dow:tue|fri & hour:9-11', scene: 'a2:mary' }],
   },
   brekke: {
     name: 'Carl Brekke', first: 'Carl', known: 'brekke.met', unknown: 'An old man in a good jacket', role: '',
-    look: { age: 'old', shirt: 0x2e3440, pants: 0x2a2a2c, hat: null, hair: 0xd8d6d0, hatChance: 0 },
+    look: { pitch: 0.5, age: 'old', shirt: 0x2e3440, pants: 0x2a2a2c, hat: null, hair: 0xd8d6d0, hatChance: 0 },
     where: [{ id: 'table', at: 'a2:corner', when: 'month:6-10 & dow:thu & hour:11-14', scene: 'a2:brekke' }],
   },
   tasha: {
     name: 'Tasha Strand', first: 'Tasha', known: 'tasha.met', unknown: 'A woman with a tablet', role: '',
-    look: { age: 'young', female: true, shirt: 0x3f6f8f, pants: 0x3a3a34, hat: 0x7a5a3a, hair: 0x5a3a2a, hatChance: 0.5 },
+    look: { pitch: 0.1, age: 'young', female: true, shirt: 0x3f6f8f, pants: 0x3a3a34, hat: 0x7a5a3a, hair: 0x5a3a2a, hatChance: 0.5 },
     where: [
       { id: 'kettle', at: 'field', when: 'f:kettle.notice & !f:kettle.done', scene: 'a2:tasha' },
       { id: 'store', at: 'a2:store', when: 'month:6-10 & dow:mon|tue|wed|thu|fri & hour:8-10 & f:kettle.done & days.since(kettle.done)>=1 & dayhash(tasha,3)=0', scene: 'a2:tasha' },
@@ -88,7 +90,7 @@ export const CAST = {
   // 'a3:store' (inside by the shelves). Their scenes are story-data/guiding.js's
   marlys: {
     name: 'Marlys Lind', first: 'Marlys', known: 'marlys.met', unknown: 'A woman pricing leeches', role: '',
-    look: { age: 'old', female: true, shirt: 0x7a5a6a, pants: 0x3e3a36, hat: null, hair: 0xc8c4be, hatChance: 0 },
+    look: { pitch: 0.4, age: 'old', female: true, shirt: 0x7a5a6a, pants: 0x3e3a36, hat: null, hair: 0xc8c4be, hatChance: 0 },
     where: [
       // GY-13 choice 1: at the landing with Sheila, the next Thursday to Sunday, a day she never comes in
       { id: 'statement', at: 'a3:landing', when: 'f:choice.sheila=in & !f:sheila.statement & month:5-10 & dow:thu|fri|sat|sun & hour:13-18', scene: null },
@@ -97,12 +99,12 @@ export const CAST = {
   },
   hap: {
     name: 'Hap Johnsrud', first: 'Hap', known: 'hap.met', unknown: 'Old man on the bench', role: '',
-    look: { age: 'old', shirt: 0x5a6a4a, pants: 0x3a3832, hat: 0x6a5a3a, hair: 0xd0ccc4, hatChance: 0.6 },
+    look: { pitch: -1, pace: 0.9, age: 'old', shirt: 0x5a6a4a, pants: 0x3a3832, hat: 0x6a5a3a, hair: 0xd0ccc4, hatChance: 0.6 },
     where: [{ id: 'bench', at: 'a3:bench', when: 'date:06-08..09-07 & dow:sat|sun & hour:10-15', scene: 'a3:hap' }],
   },
   nate: {
     name: 'Nate Johnsrud', first: 'Nate', known: 'nate.met', unknown: 'A young man with truck keys', role: '',
-    look: { age: 'young', shirt: 0x3a5a7a, pants: 0x34343a, hat: 0x2a3a4a, hair: 0x5a4030, hatChance: 0.8 },
+    look: { pitch: 0.3, age: 'young', shirt: 0x3a5a7a, pants: 0x34343a, hat: 0x2a3a4a, hair: 0x5a4030, hatChance: 0.8 },
     where: [
       { id: 'rail', at: 'a3:rail', when: 'date:06-08..09-07 & dow:sat|sun & hour:10-15', scene: 'a3:nate' },
       { id: 'tow', at: 'a3:towdock', when: 'month:5-9 & dow:mon|tue|wed|thu|fri & hour:8-17', scene: 'a3:nate' },
@@ -110,12 +112,12 @@ export const CAST = {
   },
   sheila: {
     name: 'Sheila Novak', first: 'Sheila', known: 'sheila.met', unknown: 'A woman coiling a throw line', role: '',
-    look: { age: 'mid', female: true, shirt: 0xa83a2a, pants: 0x2e3238, hat: 0x2a2a2e, hair: 0x7a6a5a, hatChance: 0.4 },
+    look: { pitch: -0.3, age: 'mid', female: true, shirt: 0xa83a2a, pants: 0x2e3238, hat: 0x2a2a2e, hair: 0x7a6a5a, hatChance: 0.4 },
     where: [{ id: 'landing', at: 'a3:landing', when: 'month:7-10 & dow:thu|fri|sat|sun & hour:13-18', scene: 'a3:sheila' }],
   },
   rick: {
     name: 'Rick Pasanen', first: 'Rick', known: 'rick.met', unknown: 'A guide buying leeches', role: '',
-    look: { age: 'mid', shirt: 0x6a7a4a, pants: 0x3a3a34, hat: 0x8a6a3a, hair: 0x6a5a4a, hatChance: 1 },
+    look: { pitch: -0.5, age: 'mid', shirt: 0x6a7a4a, pants: 0x3a3a34, hat: 0x8a6a3a, hair: 0x6a5a4a, hatChance: 1 },
     where: [{ id: 'store', at: 'a3:store', when: 'date:05-15..09-15 & (hour:5-7 | hour:18-21)', scene: 'a3:rick' }],
   },
   // /a3
@@ -127,12 +129,12 @@ export const CAST = {
   aili: {
     name: 'Aili Niemi', first: 'Aili', known: 'aili.met', unknown: 'A woman behind the counter', role: '',
     // 74, a cardigan over a work shirt, reading glasses on the counter, grey hair pinned up
-    look: { age: 'old', female: true, shirt: 0x7a5a4a, pants: 0x3e3a36, hat: null, hair: 0xc8c4bc, hatChance: 0 },
+    look: { pitch: 0.9, age: 'old', female: true, shirt: 0x7a5a4a, pants: 0x3e3a36, hat: null, hair: 0xc8c4bc, hatChance: 0 },
     where: [{ id: 'counter', at: 'a4:counter', when: 'month:5-10 & !(dow:mon & hour:9-16) & hour:6-21', scene: 'a4:aili' }],
   },
   jon: {
     name: 'Jon Niemi', first: 'Jon', known: 'jon.met', unknown: 'A man cleaning fish', role: '',
-    look: { age: 'adult', shirt: 0x4f5a3a, pants: 0x2f3236, hat: 0x6a2a24, hair: 0x5a4a3a, hatChance: 0.9 },
+    look: { pitch: 0.2, age: 'adult', shirt: 0x4f5a3a, pants: 0x2f3236, hat: 0x6a2a24, hair: 0x5a4a3a, hatChance: 0.9 },
     where: [
       { id: 'dock', at: 'a4:jondock', when: 'month:5-10 & hour:19-21', scene: 'a4:jon' },
       { id: 'morning', at: 'a4:dock12', when: 'month:5-10 & hour:6-8', scene: 'a4:jon' },
@@ -140,17 +142,17 @@ export const CAST = {
   },
   liisa: {
     name: 'Liisa Niemi', first: 'Liisa', known: 'liisa.met', unknown: 'The girl at the counter', role: 'the season staff',
-    look: { age: 'young', female: true, shirt: 0x9a4a4a, pants: 0x3a3e4a, hat: null, hair: 0x8a6a4a, hatChance: 0 },
+    look: { pitch: 1, age: 'young', female: true, shirt: 0x9a4a4a, pants: 0x3a3e4a, hat: null, hair: 0x8a6a4a, hatChance: 0 },
     where: [{ id: 'counter', at: 'a4:counter12', when: '(month:6-9 | (month:5 & date:05-24..05-31) | (month:10 & date:10-01..10-06)) & hour:8-18', scene: 'a4:liisa' }],
   },
   gord: {
     name: 'Gord Pelletier', first: 'Gord', known: 'gord.met', unknown: 'A man off a boat', role: '',
-    look: { age: 'old', shirt: 0x8a3a2a, pants: 0x3a3a34, hat: 0x2a3a2a, hair: 0x9a9690, hatChance: 1 },
+    look: { pitch: 0.1, age: 'old', shirt: 0x8a3a2a, pants: 0x3a3a34, hat: 0x2a3a2a, hair: 0x9a9690, hatChance: 1 },
     where: [{ id: 'dock', at: 'a4:dock12', when: 'dow:thu & (month:7-9 | (month:6 & date:06-15..06-30)) & hour:11-14', scene: 'a4:gord' }],
   },
   danielle: {
     name: 'Danielle Carriere', first: 'Danielle', known: 'danielle.met', unknown: 'A ranger', role: 'the Canadian ranger',
-    look: { age: 'adult', female: true, shirt: 0x5a6a3a, pants: 0x3a3a2a, hat: 0x6a5a3a, hair: 0x4a3a2a, hatChance: 1 },
+    look: { pitch: -0.8, age: 'adult', female: true, shirt: 0x5a6a3a, pants: 0x3a3a2a, hat: 0x6a5a3a, hair: 0x4a3a2a, hatChance: 1 },
     where: [{ id: 'landing', at: 'a4:prairie', when: 'month:6-9 & dow:mon|tue|wed|thu & hour:10-15', scene: 'a4:danielle' }],
   },
   // a4: end
@@ -160,7 +162,7 @@ export const CAST = {
   // (the Sawbill store's yard, 1–7 August), 'field' (the party's camp and the water: boys-cast.js). Scenes: story-data/boys.js
   carol: {
     name: 'Carol Arola', first: 'Carol', known: 'door.boys.open', unknown: 'A woman at the counter', role: '',
-    look: { age: 'old', female: true, shirt: 0x8a5a4a, pants: 0x3e3a36, hat: null, hair: 0xc8c2ba, hatChance: 0 },
+    look: { pitch: -0.1, age: 'old', female: true, shirt: 0x8a5a4a, pants: 0x3e3a36, hat: null, hair: 0xc8c2ba, hatChance: 0 },
     where: [
       { id: 'evening', at: 'b5:counter', when: 'f:carol.slides.invited & date:05-15..10-15 & hour:15-21', scene: 'b5:slides' },
       { id: 'counter', at: 'b5:counter', when: 'date:05-15..10-15 & hour:7-15', scene: 'b5:carol' },
@@ -168,7 +170,7 @@ export const CAST = {
   },
   bob: {
     name: 'Bob Tervo', first: 'Bob', known: 'bob.met', unknown: 'An old man with a clipboard', role: '',
-    look: { age: 'old', shirt: 0x5a6a4a, pants: 0x4a4438, hat: 0x6a5a3a, hair: 0xb0aca6, hatChance: 0.8 },
+    look: { pitch: 0.8, age: 'old', shirt: 0x5a6a4a, pants: 0x4a4438, hat: 0x6a5a3a, hair: 0xb0aca6, hatChance: 0.8 },
     where: [
       { id: 'out15', at: 'b5:window', when: 'date:08-15..08-15 & hour:15-18', scene: 'b5:bob' },
       { id: 'yard', at: 'b5:yard', when: 'date:08-01..08-07 & hour:9-18', scene: 'b5:yard' },
@@ -178,7 +180,7 @@ export const CAST = {
   frank: {
     name: 'Frank Kosir', first: 'Frank', known: 'frank.met', unknown: 'A man in a grey work shirt', role: '',
     // a grey work shirt with the new sign's patch on the pocket, a key ring on his belt (32 §5.7)
-    look: { age: 'old', shirt: 0x6e7072, pants: 0x34363a, hat: 0x2e3238, hair: 0x9a948c, hatChance: 0.5 },
+    look: { pitch: -0.4, age: 'old', shirt: 0x6e7072, pants: 0x34363a, hat: 0x2e3238, hair: 0x9a948c, hatChance: 0.5 },
     where: [
       { id: 'out15', at: 'b5:window', when: 'date:08-15..08-15 & hour:15-18', scene: 'b5:frank' },
       { id: 'yard', at: 'b5:yard', when: 'date:08-01..08-07 & hour:9-18', scene: 'b5:yard' },
@@ -188,7 +190,7 @@ export const CAST = {
   },
   denny: {
     name: 'Dennis Rask', first: 'Denny', known: 'denny.met', unknown: 'A friendly old man', role: '',
-    look: { age: 'old', shirt: 0x7a8aa0, pants: 0x4a4a50, hat: 0x8a2a2a, hair: 0xd0ccc4, hatChance: 0.6 },
+    look: { pitch: 0.4, age: 'old', shirt: 0x7a8aa0, pants: 0x4a4a50, hat: 0x8a2a2a, hair: 0xd0ccc4, hatChance: 0.6 },
     where: [
       { id: 'out15', at: 'b5:corner', when: 'date:08-15..08-15 & hour:15-18', scene: 'b5:denny' },
       { id: 'yard', at: 'b5:yard', when: 'date:08-01..08-07 & hour:9-18', scene: 'b5:yard' },
@@ -200,9 +202,9 @@ export const CAST = {
 // p: begin — the company and the press (Round 6, 40 §1.1): Dan, Wade and Maggie, placed by company.js (FieldPerson reads
 // their name and look here); no slots of the cast's own
 Object.assign(CAST, {
-  dan: { name: 'Dan Marolt', first: 'Dan', known: 'dan.met', unknown: 'A man in a company fleece', role: '', look: { age: 'mid', shirt: 0x2f4a3a, pants: 0x3a3a40, hat: null, hair: 0x5a4030, hatChance: 0 }, where: [] },
-  wade: { name: 'Wade Helstrom', first: 'Wade', known: 'wade.named', unknown: 'A man in a quilted vest', role: '', look: { age: 'mid', shirt: 0x3a3a3c, pants: 0x2c3448, hat: null, hair: 0x8a8278, hatChance: 0 }, where: [] },
-  maggie: { name: 'Maggie Tomczak', first: 'Maggie', known: 'maggie.met', unknown: 'A woman with a new rod', role: '', look: { age: 'mid', female: true, shirt: 0x6a5a4a, pants: 0x3a3a3a, hat: null, hair: 0x4a3a2e, hatChance: 0 }, where: [] },
+  dan: { name: 'Dan Marolt', first: 'Dan', known: 'dan.met', unknown: 'A man in a company fleece', role: '', look: { pitch: 0.7, pace: 1.06, age: 'mid', shirt: 0x2f4a3a, pants: 0x3a3a40, hat: null, hair: 0x5a4030, hatChance: 0 }, where: [] },
+  wade: { name: 'Wade Helstrom', first: 'Wade', known: 'wade.named', unknown: 'A man in a quilted vest', role: '', look: { pitch: -0.3, pace: 0.92, age: 'mid', shirt: 0x3a3a3c, pants: 0x2c3448, hat: null, hair: 0x8a8278, hatChance: 0 }, where: [] },
+  maggie: { name: 'Maggie Tomczak', first: 'Maggie', known: 'maggie.met', unknown: 'A woman with a new rod', role: '', look: { pitch: 0.3, age: 'mid', female: true, shirt: 0x6a5a4a, pants: 0x3a3a3a, hat: null, hair: 0x4a3a2e, hatChance: 0 }, where: [] },
 });
 // p: end
 // n: begin — the endings (story Round 3, stream n; 50 §9.1 "the last Thursday", §12.1): in the journalist ending, after the

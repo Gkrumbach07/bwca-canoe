@@ -174,13 +174,17 @@ export const steps = [
 export const shelf = { id: 'p1-shelf', step: 1, title: 'P1: the bundle left on the shelf', run: async ({ page, result, ctx }) => {
   await page.evaluate((home) => { const g = window.__game; return g.onboarding.pending(home) && g.onboarding.start(home); }, ctx.home);
   await hear(page);
-  const r = await picks(page, ['I\'ll wait for a rental.']);
+  // (ux round 2: the offer is "Whose was it?" and "I'll take it." only; the shelf is an old season's: cast.debug.shelve)
+  const offer = await page.evaluate(() => window.__t.convo());
+  const only = !!(offer && offer.choices && offer.choices.length <= 2 && !offer.choices.some((t) => /wait for a rental/.test(t)));
+  for (let k = 0; k < 10; k++) { if (!(await page.evaluate(() => window.__t.convo()))) break; await page.keyboard.press('Escape'); await page.waitForTimeout(80); }
+  const r = await page.evaluate(() => { const g = window.__game; const ok = g.storyTalk.cast.debug.shelve(); g.onboarding.start(g.profile.home); return { ok }; }).then((x) => ({ ok: x.ok && only }));
   await hear(page, 3);
   for (let k = 0; k < 8; k++) { const c = await page.evaluate(() => window.__t.convo()); if (!c) break; await page.keyboard.press('Digit1'); await page.waitForTimeout(80); }
   await page.evaluate(() => { const o = window.__game.outfitter; if (o.open) o.hide(); });
   const f = await facts(page, ['bundle.shelf', 'bundle.taken']);
   const pack = await page.evaluate(() => window.__game.inventory.containers.some((c) => c.item === 'waltpack'));
-  result('1b P1 "I\'ll wait for a rental.": the bundle stays on the shelf (bundle.shelf, no BRM-14 pack); the loaned canoe all the same',
+  result('1b P1 offers no "I\'ll wait for a rental." (ux round 2); an old season\'s shelf: the bundle stays on the shelf (bundle.shelf, no BRM-14 pack); the loaned canoe all the same',
     r.ok && f['bundle.shelf'] && !f['bundle.taken'] && !pack, { r: r.ok ? 'ok' : r, f, pack });
 } };
 export const r1 = { id: 'r1', step: 1, title: 'R1: Josie, the bundle off the shelf', run: async ({ page, result, ctx }) => {

@@ -9,20 +9,21 @@
 // an outfitter in a season, someone there suggests it in a line or two of plain talk and pencils the site and the way on
 // your map (a person marking it for you, because they are suggesting it): at home, the keeper as the season's first
 // talk ends (onboarding.js), elsewhere the keeper when you ask ("First time here. Somewhere easy for a night?", their
-// talk's first choice, npcs.js extraChoices). With it a small paid job, offered with a yes: look over the site's grate,
+// talk's first choice, npcs.js extraChoices). With it a small paid job, taken with the one answer (ux round 2): look over the site's grate,
 // latrine and tent pad (the 'starter' notice kind, task-kinds-2.js, the campsite check's own steps), $20, three days. It
 // is a suggestion: no marker, no nag, the player goes where they like; if they go elsewhere the notice just lapses (its
 // day passes like any notice's). Once per outfitter per season. The site is held for you while the suggestion stands
 // (parties.js mine, reaching back STARTER.clearH: the parties' sweep puts any party there, already camped or to come,
 // on another site, as for a site you have left things at), so the first night is not spoiled by a party camped there.
 //
-// The weather (weather.js GENTLE): the season's own seed (main.js), so a season can start grey or wet; over the first
-// trip (the start day and the two after, cut as the first trip with a night out ends) no thunderstorm and no wind that
+// The weather (weather.js GENTLE, START_DAY): the start day is always the same fair day (clear, then broken cumulus,
+// clear at night: ux round 2); the two after are the season's own seed (main.js), grey or wet perhaps, but over the first
+// trip (cut as the first trip with a night out ends) no rain heavier than light rain, no thunderstorm and no wind that
 // raises whitecaps. gentle() is the window, in abs hours (trip.js absDay × 24 + the hour).
 //
 //   starter.attach({ tasks, profile, outfitter, npcs, onboarding, parties, weather, trip, day, world, hud })
 //   starter.route(ep) → the route, or null           starter.available(ep) → bool (a route, not yet suggested this season)
-//   starter.talk(ep, done, { by }) → a talk node: the suggestion, the pencil, then the job offered with a yes; done() → the
+//   starter.talk(ep, done, { by }) → a talk node: the suggestion, the pencil and the job, taken with the one answer; done() → the
 //     node after it (the onboarding's close, the keeper's own choices)
 //   starter.take(ep) → the notice taken, or null      starter.notes() → the map's pencilled ways (map-book.js marks)
 //   starter.holds() → [{ i, key, since }] (parties.js mine)     starter.gentle() → { from, to } | null
@@ -105,23 +106,20 @@ export class Starter {
   landingOf(ep) { const T = this.t.tasks; return T && typeof T.landing === 'function' ? T.landing(Number(ep)) : null; }
 
   // --- the talk ------------------------------------------------------------------------------------------------------
-  // the suggestion: the way pencilled as it is said, then the job, with a yes
+  // the suggestion: the way pencilled as it is said and the job with it, one answer (ux round 2)
   talk(ep, done = () => null, { by = null } = {}) {
     const W = this.words(ep);
     if (!W || !this.available(ep)) return done();
     this.state.offered[Number(ep)] = Math.round(this.nowH * 100) / 100; this.write();
     const pay = this.payOf(ep), node = (say, choices) => (by ? { say, by, choices } : { say, choices });
-    const after = (say) => node(say, [{ text: 'Thanks.', go: done }]);
     const ans = (go) => () => { this.answer(ep); return go(); }; // (answered: the suggestion is not made again)
     // (r2 join: an open ticket means no night permit at the desk: the keeper says so, once, with the way)
     const P = this.t.permits, owed = P && typeof P.owed === 'function' ? P.owed() : 0;
     const tk = owed > 0 ? ` That ticket of yours first, though: the desk sells no night with one open.` : '';
-    return node(`First night out? ${W.way} ${W.easy} Back by lunch the next day. I’ve marked it on your map.${tk}`, [
-      { text: 'I’ll go there.', go: () => node(`While you’re there, look over the grate, the latrine and the tent pad for me. $${pay} when you’re back.`, [
-        { text: 'I’ll do that.', go: ans(() => { this.take(ep); return after('Good. Back in two or three days, then.'); }) },
-        { text: 'I’ll just camp.', go: ans(() => after('Fair enough. Enjoy it.')) },
-      ]) },
-      { text: 'I might go somewhere else.', go: ans(() => after('Suit yourself. It’s on your map if you want it.')) },
+    // (ux round 2, the owner 2026-11-13: "way too many options for this first interaction": the way and the job in one
+    // word and one answer; the job is taken with it, and if it is never done it only lapses, tasks.js expire)
+    return node(`First night out? ${W.way} ${W.easy} Back by lunch the next day. I’ve marked it on your map. While you’re there, look over the grate, the latrine and the tent pad for me: $${pay} when you’re back.${tk}`, [
+      { text: 'I’ll do that.', go: ans(() => { this.take(ep); return done(); }) },
     ]);
   }
   payOf(ep) { const r = this.route(ep); return STARTER.pay + (r && r.portages && r.portages.length ? STARTER.carry : 0); }

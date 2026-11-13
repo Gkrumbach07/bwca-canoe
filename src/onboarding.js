@@ -206,11 +206,11 @@ export class Onboarding {
     // taken or left on the shelf (cast.js p1, set by main.js's st-t block); with the flag off, as before
     if (STORY_ON && typeof this.p1 === 'function') { let n = null; try { n = this.p1(ep, landing); } catch (e) { console.warn('onboarding: p1', e); } if (n) return n; }
     // /st-t
+    // (ux round 2: the gear is taken, one question on the way; no "Maybe later." to walk off without it)
     const take = { text: 'I’ll take it.', go: () => { this.give(); return this.after(ep, landing); } };
-    const offer = () => ({ heard: this.heard(), say: 'There’s old gear in the back nobody takes. A canvas pack, a canvas tent, a stove with a dent in it. Heavy, but it all works. If you’re not going to need it, it’s yours.',
-      choices: [take, { text: 'Why does nobody take it?', go: () => ({ say: 'It’s old. People want the light stuff. It’s been on that shelf since before I started here.', choices: [take, { text: 'Maybe later.', kind: 'bye', go: () => null }] }) }, { text: 'Maybe later.', kind: 'bye', go: () => null }] });
-    return { say: 'Starting the season? Bad week for it. Every pack and tent we rent is out on the water till Sunday.',
-      choices: [{ text: 'Nothing left at all?', go: offer }, { text: 'I’ll manage.', go: () => ({ say: 'With what? Hang on.', choices: [{ text: '…', go: offer }] }) }] };
+    const offer = () => ({ heard: this.heard(), say: 'Starting the season? Bad week for it: every pack and tent we rent is out till Sunday. But there’s old gear in the back nobody takes. A canvas pack, a canvas tent, a stove with a dent in it. Heavy, but it all works. It’s yours.',
+      choices: [{ text: 'Why does nobody take it?', go: () => ({ say: 'It’s old. People want the light stuff. It’s been on that shelf since before I started here.', choices: [take] }) }, take] });
+    return offer();
   }
   heard() { if (!this.state.heard) { this.state.heard = true; this.write(); } return true; }
   // the gear given: where it is, then the keeper (the first permit's on them) and the counter

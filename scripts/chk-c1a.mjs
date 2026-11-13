@@ -581,11 +581,16 @@ async function seasonB() {
     const ce = await counterE(B);
     if (!(await B.evaluate(() => !!window.__t.convo()))) { await B.evaluate(() => { const g = window.__game, o = g.outfitter; if (o.open) o.hide(); if (g.onboarding.pending(g.profile.home)) g.onboarding.start(g.profile.home); }); await B.waitForTimeout(150); }
     const c = await seeChoices(B);
-    const r = await choose(B, 'I\'ll wait for a rental.'); const said = await hear(B, 6);
+    // (ux round 2: P1 offers the bundle with one question and "I'll take it." only; the shelf branch is an old season's,
+    // left as that choice left it: cast.debug.shelve, then the talk's close)
+    const offered = !!(c && c.choices && c.choices.some((t) => /^I.ll take it/.test(t)) && !c.choices.some((t) => /wait for a rental|How much|BRM-14|Does it work/.test(t)) && c.choices.length <= 2);
+    await endTalk(B);
+    const sh = await B.evaluate(() => { const g = window.__game; const ok = g.storyTalk.cast.debug.shelve(); g.onboarding.start(g.profile.home); return ok; });
+    const said = await hear(B, 6);
     for (let k = 0; k < 10; k++) { const cc = await B.evaluate(() => window.__t.convo()); if (!cc) break; await B.keyboard.press('Digit1'); await B.waitForTimeout(80); }
     await B.evaluate(() => { const o = window.__game.outfitter; if (o.open) o.hide(); });
     const inv = await B.evaluate(() => { const g = window.__game, inv = g.profile.inventory; return { packs: inv.containers.map((k) => k.item), tents: inv.containers.flatMap((k) => k.grid.filter((e) => /tent/.test(e.id)).map((e) => e.id)), money: g.profile.money, shelf: g.story.has('bundle.shelf') }; });
-    result(`B.shelf ${ep}: E at the counter; "I'll wait for a rental." → the shelf; what the player has to camp with`, r.ok && inv.shelf, { door: door.via, ce: ce.via, c, said, inv });
+    result(`B.shelf ${ep}: E at the counter; P1 offers only "Whose was it?" and "I'll take it."; an old season's shelf (shelve) → what the player has to camp with`, offered && sh && inv.shelf, { door: door.via, ce: ce.via, c, said, inv });
   });
 
   await run('r1', async () => {

@@ -392,13 +392,15 @@ async function main() {
       // is Tauno before his name), everyone else by their first name (names are claimed once: npcs.js names)
       const id = String(sp.person || sp.key || ''), first = (n) => String(n || '').split(' ')[0];
       const cast = /^cast:/.test(id) ? id.split(':').slice(0, 2).join(':') : /^staffer:/.test(id) && first(sp.name) === 'Josie' ? 'cast:josie' : null;
-      const who = other ? { key: `name:${first(o.by)}`, name: o.by, female: femaleName(o.by) } : { key: cast || (sp.name ? `name:${first(sp.name)}` : id), name: sp.name, ...(sp.voice || { female: femaleName(sp.name) }) };
+      // (ux round 2: the keeper's line in Josie's talk in the keeper's own voice, the age and pitch of their drawn figure)
+      const byV = other && typeof talk.voiceOfName === 'function' ? talk.voiceOfName(o.by) : null;
+      const who = other ? { key: `name:${first(o.by)}`, name: o.by, ...(byV || { female: femaleName(o.by) }) } : { key: cast || (sp.name ? `name:${first(sp.name)}` : id), name: sp.name, ...(sp.voice || { female: femaleName(sp.name) }) };
       let pos = null;
       if (!other && sp.pos) { try { pos = sp.pos(head); } catch { pos = null; } }
       audio.speak(text, who, pos, { talk: !!o.talk });
     };
-    // (ux) where someone named in a talk's line stands (the keeper's line in the staffer's talk): their drawn head
-    talk.whereIs = (name, out) => {
+    // the nearest drawn body (within 20 m) by first name
+    const bodyOf = (name) => {
       const first = String(name || '').split(' ')[0];
       if (!first) return null;
       let best = null, bd = 20;
@@ -409,10 +411,16 @@ async function main() {
         const d = Math.hypot(f.x - player.x, f.z - player.z); if (d >= bd) continue;
         bd = d; best = b;
       }
+      return best;
+    };
+    // (ux) where someone named in a talk's line stands (the keeper's line in the staffer's talk): their drawn head
+    talk.whereIs = (name, out) => {
+      const best = bodyOf(name);
       if (!best || !best.fig || !best.fig.bones || !best.fig.bones.head) return null;
       best.fig.bones.head.getWorldPosition(out); out.y += 0.16;
       return out;
     };
+    talk.voiceOfName = (name) => { const b = bodyOf(name), v = b && b.who && b.who.person, f = v && v.figs && v.figs[b.who.fig]; return (f && f.look && f.look.voice) || null; };
   }
   // p2 A: the actor layer (actors.js): people out on the water and the trails, posed with the player's own stroke, gait and
   // carry (poses.js). The parties drive it (people phase 2); __game.actors.demo() (test only) has two canoes crossing Lake

@@ -145,14 +145,15 @@ try {
       W.setSeed(1000 + k * 7919);
       const sample = (gentle) => {
         W.gentle = gentle ? { from, to: from + 72 } : null;
-        const states = new Set(); let storm = 0, maxWind = 0, wet = 0;
+        const states = new Set(), day1 = new Set(); let storm = 0, maxWind = 0, wet = 0, pour = 0;
         for (let h = 0; h < 72; h++) {
           const hy = (doy - 1) * 24 + h, f = W._hour(year, hy), dd = doy + Math.floor(h / 24), hr = h % 24;
           const base = W.dayBreeze(year, dd, hr), wind = Math.max(f.min, base * f.mul);
-          states.add(NAMES[f.s]); if (f.s === 6 || f.s === 7) storm++; if (f.s === 4 || f.s === 5 || f.s === 2 || f.s === 3) wet++;
+          states.add(NAMES[f.s]); if (f.s === 6 || f.s === 7) storm++; if (f.s === 4 || f.s === 5 || f.s === 2 || f.s === 3) wet++; if (f.s === 5) pour++;
+          if (h < 30) day1.add(`${h}:${NAMES[f.s]}`);
           maxWind = Math.max(maxWind, wind * (1 + 0.25 * (f.gust || 1)));
         }
-        return { states: [...states], storm, wet, maxWind: +maxWind.toFixed(1) };
+        return { states: [...states], storm, wet, pour, day1: [...day1], maxWind: +maxWind.toFixed(1) };
       };
       out.push({ k, doy, held: sample(true), free: sample(false) });
     }
@@ -161,8 +162,14 @@ try {
   });
   const anyWet = wx.filter((s) => s.held.wet > 0).length, stormsHeld = wx.reduce((a, s) => a + s.held.storm, 0), maxHeld = Math.max(...wx.map((s) => s.held.maxWind));
   const freeBad = wx.filter((s) => s.free.storm > 0 || s.free.maxWind > 8).length;
-  result('5a over 20 seeded season starts some begin grey, wet or foggy', anyWet >= 4, { anyWet, starts: wx.map((s) => `${s.doy}:${s.held.states.join('/')}`) });
+  result('5a over 20 seeded season starts some turn grey, wet or foggy in the first three days (after the fair start day)', anyWet >= 4, { anyWet, starts: wx.map((s) => `${s.doy}:${s.held.states.join('/')}`) });
   result('5b and with the first trip held kind: no storm, the wind under whitecaps (≤ 7 m/s with its gusts)', stormsHeld === 0 && maxHeld <= 7, { stormsHeld, maxHeld, freeBad, freeMax: Math.max(...wx.map((s) => s.free.maxWind)) });
+  // (ux round 2) the start day is the same fair day every season: clear, then broken cumulus 11:00–19:00, clear overnight
+  // to 06:00; no steady rain over the whole first trip
+  const want = (h) => (h < 24 && h % 24 >= 11 && h % 24 < 19 ? 'fair' : 'clear');
+  const day1Bad = wx.filter((s) => s.held.day1.some((x) => { const [h, st] = x.split(':'); return st !== want(Number(h)); })).length;
+  const poured = wx.reduce((a, s) => a + s.held.pour, 0), freeDay1 = new Set(wx.flatMap((s) => s.free.day1.map((x) => x.split(':')[1])));
+  result('5c the start day is the known fair day in all 20 seasons; no steady rain or storm in the first three days', day1Bad === 0 && poured === 0 && stormsHeld === 0, { day1Bad, poured, freeDay1: [...freeDay1], first: wx[0].held.day1.slice(0, 30).join(' ') });
   await page.context().close();
 
   // --- 2 new seasons at three outfitters; 3 another outfitter's keeper; 4 the starter trip at one ----------------------

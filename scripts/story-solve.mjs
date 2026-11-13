@@ -988,7 +988,6 @@ const SLICE = [
   { step: 7, id: 'the Front Porch pencilled', when: 'f:nb.found & !f:ink.frontporch & und:NB31', soft: true },
   { step: 7, id: 'the Front Porch inked by a keeper\'s ring (NB01 understood)', when: 'f:ink.frontporch & und:NB01' },
   // branches off the main line
-  { step: 1, id: 'R1: the bundle taken later at the counter', when: 'f:bundle.later', via: ['f:bundle.shelf'], branch: true },
   { step: 4, id: 'X1, R3 "Not today.", then "Changed your mind?" → yes', when: 'f:tauno.porch.declined2 & f:tauno.porch.done', via: ['f:bundle.taken', 'f:nb.found', 'f:tauno.armed', 'f:tauno.porch.declined1', 'f:tauno.porch.declined2'], branch: true },
   { step: 4, id: 'the porch, not warm (NB45 unread): the turn all the same', when: 'f:tauno.turn & !f:tauno.porch.warm', via: ['f:bundle.taken', 'f:nb.found', 'f:tauno.armed', 'f:tauno.porch.done & !read:NB45', 'f:door.crews.taken & !f:tauno.porch.warm', 'f:crews.seen & !f:tauno.porch.warm'], branch: true },
 ];
@@ -998,7 +997,6 @@ const MAIN = SLICE.filter((g) => !g.branch && !g.soft);
 const ARTI = ['f:nb.found', 'f:door.crews.taken | f:door.crews.declined', 'lead:crews=closed', 'f:tauno.turn', 'f:tauno.doors', 'f:door.family.ringed', 'read:NB20 & read:NB31', 'und:NB20', 'und:NB31', 'f:ink.frontporch'];
 // the declines: each reached by its own chain, then the slice's end from there (the rest of the main line, in order)
 const DECLINES = [
-  { id: 'the bundle left on the shelf (P1 "I\'ll wait for a rental.")', via: ['f:bundle.shelf'] },
   { id: 'keep walking (X1: declined1)', via: ['f:bundle.taken', 'f:nb.found', 'f:tauno.armed', 'f:tauno.porch.declined1'] },
   { id: 'R3 "Not today." (declined2)', via: ['f:bundle.taken', 'f:nb.found', 'f:tauno.armed', 'f:tauno.porch.declined1', 'f:tauno.porch.declined2'] },
   { id: 'X2: the door declined ("Not my business.")', via: ['f:bundle.taken', 'f:nb.found', 'f:tauno.armed', 'f:door.crews.declined'] },
