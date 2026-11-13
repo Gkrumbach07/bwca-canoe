@@ -14,7 +14,7 @@
 // Facts (all under declared namespaces): tauno.call (exists) · tauno.call.asked · tauno.call.declined · tauno.big2 ·
 // maggie.called (=tauno|marlys|sheila|carol|rene|keeper) · maggie.fallback · maggie.note (the slip's abs day) ·
 // maggie.met · maggie.lied · maggie.bunk · maggie.caught · maggie.matched · maggie.ostrander · maggie.kettlemap (L1D) ·
-// maggie.e7copy (a2's wrong hill reads it) · maggie.code · maggie.paper · maggie.adrift · maggie.stop · maggie.meeting ·
+// maggie.e7copy (a2's wrong hill reads it) + maggie.e7sketch (final join: the copy carries E-7's sketch: L6B's second way, locks.js) · maggie.code · maggie.paper · maggie.adrift · maggie.stop · maggie.meeting ·
 // maggie.order · maggie.lgnote · midpoint · ev.search (lake) · ev.stranger (portage) · ev.adrift (m's) · dan.met ·
 // dan.card · dan.offer · dan.setup · dan.lid · dan.blade · wade.counter · wade.named · wade.helstrom · wade.boots ·
 // wade.putin (the EP's name) · choice.brekke (lie|deflect|needle: story.tier adds one for needle) · brekke.needled ·
@@ -204,7 +204,7 @@ export const MAGGIE = {
     matched: { say: [M('40:6.4.21'), M('40:6.4.22'), M('40:6.4.23'), M('40:6.4.24')], then: ['f:maggie.matched', 'walt:40.w.matched'], to: 'papers' },
     // what she gives, matched or not (once): Walt's letter came with the stakes; Ostrander's note, the target list, the handout
     papers: { say: [{ ...M('40:6.4.26'), when: '!f:maggie.ostrander' }, { ...M('40:6.4.27'), when: '!f:maggie.ostrander' }],
-      then: [{ when: '!f:maggie.ostrander', then: ['do:papers', 'f:maggie.ostrander', 'f:maggie.kettlemap', 'f:maggie.e7copy', 'walt:40.w.e7.2'] }], to: 'hub' },
+      then: [{ when: '!f:maggie.ostrander', then: ['do:papers', 'f:maggie.ostrander', 'f:maggie.kettlemap', 'f:maggie.e7copy', 'f:maggie.e7sketch', 'walt:40.w.e7.2'] }], to: 'hub' },
     hub: { go: [...HUB, { ask: '40:6.4.c6', once: 'i.heard', say: [{ hook: 'heard1' }, { hook: 'heard2' }] }] },
     // a return visit (6.5): her opener by the last thing that happened, then the hub
     again: { say: [{ first: [

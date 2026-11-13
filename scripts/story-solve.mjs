@@ -1116,6 +1116,52 @@ function sliceFar(rp2) {
 }
 // j1: end
 
+// final: begin — the Round 6 gates (campaign-design Part 4 Round 6; §14.2 checks 3, 4, 5): every lock has all its keys,
+// the articulation proof is an ERROR (scripts/story-solve-locks.mjs: two independent keys witnessed, no support node
+// whose loss leaves a lock without one), and the full 72-branch endings check (story-solve-endings.mjs solveChoices72).
+// A way (one fact of a key's when) is witnessed by this solver's own moves (searched alone from where slice 1 ends with
+// every subgraph on, or from where slice 2 ends with the far end on) or by a stream's Node proof (UNIT_WITNESS)
+async function finalGates(rp1, S2, SF) {
+  const { WAYS, UNIT_WITNESS, unitWitness, proveLocks } = await import('./story-solve-locks.mjs');
+  const { solveCompany } = await import('./story-solve-company.mjs');
+  const CO = solveCompany();
+  const out = report.final = { ways: {}, locks: null, choices: null };
+  const witnessed = new Set();
+  const facts = [...new Set(Object.values(WAYS).flatMap((t) => Object.keys(t)))];
+  const all = () => { on2(); on3(); if (typeof onI === 'function') onI(); relCache.clear(); };
+  for (const f of facts) {
+    const goal = `f:${f}`;
+    let how = null;
+    const u = unitWitness(f, CO.doc);
+    if (u && u.ok) how = u.how;
+    if (!how && rp1 && rp1.ok) {
+      if (rp1.S.when(goal)) how = 'slice 1';
+      else { all(); const c = chain([goal], rp1.S, { max: MAX }); if (c.ok && replay(c.path, rp1.S).ok) how = `${c.path.length} moves from slice 1's end ("${c.path[c.path.length - 1]}")`; }
+    }
+    if (!how && S2 && S2.ok) {
+      all(); RF = true; relCache.clear();
+      const c = S2.S.when(goal) ? { ok: true, path: [] } : chain([goal], S2.S, { max: MAX });
+      if (c.ok && (!c.path.length || replay(c.path, S2.S).ok)) how = c.path.length ? `${c.path.length} moves from slice 2's end ("${c.path[c.path.length - 1]}")` : 'slice 2';
+      RF = false; relCache.clear();
+    }
+    if (!how && SF && SF.s && SF.s.when(goal)) how = 'slice 3 (the far end to the lift)';
+    out.ways[f] = how || (u ? `not witnessed (${u.how})` : 'not witnessed');
+    if (how) witnessed.add(f);
+    say(`${how ? 'PASS' : 'MISS'} final way ${f}: ${out.ways[f]}`);
+  }
+  const P = proveLocks(witnessed);
+  out.locks = P.locks;
+  for (const L of P.locks) res(`final lock ${L.lock}: keys ${L.independent.join(', ')} independent and witnessed${L.witnessed.length > L.independent.length ? ` (+ ${L.witnessed.filter((k) => !L.independent.includes(k)).join(', ')} confirming)` : ''}; no articulation point among ${Object.keys(L.knockouts).length} support nodes`, !L.fails.length, { fails: L.fails });
+  for (const f of P.fails) console.log(`ERROR ${f}`);
+  // the 72 branches, from the real lift when slice 3 reached it (else n's stubs)
+  const { solveChoices72 } = await import('./story-solve-endings.mjs');
+  const C = await solveChoices72({ from: SF ? SF.s.doc : null });
+  out.choices = { total: C.total, branches: C.branches, producers: C.producers, hooks: C.hooks, fails: C.fails.slice(0, 50), rows: C.rows };
+  res(`final endings: ${C.branches} of ${C.total} climax branches played (Tauno ×2, Sheila ×2, Denny ×3, Aili ×2, Brekke ×3), each × north × meeting × Maggie: J and M in every one, JN wherever north`, C.ok, { fails: C.fails.slice(0, 20) });
+  for (const f of C.fails.slice(0, 20)) console.log(`ERROR endings ${f}`);
+}
+// final: end
+
 // --- run ----------------------------------------------------------------------------------------------------------------------
 await buildSetters();
 if (arg('chain', false)) { const c = chain(String(arg('chain')).split(';;')); console.log(c.ok, c.fail, c.states, c.capped, c.path); if (!c.ok) { for (const m of moves(c.S)) console.log('  ', m.kind, m.id); console.log(Object.keys(c.S.s.doc.facts).join(' '), c.S.trips, c.S.conv); } process.exit(0); }
@@ -1166,6 +1212,17 @@ const rp = main.ok ? replay(main.path) : null;
 res('the plan replays on a fresh story, every move on offer where it is played', !!(rp && rp.ok && rp.S.when(END)), { at: rp && rp.at });
 // a3: --only-a3: slice 1's plan, then slice A3 alone (a stream's quick check; the join runs everything)
 if (arg('only-a3', false)) { await slice3(main, rp); console.log(`story-solve --only-a3: ${report.fail.length ? `${report.fail.length} FAIL` : 'all pass'}`); for (const f of report.fail) console.log('FAIL', f.name, f.at || ''); process.exit(report.fail.length ? 1 : 0); }
+// final: --only-final: slice 1's plan, slice 2's (fast, no proofs) and slice 3 to the lift, then the Round 6 gates alone
+if (arg('only-final', false)) {
+  on2(); const c2 = rp && rp.ok ? chain([...MAIN2.map((g) => g.when), END2], rp.S) : null;
+  const S2 = c2 && c2.ok ? replay(c2.path, rp.S) : null; R2 = false; relCache.clear();
+  report.slice2 = { end: S2 };
+  const SF = S2 ? sliceFar(S2) : null;
+  await finalGates(rp, S2, SF);
+  console.log(`story-solve --only-final: ${report.fail.length ? `${report.fail.length} FAIL` : 'all pass'} (${((Date.now() - t0) / 1000).toFixed(1)} s)`); for (const f of report.fail) console.log('FAIL', f.name, f.at || '');
+  if (JSON_OUT) writeFileSync(JSON_OUT, JSON.stringify(report, null, 1));
+  process.exit(report.fail.length ? 1 : 0);
+}
 for (const g of SLICE) {
   let path = null, n = -1;
   if (!g.branch && main.ok) { n = firstTrue(main.path, g.when); path = n >= 0 ? main.path.slice(0, n) : null; }
@@ -1246,7 +1303,8 @@ if (main.ok) {
 if (!arg('r1', false)) await slice2(main, rp);
 // j1: begin: slice 3 (Round 3's far end, from where slice 2 ends): the R3 keys and the pit's lift
 let SFEND = null;
-if (!arg('r1', false) && !arg('r2', false)) SFEND = sliceFar(report.slice2 && report.slice2.end);
+const S2END = report.slice2 && report.slice2.end; // final: kept for the lock proof (sliceFar drops it from the report)
+if (!arg('r1', false) && !arg('r2', false)) SFEND = sliceFar(S2END);
 // j1: end
 // a3: the guiding years (Round 4), from where slice 1 ends
 if (!arg('r1', false) && !arg('no-a3', false)) await slice3(main, rp);
@@ -1293,6 +1351,9 @@ if (!arg('r1', false) && !arg('no-a3', false)) await slice3(main, rp);
   for (const f of Gr.fails) res(`end games: ${f}`, false);
 }
 // g: end
+// final: begin — the Round 6 gates on the full run
+if (!arg('r1', false) && !arg('r2', false)) await finalGates(rp, S2END, SFEND);
+// final: end
 report.ms = Date.now() - t0;
 if (PLAN && report.plan) { console.log('\nThe slice, as the solver plays it:'); report.plan.forEach((m, i) => console.log(`${String(i + 1).padStart(3)}. ${m}`)); }
 if (PLAN && report.slice2 && report.slice2.plan) { console.log('\nSlice 2, as the solver plays it (from the end of slice 1):'); report.slice2.plan.forEach((m, i) => console.log(`${String(i + 1).padStart(3)}. ${m}`)); }

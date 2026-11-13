@@ -36,11 +36,13 @@ function fresh(br) {
   s.clock({ abs: ABS0, hours: 6 });
   s.set('nb.found', true, 'solve');
   if (br.record) s.set('tauno.record', true, 'solve');
+  else if (br.record === false && s.doc.facts && s.doc.facts['tauno.record']) delete s.doc.facts['tauno.record']; // final: a real doc's record off
   if (br.north) s.set('drift.done', true, 'solve');
   if (br.met) s.meet('maggie', 'solve');
   if (br.meeting) s.doc.meeting = { ep: 30, firstDawn: ABS0 - 1 };
   s.set('run.lifted', br.meeting ? 30 : 'any', 'solve'); // (r's fact at the lift)
   s.set('pit.note', true, 'solve');                      // (f's: Eino's note picked up)
+  if (br.setup) br.setup(s);                              // final: the 72 branches' climax choices, played (solveChoices72)
   return s;
 }
 const argsOf = (s) => ({ ep: 30, carbonRead: false, einoNote: s.has('pit.note'), stranger: !(s.doc.ppl.maggie && s.doc.ppl.maggie.met), danCard: false, needled: false, farm: false, sledArgued: false });
@@ -86,6 +88,22 @@ function walk(s, def, start, hooksFor, limit = 40) {
   return paths;
 }
 
+// one branch: who is in the lot, then every path through Dan's money scene and Maggie's, the endings each reaches
+function endsFor(br, name, rows, fails, hooks) {
+    // who is in the lot: Maggie here, or by the call, or as a stranger; Dan and Wade always
+    const s0 = fresh(br), plan = N.lotFor(s0, 30, { abs: ABS0, hours: 6, served: true });
+    if (!plan.stage) { fails.push(`${name}: the lot is not staged (${plan.why})`); return null; }
+    const got = { J: null, JN: null, M: null };
+    const sM = fresh(br); sM.solveHooks = { scene: 'M' };
+    for (const p of walk(sM, N.DAN_M, 'start', hooks)) { const e = p.s.get('end'); if (e && !got[e]) got[e] = p.trail; }
+    const sJ = fresh(br); sJ.solveHooks = { scene: 'J' };
+    for (const p of walk(sJ, N.MAGGIE, 'start', hooks)) { const e = p.s.get('end'); if (e && !got[e]) got[e] = p.trail; }
+    const north = !!br.north, want = north ? ['J', 'JN', 'M'] : ['J', 'M'];
+    for (const e of want) if (!got[e]) fails.push(`${name}: ${e} not reachable`);
+    if (!north && got.JN) fails.push(`${name}: JN reached without "went north"`);
+    rows.push({ branch: name, wagon: plan.wagon, J: !!got.J, JN: north ? !!got.JN : 'n/a (needs north)', M: !!got.M, paths: got });
+    return rows[rows.length - 1];
+}
 export function solveEndings(opts = {}) {
   FROM = opts.from || null; // j1
   const rows = [], fails = [];
@@ -101,18 +119,7 @@ export function solveEndings(opts = {}) {
   const RECORDS = FROM ? [!!(FROM.facts && FROM.facts['tauno.record'])] : [false, true]; // j1: a real doc keeps its own record
   for (const record of RECORDS) for (const north of [false, true]) for (const meeting of [false, true]) for (const met of [true, false]) {
     const br = { record, north, meeting, met }, name = `record=${+record} north=${+north} meeting=${meeting ? 30 : 'any'} maggie=${met ? 'met' : 'stranger'}`;
-    // who is in the lot: Maggie here, or by the call, or as a stranger; Dan and Wade always
-    const s0 = fresh(br), plan = N.lotFor(s0, 30, { abs: ABS0, hours: 6, served: true });
-    if (!plan.stage) { fails.push(`${name}: the lot is not staged (${plan.why})`); continue; }
-    const got = { J: null, JN: null, M: null };
-    const sM = fresh(br); sM.solveHooks = { scene: 'M' };
-    for (const p of walk(sM, N.DAN_M, 'start', hooks)) { const e = p.s.get('end'); if (e && !got[e]) got[e] = p.trail; }
-    const sJ = fresh(br); sJ.solveHooks = { scene: 'J' };
-    for (const p of walk(sJ, N.MAGGIE, 'start', hooks)) { const e = p.s.get('end'); if (e && !got[e]) got[e] = p.trail; }
-    const want = north ? ['J', 'JN', 'M'] : ['J', 'M'];
-    for (const e of want) if (!got[e]) fails.push(`${name}: ${e} not reachable`);
-    if (!north && got.JN) fails.push(`${name}: JN reached without "went north"`);
-    rows.push({ branch: name, wagon: plan.wagon, J: !!got.J, JN: north ? !!got.JN : 'n/a (needs north)', M: !!got.M, paths: got });
+    endsFor(br, name, rows, fails, hooks);
   }
   // the epilogue on the clock: from each ending, 31 days on, the dated facts (rules-endings.js) and the read points
   const epi = {};
@@ -136,6 +143,80 @@ export function solveEndings(opts = {}) {
     if (!plan.stage) fails.push('walk away: the lot never stages again'); else epi.walkAway = { stagesAgain: true, wagon: plan.wagon }; }
   return { ok: !fails.length, rows, epilogue: epi, fails };
 }
+
+// --- final: begin — the 72-branch gate (campaign-design §14.2 check 5, Part 4 Round 6: "the full 72-branch endings check
+// is a gate"). The product of the exclusive climax choices: Tauno on record ×2, Sheila ×2, Denny ×3, Aili ×2, Brekke ×3.
+// Each choice is played as its own scene plays it: the choice's `then` in the scene data (and the `then` of the node it
+// goes to), found by the fact it writes, applied through the story's rules (f:, walt:, conditional blocks); a hook (do:)
+// is named, not run. A choice with no producer in the data is a failure. Then the dawn lot from that state, as above:
+// J and M reachable in every branch, JN wherever "went north" holds, across north × meeting × Maggie met.
+const CHOICES = [
+  { who: 'tauno', ways: [{ id: 'record', act: 'f:tauno.record' }, { id: 'off', act: null }] },
+  { who: 'sheila', ways: [{ id: 'in', act: 'f:choice.sheila=in' }, { id: 'lie', act: 'f:choice.sheila=lie' }] },
+  { who: 'denny', ways: [{ id: 'turn', act: 'f:choice.denny=turn' }, { id: 'told', act: 'f:choice.denny=told' }, { id: 'left', act: 'f:choice.denny=left' }] },
+  { who: 'aili', ways: [{ id: 'know', act: 'f:choice.aili=know' }, { id: 'thanks', act: 'f:choice.aili=thanks' }] },
+  { who: 'brekke', ways: [{ id: 'lie', act: 'f:choice.brekke=lie' }, { id: 'deflect', act: 'f:choice.brekke=deflect' }, { id: 'needle', act: 'f:choice.brekke=needle' }] },
+];
+const SCENE_MODS = ['mining.js', 'guiding.js', 'family.js', 'company.js', 'informant.js', 'boys.js'];
+async function sceneDefs() {
+  const out = [];
+  for (const f of SCENE_MODS) {
+    let M; try { M = await import(`../src/story-data/${f}`); } catch { continue; }
+    for (const [k, v] of Object.entries(M)) if (v && typeof v === 'object' && v.nodes && typeof v.nodes === 'object') out.push({ mod: f, name: k, def: v });
+  }
+  return out;
+}
+// every way the data writes `act`: [{ where, acts }] (the choice's then + its `to` node's then, or the node's own then)
+function producersOf(defs, act) {
+  const has = (list) => JSON.stringify(list || []).includes(JSON.stringify(act));
+  const ways = [];
+  for (const { mod, name, def } of defs) for (const [nid, N0] of Object.entries(def.nodes)) {
+    if (has(N0.then)) ways.push({ where: `${mod} ${name}.${nid}`, acts: [...(N0.then || [])] });
+    for (const c of N0.go || []) if (has(c.then)) ways.push({ where: `${mod} ${name}.${nid}:${c.ask}`, acts: [...(c.then || []), ...((c.to && def.nodes[c.to] && def.nodes[c.to].then) || [])] });
+  }
+  return ways;
+}
+function play(s, acts, hooks) {
+  for (const x of acts || []) {
+    if (x && typeof x === 'object') { if (!x.when || s.when(x.when)) play(s, x.then, hooks); continue; }
+    if (typeof x !== 'string') continue;
+    if (/^do:/.test(x)) { hooks.add(x); continue; }
+    if (/^(f:|walt:|und:|key:)/.test(x)) { try { s.rules.apply({ id: 'solve:72', then: [x] }, {}); } catch { /* a walt: id the text lacks: the lint's */ } }
+  }
+}
+export async function solveChoices72(opts = {}) {
+  FROM = opts.from || null;
+  const defs = await sceneDefs(), rows = [], fails = [], hooksSeen = new Set(), producers = {};
+  for (const C of CHOICES) for (const w of C.ways) if (w.act) {
+    const p = producersOf(defs, w.act);
+    producers[`${C.who}=${w.id}`] = p.map((q) => q.where);
+    if (!p.length) fails.push(`no producer in the scene data for ${C.who}: ${w.act}`);
+  }
+  const prod = (C, w) => (w.act ? producersOf(defs, w.act)[0] : null);
+  const hooks = (S) => ({ handed: () => {}, carbon: () => S.set('end.carbon', 'maggie', 'solve'),
+    named: () => N.commitEnding(S, { end: 'J', walt: 'named', lot: 30 }), kept: () => N.commitEnding(S, { end: 'J', walt: 'kept', lot: 30 }),
+    handover: () => N.commitEnding(S, { end: 'M', lot: 30 }), close: () => {},
+    turnback: () => {}, readyes: () => S.set('end.read', 'yes', 'solve'), readno: () => S.set('end.read', 'no', 'solve'), readsilent: () => S.set('end.read', 'silent', 'solve') });
+  const pick = (i) => { const out = []; let n = i; for (const C of CHOICES) { out.push([C, C.ways[n % C.ways.length]]); n = Math.floor(n / C.ways.length); } return out; };
+  const total = CHOICES.reduce((a, C) => a * C.ways.length, 1);
+  let branches = 0;
+  for (let i = 0; i < total; i++) {
+    const sel = pick(i), label = sel.map(([C, w]) => `${C.who}=${w.id}`).join(' ');
+    if (sel.some(([C, w]) => w.act && !prod(C, w))) continue; // (a choice with no producer: failed above)
+    branches++;
+    const setup = (s) => { for (const [C, w] of sel) { if (C.who === 'tauno') continue; play(s, prod(C, w).acts, hooksSeen); } };
+    let all = true;
+    for (const north of [false, true]) for (const meeting of [false, true]) for (const met of [true, false]) {
+      const br = { record: sel[0][1].id === 'record', north, meeting, met, setup };
+      const before = fails.length;
+      endsFor(br, `${label} · north=${+north} meeting=${meeting ? 30 : 'any'} maggie=${met ? 'met' : 'stranger'}`, rows, fails, hooks);
+      if (fails.length > before) all = false;
+    }
+    rows.push({ branch: label, all });
+  }
+  return { ok: !fails.length && branches === total, total, branches, combos: rows.filter((r) => r.all === undefined).length, rows: rows.filter((r) => r.all !== undefined), producers, hooks: [...hooksSeen], fails };
+}
+// final: end
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   const warn = console.warn; console.warn = () => {};

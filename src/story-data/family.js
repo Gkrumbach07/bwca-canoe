@@ -252,7 +252,7 @@ export const WANTS = [
   // final join: 7b's AILI_S6 (60 S6 "Aili"): the 1928 runner's book shown, the print of N.N. 1928, the bottle; each once
   // (aili.said.<once>), said where she stands, nothing given
   ...AILI_S6.map((w) => ({ who: 'aili', item: w.show || undefined, print: w.print || undefined, give: false,
-    when: `f:aili.met & !f:aili.said.${w.once}${w.when ? ` & (${w.when})` : ''}`, say: w.say, then: [`f:aili.said.${w.once}`], gift: `s6.${w.once}` })),
+    when: `f:aili.met & !f:aili.said.${w.once}${w.when ? ` & (${w.when})` : ''}`, say: w.say, then: [`f:aili.said.${w.once}`], gift: w.once })),
 ];
 
 // --- 6.10 the back porch: the can in your hands, Aili home early -----------------------------------------------------

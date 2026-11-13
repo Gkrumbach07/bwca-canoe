@@ -18,6 +18,8 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import { HELPERS as HELPERS_L } from './slice/c1-layer.mjs';
 import { HELPERS_T, choose, hear } from './slice/c1-talk.mjs';
+const SNAP_DIR = process.env.SHOTS || null; // final join: the contact sheet's shots (env SHOTS=dir)
+const snap = async (pg, name) => { if (!SNAP_DIR) return; try { (await import('node:fs')).mkdirSync(SNAP_DIR, { recursive: true }); await pg.screenshot({ path: `${SNAP_DIR}/${name}.png` }); } catch { /* a nicety */ } };
 
 const APP = (process.env.APP || 'http://localhost:5400').replace(/\/$/, '');
 function findPw() { if (process.env.PW) return process.env.PW; const base = path.join(homedir(), '.npm/_npx'); for (const d of existsSync(base) ? readdirSync(base) : []) { const p = path.join(base, d, 'node_modules/playwright-core'); if (existsSync(p)) return p; } return 'playwright-core'; }
@@ -121,6 +123,7 @@ try {
     }
     return { legs: out, caught: R.caught, resets: window.__j1resets, cans: g.inventory.count('ammocan', { reachable: false }), active: R.active, facts: Object.keys(s.doc.facts).filter((k) => /^run\.|^ev\.watchers/.test(k)) };
   });
+  await snap(page, 'j1-run-night');
   const order = r3.legs.map((l) => l.leg);
   result(`3 the night down the designed route: ${order.length} legs in order (${order.join(' → ')}), the run on all night, ${r3.caught} catch(es)`,
     r3.legs.length >= 8 && r3.legs.every((l) => l.active) && r3.active && r3.cans === 2, r3);
@@ -137,6 +140,7 @@ try {
     T.standAt(TL.lot.x, TL.lot.z); for (let k = 0; k < 12; k++) { L.step(10); await L.wait(40); }
     return { arrived: s.get('run.arrived'), staged: en.staged(), hold: g.outfitter.storyHold ? g.outfitter.storyHold(30) : null, stage: s.stage, cans: g.inventory.count('ammocan', { reachable: false }), hours: +g.day.hours.toFixed(2), active: R.active };
   });
+  await snap(page, 'j1-dawn-lot');
   const S = r4.staged || {};
   result('4 the dawn lot at Lake One 30 with the cans: run.arrived = 30, Dan, Wade and Maggie\'s wagon (her first dawn), the come-out held, still S6',
     r4.arrived === 30 && !!r4.staged && ['dan', 'wade'].every((w) => (S.people || []).includes(w)) && S.maggie && r4.hold === true && r4.stage === 'S6' && r4.cans === 2 && r4.active, r4);

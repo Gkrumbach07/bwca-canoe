@@ -18,6 +18,8 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import { HELPERS as HELPERS_L } from './slice/c1-layer.mjs';
 import { HELPERS_T } from './slice/c1-talk.mjs';
+const SNAP_DIR = process.env.SHOTS || null; // final join: the contact sheet's shots (env SHOTS=dir)
+const snap = async (pg, name) => { if (!SNAP_DIR) return; try { (await import('node:fs')).mkdirSync(SNAP_DIR, { recursive: true }); await pg.screenshot({ path: `${SNAP_DIR}/${name}.png` }); } catch { /* a nicety */ } };
 
 const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i > 0 ? process.argv[i + 1] : d; };
 const APP = (process.env.APP || 'http://localhost:5330').replace(/\/$/, '');
@@ -128,6 +130,7 @@ async function J() {
     const ok = G.debug.find('cave');
     return { ready, choice, given: t.ok, at, inland, props, prop, ok, state: G.debug.state().secrets.cave, kettle: g.inventory.count('tradekettle', { reachable: true }) };
   });
+  await snap(page, 'g-cave');
   result('J 5: a month on, Lise at Cub Creek has the next; Winchell\'s north wall worked out (on land, by the water), the cave\'s prop standing; its verb → found, the copper kettle in hand',
     r4.ready && r4.choice === 'You wanted a word?' && r4.at && r4.inland > 0 && r4.props.includes('cave') && r4.ok && r4.state === 'found' && r4.kettle >= 1, r4);
   // the falls for the camera (taken on directly: the order of owners is the player's)

@@ -21,6 +21,8 @@ import path from 'node:path';
 import { HELPERS as HELPERS_L } from './slice/c1-layer.mjs';
 import { HELPERS_T, choose, hear } from './slice/c1-talk.mjs';
 import { HELPERS_E } from './slice/c2-episodes.mjs';
+const SNAP_DIR = process.env.SHOTS || null; // final join: the contact sheet's shots (env SHOTS=dir)
+const snap = async (pg, name) => { if (!SNAP_DIR) return; try { (await import('node:fs')).mkdirSync(SNAP_DIR, { recursive: true }); await pg.screenshot({ path: `${SNAP_DIR}/${name}.png` }); } catch { /* a nicety */ } };
 
 const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i > 0 ? process.argv[i + 1] : d; };
 const APP = (process.env.APP || 'http://localhost:5300').replace(/\/$/, '');
@@ -226,6 +228,7 @@ try {
       const said = S.show('kari', { kind: 'print', id: shot && shot.id, matches: shot ? shot.matches : [] });
       return { diag, drawn, shot, said, pups: S.d().doc().pups, counted: g.story.has('ep.S4.counted'), owed: S.owed() };
     });
+    await snap(page, 's4-meadow');
     result('S4c August: the meadow from 400 m: wolves and pups drawn; the print; Kari counts them ($40 owed)', md.drawn >= 4 && md.shot && md.shot.matches.includes('s4.pups') && md.counted && md.owed.includes(40), md);
     const end = await W(page, async () => {
       const g = window.__game, E = window.__e, L = window.__L;

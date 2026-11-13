@@ -14,6 +14,8 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import { HELPERS as HELPERS_L } from './slice/c1-layer.mjs';
 import { HELPERS_T, choose, hear } from './slice/c1-talk.mjs';
+const SNAP_DIR = process.env.SHOTS || null; // final join: the contact sheet's shots (env SHOTS=dir)
+const snap = async (pg, name) => { if (!SNAP_DIR) return; try { (await import('node:fs')).mkdirSync(SNAP_DIR, { recursive: true }); await pg.screenshot({ path: `${SNAP_DIR}/${name}.png` }); } catch { /* a nicety */ } };
 
 const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i > 0 ? process.argv[i + 1] : d; };
 const APP = (process.env.APP || 'http://localhost:5250').replace(/\/$/, '');
@@ -132,6 +134,7 @@ async function ending(E) {
     const ok = C.talk('josie') || g.storyEndings.debug.postcardTalk();
     return { ok, staged: C.staged().map((x) => x.who) };
   });
+  await snap(page, `n-postcard-${E}`);
   const said = [await choose(page, 'No.'), await hear(page)];
   const card = await page.evaluate((E) => { const g = window.__game, s = g.story; return { postcard: s.has('world.postcard'), page: g.inventory.has('page:postcard'), walt: s.walt().slice(-2), line: { J: '50:11.4', JN: '50:11.5', M: '50:11.6' }[E] }; }, E);
   result(`${E} 8: the postcard from Josie at the home counter, into the book; its line by ending last on the Walt page`, pc.ok && card.postcard && card.page && card.walt.includes(card.line) && card.walt.includes('50:11.c4'), { pc, said, card });
