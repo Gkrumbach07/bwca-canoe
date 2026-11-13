@@ -120,6 +120,9 @@ export class Dialogue {
     this.log.push({ name, role: role || '', text, at: h != null ? `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.floor((h % 1) * 60)).padStart(2, '0')}` : '' });
     while (this.log.length > LOG_N) this.log.shift();
   }
+  // (ux) one person under two speakers (the cast's bark by their head and their talk: Tauno's "That's BRM fourteen." was
+  // up by his head, over his name tag, as the panel said it)
+  same(a, b) { if (!a || !b) return false; return a.key === b.key || (a.person != null && a.person === b.person) || (!!a.name && a.name === b.name); }
   // a line said aloud (audio-speech.js through main.js's hook): never a wait's ellipsis
   speak(sp, text, o) { if (typeof this.voice === 'function' && text && !/^\s*…\s*$/.test(text)) { try { this.voice(sp, String(text), o); } catch (e) { console.warn('dialogue: voice', e); } } }
   // the head (or the spot above it) of a speaker, or null when they are gone
@@ -151,6 +154,7 @@ export class Dialogue {
       for (const q of this.queue) {
         if (live.some((b) => b.room === q.room || b.sp.key === q.sp.key)) continue;
         if ((this.gapUntil.get(q.room) || 0) > this.clock) continue;
+        if (c && this.same(q.sp, c.speaker)) continue; // (ux) the one you talk with says it in the panel, never by their head too
         if (c && (q.room === String(c.room) || q.sp.key === c.speaker.key) && q.pri < PRI.reply) continue; // the room listens while you talk
         if (c && q.pri < PRI.reply && this.distTo(q.sp) < QUIET_R) continue; // (ux) and so does anyone near, the keeper by the porch too
         const s = q.pri * 100 - this.distTo(q.sp) - q.age * 0.5;
@@ -229,8 +233,8 @@ export class Dialogue {
     if (this.convo) this.close(false);
     this.convo = { ...c, node: null, you: null, wait: false, t: 0, last: this.lastFrom(c.speaker.key), said: null, saidTo: null };
     // what they were saying is now said here; the room waits while you talk
-    for (const b of this.on) if (!b.out && (b.sp.key === c.speaker.key || this.distTo(b.sp) < QUIET_R)) b.t = 0; // (ux: anyone near hushes)
-    this.queue = this.queue.filter((q) => q.sp.key !== c.speaker.key);
+    for (const b of this.on) if (!b.out && (this.same(b.sp, c.speaker) || this.distTo(b.sp) < QUIET_R)) b.t = 0; // (ux: anyone near hushes)
+    this.queue = this.queue.filter((q) => !this.same(q.sp, c.speaker));
     document.body.classList.add('talking');
     this.panel.classList.add('show');
     let first = null;
