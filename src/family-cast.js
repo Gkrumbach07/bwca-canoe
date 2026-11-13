@@ -66,7 +66,7 @@ class FamilyCast {
     this.offs.push(s.sensor('shook', (arg) => s.get('jon.chase') === arg));
     this.offs.push(s.on('season', () => this.clear()));
     // the gifts she never asked for (show.js): the June print at Mummo's, June's pot (33 §6.4)
-    for (const w of WANTS) this.offs.push(show.want({ id: `family:${w.gift}`, who: 'aili', print: w.print, item: w.item, give: w.give !== false && !!w.item, when: w.when, to: w.to, run: () => {} }));
+    for (const w of WANTS) this.offs.push(show.want({ id: `family:${w.gift}`, who: 'aili', print: w.print, item: w.item, give: w.give !== false && !!w.item, when: w.when, to: w.to, say: w.say, then: w.then, run: () => {} })); // (final join: say/then for 7b's AILI_S6)
     this.offs.push(show.talker('aili', (o = {}) => this.talk('aili', o)));
     // the rented boat in a picture: Jon's second boat (33 §6.7 "The camera can photograph it. Nothing in the game points at it.")
     const P = this.c.photo;

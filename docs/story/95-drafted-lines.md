@@ -1506,3 +1506,14 @@ Used: the Walt page when the player has cooked in Walt's pan at C1210 (32 §5.9.
 The projector hums. Carol turns the carousel to the first slide.
 ```
 Used: the HUD note as the slides start after close (32 §5.3 "Staging").
+
+## Final join (campaign run: the seams between streams)
+
+Build drafts, for the writers to replace. Words the join needed where two streams meet and neither doc gives them.
+
+<!-- id: d95.final.gord.bootleg -->
+```
+Bootleggers ever come through here?
+```
+Used: the player's ask on Gord's hub (33 §6.13; 60 S6 "Gord", Thursdays, asked about bootleggers): his answer is 60's
+S6.conv.15. Open once S6 is heard of (s6.story) or the ledger is found.

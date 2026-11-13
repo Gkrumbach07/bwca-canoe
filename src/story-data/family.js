@@ -27,6 +27,7 @@
 //   liisa.met · liisa.told.<NB> · liisa.shown · liisa.monday · cards.seen · cards.stone (L4D) · cards.postmarks
 //   gord.met · gord.told (a "went north" piece) · danielle.met · danielle.log (a "went north" piece) · danielle.stone ·
 //   carp.stump · carp.stone (the Carp-end stump and the cairn, US side of the line)
+import { AILI_S6, GORD_S6 } from './sides-7b.js'; // final join: stream 7b's lines for the family's Aili and Gord (60 S6)
 export const A4_SENSORS = { ailistep: 'cmp', ailialive: 'cmp', ailishut: 'flag', liisanext: 'arg', liisaready: 'flag', monday: 'flag', chased: 'flag', shook: 'arg' };
 
 // --- the calendar (33 §3) -------------------------------------------------------------------------------------------
@@ -155,8 +156,8 @@ export const AILI = {
       // 6.5 the kitchen table: step 2, Eino's name on the Walt page, a day since the stone
       { ask: '33:6.5.c1', once: 'eino', when: `${W2} & (f:tauno.turn | f:knows.eino) & days.since(aili.stone)>=1`, to: 'eino' },
       // 6.6 the guest book: step 3, a day after the kitchen table
-      { ask: '33:6.6.c2', once: 'book', when: `${W3} & days.since(aili.kitchen)>=1 & (f:marlys.met | f:wade.met)`, to: 'book' },
-      { ask: '33:6.6.c1', once: 'book', when: `${W3} & days.since(aili.kitchen)>=1 & !(f:marlys.met | f:wade.met)`, to: 'book' },
+      { ask: '33:6.6.c2', once: 'book', when: `${W3} & days.since(aili.kitchen)>=1 & (f:gy.register | f:wade.met)`, to: 'book' },
+      { ask: '33:6.6.c1', once: 'book', when: `${W3} & days.since(aili.kitchen)>=1 & !(f:gy.register | f:wade.met)`, to: 'book' },
       { ask: '33:6.2.c12', say: ['33:6.2.14'], end: true }] },
     came: { hub: 'talk0', go: [{ ask: '33:6.2.c8', once: 'came', say: ['33:6.2.10'] }] },
     his: { hub: 'talk0', go: [{ ask: '33:6.2.c10', once: 'nothing', say: ['33:6.2.12'], to: 'his2' }] },
@@ -248,6 +249,10 @@ export const WANTS = [
   { who: 'aili', item: 'junespot', give: false, when: 'f:aili.met & ailistep>=1 & !f:aili.stone', to: 'pot', gift: 'pot' },
   { who: 'aili', print: 's7.lilacs.camp', when: 'f:aili.stone & !f:aili.print & !f:aili.again', to: 'again', gift: 'print2' },
   { who: 'aili', item: 'junespot', give: false, when: 'f:aili.stone & !f:aili.pot & !f:aili.again', to: 'again', gift: 'pot2' },
+  // final join: 7b's AILI_S6 (60 S6 "Aili"): the 1928 runner's book shown, the print of N.N. 1928, the bottle; each once
+  // (aili.said.<once>), said where she stands, nothing given
+  ...AILI_S6.map((w) => ({ who: 'aili', item: w.show || undefined, print: w.print || undefined, give: false,
+    when: `f:aili.met & !f:aili.said.${w.once}${w.when ? ` & (${w.when})` : ''}`, say: w.say, then: [`f:aili.said.${w.once}`], gift: `s6.${w.once}` })),
 ];
 
 // --- 6.10 the back porch: the can in your hands, Aili home early -----------------------------------------------------
@@ -372,7 +377,9 @@ export const GORD = {
     meet: { say: ['33:6.13.1'], then: ['f:gord.met'], to: 'hub' },
     hub: { go: [
       { ask: '33:6.13.c1', once: 'atikokan', say: ['33:6.13.2'] },
-      { ask: '33:6.13.c2', once: 'americans', say: ['33:6.13.3'], to: 'americans' }] },
+      { ask: '33:6.13.c2', once: 'americans', say: ['33:6.13.3'], to: 'americans' },
+      // final join: 7b's GORD_S6 (60 S6 "Gord": asked about bootleggers), its ask a build draft (95 "Final join")
+      ...GORD_S6.map((g) => ({ ...g, ask: 'd95.final.gord.bootleg' }))] },
     americans: { hub: 'hub', go: [{ ask: '33:6.13.c3', once: 'lately', say: ['33:6.13.4'], then: ['f:gord.told', 'walt:33:6.13.w.1'], to: 'lately' }] },
     lately: { hub: 'hub', go: [
       { ask: '33:6.13.c4', once: 'like', say: ['33:6.13.5'], to: 'like' },

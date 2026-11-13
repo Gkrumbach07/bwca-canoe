@@ -24,6 +24,7 @@
 
 // the condition names the scenes read from the live world (guiding-cast.js registers them as sensors)
 import { HAP_S8 } from './sides-s.js'; // j1: S8's three Hap topics (stream s) join his hub
+import { HAP_S5, HAP_S5_NODES } from './sides-7b.js'; // final join: S5's Hap topics (stream 7b) and their follow-up node
 export const GY_SENSORS = { southnight: 'flag', northwind2: 'flag', lampLit: 'flag', truckLooked: 'flag', nightNow: 'flag' };
 
 // --- the people's hours (31 §4 "Who is where, when"; 13 #8) -------------------------------------------------------------
@@ -137,6 +138,7 @@ export const HAP_HUB = [
       { ask: '31:GY-06b.c1', once: 'brother', when: 'f:hap.farend & f:knows.eino', to: 'let' },
       { ask: '31:GY-06c.c1', when: '(nickseen:frontporch & !f:ink.frontporch & !f:knows.frontporch) | (nickseen:kitchen & !f:ink.kitchen & !f:knows.kitchen) | (nickseen:longroom & !f:ink.longroom & !f:knows.longroom)', to: 'names' }];
 HAP_HUB.push(...HAP_S8); // j1: (stream s, sides-s.js) beside his own, under his once keys
+HAP_HUB.push(...HAP_S5); // final join: (stream 7b, sides-7b.js: 60 S5 "Hap") the plane, where, Walt
 export const HAP = {
   id: 'hap', who: 'hap',
   nodes: {
@@ -186,6 +188,7 @@ export const HAP = {
   },
 };
 // ctx: { weekAfter(fact) → a later weekend than that fact's }
+Object.assign(HAP.nodes, HAP_S5_NODES); // final join: 7b's "What colour was it?" node (s5colour), back to his hub
 export function hapEntry(s, ctx = {}) {
   if (!s.has('hap.met')) return 'first';
   const later = (k) => (ctx.later ? ctx.later(k) : (s.since('days', k) || 0) >= 3);

@@ -56,6 +56,10 @@ export function routeFor(meeting) {
   const ep = meeting && Number(meeting.ep);
   if (ep === 30) return ROUTES.lakeone;
   if (ep === 33) return ROUTES.gabbro;
+  // final join: Maggie's note at Little Gabbro (company.js gabbroTick) moves the meeting to Farm 31 ({ ep: 31, from: 33 }):
+  // the run is still the gabbro variant (its legs end at the Little Gabbro lot, a day hidden, then Farm), so a boot into
+  // the run under way, or the thaw's watchers, keep its route; the lot it ends at is Farm's (run.lotNear: ep 31)
+  if (ep === 31 && Number(meeting.from) === 33) return ROUTES.gabbro;
   return ROUTES.any;
 }
 
