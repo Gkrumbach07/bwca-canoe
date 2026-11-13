@@ -179,7 +179,7 @@ try {
     result(`5b "Look what the wind brought." → ${bought ? 'the round already bought (the yard): no "Fair enough." at camp' : 'the round shared'}, the flare (the nicknames)`, r.ok && noRound && f['boys.visited'] && f['boys.round'] && f['boys.nicknames'], { said: said.slice(0, 3), bought, offered, r: r.ok ? 'ok' : r, f });
   });
   await step('6 the bet', async () => {
-    await page.evaluate(() => { const B = window.__b5, L = window.__L; B.at(B.doy(8, 12), 17.1); B.tick(2); if (window.__game.story.has('boys.bet.moved')) B.at(B.doy(8, 13), 17.1); { const S = B.C().site(); L.standAt(S.x + 4, S.z + 4); } B.tick(4); B.talk(() => window.__b5.C().debug.camp()); });
+    await page.evaluate(() => { const B = window.__b5, L = window.__L; B.at(B.doy(8, 12), 17.1); { const S = B.C().site(); L.standAt(S.x + 4, S.z + 4); } B.tick(6); /* polish: the wind's move to the 13th is judged in the camp tick, by the camp: stood there and ticked before it is read */ if (window.__game.story.has('boys.bet.moved')) { B.at(B.doy(8, 13), 17.1); { const S = B.C().site(); L.standAt(S.x + 4, S.z + 4); } } B.tick(4); B.talk(() => window.__b5.C().debug.camp()); });
     const said = await hear(6);
     await page.evaluate(() => window.__b5.endTalk());
     await page.evaluate(async () => { const L = window.__L; for (let k = 0; k < 10; k++) { L.step(5); await L.wait(60); } window.__b5.tick(4); });
