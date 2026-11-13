@@ -84,6 +84,24 @@ export const WALT_LINES = [
   { id: '30:4.9.page.4', section: 'years' },
   { id: '30:4.6/the-thursday-lunch-tier.w1', section: 'odd' },
   // /a2
+  // a4: begin (the family, 33): drafted lines (95-drafted-lines "Stream a4") and the sections other than 33's default (people)
+  { id: 'a4:w.jon', section: 'people' },
+  { id: 'a4:w.eino', section: 'odd' },
+  { id: 'a4:w.kitchen', section: 'years' },
+  { id: 'a4:w.guestbook', section: 'odd' },
+  { id: 'a4:w.danielle', section: 'odd' },
+  { id: 'a4:w.carp', section: 'odd' },
+  { id: '33:6.4.w.1', section: 'places' },
+  { id: '33:6.4.w.2', section: 'places' },
+  { id: '33:6.4.w.3', section: 'odd' },
+  { id: '33:6.7.w.1', section: 'odd' },
+  { id: '33:6.7.w.2', section: 'odd' },
+  { id: '33:6.8.w.1', section: 'odd' },
+  { id: '33:6.9.cards.1', section: 'places' },
+  { id: '33:6.9.cards.2', section: 'odd' },
+  { id: '33:6.13.w.1', section: 'odd' },
+  { id: '33:6.10.after', section: 'odd' },
+  // a4: end
 ];
 
 // a text id with no row: its section by its id's prefix (the longest that matches), else 'odd'. Leads are a person's or a

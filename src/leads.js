@@ -32,6 +32,10 @@ export function mergeLeads(M) {
   for (const R of M.INK || []) if (!INK1.some((x) => x.nick === R.nick)) INK1.push(R);
 }
 // /a2
+// a4: begin (the family arc's leads and rings, story-data/leads-family.js)
+import * as LF from './story-data/leads-family.js';
+mergeLeads(LF);
+// a4: end
 
 const ASKED = 'lead.asked.';
 const DOOR_LEADS = new Set(['guiding', 'boys', 'family', 'mining']); // fact prefix: an ask answered (lead.asked.<id>), once a season
