@@ -300,6 +300,7 @@ carved *G.A. '87*. Someone has cut four short notches under the initials with a 
 - **The photo favour** is complete when the paddle is in frame and readable. The score system grades it as usual.
 
 **Back at Carol's counter** [Needs: the photo]:
+<!-- id: 32:5.2.back q each -->
 > *(She holds the print a long time.)* "Oh."
 > "Facing the water. He'd want that. Walt knew."
 > "Four notches. That's the three of them and the paddle, the August after. Gene's paddle went in with them that
@@ -329,12 +330,14 @@ getting older. Six labels have Carol's lines.
 Eagle). Bob and Frank under canoes on a carry. A site with a view down a long lake. **A stringer of walleye** (the
 lousy fishing). Gene grinning. Then, ninth: **a man at a creek mouth below a beaver dam, wet to the knees, laughing,
 not looking at the camera, with a notched ridge behind him.**
+<!-- id: 32:5.3.sept q each -->
 > "That one I never saw. He went through this carousel by himself. I had the flu." *(Beat.)* "That's Walt. Well. I'll
 > be. That's Walt laughing."
 > "It wasn't one of their trips. September. Denny's boy was sick, so it was just the four. Walt took them somewhere
 > with lousy fishing, Gene said, and look at that stringer."
 > "Take that one. Take the slide. Gene would want somebody to look at it who knows what they're looking at. I don't."
 
+<!-- id: 32:5.3.slide q each -->
 - The dot on the wall: **Take the slide.** **Gives:** the item *Slide, Sept 98* (book: "A man at a creek mouth, wet to
   the knees, laughing. A beaver dam. A notch in the ridge behind."). The camera's photo match places it at
   (−19835, 26740) (key 3B). Walt page: "Gene's slide, September 1998: Walt at a creek mouth below a beaver dam. Not
@@ -342,6 +345,7 @@ not looking at the camera, with a notched ridge behind him.**
 - The rule about Walt on screen: Walt is visible only in the 1985 slide (the back of his head) and this one, both
   before 1998's end. Later carousels show the boys only, because Walt is always behind the camera or at the pan.
 
+<!-- id: 32:5.3.close q -->
 **Close** (after any carousel): "That's enough. That's plenty for one night." She turns the projector off before the
 fan stops.
 
@@ -392,6 +396,7 @@ Bob's hand on a clipboard. Frank is repacking whatever Bob has just packed. Denn
   > **Frank:** "I called him. He didn't say anything for a whole minute. Longest Denny's ever been quiet."
   > **Denny:** "That's true. Ask anybody." *(He picks up the clipboard and reads it upside down.)*
 
+  <!-- id: 32:5.5.1.tell1 q -->
   **Tell 1.** Walt page: "Denny was in Duluth the week Walt went missing. *Tuesday, it was a Tuesday, my sister's
   thing.*" (The page adds the Thursday line only when the player holds a dated record: §6.) [It is true that he was in
   Duluth. The weekday is the slip: the night he can't forget, he files under the wrong day. Bob vouches for the town,
@@ -427,10 +432,13 @@ Bob's hand on a clipboard. Frank is repacking whatever Bob has just packed. Denn
 
 #### 5.5.2 Singly, earlier in the season
 
+<!-- id: 32:5.5.2.bob q -->
 - **Bob on a Tuesday** opens with "Carol says you're the one with Walt's tent. I'm Bob. I'm the one who packs." The
   topics are as above, without the others' lines. He is the safest first man to meet, and he doesn't press.
+<!-- id: 32:5.5.2.denny q each -->
 - **Denny any afternoon** opens with "You're the one! With the tent! Sit, sit, I'll get you a coffee, I'm getting one
   anyway." He never brings up "that week" himself.
+<!-- id: 32:5.5.2.carol q each -->
 - **Tell 1 is only ever asked for.** It plays once, the first time a Walt topic comes up with Denny **and** Bob or
   Carol in earshot: the store yard 1–7 August (above), Carol's counter between 14:00 and 15:00 when Denny is in, or the
   fire on the trip (5.9.3). At the counter it's Carol who asks, in the same words: "Where were you that week, Den? I
@@ -445,6 +453,7 @@ Bob's hand on a clipboard. Frank is repacking whatever Bob has just packed. Denn
 > on the river, below the rapids. And this one. And there's a carry near there, I'll ring that too. And the landing
 > on Isabella Lake. And Bog, ask for the keeper, tell him Denny sent you, he won't know who that is."
 
+<!-- id: 32:5.6.rings q -->
 **Gives:** five rings in Bog 67's reach: a river site (the watchers' 2019 camp, 5.10; C911, or C910, per
 `03-places.md` 1b), a carry on the river, the
 Isabella Lake landing, a pool below a rapid, and Bog 67's store. Walt page: "Denny says Walt's spot was the Isabella
@@ -463,6 +472,7 @@ River." [Builders pick the river site, the carry and the pool in v9 on the river
 > church. Burned a stripe on the thwart." *(Beat.)* "Gene's canoe. It's mine now. I kept the stripe."
 > "Walt named everybody. Never the obvious one. Frank's the electrician and I'm Sparky. That's Walt."
 
+<!-- id: 32:5.6.sparky q -->
 **Gives:** Walt page: "Denny is Sparky. The flare gun, 1986. He told me himself." (the *nicknames* piece, if not
 already held; Carol's 5.4 and the fire in 5.9.3 then add the other three names). [Writers: this is the arc's best
 cover and it's all true. He gives it away because it's the happiest story he has. On a second play it's a man handing
@@ -502,6 +512,7 @@ sign's patch on the pocket and a key ring on his belt. At 7:00 he leaves as Taun
 the step:
 > **Tauno:** "Frank."
 > **Frank:** "Tauno."
+<!-- id: 32:5.7.tauno q -->
 (That is all. If the player asks Tauno about Frank afterwards: "Frank's all right. Frank wants his grandkids to have
 work. So do I. We disagree about how.")
 
@@ -527,6 +538,7 @@ work. So do I. We disagree about how.")
   > anybody. The Kek. At his age. Like it was a secret. The Kek's not a secret, there's a trail of Cities people
   > from here to there." *(Beat.)* "I didn't tell anybody. Who would I tell. Nobody asked me."
 
+  <!-- id: 32:5.7.kek q each -->
   **Gives:** Walt page: "Walt told Frank 'the Kek' in July 2019, and said not to tell anyone." With N34 read and
   Denny's "the river" heard, this decodes the test (§6).
 - *"Somebody was watching Walt."* [Needs: N31 or N36 read.]
@@ -540,6 +552,7 @@ player feels clever, and it's a true slip.]
 
 **At night, under the lot lights** (a drive card; 70 §3.2). [Needs: `t2`, Frank met, a drive through Ely between 21:00
 and 5:00. Once.] The card's road line is replaced by:
+<!-- id: 32:5.7.lot q -->
 > *Through Ely, late:* "Northmark's lot under the lights. Frank, in the grey shirt, at the office door with a man in a
 > clean coat. The man is doing the talking."
 
@@ -581,6 +594,7 @@ never let the card or the page say who the man is.]
   > "Frank guards their parking lot nights. Has since '19. He thinks we don't know. Denny's the one who found out,
   > actually." *(Beat.)* "Frank would die before he'd talk. He'd die of being Frank first."
 
+  <!-- id: 32:5.8.frank q each -->
   **Gives:** Walt page: "Bob: Frank guards their lot nights. He'd die before he'd talk." (clears Frank, §6). [The
   aside "Denny's the one who found out" is true and innocent. Denny made it his business to know where Frank
   worked.]
@@ -613,6 +627,7 @@ any entry point.
 
 #### 5.9.2 At their camp
 
+<!-- id: 32:5.9.2.hail q each -->
 The site is taken (one party per site). Their camp: two canoes up on the rock, two tents, a tarp, Bob's stove hissing,
 the ballgame low on Denny's radio. When the player paddles within hailing range, the party bark is from Bob: "Come on
 in, we're decent." Frank: "Mostly." Landing to visit is allowed because they've invited it. The player doesn't camp
@@ -680,6 +695,7 @@ evening.]
 Bob lends the player one spoon. Bob and Frank go out in their canoe, and the player goes in theirs. Denny stays at
 camp with the radio. **That is why the 1998 story can be told: Denny is a kilometre away, listening to the game.**
 
+<!-- id: 32:5.9.5.frank q -->
 **The fishing** uses the existing fishing system: trolling or jigging deep (lake trout in August, 40–60 ft). The bet runs
 until dusk (about 2 game hours, ~15 real minutes). The boys' best fish is seeded at 21–27 inches. Frank lands his
 around the halfway mark: "Look at that. Look at that, Bob. Write that down." The player wins with a bigger laker.
@@ -712,11 +728,13 @@ around the halfway mark: "Look at that. Look at that, Bob. Write that down." The
   > **Bob:** "On the coffee." **Frank:** "On the coffee. Sorry. Past Bald Eagle. That's all you get out of two old men
   > in a boat."
 
+<!-- id: 32:5.9.6.w q each -->
 **Gives:** key 3A (the shore). Walt page: "September 1998: Walt took Gene, Bob and Frank in at Little Gabbro, across
 Bald Eagle, to a lake they swore off. The east bay. A creek under a beaver dam, a notch in the ridge behind. He came
 back wet to the knees." And: "Denny missed that one. His son Matt was in hospital." With lock 2 inked (the far end),
 the page adds: "The far end's east bay?" A pencil prompt, not a ring.
 
+<!-- id: 32:5.9.6.won q each -->
 **The 15th, at the counter** (if the player is in the Sawbill store at 15:00): the winner pays. If the player won: "Pay the lady.
 Walt's rule." If Frank won: **Frank:** "Put it on me, Carol. Put it all on me." **Carol:** "I always do, Frank."
 
@@ -740,9 +758,11 @@ sets it down and comes back. Nobody says anything about it.
   > **Bob:** *(watching him)* "Nobody sits there the last night."
   > **Frank:** "He's been weird all week."
   > **Bob:** "He's been weird since spring."
+  <!-- id: 32:5.9.8.cold q each -->
   [If the reveal's conditions are met, the dot on Denny reads **Talk** and 5.15 plays. If not, Denny comes back to the
   fire after ten minutes: "Cold out there. Walt was crazy." Nothing else happens.]
 
+<!-- id: 32:5.9.8.flare q each -->
 At the site, opening the book to N04 by the rock gives a small finding. Wedged in a crack at the back of the rock is
 a **spent flare cartridge**, faded red. Walt kept it there as a joke for thirty-three years. The dot names it **"An old
 flare cartridge"** and offers **Take** (a keepsake; no use). With 5.4's story known, the Walt page adds: "The flare
