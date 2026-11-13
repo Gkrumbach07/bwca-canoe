@@ -49,9 +49,9 @@ const newSeason = async (page, home = 38, doy = 191) => {
   await page.evaluate(() => window.__game.title.askNewSeason('adventure'));
   await until(page, () => !document.getElementById('entry-card').hidden && document.querySelectorAll('.startmap .pin').length > 0);
   await page.waitForTimeout(400);
-  await page.click(`.startmap .pin[data-ep="${home}"]`);
+  await page.evaluate((h) => document.querySelector(`.startmap .pin[data-ep="${h}"]`).click(), home); // (the pin can sit off the map's scroll: clicked by the DOM)
   await page.evaluate((d) => { const w = window.__game.title.wizard; w.setDate(d); w.next(); }, doy);
-  await page.click('#btn-start');
+  await page.evaluate(() => document.getElementById('btn-start').click());
   await until(page, () => { const g = window.__game; return g.title.state === 'game' && !g.player.teleporting && !!g.outfitter.visit; }, null, 180000);
   await page.evaluate(() => { const g = window.__game, T = window.__t; T.step(30); const o = g.outfitter; if (o.open) o.hide(); g.day.setClock(g.day.year, g.day.doy, 10); T.step(10); g.story.debug.fixture('turn'); });
 };
