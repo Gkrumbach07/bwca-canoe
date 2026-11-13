@@ -267,7 +267,7 @@ export class Episodes {
     if (!this.live || this.held()) return [];
     const out = [];
     for (const rec of this.recs.values()) {
-      const f = rec.flyer; if (!f || Number(f.ep) !== Number(ep)) continue;
+      const f = rec.flyer; if (!f || ![].concat(f.ep).map(Number).includes(Number(ep))) continue; // 7c: a flyer on more than one board (M1: 25 and 31)
       if (!this.window(rec.id) || this.ended(rec.id) || !this.when(f.when)) continue;
       const taken = this.taken(rec.id);
       out.push({ id: `ep:${rec.id}`, ep: Number(ep), taken, paper: this.paper(rec) });

@@ -639,12 +639,50 @@ function spinner() {
 }
 // /s
 
+// 7c: begin (the mini-campaigns' props: M1's bear sign at a chain site, M2's logbook box at each falls)
+const COL_7C = { pack: C(0x7a5a2e), packDark: C(0x4e3a20), torn: C(0xd8cbb0), scat: C(0x2e2219), seed: C(0x8a2a3a), barrel: C(0x2f5aa0), lid: C(0x1e1e1e), box: C(0x6a5a44), post: C(0x5a4a38), cord: C(0xb8a888) };
+const X7 = V(1, 0, 0), Y7 = V(0, 1, 0), Z7 = V(0, 0, 1);
+// a food pack hung too low from a limb, torn down its side, claw marks in the canvas (the dot: "Torn pack")
+function bearClaw({ rng }) {
+  const b = new PropBuilder(), y = 1.35 + rng() * 0.2;
+  b.cyl(V(-0.9, 2.4, 0), V(1.0, 2.55, 0.1), 0.07, 0.05, 6, TILE.BARK, COL.bark);          // the limb
+  b.cyl(V(0.1, 2.48, 0.04), V(0.1, y + 0.32, 0.04), 0.008, 0.008, 4, TILE.ROPE, COL_7C.cord); // the rope
+  b.box(V(0.1, y, 0.04), X7, Y7, Z7, 0.26, 0.32, 0.16, TILE.CANVAS, COL_7C.pack);           // the pack
+  for (let k = 0; k < 3; k++) b.box(V(0.0 + k * 0.07, y - 0.05, 0.205), X7, Y7, Z7, 0.012, 0.2, 0.004, TILE.CANVAS, COL_7C.torn); // the claw rents
+  b.box(V(0.1, y - 0.38, 0.04), X7, Y7, Z7, 0.2, 0.05, 0.12, TILE.CANVAS, COL_7C.packDark); // the sag where it spilled
+  return { geo: b.build(), dots: [{ y: y, r: 0.6 }] };
+}
+// scat full of raspberry seeds by the latrine trail (the dot: "Scat")
+function bearScat({ rng }) {
+  const b = new PropBuilder();
+  for (let k = 0; k < 4; k++) chunkStone(b, new THREE.Matrix4().compose(V((rng() - 0.5) * 0.25, 0.03, (rng() - 0.5) * 0.25), new THREE.Quaternion(), V(0.07, 0.04, 0.06)), rng, COL_7C.scat);
+  for (let k = 0; k < 6; k++) chunkStone(b, new THREE.Matrix4().compose(V((rng() - 0.5) * 0.2, 0.06, (rng() - 0.5) * 0.2), new THREE.Quaternion(), V(0.012, 0.01, 0.012)), rng, COL_7C.seed);
+  return { geo: b.build(), dots: [{ y: 0.05, r: 0.4 }] };
+}
+// a blue barrel dragged into the brush on its side, lid on, tooth holes (the dot: "Barrel")
+function bearBarrel({ rng }) {
+  const b = new PropBuilder(), tilt = 0.2 + rng() * 0.3;
+  const ax = V(Math.cos(tilt), 0, Math.sin(tilt));
+  b.cyl(V(0, 0.28, 0).sub(ax.clone().multiplyScalar(0.42)), V(0, 0.28, 0).add(ax.clone().multiplyScalar(0.42)), 0.28, 0.28, 12, TILE.PAINT, COL_7C.barrel, { cap0: true, cap1: true, capTile: TILE.PAINT, capCol: COL_7C.lid });
+  for (let k = 0; k < 4; k++) b.box(V((rng() - 0.5) * 0.5, 0.52, (rng() - 0.5) * 0.2), X7, Y7, Z7, 0.012, 0.012, 0.012, TILE.PAINT, COL_7C.lid); // tooth holes
+  return { geo: b.build(), dots: [{ y: 0.3, r: 0.6 }] };
+}
+// a weathered box on a cedar post at the carry, a logbook in it (M2: the dot "Logbook")
+function logBox({ rng }) {
+  const b = new PropBuilder(), h = 1.05 + rng() * 0.1;
+  b.cyl(V(0, -0.1, 0), V(0, h, 0), 0.06, 0.055, 6, TILE.WOOD, COL_7C.post, { cap1: true });
+  b.box(V(0, h + 0.13, 0), X7, Y7, Z7, 0.2, 0.14, 0.14, TILE.WOOD, COL_7C.box);
+  b.box(V(0, h + 0.29, 0), X7, Y7, Z7, 0.23, 0.02, 0.17, TILE.WOOD, COL_7C.post); // the lid
+  return { geo: b.build(), dots: [{ y: h + 0.15, r: 0.45 }] };
+}
+// 7c: end
 const REGISTRY = { stumpCut, quartzCobble, crib, landingRock, redPine, gradeMouth, slab, pole, drillRod,
   casing, coreRack, boxLid, trench, stockpile, stationStake, creekRun, beaverDam, digPit, surveyLath, surveyTag, shovelBlade, twoStumps, cafeTable, urn, coolers, launch, // (a2: the mining years' kits)
   lilacs, stoneStep, foundation, bedFrame, stoneRing, swimRock, enamelPot, sandShape, // e:
   rhubarb, flatRock, // x:
   towDock, oldFireRing, pineStub, bunkhouse, bunkDoor, bunkLamp, boathouse, // a3:
   sled, stovepipe, squareHollow, bedSpring, tobaccoTin, rustRow, beaverLodge, spinner, // s: S8
+  bearClaw, bearScat, bearBarrel, logBox, // 7c:
 };
 // 7a: begin (Round 7 stream 7a: S2's west site, S3's long rock and north bay, S4's kill: story-props-7a.js)
 Object.assign(REGISTRY, KITS_7A);

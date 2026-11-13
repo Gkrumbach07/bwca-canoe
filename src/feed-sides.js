@@ -138,8 +138,8 @@ export async function connect(t) {
     O.f.say(T(EVENING)); // (over his shoulder: the first meetings)
     return true;
   }
-  function openScene(def, start, onEnd = null) {
-    const fig = def.fig || def.who, f = fig === 'ollie' ? O.f : fig === 'tom' ? TM.f : OS.f;
+  function openScene(def, start, onEnd = null, at = null) {
+    const fig = def.fig || def.who, f = at || (fig === 'ollie' ? O.f : fig === 'tom' ? TM.f : OS.f); // j1: `at`, another stream's figure of the same person (7c's counter Tom)
     if (!f) return false;
     if (fig === 'ollie' || fig === 'tom') story.meet(fig, 'e');
     const run = new SceneRun(topics, def, { who: def.who, args: {},
@@ -223,7 +223,8 @@ export async function connect(t) {
   function tomSpot() {
     const n = hrs(story), d = story.date();
     // Monday mornings at the Moose Lake 25 store (his crew's supply run), by the steps
-    if (d.dow === 1 && n.h >= 8 && n.h < 12 && d.month >= 6 && d.month <= 9) { const L = storeLayout(25); if (L) { const f = L.stepsFoot || L.door; return { x: f.x + L.axes.b.x * 3.5 + L.axes.a.x * 2, z: f.z + L.axes.b.z * 3.5 + L.axes.a.z * 2, store: true }; } }
+    const m7c = window.__game && window.__game.storyMinis; // j1: one Tom: on a day 7c stands him at Moose Lake's counter, not also on its steps
+    if (d.dow === 1 && n.h >= 8 && n.h < 12 && d.month >= 6 && d.month <= 9 && !(m7c && typeof m7c.tomAt === 'function' && m7c.tomAt() === 25)) { const L = storeLayout(25); if (L) { const f = L.stepsFoot || L.door; return { x: f.x + L.axes.b.x * 3.5 + L.axes.a.x * 2, z: f.z + L.axes.b.z * 3.5 + L.axes.a.z * 2, store: true }; } }
     if (n.h < 7 || n.h >= 21) return null;
     // by day he works his route round the day's site (the camp itself stands from mid-afternoon: FIXED_PARTIES land)
     const c = fixedCamp('tom') || daySite('tom'); return c ? { x: c.x + 3, z: c.z + 2 } : null;
@@ -277,7 +278,8 @@ export async function connect(t) {
 
   return {
     ollie: () => O.f, tom: () => TM.f, ostbys: () => OS.f, carry: () => K.h,
-    ollieTalk, tomTalk: () => (TM.f ? openScene(TOM, 'open') : false), ostbyTalk: () => (OS.f ? openScene(OSTBYS, 'open') : false),
+    ollieTalk, tomTalk: () => (TM.f ? openScene(TOM, 'open') : false),
+    tomTalkAt: (fig) => (fig && fig.speaker ? openScene(TOM, 'open', null, fig) : false), // j1: 7c's counter Tom opens S8's scene (one speaker) ostbyTalk: () => (OS.f ? openScene(OSTBYS, 'open') : false),
     debug: { line: () => line, LEN, ROAD, RIVER, ollieAt, at, O, K, S1st, fixedCamp, daySite, tomSpot, ostbySpot, stuartIndex: si },
   };
 }

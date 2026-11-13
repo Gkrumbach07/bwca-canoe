@@ -61,15 +61,16 @@ function world({ y = 2026, m = 7, d = 14, h = 19, trip = null } = {}) {
   s.sensor('kettlespell', () => { const S = rain.spellAt(s.nowAbs()); return S ? S.a : 0; });
   s.set('tauno.said.pads', true);
   s.clock({ abs: d1, hours: 19 }); E.dayTurn(true);
-  const F1 = E.flyers(31), took1 = F1[0] ? E.take(F1[0].id) : false, after1 = E.flyers(31);
+  const KF = (ep) => E.flyers(ep).filter((f) => f.id === 'ep:mining'); // j1: only the Kettle notice (7c's M1 flyer is on Farm's board too)
+  const F1 = KF(31), took1 = F1[0] ? E.take(F1[0].id) : false, after1 = KF(31);
   ok('kettle: the notice up the first evening of the rain; taken, it reads taken (kettle.notice)', F1.length === 1 && !F1[0].taken && took1 && after1[0] && after1[0].taken && s.has('kettle.notice'), { F1, after1 });
   s.clock({ abs: d2, hours: 19 }); E.dayTurn(true);
-  const F2 = E.flyers(31);
+  const F2 = KF(31);
   ok('kettle: on the later rain the notice is up again, untaken (the Kettle day not done)', F2.length === 1 && !F2[0].taken, { F2 });
   const took2 = E.take(F2[0].id);
   ok('kettle: a re-posted notice can be taken again (no second yes: the arc\'s yes is the bench)', took2 && E.flyers(31)[0].taken && !E.started('mining'), {});
   s.set('kettle.done', true);
-  ok('kettle: down once the Kettle day is done', E.flyers(31).length === 0, {});
+  ok('kettle: down once the Kettle day is done', KF(31).length === 0, {});
   rain.clear();
 }
 
