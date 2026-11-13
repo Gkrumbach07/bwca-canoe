@@ -83,7 +83,17 @@ const PAGE_HELPERS = () => {
     },
     end() { const D = g.dialogue; if (D && D.convo) D.close(false); L.step(4); },
     async stageWait(who, n = 60) { for (let k = 0; k < n; k++) { L.step(10); await L.wait(20); if (F.staged().some((q) => q.who === who)) return true; } return false; },
-    talk(who) { const ok = F.talk(who); L.step(4); return ok; },
+    // papers off (a talk can't stay open under one: the counter, the book, the trip card), the player on foot
+    clear() {
+      const was = { paper: g.hud.paper, onFoot: g.player.onFoot, mode: g.player.mode };
+      if (g.outfitter.open) g.outfitter.hide();
+      if (g.journal && g.journal.open) g.journal.close();
+      if (g.record && typeof g.record.close === 'function') { try { g.record.close(); } catch { /* */ } }
+      if (g.hud.paper && typeof g.hud.closePaper === 'function') g.hud.closePaper(g.hud.paper);
+      if (!g.player.onFoot) L.standAt(g.player.x, g.player.z, g.player.heading);
+      L.step(4); this.was = was; return was;
+    },
+    talk(who) { this.clear(); const ok = F.talk(who); L.step(4); return ok; },
     has: (ks) => Object.fromEntries(ks.map((k) => [k, s.has(k) ? (s.get(k) === true ? true : s.get(k)) : false])),
     inv: (id) => g.inventory.count(id, { reachable: false }),
   };
@@ -150,7 +160,7 @@ try {
       f.at(2, 11); await f.toStore(); const ok = await f.stageWait('liisa');
       f.talk('liisa'); const s1 = await f.say(['Did he drown?', 'Christmas cards?', 'Tell her one of his stories.', 'It\'s in his notebook.', 'Tell her one of his stories.', 'People talk.']); f.end();
       f.talk('liisa'); const s2 = await f.say([]); f.end();
-      return { ok, s1, s2, told: s.keys('liisa.told.').length, monday: s.has('liisa.monday') };
+      return { ok, s1, s2, told: s.keys('liisa.told.').length, monday: s.has('liisa.monday'), was: f.was };
     });
     result('7a Liisa: two stories (one in his hand), then "Come back Monday."', r7.ok && r7.told === 2 && r7.monday, r7);
     const r7b = await a.evaluate(async () => {
@@ -177,11 +187,11 @@ try {
     result('8 Gord on a Thursday (his boat tied): the old American who paid cash', r8.ok && r8.told && r8.said.some((x) => /thank you twice/.test(x)), r8);
 
     // 9 Danielle at the Sucker end of Prairie Portage (a weekday); the canoe logged: the line turns north
-    const r9 = await a.evaluate(async () => { const f = window.__f, L = window.__L, g = window.__game; f.at(2, 11); await L.tp(-16605, 4549); await L.settle(); for (let k = 0; k < 60 && !f.F.debug.danielle(); k++) { L.step(10); await L.wait(30); } const dn = f.F.debug.danielle(); f.F.debug.talkDanielle(); L.step(4); const said = await f.say(['Ever find a canoe?', 'A white stone on a stump?']); f.end(); return { dn, said, has: f.has(['danielle.met', 'danielle.log', 'danielle.stone']), north: f.s.north }; });
+    const r9 = await a.evaluate(async () => { const f = window.__f, L = window.__L, g = window.__game; f.at(2, 11); await L.tp(-16605, 4549); await L.settle(); for (let k = 0; k < 60 && !f.F.debug.danielle(); k++) { L.step(10); await L.wait(30); } const dn = f.F.debug.danielle(); f.clear(); f.F.debug.talkDanielle(); L.step(4); const said = await f.say(['Ever find a canoe?', 'A white stone on a stump?']); f.end(); return { dn, said, has: f.has(['danielle.met', 'danielle.log', 'danielle.stone']), north: f.s.north }; });
     result('9 Danielle (re-sited: the US end of Prairie Portage): the canoe logged, "went north"; the Carp end named', r9.dn && r9.has['danielle.log'] && r9.north === true, r9);
 
     // 10 the Carp end: the stump with the clean ring and the cairn; the dot's Look on each (E)
-    const r10 = await a.evaluate(async () => { const f = window.__f, L = window.__L, g = window.__game; await L.tp(-10054, 2049); await L.settle(); for (let k = 0; k < 60 && !f.F.debug.carp(); k++) { L.step(10); await L.wait(30); } const dots = f.F.debug.carp() || []; const seen = []; for (const q of dots) { L.face(q, 1.4, q.y); L.step(4); const t = L.target(); seen.push(t); } return { dots, seen }; });
+    const r10 = await a.evaluate(async () => { const f = window.__f, L = window.__L, g = window.__game; await L.tp(-10054, 2049); await L.settle(); for (let k = 0; k < 60 && !f.F.debug.carp(); k++) { L.step(10); await L.wait(30); } const dots = f.F.debug.carp() || []; f.clear(); const seen = []; for (const q of dots) { L.face(q, 1.4, q.y); L.step(4); const t = L.target(); seen.push(t); } return { dots, seen }; });
     const looked = [];
     for (let k = 0; k < (r10.dots || []).length; k++) {
       const q = r10.dots[k];
