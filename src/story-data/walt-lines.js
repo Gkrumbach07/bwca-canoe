@@ -99,6 +99,33 @@ export const WALT_LINES = [
   // draft quoting NB72 (docs/story/95-drafted-lines.md, stream c), drawn from `text` until the writers anchor it)
   { id: 'c.walt.n42', section: 'farend', text: 'Not with company on the lake.' },
   // c: end
+  // a3: the guiding years (31): sections other than 31's default (people). The hinge's line is walt.nb.und.6 (above)
+  { id: '31:GY-01.close.2', section: 'people' },
+  { id: '31:GY-01.fly.5', section: 'odd' },
+  { id: '31:GY-13.sheila.1', section: 'people' },
+  { id: '31:page.2', section: 'years' },
+  { id: '31:page.3', section: 'odd' },
+  { id: '31:GY-06.gives', section: 'farend' },
+  { id: '31:GY-06b.w', section: 'years' },
+  { id: '31:GY-09.gives.1', section: 'odd' },
+  { id: '31:GY-11.gives.3', section: 'odd' },
+  { id: '31:GY-11.alders.1', section: 'places' },
+  { id: '31:GY-11.alders.2', section: 'places', annotates: '31:GY-11.alders.1' },
+  { id: '31:GY-11.waltway.1', section: 'odd' },
+  { id: '31:GY-12.rafter.1', section: 'places' },
+  { id: '31:GY-12.rafter.2', section: 'years', annotates: '31:GY-12.rafter.1' },
+  { id: '31:GY-12.5', section: 'odd' },
+  { id: '31:GY-12.6', section: 'odd' },
+  { id: '31:GY-12.c4', section: 'odd' },
+  { id: '31:GY-12.c5', section: 'odd' },
+  { id: '31:GY-13.sheila.2', section: 'odd' },
+  { id: '31:GY-08.canoe.8', section: 'odd' },
+  { id: '31:GY-08.canoe.9', section: 'odd', annotates: '31:GY-08.canoe.8' },
+  { id: '31:GY-17.w', section: 'years' },
+  { id: '31:GY-18.w', section: 'places' },
+  { id: '31:GY-04.gives.1', section: 'leads', done: 'f:rick.met' },
+  { id: '31:GY-09b.2', section: 'leads', done: 'met:ollie>=1' },
+  // /a3
 ];
 
 // a text id with no row: its section by its id's prefix (the longest that matches), else 'odd'. Leads are a person's or a

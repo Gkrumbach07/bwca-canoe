@@ -2606,6 +2606,203 @@
       ],
       "verbs": [],
       "triggers": []
+    },
+    {
+      "id": "gy.tow",
+      "name": "Prairie Portage, the Sucker end: the tow landing",
+      "doc": "docs/story/31-guiding-years.md GY-04, GY-05b (a3); 31 §13 check 1 (Hap's 'left' must be the wrong side)",
+      "a3": true,
+      "x": -16605,
+      "z": 4549,
+      "lake": "Sucker Lake",
+      "shore": true,
+      "clear": 4,
+      "search": 120,
+      "props": [
+        {
+          "id": "gy.towdock",
+          "kit": "towDock",
+          "at": [
+            7,
+            -0.4
+          ],
+          "wet": "edge",
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Tow landing"
+            }
+          ]
+        }
+      ],
+      "verbs": [],
+      "triggers": [
+        {
+          "on": "enter",
+          "r": 40,
+          "when": "true",
+          "then": [
+            "f:gy.tow"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "gy.prairie",
+      "name": "Prairie Portage, the Inlet Bay end (P194 walked)",
+      "doc": "31 GY-05c (a3): 'Hundred and twenty-two rods. Still.'",
+      "a3": true,
+      "x": -16720,
+      "z": 4231,
+      "lake": "Basswood Lake",
+      "shore": true,
+      "clear": 0,
+      "search": 120,
+      "props": [],
+      "verbs": [],
+      "triggers": [
+        {
+          "on": "enter",
+          "r": 45,
+          "when": "f:gy.tow",
+          "then": [
+            "f:gy.prairie"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "gy.lunch",
+      "name": "Hap's lunch rock: a flat granite point on Inlet Bay, US side (not Mummo's shore)",
+      "doc": "31 GY-04, GY-07, §9.1 (a3); 31 §13 check 2 (to confirm the bay mouth and the ridge in v9)",
+      "a3": true,
+      "x": -17850,
+      "z": 3550,
+      "lake": "Basswood Lake",
+      "shore": true,
+      "clear": 5,
+      "search": 600,
+      "props": [
+        {
+          "id": "gy.lunchrock",
+          "kit": "landingRock",
+          "at": [
+            0,
+            -0.4
+          ],
+          "wet": "edge",
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Flat rock on the point"
+            }
+          ]
+        },
+        {
+          "id": "gy.firering",
+          "kit": "oldFireRing",
+          "at": [
+            0,
+            3.2
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "f:gy.lunch",
+              "name": "Old fire ring, under the moss"
+            }
+          ]
+        },
+        {
+          "id": "gy.stub",
+          "kit": "pineStub",
+          "at": [
+            1.6,
+            4.6
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Pine stub"
+            }
+          ]
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "gy.firering",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:gy.firering"
+          ]
+        }
+      ],
+      "triggers": [
+        {
+          "on": "enter",
+          "r": 14,
+          "when": "true",
+          "then": [
+            "f:gy.lunch"
+          ]
+        }
+      ],
+      "photo": [
+        {
+          "id": "hap1986",
+          "tol": {
+            "d": 30,
+            "deg": 180
+          },
+          "when": "f:hap.day & !f:hap.photo",
+          "then": [
+            "f:gy.lunch.photo"
+          ],
+          "a3": "31 GY-07: Hap's print held against the view (a match is a match; the pine is gone)"
+        }
+      ]
+    },
+    {
+      "id": "gy.reef",
+      "name": "The reef past the second island, Inlet Bay (walleye in a south-wind drift)",
+      "doc": "31 GY-04, GY-05e (a3); 31 §13 check 2 (a real shoal from the depth data)",
+      "a3": true,
+      "x": -17150,
+      "z": 3350,
+      "lake": "Basswood Lake",
+      "clear": 0,
+      "search": 200,
+      "props": [],
+      "verbs": [],
+      "triggers": []
+    },
+    {
+      "id": "gy.mummos",
+      "name": "Mummo's from the water (Hap's 'his grandmother's old place')",
+      "doc": "31 GY-05d (a3): any visit, by water or ashore",
+      "a3": true,
+      "x": -17480,
+      "z": 3730,
+      "lake": "Basswood Lake",
+      "shore": true,
+      "clear": 0,
+      "search": 140,
+      "props": [],
+      "verbs": [],
+      "triggers": [
+        {
+          "on": "enter",
+          "r": 120,
+          "when": "true",
+          "then": [
+            "f:gy.mummos"
+          ]
+        }
+      ]
     }
   ],
   "portages": [
@@ -3913,6 +4110,121 @@
         "lakeId": null,
         "off": 0,
         "tried": 1
+      },
+      "gy.tow": {
+        "props": {
+          "gy.towdock": {
+            "x": -16609.1,
+            "z": 4541.5,
+            "heading": 1.4172,
+            "sd": -1,
+            "y": 406.6
+          }
+        },
+        "lanes": [],
+        "x": -16610.6,
+        "z": 4548.4,
+        "n": [
+          -0.9882,
+          -0.153
+        ],
+        "u": [
+          0.153,
+          -0.9882
+        ],
+        "lakeId": 218,
+        "off": 6,
+        "tried": 43
+      },
+      "gy.prairie": {
+        "props": {},
+        "lanes": [],
+        "x": -16726,
+        "z": 4236.4,
+        "n": [
+          -0.7312,
+          0.6821
+        ],
+        "u": [
+          -0.6821,
+          -0.7312
+        ],
+        "lakeId": 4,
+        "off": 8,
+        "tried": 31
+      },
+      "gy.lunch": {
+        "props": {
+          "gy.lunchrock": {
+            "x": -17559.6,
+            "z": 3540,
+            "heading": 1.5708,
+            "sd": -0.4,
+            "y": 395.6
+          },
+          "gy.firering": {
+            "x": -17563.2,
+            "z": 3540,
+            "heading": 1.5708,
+            "sd": 3.2,
+            "y": 397.5
+          },
+          "gy.stub": {
+            "x": -17564.6,
+            "z": 3538.4,
+            "heading": 1.5708,
+            "sd": 4.6,
+            "y": 397.6
+          }
+        },
+        "lanes": [],
+        "x": -17560,
+        "z": 3540,
+        "n": [
+          -1,
+          0
+        ],
+        "u": [
+          0,
+          -1
+        ],
+        "lakeId": 4,
+        "off": 290,
+        "tried": 151
+      },
+      "gy.reef": {
+        "props": {},
+        "lanes": [],
+        "x": -17150,
+        "z": 3350,
+        "n": [
+          0,
+          1
+        ],
+        "u": [
+          1,
+          0
+        ],
+        "lakeId": 4,
+        "off": 0,
+        "tried": 1
+      },
+      "gy.mummos": {
+        "props": {},
+        "lanes": [],
+        "x": -17482.6,
+        "z": 3723.5,
+        "n": [
+          -0.5852,
+          0.8109
+        ],
+        "u": [
+          -0.8109,
+          -0.5852
+        ],
+        "lakeId": 4,
+        "off": 7,
+        "tried": 26
       }
     },
     "portages": {

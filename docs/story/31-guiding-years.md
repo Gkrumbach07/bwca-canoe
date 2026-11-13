@@ -168,7 +168,9 @@ Hap's grandson. Drives Moose Lake's tow boat weekdays and his grandfather weeken
 same breath. Not in the country in October 2019 (he was at college in Duluth after Labor Day); he knows nothing of the
 night.
 
+<!-- id: 31:5.4.gives q -->
 - **Gives:** the tow landing's real side (a second way to know it); "He forgets the week. He doesn't forget a reef."
+<!-- id: 31:5.4.voice each -->
 - **Voice:** "I drive the tow weekdays and Grandpa weekends. Grandpa's harder." / "Thanks for doing his day. He talks
   about it at the home. They're sick of it. That's good."
 
@@ -199,6 +201,7 @@ let Marlys keep volunteering because the leeches sell better when she does.
 
 - **Gives:** rings for every place a lead names (he is the keeper who pencils this arc); the board's home-turf tasks;
   tier-1 texture; the after-ending reactions.
+<!-- id: 31:5.6.voice each -->
 - **Voice:** "Before my time. Bought the place in '21. It came with a lot of canoes and a lot of opinions." / "Fella
   in here asking which way you went. I told him out the door and left."
 
@@ -274,16 +277,19 @@ Topics now open (each once, then as repeats):
   MARLYS: "I don't remember much about that week. It was a long time ago."
   [Tell: she has just dated a burn hole to the year. Nothing points this out. The Walt page notes it later, when the
   register is found.]
+<!-- id: 31:GY-01.fly each -->
 - **"There was a notebook rolled in the fly."** [Offered only as the player's choice; never needed.]
   MARLYS: "In the fly." [A long pause.] "I never unrolled it. I boxed it at six in the morning and I never—" [She
   stops.] "Keep it on you. Not in the pack. On you."
   *(Walt page: "Marlys boxed his things 'at six in the morning'. She doesn't remember that week.")*
 
+<!-- id: 31:GY-01.close q each -->
 **Close:** "Go on. You've got a carry before dark."
 *(gives: Marlys met; Walt page: "Marlys, Moose Lake, Tuesdays and Wednesdays. She knew the tent by the burn hole.")*
 
 ### GY-02 · Marlys, after
 
+<!-- id: 31:GY-02.open q each -->
 Repeatable topics on her days. Openers rotate: "You're back. Wind on Sucker?" / "You came back with all your gear. Sit
 a minute, I've got coffee." / "Gus is in a mood. Buy something."
 
@@ -308,6 +314,7 @@ a minute, I've got coffee." / "Gus is in a mood. Buy something."
 
 ### GY-03 · Hap on the porch
 
+<!-- id: 31:GY-03.dot q -->
 **Where:** Moose Lake porch, Sat/Sun 10–15, June to Labor Day. **Needs:** nothing. The dot on him: "Old man on the
 bench."
 
@@ -330,10 +337,13 @@ HAP: "Hap Johnsrud. I guided off this dock from '58 to oh-two. Now I sit. My gra
 can watch other people do it wrong."
 
 Topics:
+<!-- id: 31:GY-03.walt each -->
 - **"Walt."** — as above, then: "First time I guided with him he was twenty-two, back from the army, and he could find
   walleye in a rain barrel."
+<!-- id: 31:GY-03.october each -->
 - **"October."** — "He'd go out alone in October. People said he was strange. I said he liked October." [Nothing more
   until GY-06.]
+<!-- id: 31:GY-03.memory each -->
 - **"Your memory."** — "It's got holes. I'll tell you when I know I'm in one. Mostly I don't know."
 - **"What was he like?"** — opens the set piece:
   HAP: "You want to know what Walt was like, you do a day with him. I can't. My legs are in Ely. So I'll give you the
@@ -341,34 +351,46 @@ Topics:
 
 ### GY-04 · Set piece A: Hap's day (August 1986)
 
+<!-- id: 31:GY-04.again q -->
 **Where:** the porch, then Moose Lake's water. **Needs:** GY-03. Told once; the player can ask "Tell me the day
 again." any time, and he tells it shorter.
 
+<!-- id: 31:GY-04.day.1 -->
 HAP: "August of '86. A Tuesday, because Tuesdays the tow had room.
 
+<!-- id: 31:GY-04.day.2 -->
 "Five o'clock at the dock. Walt had two pots on. One for the clients and one for him, and you didn't touch his.
 
+<!-- id: 31:GY-04.day.3 -->
 "Tow up the chain at six. Moose, Newfound, Sucker. The tow drops you at Prairie, at the landing on the left as you come
 up.
 
+<!-- id: 31:GY-04.day.4 -->
 "Over Prairie. Walt carried the Grumman and the clients' cooler both. Showing off. He was forty.
 
+<!-- id: 31:GY-04.day.5 -->
 "Into the bay, past his grandmother's old place. You'll know it in June. Lilacs.
 
+<!-- id: 31:GY-04.day.6 -->
 "Out to the reef past the second island. South wind, jig and a minnow, let it drift down. The clients got their
 walleye. If they didn't, Walt hooked one and handed them the rod.
 
+<!-- id: 31:GY-04.day.7 -->
 "Lunch on the rock on the point. Fish, potatoes, onions, the big pan. Ricky took a picture."
 [He takes a square print out of his shirt pocket. It has gone orange.]
+<!-- id: 31:GY-04.day.8 -->
 HAP: "That's the rock. That's Walt. That's me, with hair.
 
+<!-- id: 31:GY-04.day.9 -->
 "Back on the tow by four. I went in the bar. Walt drove home to June.
 
+<!-- id: 31:GY-04.day.10 -->
 "That's the day. Go do it. Tell me what's there now. I'm not going to see it again, so don't make anything up."
 
 [He holds out the print.]
 HAP: "Bring that back. It's the only one."
 
+<!-- id: 31:GY-04.gives q each -->
 *(gives: **Hap's picture, 1986** (a loaned item; GY-07); leads: Rick ("Ricky"), Nate by presence. Asked, Gus pencils
 the places on the Moose Lake sheet: "Hap's day? Everybody gets Hap's day." Rings: the Moose Lake dock, the Sucker end of
 Prairie, the Inlet Bay shore, the reef, the lunch point. No list appears anywhere; the rings are the record.)*
@@ -386,6 +408,7 @@ Prairie, the Inlet Bay shore, the reef, the lunch point. No list appears anywher
 ### GY-05 · Telling Hap what's there now
 
 Each report is a topic that appears only after the player has been to that place (a world flag), on any later weekend.
+<!-- id: 31:GY-05.next q -->
 One memory each, then he goes quiet a moment, then: "Next."
 
 **GY-05a · The dock** *(needs: walked the Moose Lake dock to the end)*
@@ -449,11 +472,14 @@ HAP: "The tow still drop you on the left as you come up?"
 **Needs:** GY-05b resolved. Once. This is the arc's big finding.
 
 [He turns the cane over in his hands.]
+<!-- id: 31:GY-06.far.1 -->
 HAP: "He came for coffee once a month, at the home. Ten years. First Tuesday. He'd bring the bad doughnuts from the gas
 station, because the home's are worse.
 
+<!-- id: 31:GY-06.far.2 -->
 "He'd tell me where he'd been. Never where he was going. Walt never once in his life said where he was going.
 
+<!-- id: 31:GY-06.far.3 -->
 "Except October. October he'd say it like it was the weather. He'd go in at Little Gabbro in October, every year. Said
 you don't even need to book, nobody there. Across Bald Eagle, where they found his brother, and on to what he called
 the far end."
@@ -469,6 +495,7 @@ the far end."
 
 **Close:** "That's enough. Nate's got the truck running."
 
+<!-- id: 31:GY-06.gives q each -->
 *(gives: **lock 2, key A** (bible 5.2). Walt page: "Hap: every October, in at Little Gabbro, across Bald Eagle to 'the
 far end'. Past Gull there's only Pietro, and Walt never said Pietro." Gus rings **Little Gabbro** and **Bald Eagle**
 when asked. **He does not ring Gull or Pietro:** Hap named them as geography, not as the far end, and no keeper can ring
@@ -478,11 +505,14 @@ the far end (bible 5.3.4). The player pencils it. Counts as a big finding for Ta
 
 **Needs:** GY-06; Eino known. A topic, **"His brother."** Once.
 
+<!-- id: 31:GY-06b.let.1 -->
 HAP: "I told him to let it go. That fall. In my truck, at this landing. I said, Walt, he's gone, and they've got
 lawyers, and you've got your mother. Let it go.
 
+<!-- id: 31:GY-06b.let.2 -->
 "He looked at me like I'd said it in another language.
 
+<!-- id: 31:GY-06b.let.3 -->
 "He did, though. Didn't he. Forty years." [Pause.] "He came for coffee anyway. I think that was him saying I wasn't
 wrong. Or that I was and he'd forgiven me. With Walt you couldn't tell which, and you weren't supposed to."
 
@@ -490,17 +520,22 @@ wrong. Or that I was and he'd forgiven me. With Walt you couldn't tell which, an
 - **"He let it go. Then he didn't."** — [He looks at the player for a while.] HAP: "No. I suppose he didn't."
 - **[Say nothing.]** — HAP: "…Yeah."
 
+<!-- id: 31:GY-06b.w q -->
 *(gives: Walt page: "Hap told Walt to let it go, fall of '77.")*
 
 ### GY-06c · Hap: Walt's names for lakes
 
 **Needs:** any of these unmatched on the Walt page. Topic **"Walt's names for lakes."** One at a time.
+<!-- id: 31:GY-06c.porch -->
 - **The Front Porch:** "Lake One. Everybody's first night. He said it's where you sit before you go in the house."
+<!-- id: 31:GY-06c.kitchen -->
 - **The Kitchen:** "Insula. That's where supper came from. He never took a client to Insula. That one was his."
+<!-- id: 31:GY-06c.longroom -->
 - **The Long Room:** "Ottertrack. Long, narrow, cliffs both sides. Like the long room at the Finn hall, he said. Every
   sound comes back to you."
 - Anything else: "That's not one of his I know. Ask somebody who tripped with him."
 
+<!-- id: 31:GY-06c.gus q -->
 *(Hap doesn't write on maps. Asked, Gus pencils the lake: "Hap says Insula? Then it's Insula." That ring inks a matching
 pencil, bible 5.3.4.)*
 
@@ -524,12 +559,14 @@ Back on the porch (Sat/Sun):
   HAP: "Hair jigs. I tied those the winter after I quit. Never fished one. Walt said they were too pretty to get wet.
   Get them wet."
 
+<!-- id: 31:GY-07.gives q each -->
 *(gives: **Hap's jigs**, a unique lure (stats to `uniques.js`: a walleye jig, strong on reefs in a drift). Hap keeps both
 pictures; the 1986 print matters again in the journalist ending. The board-style tally line on the next trip-end screen:
 "Hap's day, done." Hap's thread is now at rest; he still sits every summer weekend and says one line of the day's wind.)*
 
 ### GY-08 · Rick, the swamper
 
+<!-- id: 31:GY-08.where q -->
 **Where:** the Moose Lake store, early or late; on the water in a bay with a client by day (he lifts a hand, says "On
 jigs" or nothing). **Needs:** none; Hap's "Ricky" makes him a lead.
 
@@ -559,6 +596,7 @@ Topics:
 - **Trade** (`people.md`'s guide trade): a dozen leeches for a lure off his hat, once a week.
 - **"Did Walt ever buy a canoe off anybody?"** *(needs: the Walt page already says "went north")*
   RICK: [He stops tying.] "Why would you ask that."
+  <!-- id: 31:GY-08.canoe each -->
   - **"He'd have needed a second one."** / **"Something doesn't add up."**
   RICK: "September of '19 he came out to my place in Babbitt. Asked me did I know anybody with an old fifteen-foot
   aluminium. Somebody who wouldn't remember him. Said it was for a kid at the bunkhouse who couldn't afford a boat."
@@ -608,6 +646,7 @@ Topics:
     nodded."
     - **"Who?"** — SHEILA: "I'm not going to say a name on a dock." [Then she offers page two, as above.]
 
+<!-- id: 31:GY-09.gives q each -->
 *(gives: **Sheila's report** (a book page, finished text below). Walt page: "Sheila's page two: SSE 10–15, gusts 20, the
 night he went. His canoe was on Birch's south shore." Nothing on the page says what that means. If the player answered
 "He wrote it down", Sheila knows a notebook exists; she never asks to see it and never says so to anyone.)*
@@ -654,6 +693,7 @@ on a rock eating the last of the trail mix. Probably."
 - **"Where would they be?"**
   SHEILA: "A party with sense is tucked in on the calm side of something, out of it. A party without sense is on the
   downwind shore with a canoe full of water. Look at the calm sides first."
+<!-- id: 31:GY-10.look each -->
 - **"I'll look."** / **"Not today."** [Declining costs nothing; the squad finds them that evening, and Sheila says so
   next time: "Found them. South side of an island, out of it, eating raisins. Of course."]
 
@@ -674,6 +714,7 @@ that line.)*
 
 ### GY-11 · Set piece B: the drift test (the hinge)
 
+<!-- id: 31:GY-11.ask q each -->
 **Needs:** Sheila's report. **Arrangement**, at the landing, as a topic **"Could we see it?"** or offered by her the
 next time after GY-09:
 SHEILA: "Wind's supposed to go south after dark {day}. If you wanted to see something for yourself. I can't make you,
@@ -706,6 +747,7 @@ anywhere mid-lake: north, every time; never south.
 [Nothing is said and nothing is shown. No card. The book changes quietly when the player turns away from the grounded
 hull, or at the latest when they reach the bypass.]
 
+<!-- id: 31:GY-11.gives q each -->
 *(gives: **the Walt page's line for Walt changes from "drowned" to "went north"** (bible 5.6). If Eino's wind is known
 (Tauno or Ollie): "Two canoes, both found on the shore the wind couldn't put them on." The drift test counts as a big
 finding.)*
@@ -713,19 +755,24 @@ finding.)*
 **Optional, the same night: the alders.** The player may paddle to the south shore where Walt's canoe was found. In the
 headlamp's circle, in a foot of water by the alders, a white cobble that doesn't belong on gabbro; on an alder above it,
 a cut end of rope. (Bible 5.6, item 4.)
+<!-- id: 31:GY-11.alders q each -->
 *(Walt page: "A white stone in the water at the alders, where his canoe was found. A cut rope." If Aili has given the
 sign: "His stone.")*
 
+<!-- id: 31:GY-11.back q each -->
 **Back at the bypass.** Sheila asks nothing. She takes the spare's line or, if the player left it on the Canadian
 shore, says: "Leave it. It's where it'd go." The ride back is the motor and nothing else. At the Moose Lake dock, tying
 up:
 SHEILA: "Page two."
 
+<!-- id: 31:GY-11.fetched q -->
 [Next meeting, if the spare was left: "Squad fetched the spare off the Canadian shore Monday. The Canadians were very
 polite about it."]
 
+<!-- id: 31:GY-11.permit q -->
 **Permit:** none. "You're with the squad tonight. Nobody's writing you a ticket."
 
+<!-- id: 31:GY-11.waltway q each -->
 **Walt's way (the alternative).** The player may run it alone instead: rent a second canoe from Gus, and on any
 south-wind night leave the Moose Lake dock after 23:00, no light, along the shore up the chain to the bypass and Birch,
 towing it. If they reach mid-Birch within five game hours, the book adds one line under N38: "Five hours, in the dark.
@@ -749,6 +796,7 @@ what's missing: the dot names each box by its year; there is no prompt, no list.
 of the **2020** box, under the 2020 one. (She couldn't look at it, so she buried it under the next year.)
 
 Also in the loft, each a small finding:
+<!-- id: 31:GY-12.rafter each -->
 - On the rafter by the window, cut with a knife: **W.H. 61** and, lower, **E.H. 64**. *(Walt page: "Two sets of
   initials in the Moose Lake boathouse. W.H. 61. E.H. 64." Once Eino is known: "E.H. Eino. They swamped here as
   boys.")* If asked, Marlys: "Walt's and his brother's. Don't tell Gus, he'll sand it."
@@ -759,11 +807,13 @@ Also in the loft, each a small finding:
 **The register** (a red clothbound book, *BUNKHOUSE 2019* on the spine; item, story-bound like a book page). Ordinary
 entries in Marlys's hand all year: parties, bunks 1–6, nights, "pd" and amounts in quarters. In October:
 
+<!-- id: 31:register.oct14 -->
 > *Oct 14 — W.H. — bunk 3 — Oct 14–*
 <!-- id: register.helstrom -->
 > *Oct 15 — W. HELSTROM — day use — parked* [in tidy capitals that aren't Marlys's]
 
 Inside the back cover, folded once:
+<!-- id: 31:register.message whole -->
 - **The message**, a sheet off a phone pad in Marlys's hand: *6:05 — your friend called, call back*, and a Duluth number.
 - **The 2019 clipping**, from the Ely weekly, cut out by Marlys:
 
@@ -803,10 +853,12 @@ bunkhouse until they're back in three. No card, no prompt, no hour shown beyond 
 - [If the player lit it already:] MARLYS: "He always had it there. You could see it from my kitchen."
 
 **18:05.** Up the hill the store phone rings. Marlys goes up. She comes back with nothing in her hand.
+<!-- id: 31:GY-13.phone.1 -->
 MARLYS: "Somebody wanting to know are the leeches in." [She sits.] "That Thursday it rang at five past six too. A man
 asked for Walt. I said he's down at the bunkhouse, can I take a message. He said, tell him his friend called. He said
 'his friend' twice, like I might lose the word. He gave me a number.
 
+<!-- id: 31:GY-13.phone.2 -->
 "I wrote it on the pad and I walked it down here myself. Walt opened that door with his reading glasses on. I said,
 your friend called. He looked at that paper a long time. Then he said thank you. Twice."
 - **"Who was the friend?"** — MARLYS: "I don't know. A nice voice. Older. Not from here."
@@ -820,6 +872,7 @@ with a thermos and sits on the bunkhouse step, outside the screen.
 MARLYS: "I locked up at ten. Same as tonight. Went to bed like it was any Thursday." [Pause.] "I'll sit out here a
 while. I don't sleep much anymore."
 
+<!-- id: 31:GY-13.truck q -->
 **23:40.** A pickup pulls into the lot and idles, lights off. From the bunk window the player sees its shape and the
 glow of its dash, nothing more. Marlys, on the step, can see it too. She says nothing.
 [It is nobody: in fall a deer hunter waiting on shooting light, before September a walleye man waiting on the dawn.
@@ -852,20 +905,26 @@ empty and his canoe was off the rack."
 - **"What did you do?"**
 - **[Say nothing.]**
 
+<!-- id: 31:GY-13.six.1 -->
 MARLYS: "I didn't call anybody. I should have called somebody. I put his pack and his tent in a box and put the box on
 the high shelf in the back, behind the winter stock. Where I slept last night. I don't know why." [Pause.] "I knew why.
 
+<!-- id: 31:GY-13.six.2 -->
 "Saturday morning a man came in. Nice coat. Clean boots. He asked if Walt had left anything. Nobody had said Walt was
 gone. Not to anybody. I said his sister came and took it all.
 
+<!-- id: 31:GY-13.six.3 -->
 "That's the only lie I ever told across that counter. He thanked me. Once.
 
+<!-- id: 31:GY-13.six.4 -->
 "That afternoon a party came off Birch and said there was a canoe on the south shore, full of water.
 
+<!-- id: 31:GY-13.six.5 -->
 "The sheriff said no foul play. They said, don't make it worse for the family. So I didn't. I let it lie." [She looks
 at the window, at the lot.] "I've looked at a parking lot every night for seven years. I don't even live there now,
 and I look at it.
 
+<!-- id: 31:GY-13.six.6 -->
 "Ten days they looked for him. He'd have looked for any one of us till the ice came in."
 
 [She closes the register.]
@@ -886,6 +945,7 @@ SHEILA: "We overlapped two years, Wade and me."
 - **"Wade?"** — SHEILA: "Wade Helstrom. The man in the coat. He's the one told the office 'old man, high wind'. He
   kept his boots clean then too."
 - **[Say nothing.]** — SHEILA: "He kept his boots clean then too."
+<!-- id: 31:GY-13.sheila q each -->
 *(flag `sheilaIn`. Walt page: "Marlys told Sheila. Sheila wrote it down." and "Wade told the sheriff's office it was an
 old man in a high wind." Both are facts Maggie can use. The journalist ending's county review follows (bible 7.1).)*
 
@@ -927,6 +987,7 @@ her recurring look at the lot is gone.)*
 plays exactly as written there. Marlys, behind the counter, sees him come in, sets down what she's holding and goes
 into the back. She does not come out until his truck has left. [Gus or Josie rings him up.]
 Afterwards, if the player asks Marlys anything:
+<!-- id: 31:GY-15.before each -->
 - Before GY-13: MARLYS: "I don't like that man." **"Who is he?"** — "Somebody. Buy something, I'm not in the mood."
 - After GY-13: MARLYS: "That's him. That's the one who asked."
 
@@ -936,15 +997,21 @@ Afterwards, if the player asks Marlys anything:
 
 Keeper texture, threaded through the arc. One line each, once:
 - **The bunkhouse question** (`20-opening.md` has his "We bought the place in '21.").
+<!-- id: 31:GY-16.marlys -->
 - **On Marlys:** "Marlys does Tuesdays. Don't get her started on the loft."
+<!-- id: 31:GY-16.hap -->
 - **On Hap:** "Hap's been on that bench since before I owned it. Came with the porch."
+<!-- id: 31:GY-16.tier1 -->
 - **Tier 1:** "Fella in here asking which way you went. I told him out the door and left."
+<!-- id: 31:GY-16.tow -->
 - **On the tow:** "Never ran Moose. Ran Sag. Thirty years. Ask Nate where it lands, he drives it."
+<!-- id: 31:GY-16.rings -->
 - **After GY-06 rings:** "Little Gabbro? Bald Eagle? You're a long way from my reach. Ask Farm. I'll ring them anyway."
 - **His board's home-turf tasks** (section 8).
 
 ### GY-17 · Farm's wall (the Fall Lake years)
 
+<!-- id: 31:GY-17.dot q -->
 By Farm 31's till, among the pike pictures, a framed photo: **Guides, 1981**, nine men and one woman on a dock, Walt in
 the back row, thirty-five, in a terrible hat. The dot names it "Old guide photo". No match, no task.
 - With Tauno on the porch the same morning, a topic **"Walt's in the photo inside."**
@@ -953,6 +1020,7 @@ the back row, thirty-five, in a terrible hat. The dot names it "Old guide photo"
   [If June isn't known:] "She taught at Tower. Smartest person in any room he was in."
 - Asked, the Farm keeper: "Fall Lake outfit's long gone. The photo came with the wall."
 
+<!-- id: 31:GY-17.w q -->
 *(Walt page: "Walt guided off Fall Lake in '81. A photo at Farm.")*
 
 ### GY-18 · Hog Creek's wall map (the counter years)
@@ -963,6 +1031,7 @@ isn't the printer's: a rod count at each carry, most of them the printed figure 
   KEEPER: "Walt did. Counter man here, Tuesdays to Saturdays, seven years. He paced every carry in our reach and wrote
   it on there. Said the printed ones were for people who didn't walk them." [Pause.] "I can't bring myself to paint over
   it."
+<!-- id: 31:GY-18.w q -->
 *(Walt page: "Walt's pencil on Hog Creek's wall map. Mostly the map's rods, now and then one off, sevens crossed. Same as
 his book." It teaches how to read the back cover's rods (match them to the map, allow a rod), and puts his hand on a third wall: the notebook, the 2019 letter (Maggie), the map.)*
 
@@ -998,6 +1067,7 @@ arc adds:
 - **The lunch rock, Inlet Bay**: GY-N1, read on the rock. Opening the book there shows the entry and, standing on the
   rock, the player's eye goes to the stub of the pine. Small finding: a blackened ring of fire-stones under the moss
   at the rock's back, older than any grate.
+<!-- id: 31:9.1.crib -->
 - **The Moose Lake dock, third crib**: the dot on the crib's iron says "Old bolts. New ones." No entry; Marlys's line
   (GY-02) is the story.
 - **Bunk 3**: when the player buys a later permit at Moose Lake (the bunkhouse night, `campaigns.md`), once GY-13 is
@@ -1070,6 +1140,7 @@ Nobody in this arc shifts uneasily. Marlys's tell is a place she looks; everyone
 the wrong hill, the chart and Denny; the drift test's thread also turns on any two of Liisa's cards, Danielle, the
 alders stone and Gord (bible 5.6); the informant's hard evidence also comes from Bob and the canary trap.
 
+<!-- id: 31:page q each page -->
 **Walt page lines this arc writes** (the player's words, in the order they're likely found): "Marlys knew the tent by
 the burn hole." · "Hap's day: August '86." · "Walt's rods: within a rod of the map." · "Hap: October, Little Gabbro,
 across Bald Eagle, the far end. Past Gull only Pietro. Walt never said Pietro." · "Hap told Walt to let it go, fall of

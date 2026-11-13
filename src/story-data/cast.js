@@ -81,6 +81,44 @@ export const CAST = {
     ],
   },
   // /a2
+  // a3: the guiding years' people at Moose Lake 25 (story Round 4; docs/story/31-guiding-years.md §4 "Who is where, when",
+  // §5, §6's gate for Marlys). Their `where` is read by guiding-cast.js (not cast.js's walkout or seats): 'a3:counter'
+  // (beside the counter, pricing stock), 'a3:bench' (the porch bench's far seat: Tauno's home slot keeps the near one),
+  // 'a3:rail' (the porch foot), 'a3:towdock' (the dock's end), 'a3:landing' (the dock's foot, by the squad boat),
+  // 'a3:store' (inside by the shelves). Their scenes are story-data/guiding.js's
+  marlys: {
+    name: 'Marlys Lind', first: 'Marlys', known: 'marlys.met', unknown: 'A woman pricing leeches', role: '',
+    look: { age: 'old', female: true, shirt: 0x7a5a6a, pants: 0x3e3a36, hat: null, hair: 0xc8c4be, hatChance: 0 },
+    where: [
+      // GY-13 choice 1: at the landing with Sheila, the next Thursday to Sunday, a day she never comes in
+      { id: 'statement', at: 'a3:landing', when: 'f:choice.sheila=in & !f:sheila.statement & month:5-10 & dow:thu|fri|sat|sun & hour:13-18', scene: null },
+      { id: 'counter', at: 'a3:counter', when: 'f:nb.found & (porch:done | porch:declined2) & month:5-10 & dow:tue|wed & hour:9-17', scene: 'a3:marlys' },
+    ],
+  },
+  hap: {
+    name: 'Hap Johnsrud', first: 'Hap', known: 'hap.met', unknown: 'Old man on the bench', role: '',
+    look: { age: 'old', shirt: 0x5a6a4a, pants: 0x3a3832, hat: 0x6a5a3a, hair: 0xd0ccc4, hatChance: 0.6 },
+    where: [{ id: 'bench', at: 'a3:bench', when: 'date:06-08..09-07 & dow:sat|sun & hour:10-15', scene: 'a3:hap' }],
+  },
+  nate: {
+    name: 'Nate Johnsrud', first: 'Nate', known: 'nate.met', unknown: 'A young man with truck keys', role: '',
+    look: { age: 'young', shirt: 0x3a5a7a, pants: 0x34343a, hat: 0x2a3a4a, hair: 0x5a4030, hatChance: 0.8 },
+    where: [
+      { id: 'rail', at: 'a3:rail', when: 'date:06-08..09-07 & dow:sat|sun & hour:10-15', scene: 'a3:nate' },
+      { id: 'tow', at: 'a3:towdock', when: 'month:5-9 & dow:mon|tue|wed|thu|fri & hour:8-17', scene: 'a3:nate' },
+    ],
+  },
+  sheila: {
+    name: 'Sheila Novak', first: 'Sheila', known: 'sheila.met', unknown: 'A woman coiling a throw line', role: '',
+    look: { age: 'mid', female: true, shirt: 0xa83a2a, pants: 0x2e3238, hat: 0x2a2a2e, hair: 0x7a6a5a, hatChance: 0.4 },
+    where: [{ id: 'landing', at: 'a3:landing', when: 'month:7-10 & dow:thu|fri|sat|sun & hour:13-18', scene: 'a3:sheila' }],
+  },
+  rick: {
+    name: 'Rick Pasanen', first: 'Rick', known: 'rick.met', unknown: 'A guide buying leeches', role: '',
+    look: { age: 'mid', shirt: 0x6a7a4a, pants: 0x3a3a34, hat: 0x8a6a3a, hair: 0x6a5a4a, hatChance: 1 },
+    where: [{ id: 'store', at: 'a3:store', when: 'date:05-15..09-15 & (hour:5-7 | hour:18-21)', scene: 'a3:rick' }],
+  },
+  // /a3
 };
 // n: begin — the endings (story Round 3, stream n; 50 §9.1 "the last Thursday", §12.1): in the journalist ending, after the
 // last Thursday the launch never comes to Farm again and Len eats alone

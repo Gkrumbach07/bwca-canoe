@@ -184,7 +184,8 @@ let dialCss = false;
 // join, 2026-10-24)
 let dialUp = null;
 if (typeof window !== 'undefined') window.addEventListener('keydown', (e) => { if (dialUp && dialUp.isOpen) dialUp.onKey(e); }, true);
-class RestDial {
+// a3: exported (with stopsAt) for the guiding years' bunk-3 night, guiding-cast.js
+export class RestDial {
   constructor() {
     if (!dialCss && typeof document !== 'undefined') { dialCss = true; const s = document.createElement('style'); s.id = 'rest-dial-css'; s.textContent = DIAL_CSS; document.head.appendChild(s); }
     dialUp = this;
@@ -216,8 +217,9 @@ class RestDial {
   // opts: [{ label, small, at (the hour) }]; at: the hour chosen to begin with; words(at) → the line under
   // co-op (coop-night.js): keep, the dial stays up on E (E ticks, the night begins when everyone has); onSet(at), the
   // hour turned by this player (put(at) turns it from the wire without calling it back)
-  show({ kicker, opts, at, words, onPick, onClose = null, keep = false, onSet = null }) {
+  show({ kicker, opts, at, words, onPick, onClose = null, keep = false, onSet = null, stopsAt = null }) {
     this.opts = opts; this.onPick = onPick; this.onClose = onClose; this.words = words; this.keep = keep; this.onSet = null;
+    this.stopsAt = stopsAt; // a3: { now, hours: [h] }: the rest stops at the first of these after now (GY-13, Marlys's hours)
     this.kick.textContent = kicker || 'Rest';
     this.row.innerHTML = opts.map((o, k) => `<button type="button" class="opt" role="radio" data-i="${k}"><b>${esc(o.label)}</b><span>${esc(o.small)}</span></button>`).join('');
     this.isOpen = true;
@@ -235,7 +237,16 @@ class RestDial {
     this.sub.textContent = this.words ? this.words(at) : '';
     if (this.onSet) this.onSet(at);
   }
-  confirm() { if (!this.isOpen) return; const at = this.at, f = this.onPick; if (!this.keep) this.hide(); if (f) f(at); }
+  confirm() { if (!this.isOpen) return; const at = this.stopAt(this.at), f = this.onPick; if (!this.keep) this.hide(); if (f) f(at); }
+  // a3: begin. RestDial.stopsAt (campaign-design §5.3): the rest goes only as far as the first stop between now and the
+  // hour chosen (bunk 3's night stops at each of Marlys's hours and at nothing else); without stopsAt, the hour chosen
+  stopAt(at) {
+    const S = this.stopsAt; if (!S || !Array.isArray(S.hours) || !S.hours.length || !Number.isFinite(S.now)) return at;
+    const ahead = (h) => (((h - S.now) % 24) + 24) % 24, want = ahead(at) || 24;
+    const first = S.hours.filter((h) => ahead(h) > 0.01).sort((a, b) => ahead(a) - ahead(b))[0];
+    return first != null && ahead(first) <= want + 1e-6 ? first : at;
+  }
+  // a3: end
   close() { if (!this.isOpen) return; const f = this.onClose; this.hide(); if (f) f(); }
   hide() { this.isOpen = false; this.el.classList.remove('show'); }
 }
@@ -1233,4 +1244,4 @@ function nightLine(fc, season, fly = true) {
   if (cold) return fly ? 'A clear, cold night. Frost on the fly at dawn.' : 'A clear, cold night, the stars through the mesh. Dew on everything at dawn.';
   return fly ? 'A clear night, the stars down to the treeline. Loons out on the lake.' : 'A clear night, the stars through the mesh. Loons out on the lake.';
 }
-export { RestDial }; // r: the canoe's Rest dial, tied off (run.js)
+// (r: RestDial is exported at its class: a3 and r both use it; join 1 kept the one export)

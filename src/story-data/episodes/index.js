@@ -10,5 +10,6 @@ import S3 from './s3-lights.js';
 import S4 from './s4-wolves.js';
 const SIDE7A = [S2, S3, S4];
 // 7a: end
+import guiding from './arc-guiding.js'; // a3: the guiding years' arc (Round 4)
 
-export const EPISODES = [S7, S9, mining, ...SIDE7A]; // (7a: ...SIDE7A)
+export const EPISODES = [S7, S9, mining, guiding, ...SIDE7A]; // (a3: guiding; 7a: ...SIDE7A)
