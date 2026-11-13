@@ -229,13 +229,16 @@ shown.
 Finishing one of her two board notices (6.13). Carrying the tent in. Accepting the coffee and the bars (declining
 them three times in a row reads as unfriendly and costs a visit's worth; she says nothing about it).
 
+<!-- id: 33:5.wash q also -->
 **What sets her back** (each one closes her for the rest of that day: "I have to get the wash in."):
+<!-- id: 33:5.twice q each also -->
 - Asking "Is he alive?" a **second** time in a season. The first time she answers narrowly. The second: "That's
   twice." The third time in any season drops her a step for three game days.
 - Telling her where the player is going next. "Don't tell me where you're going. I don't want to know where." (She
   is not part of the canary trap.)
 - Offering to show her the notebook. "Don't. If I don't see it, I don't know it."
 - Repeating Gord's story about the American to her. "Gord talks. Thursdays he talks. I don't."
+<!-- id: 33:5.canada q also -->
 - Bringing up Canada in any form: "There's nothing up there but Canadians."
 - Saying Walt's name in the store when someone else is at the counter. She pours their coffee and doesn't look at
   the player again until the other person leaves.
@@ -286,6 +289,7 @@ Day-beat lines elsewhere (rumours and scheduled parties; one per day at most, fr
 **Variant A, before night one** (only possible if the player's home is Little Vermilion, since the box sat on a back
 shelf next door). She sees the pack on their back.
 - AILI: "That pack. Where'd you get that?"
+<!-- id: 33:6.2.A q each also -->
 - ▸ "The back room next door." → AILI: "Hm." *[She looks at the patch. She looks away.]* "Leeches are in the tank.
   Crawlers in the cooler. Coffee's a dollar, nobody pays it."
   *Gives:* nothing. After night one, Variant B plays on the next visit with one line added before the opener:
@@ -322,6 +326,7 @@ bible 6.2). If carried, the tent counts for step 1 ("Sit"), so on the next visit
 does.
 
 **Variant C, after night one, without the bundle.** She doesn't know them.
+<!-- id: 33:6.2.C q each also -->
 - AILI: "Leeches or crawlers?" → ▸ "I'm asking about Walt Haapala." → AILI: *[She looks at the parking lot first.]*
   "Who sent you in here?" → ▸ "An old man in Ely." / "Nobody." → AILI: "Mm. They found his canoe. That's what there
   is. Leeches or crawlers?"
@@ -332,6 +337,7 @@ does.
 **When.** Step 1. These topics open one a day, in this order, and stay open.
 
 **Opener** (rotates; she says one):
+<!-- list: 33:6.3.open -->
 - "Back again. Wind's been in the south all week. You'll have had a time on Sand Point."
 - "Sit. Not that stool, it wobbles. Pekka was going to fix it in 2009."
 - "You look tired. Eat something before you go back out."
@@ -513,6 +519,7 @@ If the chase is never shaken, the grey boat peels off at dusk toward Crane and t
 No fail. Everything after is the same, except one line.
 
 **The denial.** *When:* the next time the player meets Jon after the chase.
+<!-- id: 33:6.7.shook q each also -->
 - ▸ **"That was you on Sand Point."** → JON: "I was on Crane all day with two guys from Des Moines." *[He doesn't look
   up.]* "And {site} has no shade. You'll have cooked." *(tell: the player never told him where they camped. If they
   shook him, the template is instead: "That island you sat behind is all rock. Must've been boring.")*
@@ -567,6 +574,7 @@ radio.*); the 2020 car (texture for Maggie: the family was watched). Jon's prote
 trap honestly (bible 5.7): ▸ "Where are you headed next?" → JON: "{lake}. Go early. It blows up there after two."
 Nothing comes back from him.
 
+<!-- id: 33:6.8.never q each also -->
 **Never.** Jon never mentions the ranger, the aluminium canoe, Canada, or any town. Asked "Did anyone ever find
 anything on the Canadian side?": JON: "People find all kinds of things over there. It's a big country."
 
@@ -631,6 +639,7 @@ freezer. A shelf. She reaches behind the boots and takes down a red coffee can w
 `[Liisa goes. The player has the can. The book's camera can photograph each envelope. The Walt page records what the
 player reads, in their words:]`
 
+<!-- id: 33:6.9.postmarks -->
 | Card | Postmark |
 |---|---|
 | 1 | Atikokan, Ont., Dec 2020 |
@@ -663,6 +672,7 @@ it's day, and she looks up at it anyway.]`
 The player has two choices and no third (bible 6.4). If the player says nothing for about ten real seconds, the scene
 takes the second branch without its spoken line: the player simply holds out the can, and she says "Thank you."
 
+<!-- id: 33:6.10.c.know q also -->
 **▸ "I know."**
 - `[A long silence. The sound of the motor, getting farther away.]`
 - AILI: "You don't know anything." *[She takes the can and puts it back behind the boots and straightens it.]*
@@ -677,6 +687,7 @@ takes the second branch without its spoken line: the player simply holds out the
   showing you anything. I was showing you cards."
   *The Walt page:* *I told Aili I knew. She said I didn't know anything.*
 
+<!-- id: 33:6.10.c.thanks q also -->
 **▸ "Liisa thought you'd want them in the house."**
 - `[The player holds out the can. A pause. She looks at the player for a long time, and the player understands that
   she understands exactly what they are doing.]`
