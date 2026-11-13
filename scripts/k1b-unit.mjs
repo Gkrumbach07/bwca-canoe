@@ -34,6 +34,7 @@ const fakeStory = () => { const got = []; return { got, mode: 'full', emit(evt, 
 // --- 1 the flag ------------------------------------------------------------------------------------------------------
 result('flag: on by default, production and dev alike (owner 2026-11-13)', storyOn('') === true && storyOn('?story=1') === true && storyOn('?x=1') === true);
 result('flag: off with ?story=0', storyOn('?story=0') === false && storyOn('?x=1&story=0') === false);
+result('flag: a dev server set off by default (VITE_STORY_DEFAULT=0): on only with ?story=1', storyOn('', false) === false && storyOn('?story=1', false) === true && storyOn('?story=0', false) === false);
 result('flag: off in Node (no Vite env)', STORY_ON === false);
 
 // --- 2 the feed over the trip and outfitter adapters --------------------------------------------------------------------
