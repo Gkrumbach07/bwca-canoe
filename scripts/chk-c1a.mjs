@@ -122,7 +122,9 @@ async function talkE(page, key) {
   if (other) await endTalk(page); // (the dot was on someone else: a visitor stood between)
   await page.evaluate((k) => window.__t.talkTo(k), key);
   for (let k = 0; k < 25; k++) { if (await page.evaluate(() => { window.__L.step(2); return !!window.__t.convo(); })) return { ok: true, via: other ? `api (E found ${other} in the way)` : 'api (E did not open it)' }; await page.waitForTimeout(100); }
-  return { ok: false, via: 'neither E nor the API opened it' };
+  // (why it would not stay open: dialogue.update closes a talk under a paper or a big card, off foot, or teleporting)
+  const why = await page.evaluate((k) => { const g = window.__game, h = g.hud, p = g.player, d = g.npcs.dialogue; let opened = null; try { opened = window.__t.talkTo(k); } catch (e) { opened = String(e).slice(0, 120); } const now = !!d.convo; window.__L.step(1); return { opened, now, after: !!d.convo, paper: !!(h && h.paper), big: h && h.big ? String(h.big.id || h.big.kind || h.big.className || h.big).slice(0, 80) : null, onFoot: p.onFoot, mode: p.mode, tp: !!p.teleporting }; }, key);
+  return { ok: false, via: 'neither E nor the API opened it', why };
 }
 // the store's keeper, once the roster has settled (E on them)
 async function keeperE(page, ep) {
