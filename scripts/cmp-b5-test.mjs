@@ -163,7 +163,7 @@ try {
     result('5a 11 August: the fixed party at C1210 (parties.campsAt) and the three of them at the fire', Array.isArray(st.fixed) && st.fixed.some((q) => q.fixed === 'boys') && ['bob', 'frank', 'denny'].every((w) => at.some((q) => q.who === w)), st);
     await shot('b5-camp');
     // something shared from your pack: the rig hands you a chocolate bar if the season's food has none
-    await page.evaluate(() => { const g = window.__game; if (!window.__b5.C().food()) { try { g.inventory.place('chocolate', 1, {}); } catch { /* */ } } });
+    await page.evaluate(() => { const g = window.__game; if (!window.__b5.C().food()) { try { const r = typeof g.inventory.toHandNew === 'function' ? g.inventory.toHandNew('snack:chocolate') : null; if (!(r && r.ok)) g.inventory.place('snack:chocolate', 1, {}); } catch { /* */ } } });
     const t1 = await page.evaluate(() => window.__b5.talk(() => window.__b5.C().debug.camp()));
     log('talk', JSON.stringify(t1));
     const said = await hear(4);
@@ -173,7 +173,7 @@ try {
     result('5b "Look what the wind brought." → the round shared, the flare (the nicknames)', r.ok && f['boys.visited'] && f['boys.round'] && f['boys.nicknames'], { said: said.slice(0, 3), r: r.ok ? 'ok' : r, f });
   });
   await step('6 the bet', async () => {
-    await page.evaluate(() => { const B = window.__b5, L = window.__L; B.at(B.doy(8, 12), 17.1); { const S = B.C().site(); L.standAt(S.x + 4, S.z + 4); } B.tick(4); B.talk(() => window.__b5.C().debug.camp()); });
+    await page.evaluate(() => { const B = window.__b5, L = window.__L; B.at(B.doy(8, 12), 17.1); B.tick(2); if (window.__game.story.has('boys.bet.moved')) B.at(B.doy(8, 13), 17.1); { const S = B.C().site(); L.standAt(S.x + 4, S.z + 4); } B.tick(4); B.talk(() => window.__b5.C().debug.camp()); });
     const said = await hear(6);
     await page.evaluate(() => window.__b5.endTalk());
     await page.evaluate(async () => { const L = window.__L; for (let k = 0; k < 10; k++) { L.step(5); await L.wait(60); } window.__b5.tick(4); });
