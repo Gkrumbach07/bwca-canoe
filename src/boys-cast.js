@@ -204,7 +204,12 @@ class BoysCast {
 
   // --- the camp at C1210, 9–14 August (32 §5.9.1–§5.9.8) ----------------------------------------------------------------------
   campOn() { const t = this.date(); return t.m === 8 && t.d >= TRIP.camp.days[0] && t.d <= TRIP.camp.days[1] && !(t.d === TRIP.camp.days[0] && t.h < TRIP.camp.land); }
-  site() { const pl = this.c.layer && this.c.layer.place ? this.c.layer.place('boys.c1210') : null; return { x: TRIP.camp.site[0], z: TRIP.camp.site[1], landing: pl && Number.isFinite(pl.x) ? { x: pl.x, z: pl.z } : { x: TRIP.camp.landing[0], z: TRIP.camp.landing[1] } }; }
+  // the site in the release the game runs: the campsite nearest the doc's C1210 (the one parties.js's fixed party holds)
+  site() {
+    if (!this.siteAt) { const w = this.c.world, [x0, z0] = TRIP.camp.site; let best = null; for (const c of (w && w.campsites) || []) { const d = Math.hypot(c.x - x0, c.z - z0); if (d < 400 && (!best || d < best.d)) best = { x: c.x, z: c.z, d }; } this.siteAt = best ? { x: best.x, z: best.z } : { x: x0, z: z0 }; }
+    const pl = this.c.layer && this.c.layer.place ? this.c.layer.place('boys.c1210') : null;
+    return { x: this.siteAt.x, z: this.siteAt.z, landing: pl && Number.isFinite(pl.x) ? { x: pl.x, z: pl.z } : { x: TRIP.camp.landing[0], z: TRIP.camp.landing[1] } };
+  }
   campTick(p, step) {
     const S = this.site(), d = Math.hypot(S.x - p.x, S.z - p.z), s = this.story, t = this.date();
     if (!this.campOn() || d > CAMP_R + 60) { if (this.camp && !this.talkingToField(this.camp)) this.dropCamp(); this.endBet(true); return; }
