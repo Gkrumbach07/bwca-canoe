@@ -84,6 +84,7 @@ Rescue squad, 38 years. Squad record on the Stuart: 49 minutes, canoe and pack, 
 He'll be at the road with his watch.
 ```
 
+<!-- id: side.last q each -->
 When a side story ends, its page gets one last line in the same hand ("Ollie's back in June." / "The sled went to the
 yard in town." / "Kari left. She got most of it.").
 
@@ -145,6 +146,7 @@ Each is taught once, at the moment of need, by a person or by the world. Nothing
   walk ends after dark, and a day permit out after dark is a ranger's fine. An overnight permit with a night on the
   Stuart River avoids it.
 - **Person:** Ollie Pekkala, 79.
+<!-- id: S1.first whole -->
 - **First stamped:** *Beat the squad on the Stuart* (or *Carried the Stuart for Ollie*).
 
 ### The hook
@@ -199,6 +201,7 @@ brother", "the Haapala boy". He says "upwind" once.
 - **Rumour:** 70 6.1 ("Fella on the Stuart Portage at dusk…"); Leon at Moose River North (70 8.6, once the player has
   started S1, or asked about the Stuart); Tauno ("Ollie Pekkala. Drag line, nine days in…", 30); Sheila (31 GY-09b).
   Any of these rings the Stuart Portage if it isn't on a sheet the player owns.
+<!-- id: S1.leon q -->
 - **The board:** a Portage survey task for the Stuart Portage (an existing kind) at Moose River North puts players on
   the trail. Leon, handing it over in a walk-evening week: "If you're on it after supper, you'll meet Ollie. Say
   'evening' back. That's the whole conversation, the first couple of times."
@@ -314,6 +317,7 @@ OLLIE: "Ask me, then. I said I would."
 Close: OLLIE: "Evening." *[He walks back toward the road.]*
 
 **C. Later walk evenings** *(after B; one second line, rotating, after "Evening.")*
+<!-- list: S1.C -->
 - "Mud's down a foot in the middle."
 - "You're early."
 - "Bear on the hill Tuesday. Small. Minding its business."
@@ -358,6 +362,7 @@ story they have half-heard, and the log page gains its Walt-page line then.
 
 ### The window and how it ends without you
 
+<!-- id: S1.end q each -->
 He stops walking after the last Thursday of September, "when the leaves are down", and is back the first Tuesday of
 June. Nothing is lost: a player who never did the carry can do it next summer. The page's last line: *"Ollie's back in
 June."*
@@ -1713,8 +1718,10 @@ same Grumman (a scheduled party, 3–9 August, at a site near the lunch rock). T
 
 ### How it starts
 
+<!-- id: S8.tom q -->
 - **Tom** *(the ranger party, met on Lake One or Insula, or at the Moose Lake store)*: "You going to Insula? Look at
   the sled on the lunch rock before my crew gets to it. Tell me if it's history. I honestly can't."
+<!-- id: S8.rumour q each -->
 - **Rumour:** 70 6.1 ("Tom Becker's crew is going to haul that old sled off the lunch rock on Insula. People have
   opinions."). Gus: "There's a sled on a rock on Insula. Half the town wants it gone and the other half eats lunch next
   to it."
@@ -1815,6 +1822,7 @@ TOM: "Okay. How old?"
 
 - **The eye for old clearings** (lock 5 key B; 50 3.1).
 - Tom's friendship; the sled's fate; his line in the journalist ending.
+<!-- id: S8.first whole -->
 - **First stamped:** *Found Emil's clearing.*
 
 ### Red herrings
@@ -1831,6 +1839,7 @@ old brothers, and a clearing nobody else will ever find.
 
 ### The window and how it ends without you
 
+<!-- id: S8.end q -->
 The third week of September Tom's crew hauls the sled out. Tom, after: "It's in the yard in town. If you ever find out
 how old it was, tell me. I'll feel bad on schedule." The clearing stays; Tom's teaching line stays available any
 season, so lock 5 key B survives the window.
