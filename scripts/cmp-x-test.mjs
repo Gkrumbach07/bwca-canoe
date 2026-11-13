@@ -96,8 +96,8 @@ try {
       const g = window.__game, s = g.story, m0 = g.profile.s.money, on = !!g.trip.active;
       s.action('pay', '25@d95.S7.pay', { rule: 'x.rig' });
       window.__L.step(2);
-      const text = document.body.innerText || '';
-      return { on, paid: g.profile.s.money - m0, note: /Lilacs for Rose.s calendar/.test(text), due: ((s.doc.dir && s.doc.dir.pay) || []).filter((p) => !p.paid).length };
+      const box = g.hud && g.hud.el && g.hud.el.lines, text = box ? box.textContent || '' : '', L = (s.doc.dir && s.doc.dir.pay) || [];
+      return { on, paid: g.profile.s.money - m0, note: /Lilacs for Rose.s calendar/.test(text), lines: text.slice(0, 300), payText: L.length ? L[L.length - 1].text : null, showLines: g.hud && g.hud.settings ? g.hud.settings.showLines : null, due: L.filter((p) => !p.paid).length };
     });
     result('3 story pay with no trip on: paid at once (+$25), its line shown as a note ("Lilacs for Rose\'s calendar")', !r.on && r.paid === 25 && r.note && r.due === 0, r);
   }
