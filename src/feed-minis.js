@@ -346,8 +346,9 @@ export async function connect(t) {
   async function giveFavour(id, n) {
     const kind = FAVOURS[n - 1];
     let tk = null;
-    // (the board's bands: local, medium, far; Lake One's landing first, then the counter he is at, near then a day out)
-    for (const [ep, band] of [[FAVOUR_EP, 'local'], [tom ? tom.ep : 25, 'local'], [FAVOUR_EP, 'medium'], [tom ? tom.ep : 25, 'medium']]) {
+    // (the board's bands: local, medium, far; Lake One's landing first, then the counter he is at, near first)
+    const here = tom ? tom.ep : 25;
+    for (const [ep, band] of [[FAVOUR_EP, 'local'], [here, 'local'], [FAVOUR_EP, 'medium'], [here, 'medium'], [FAVOUR_EP, 'far'], [here, 'far']]) {
       if (tk || !tasks || typeof tasks.makeKind !== 'function') break;
       try { tk = await tasks.makeKind(kind, ep, band); } catch (e) { console.warn('7c: a favour', kind, ep, band, e); tk = null; }
     }
