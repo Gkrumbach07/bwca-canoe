@@ -380,9 +380,154 @@ function sandShape() {
 }
 // /e
 
+// a3: Round 4 stream A3's kits (docs/story/31-guiding-years.md GY-04, GY-07, GY-12, GY-13, §9.1, §13 "Story props"): the
+// tow landing at Prairie's Sucker end, the lunch rock's old fire ring and pine stub, and at Moose Lake 25 the bunkhouse
+// (six bunks, bunk 3 under the window, the step, the stuck screen door, the battery lamp on the sill) and the boathouse
+// (the loft over its back half: the ladder on the left inside the door, the banker's boxes 1998–2020, the rafter by the
+// window, Marlys's red canoe across the rafters, the crew snapshot, the coffee can of bolts). The two buildings return
+// their `spots` in their own frame (front, the door's side, toward -z; x across; y up from the floor) for guiding-cast.js.
+const COL_G = { plank: C(0x8a7356), plankOld: C(0x6e6050), post: C(0x5a4a3a), moss: C(0x5f6e3c), stub: C(0x9a958c),
+  siding: C(0x7d5a3c), trim: C(0xd9cdb0), roof: C(0x4b4f55), floor: C(0x9a7a56), frame: C(0x5a4636), mattress: C(0x9aa08a),
+  stove: C(0x2a2a2a), glass: C(0x86a0a8), screen: C(0x4a4a46), lamp: C(0xd8b84a), box: C(0xc9b48a), boxLid: C(0xb8a37a),
+  red: C(0xa8322a), rafter: C(0x6a5440), photo: C(0xe8e0cc), can: C(0x8a8a86), shingle: C(0x5a4f48) };
+function towDock({ rng }) {
+  const b = new PropBuilder(), L = 3.2, W = 0.9;
+  for (const [x, z] of [[-W, -L], [W, -L], [-W, 0], [W, 0]]) b.cyl(V(x, -0.9, z), V(x, 0.42, z), 0.07, 0.07, 6, TILE.WOOD, COL_G.post);
+  for (let z = -L; z <= 0.01; z += 0.32) b.box(V(0, 0.4, z), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), W + 0.12, 0.025, 0.14, TILE.WOOD, rng() < 0.3 ? COL_G.plankOld : COL_G.plank);
+  return { geo: b.build(), dots: [{ y: 0.5, r: 1.6 }] };
+}
+function oldFireRing({ rng }) {
+  const b = new PropBuilder(), R = 0.45;
+  for (let k = 0; k < 9; k++) { const a = (k / 9) * Math.PI * 2, s = 0.1 + rng() * 0.05; chunkStone(b, new THREE.Matrix4().compose(V(Math.cos(a) * R, -0.02, Math.sin(a) * R), new THREE.Quaternion(), V(s, s * 0.5, s)), rng, rng() < 0.5 ? COL_G.moss : COL.rock); }
+  return { geo: b.build(), dots: [{ y: 0.05, r: 0.7 }] };
+}
+function pineStub({ rng }) {
+  const b = new PropBuilder(), h = 1.6 + rng() * 0.5;
+  b.cyl(V(0, -0.1, 0), V(0.05, h, 0.03), 0.36, 0.24, 9, TILE.BARK, COL_G.stub, { cap1: true, capTile: TILE.SPLIT, capCol: COL.cutOld, jitter: 0.04, rng });
+  b.cyl(V(0.05, h, 0.03), V(0.12, h + 0.5, -0.05), 0.12, 0.02, 5, TILE.SPLIT, COL_G.stub); // (the snapped top's splinter)
+  return { geo: b.build(), dots: [{ y: 1, r: 0.6 }] };
+}
+// the walls of a box building with gaps (front −z: `door` [x0, x1, y1], `win` [x0, x1, y0, y1]); half sizes hx, hz, eave h
+function walls(b, hx, hz, h, col, { door = null, win = [], sideWin = [] } = {}) {
+  const t = 0.05;
+  // front, in pieces round the door and the windows (columns between gaps)
+  const cuts = [...(door ? [[door[0], door[1], 0, door[2]]] : []), ...win].sort((p, q) => p[0] - q[0]);
+  let x = -hx;
+  for (const [x0, x1, y0, y1] of cuts) {
+    if (x0 > x) b.box(V((x + x0) / 2, h / 2, -hz), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), (x0 - x) / 2, h / 2, t, TILE.WOOD, col);
+    if (y0 > 0) b.box(V((x0 + x1) / 2, y0 / 2, -hz), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), (x1 - x0) / 2, y0 / 2, t, TILE.WOOD, col);
+    if (y1 < h) b.box(V((x0 + x1) / 2, (y1 + h) / 2, -hz), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), (x1 - x0) / 2, (h - y1) / 2, t, TILE.WOOD, col);
+    if (y0 > 0) b.box(V((x0 + x1) / 2, y0, -hz + 0.02), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), (x1 - x0) / 2 + 0.05, 0.03, 0.12, TILE.WOOD, COL_G.trim); // (a sill)
+    x = x1;
+  }
+  if (x < hx) b.box(V((x + hx) / 2, h / 2, -hz), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), (hx - x) / 2, h / 2, t, TILE.WOOD, col);
+  b.box(V(0, h / 2, hz), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), hx, h / 2, t, TILE.WOOD, col);
+  for (const s of [-1, 1]) {
+    const w = sideWin.find((q) => q.s === s);
+    if (!w) { b.box(V(s * hx, h / 2, 0), V(0, 0, 1), V(0, 1, 0), V(1, 0, 0), hz, h / 2, t, TILE.WOOD, col); continue; }
+    b.box(V(s * hx, w.y0 / 2, 0), V(0, 0, 1), V(0, 1, 0), V(1, 0, 0), hz, w.y0 / 2, t, TILE.WOOD, col);
+    b.box(V(s * hx, (w.y1 + h) / 2, 0), V(0, 0, 1), V(0, 1, 0), V(1, 0, 0), hz, (h - w.y1) / 2, t, TILE.WOOD, col);
+    b.box(V(s * hx, (w.y0 + w.y1) / 2, (w.z0 - hz) / 2), V(0, 0, 1), V(0, 1, 0), V(1, 0, 0), (w.z0 + hz) / 2, (w.y1 - w.y0) / 2, t, TILE.WOOD, col);
+    b.box(V(s * hx, (w.y0 + w.y1) / 2, (w.z1 + hz) / 2), V(0, 0, 1), V(0, 1, 0), V(1, 0, 0), (hz - w.z1) / 2, (w.y1 - w.y0) / 2, t, TILE.WOOD, col);
+    b.box(V(s * hx, (w.y0 + w.y1) / 2, (w.z0 + w.z1) / 2), V(0, 0, 1), V(0, 1, 0), V(1, 0, 0), (w.z1 - w.z0) / 2, (w.y1 - w.y0) / 2, 0.01, TILE.GLASS, COL_G.glass);
+  }
+}
+function gable(b, hx, hz, h, rise, col, over = 0.3) {
+  const e = hz + over;
+  for (const s of [-1, 1]) b.quad(V(-hx - over, h, s * e), V(hx + over, h, s * e), V(hx + over, h + rise, 0), V(-hx - over, h + rise, 0), TILE.ROOF, col);
+  for (const sx of [-1, 1]) b.face([V(sx * hx, h, -hz), V(sx * hx, h, hz), V(sx * hx, h + rise * (hz / e), 0)], TILE.WOOD, COL_G.siding);
+}
+function bunk(b, cx, cz, y, along = 'x') {
+  const X = along === 'x' ? V(1, 0, 0) : V(0, 0, 1), Z = along === 'x' ? V(0, 0, 1) : V(1, 0, 0), o = V(cx, y, cz);
+  b.box(o, X, V(0, 1, 0), Z, 0.98, 0.05, 0.42, TILE.WOOD, COL_G.frame);
+  b.box(o.clone().add(V(0, 0.09, 0)), X, V(0, 1, 0), Z, 0.94, 0.06, 0.38, TILE.CANVAS, COL_G.mattress);
+  if (y < 0.6) for (const sx of [-1, 1]) for (const sz of [-1, 1]) { const p = o.clone().addScaledVector(X, sx * 0.94).addScaledVector(Z, sz * 0.38); b.cyl(V(p.x, 0, p.z), V(p.x, y, p.z), 0.035, 0.035, 4, TILE.WOOD, COL_G.frame); }
+}
+// the bunkhouse: 6 × 4 m, the door and bunk 3's window in the front (toward the lot), bunk 4 across, 1 and 2 at the back
+// with 5 and 6 over them, the stove at the back between; the step outside the door
+function bunkhouse() {
+  const b = new PropBuilder(), hx = 3, hz = 2, h = 2.3;
+  b.box(V(0, 0.05, 0), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), hx, 0.05, hz, TILE.WOOD, COL_G.floor);
+  walls(b, hx, hz, h, COL_G.siding, { door: [-0.45, 0.45, 2.0], win: [[-2.2, -1.0, 1.05, 1.75]] });
+  gable(b, hx, hz, h, 1.0, COL_G.roof);
+  bunk(b, -1.75, -1.4, 0.45); bunk(b, 1.75, -1.4, 0.45); bunk(b, -1.75, 1.45, 0.45); bunk(b, 1.75, 1.45, 0.45);
+  bunk(b, -1.75, 1.45, 1.45); bunk(b, 1.75, 1.45, 1.45);
+  b.box(V(0, 0.4, 1.6), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), 0.35, 0.4, 0.3, TILE.METAL, COL_G.stove);
+  b.cyl(V(0, 0.8, 1.6), V(0, h + 1.2, 1.6), 0.07, 0.07, 6, TILE.METAL, COL_G.stove);
+  b.box(V(0, 0.08, -hz - 0.45), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), 0.6, 0.08, 0.3, TILE.WOOD, COL_G.plankOld); // the step
+  const spots = {
+    bunk3: { x: -1.75, y: 0.62, z: -1.4, face: Math.PI }, bunk4: { x: 1.75, y: 0.62, z: -1.4 }, step: { x: 0, y: 0.2, z: -hz - 0.45 },
+    door: { x: 0, y: 0, z: -hz }, lamp: { x: -1.6, y: 1.1, z: -hz + 0.1 }, window: { x: -1.6, y: 1.4, z: -hz }, inside: { x: 0, y: 0, z: 0 },
+  };
+  return { geo: b.build(), dots: [], spots };
+}
+// the screen door, hinged at x = −0.45 of the doorway (its own mesh: it sticks, then bangs at 02:00)
+function bunkDoor() {
+  const b = new PropBuilder();
+  for (const x of [0.02, 0.88]) b.box(V(x, 1.0, 0), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), 0.03, 1.0, 0.025, TILE.WOOD, COL_G.trim);
+  for (const y of [0.04, 1.0, 1.96]) b.box(V(0.45, y, 0), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), 0.44, 0.04, 0.025, TILE.WOOD, COL_G.trim);
+  b.box(V(0.45, 1.0, 0), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), 0.42, 0.94, 0.005, TILE.PLAIN, COL_G.screen);
+  return { geo: b.build(), dots: [] };
+}
+function bunkLamp() {
+  const b = new PropBuilder();
+  b.cyl(V(0, 0, 0), V(0, 0.16, 0), 0.06, 0.05, 8, TILE.METAL, COL_G.stove, { cap1: true });
+  b.cyl(V(0, 0.16, 0), V(0, 0.24, 0), 0.045, 0.045, 8, TILE.GLASS, COL_G.lamp, { cap1: true, capTile: TILE.METAL, capCol: COL_G.stove });
+  return { geo: b.build(), dots: [{ y: 0.12, r: 0.25 }] };
+}
+// the boathouse: 7 × 5 m, the door in the front (−z, from the yard), the water side open over the slip; the loft over the
+// back half at 2.3 m, the ladder on the left inside the door, the window over the dock in the left wall
+export const LOFT_YEARS = Array.from({ length: 23 }, (_, k) => 1998 + k);
+function boathouse({ rng }) {
+  const b = new PropBuilder(), hx = 3.5, hz = 2.5, h = 3.4, loftY = 2.3;
+  b.box(V(0, 0.05, -hz / 2), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), hx, 0.05, hz / 2, TILE.WOOD, COL_G.floor);
+  // front wall with the door; the back (water side) only a beam; the sides with the window on the left (−x)
+  const t = 0.05;
+  for (const [x0, x1] of [[-hx, -0.7], [0.7, hx]]) b.box(V((x0 + x1) / 2, h / 2, -hz), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), (x1 - x0) / 2, h / 2, t, TILE.WOOD, COL_G.siding);
+  b.box(V(0, (2.1 + h) / 2, -hz), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), 0.7, (h - 2.1) / 2, t, TILE.WOOD, COL_G.siding);
+  b.box(V(0, h - 0.2, hz), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), hx, 0.2, 0.08, TILE.WOOD, COL_G.rafter);
+  for (const s of [-1, 1]) {
+    if (s < 0) { // the window over the dock, in the loft
+      b.box(V(-hx, 1.4, 0), V(0, 0, 1), V(0, 1, 0), V(1, 0, 0), hz, 1.4, t, TILE.WOOD, COL_G.siding);
+      b.box(V(-hx, (3.3 + h) / 2, 0), V(0, 0, 1), V(0, 1, 0), V(1, 0, 0), hz, (h - 3.3) / 2 + 0.01, t, TILE.WOOD, COL_G.siding);
+      b.box(V(-hx, 3.05, -hz / 2 - 0.2), V(0, 0, 1), V(0, 1, 0), V(1, 0, 0), hz / 2 + 0.2, 0.25, t, TILE.WOOD, COL_G.siding);
+      b.box(V(-hx, 3.05, hz * 0.75), V(0, 0, 1), V(0, 1, 0), V(1, 0, 0), hz * 0.25, 0.25, t, TILE.WOOD, COL_G.siding);
+      b.box(V(-hx, 3.05, hz * 0.25), V(0, 0, 1), V(0, 1, 0), V(1, 0, 0), hz * 0.25, 0.25, 0.01, TILE.GLASS, COL_G.glass);
+    } else b.box(V(hx, h / 2, 0), V(0, 0, 1), V(0, 1, 0), V(1, 0, 0), hz, h / 2, t, TILE.WOOD, COL_G.siding);
+  }
+  gable(b, hx, hz, h, 1.2, COL_G.shingle);
+  // the loft floor (the back half), its joists, the rafters
+  b.box(V(0, loftY, hz / 2), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), hx - 0.05, 0.04, hz / 2, TILE.WOOD, COL_G.plankOld);
+  for (const x of [-2.6, -1.3, 0, 1.3, 2.6]) b.box(V(x, h + 0.02, 0), V(0, 0, 1), V(0, 1, 0), V(1, 0, 0), hz, 0.06, 0.05, TILE.WOOD, COL_G.rafter);
+  // the ladder on the left inside the door
+  const lx = -2.4, lz = -0.15;
+  for (const dx of [-0.22, 0.22]) b.cyl(V(lx + dx, 0, lz - 0.35), V(lx + dx, loftY + 0.9, lz), 0.03, 0.03, 4, TILE.WOOD, COL_G.frame);
+  for (let k = 1; k <= 8; k++) { const f = k / 9, y = f * (loftY + 0.9); b.cyl(V(lx - 0.22, y, lz - 0.35 * (1 - f)), V(lx + 0.22, y + (k === 3 ? 0.04 : 0), lz - 0.35 * (1 - f)), 0.018, 0.018, 4, TILE.WOOD, COL_G.frame); } // (the third rung loose)
+  // Marlys's red canoe across the rafters, upside down
+  const cz = -0.9; b.cyl(V(-2.4, h - 0.12, cz), V(2.4, h - 0.12, cz), 0.32, 0.32, 8, TILE.HULL, COL_G.red, { arc: [Math.PI * 0.05, Math.PI * 0.95], up: V(0, 1, 0) });
+  // the banker's boxes by year, in rows on the loft floor (1998 at the back left); 2019 is not among them
+  const boxes = [], yrs = LOFT_YEARS.filter((y) => y !== 2019);
+  yrs.forEach((yr, k) => {
+    const col = k % 8, row = Math.floor(k / 8), x = -2.9 + col * 0.62 + 0.4, z = hz - 0.35 - row * 0.5, y = loftY + 0.04 + 0.16;
+    b.box(V(x, y, z), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), 0.2, 0.15, 0.16, TILE.PLAIN, COL_G.box);
+    b.box(V(x, y + 0.16, z), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), 0.21, 0.02, 0.17, TILE.PLAIN, COL_G.boxLid);
+    boxes.push({ year: yr, x, y: y + 0.1, z });
+  });
+  // the rafter by the window (the initials), the crew snapshot on a beam, the coffee can of bolts
+  const rafter = { x: -hx + 0.35, y: h + 0.02, z: hz * 0.25 };
+  const snap = { x: 1.3, y: h - 0.15, z: hz * 0.7 }; b.box(V(snap.x, snap.y, snap.z - 0.06), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), 0.07, 0.05, 0.004, TILE.PLAIN, COL_G.photo);
+  const bolts = { x: 2.7, y: loftY + 0.14, z: hz - 0.3 }; b.cyl(V(bolts.x, loftY + 0.04, bolts.z), V(bolts.x, loftY + 0.2, bolts.z), 0.08, 0.08, 8, TILE.METAL, COL_G.can, { cap1: true });
+  void rng;
+  const spots = { door: { x: 0, y: 0, z: -hz }, ladder: { x: lx, y: 1.2, z: lz - 0.2 }, loft: { x: -1.6, y: loftY + 0.15, z: hz * 0.45 }, loftStand: { x: lx + 0.6, y: 0, z: lz - 0.6 },
+    boxes, rafter, snap, bolts, canoe: { x: 0, y: h - 0.2, z: cz }, inside: { x: 0, y: 0, z: -hz / 2 } };
+  return { geo: b.build(), dots: [], spots };
+}
+// /a3
+
 const REGISTRY = { stumpCut, quartzCobble, crib, landingRock, redPine, gradeMouth, slab, pole, drillRod,
   casing, coreRack, boxLid, trench, stockpile, stationStake, creekRun, beaverDam, digPit, surveyLath, surveyTag, shovelBlade, twoStumps, cafeTable, urn, coolers, launch, // (a2: the mining years' kits)
   lilacs, stoneStep, foundation, bedFrame, stoneRing, swimRock, enamelPot, sandShape, // e:
+  towDock, oldFireRing, pineStub, bunkhouse, bunkDoor, bunkLamp, boathouse, // a3:
 };
 // a2: the café's spots in a store's own frame (props.js's: a across, b toward the front wall and the door; every store's
 // inside is the same ±2.86 × ±3.86 m): the window table front left, the corner table front right clear of the board, the

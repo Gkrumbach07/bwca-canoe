@@ -115,16 +115,9 @@ const NEXT = '31:GY-05.next';
 const CARRY = 'carrying:waltpack | has:walttent';
 const SISTER = 'His sister\'d want a picture of those lilacs. Don\'t tell her I said so.';
 const GO_JUNE = 'Lilacs are June. Go in June.';
-export const HAP = {
-  id: 'hap', who: 'hap',
-  nodes: {
-    // GY-03 the first sit: "Sit, if you're going to stand there." (his look at the pack first)
-    first: { say: ['31:GY-03.1', { id: '31:GY-03.2', when: CARRY }], go: [
-      { ask: '31:GY-03.c1', when: CARRY, say: ['31:GY-03.3'], to: 'intro' },
-      { ask: '31:GY-03.c2', say: ['31:GY-03.4'], to: 'intro' },
-      { ask: '31:GY-03.c3', say: [{ first: [{ id: '31:GY-03.5', when: CARRY }, { id: '31:GY-03.5', strip: 'That\'s Walt\'s pack.' }] }], to: 'intro' }] },
-    intro: { say: ['31:GY-03.6'], then: ['f:hap.met', 'f:door.guiding.open'], to: 'hub' },
-    hub: { go: [
+// Hap's porch topics (his hub's choices). Another stream's Hap topics join this list (S8's three, sides-s.js HAP_S8: the
+// join pushes them, `HAP_HUB.push(...HAP_S8)`), so they sit beside his own under the same once keys (hap.said.*)
+export const HAP_HUB = [
       { ask: '31:GY-03.walt.1', once: 'walt', say: ['31:GY-03.4', '31:GY-03.walt.2'] },
       { ask: '31:GY-03.october.1', once: 'october', say: ['31:GY-03.october.2'] },
       { ask: '31:GY-03.memory.1', once: 'memory', say: ['31:GY-03.memory.2'] },
@@ -141,7 +134,17 @@ export const HAP = {
       { ask: '31:GY-07.c1', once: 'rock', when: 'f:gy.lunch.photo & f:hap.day & !f:hap.photo', say: ['31:GY-07.1'], to: 'rock' },
       // GY-06b, GY-06c after the real talk / any time
       { ask: '31:GY-06b.c1', once: 'brother', when: 'f:hap.farend & f:knows.eino', to: 'let' },
-      { ask: '31:GY-06c.c1', when: '(nickseen:frontporch & !f:ink.frontporch & !f:knows.frontporch) | (nickseen:kitchen & !f:ink.kitchen & !f:knows.kitchen) | (nickseen:longroom & !f:ink.longroom & !f:knows.longroom)', to: 'names' }] },
+      { ask: '31:GY-06c.c1', when: '(nickseen:frontporch & !f:ink.frontporch & !f:knows.frontporch) | (nickseen:kitchen & !f:ink.kitchen & !f:knows.kitchen) | (nickseen:longroom & !f:ink.longroom & !f:knows.longroom)', to: 'names' }];
+export const HAP = {
+  id: 'hap', who: 'hap',
+  nodes: {
+    // GY-03 the first sit: "Sit, if you're going to stand there." (his look at the pack first)
+    first: { say: ['31:GY-03.1', { id: '31:GY-03.2', when: CARRY }], go: [
+      { ask: '31:GY-03.c1', when: CARRY, say: ['31:GY-03.3'], to: 'intro' },
+      { ask: '31:GY-03.c2', say: ['31:GY-03.4'], to: 'intro' },
+      { ask: '31:GY-03.c3', say: [{ first: [{ id: '31:GY-03.5', when: CARRY }, { id: '31:GY-03.5', strip: 'That\'s Walt\'s pack.' }] }], to: 'intro' }] },
+    intro: { say: ['31:GY-03.6'], then: ['f:hap.met', 'f:door.guiding.open'], to: 'hub' },
+    hub: { go: HAP_HUB },
     // GY-04 the day (August 1986): told once; then the print into your hands, "Bring that back."
     day: { say: [...RAW.slice(0, 10), '31:GY-04.1'], then: ['f:hap.day', 'give:page.happrint', 'walt:31:page.2'], to: 'hub' },
     // GY-05b the tow landing: "The tow still drop you on the left as you come up?"
