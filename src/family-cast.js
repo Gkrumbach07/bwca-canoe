@@ -423,10 +423,13 @@ class FamilyCast {
   }
 
   // --- the far places: Danielle at the Sucker end of Prairie Portage; the Carp end's stump and cairn -------------------------
-  dryNear(x, z, r = 30) {
+  // the nearest point to (x, z) that is dry with dry ground 3 m round it (a person stood there, and you beside them, are on
+  // land, not at the water's edge where the walker swims)
+  dryNear(x, z, r = 40) {
     const w = this.c.world; if (!w || typeof w.isWater !== 'function') return { x, z };
-    if (!w.isWater(x, z)) return { x, z };
-    for (let d = 3; d <= r; d += 3) for (let k = 0; k < 12; k++) { const a = (k / 12) * Math.PI * 2, qx = x + Math.cos(a) * d, qz = z + Math.sin(a) * d; if (!w.isWater(qx, qz)) return { x: qx, z: qz }; }
+    const dry = (qx, qz) => { if (w.isWater(qx, qz)) return false; for (let k = 0; k < 8; k++) { const a = (k / 8) * Math.PI * 2; if (w.isWater(qx + Math.cos(a) * 3, qz + Math.sin(a) * 3)) return false; } return true; };
+    if (dry(x, z)) return { x, z };
+    for (let d = 2; d <= r; d += 2) for (let k = 0; k < 16; k++) { const a = (k / 16) * Math.PI * 2, qx = x + Math.cos(a) * d, qz = z + Math.sin(a) * d; if (dry(qx, qz)) return { x: qx, z: qz }; }
     return { x, z };
   }
   farTick(p) {
@@ -435,7 +438,7 @@ class FamilyCast {
     const P = PLACES.prairie, dP = Math.hypot(p.x - P.x, p.z - P.z), here = dP < 260 && s.when(CAST.danielle.where[0].when);
     if (here && !this.dani) {
       const q = this.dryNear(P.x, P.z);
-      this.dani = new FieldPerson(this.c, 'danielle', { x: q.x + 2, z: q.z + 2, heading: Math.atan2(-(P.z - q.z), P.x - q.x), name: this.nameOf('danielle') });
+      this.dani = new FieldPerson(this.c, 'danielle', { x: q.x, z: q.z, heading: Math.atan2(-(P.z - q.z), P.x - q.x), name: this.nameOf('danielle') });
       this.dani.onTalk = (f) => this.talkField(f, DANIELLE, danielleEntry(s));
     } else if (!here && this.dani && !this.dani.talking) { this.dani.remove(); this.dani = null; }
     // the Carp end: the stump with the clean ring and the cairn, built within 320 m
