@@ -583,6 +583,7 @@ or above, or the open house) notices the lid:
 > **Dan:** "Is that an old Boreal box end? We'd love that for the history wall. Forty dollars?"
 - **Sell** ($40): the lid goes on the open house board under *"Core box, Kettle pad, 1976. Driller unknown."* Mary sees
   it there. Her scene (§4.4) plays colder and gives less.
+<!-- id: 30.lid.keep q each -->
 - **Keep it**: "Maybe later." Dan: "Sure. Offer's open."
 
 ### 4.4 The back table: Mary and Leo's lid

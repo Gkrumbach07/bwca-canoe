@@ -779,3 +779,214 @@ the player's hand) and 02b (keepers, Tom, the guides, the soloists). M3 never na
 | `m6.end.done` |  | Thirty days and what I said I'd do. | M6 end |
 | `m6.end.yours` |  | Thirty days. Not all of it. It's still mine. | M6 end, the days over |
 | `m6.first` |  | First stamped: a long stay. | M6 the trip card |
+
+## Stream p (Round 6: the company and the press) — build drafts, for the writers to replace
+
+The company and the press (40): the leech-order pad, the Ledger topic, Dan's junk and his card, the Kettle handout, the
+things a player can bring Maggie (40 §6.6 has her replies, not the asks). Lines the docs have in prose were anchored in 40
+(`40.w.*`, `40.brekke.again`, `40.hog.*`, `40.pad.keeper`, `40.maggie.*`, `40.stranger.dot`, `40.josie.hog`, `40.wade.josie`)
+and 30 (`30.lid.keep`), prose unchanged.
+
+<!-- id: d95.p.pad.ask -->
+```
+Leave a leech order.
+```
+Used: The counter's order pad, any outfitter (company.js PAD): the verb, 40 §6.9 names it in bold ("Leave a leech order") but gives no line.
+
+<!-- id: d95.p.pad.lakeone -->
+```
+Lake One.
+```
+Used: The pad: the place, the first of the two Maggie named (40 §6.9).
+
+<!-- id: d95.p.pad.gabbro -->
+```
+Little Gabbro.
+```
+Used: The pad: the place, the second.
+
+<!-- id: d95.p.pad.1 -->
+```
+One dozen.
+```
+Used: The pad: the number of dozens (the days from today, 40 §6.9).
+
+<!-- id: d95.p.pad.2 -->
+```
+Two dozen.
+```
+Used: The pad: the number of dozens (the days from today, 40 §6.9).
+
+<!-- id: d95.p.pad.3 -->
+```
+Three dozen.
+```
+Used: The pad: the number of dozens (the days from today, 40 §6.9).
+
+<!-- id: d95.p.pad.4 -->
+```
+Four dozen.
+```
+Used: The pad: the number of dozens (the days from today, 40 §6.9).
+
+<!-- id: d95.p.pad.5 -->
+```
+Five dozen.
+```
+Used: The pad: the number of dozens (the days from today, 40 §6.9).
+
+<!-- id: d95.p.pad.6 -->
+```
+Six dozen.
+```
+Used: The pad: the number of dozens (the days from today, 40 §6.9).
+
+<!-- id: d95.p.pad.7 -->
+```
+Seven dozen.
+```
+Used: The pad: the number of dozens (the days from today, 40 §6.9).
+
+<!-- id: d95.p.pad.8 -->
+```
+Eight dozen.
+```
+Used: The pad: the number of dozens (the days from today, 40 §6.9).
+
+<!-- id: d95.p.pad.9 -->
+```
+Nine dozen.
+```
+Used: The pad: the number of dozens (the days from today, 40 §6.9).
+
+<!-- id: d95.p.pad.slip -->
+```
+PHONE ORDER — LEECH ORDER — {n} doz — {place}
+```
+Used: The slip filled in before it is torn off (40 §6.9 "Teach once"), shown as a note; the slip's shape is item.leechslip's.
+
+<!-- id: d95.p.pad.never -->
+```
+Never mind.
+```
+Used: The pad: put the pen down.
+
+<!-- id: d95.p.ledger.ask -->
+```
+The Ledger?
+```
+Used: A keeper topic after Tauno's "Not yet." (40 §6.2 "The player's own way"): the keeper's answer is 40:6.2.8.
+
+<!-- id: d95.p.lid.sell -->
+```
+Sell it. Forty dollars.
+```
+Used: Dan sees Leo's lid (30 §4.3 "The open-house sale": Sell, $40); Keep is 30.lid.keep.
+
+<!-- id: d95.p.blade.offer -->
+```
+That a shovel blade? Somebody's, once. Twenty bucks for the wall, if you're not attached to it.
+```
+Used: Dan sees the broken shovel blade (30 §4.7, 90: Dan buys it for $20; no line in the docs).
+
+<!-- id: d95.p.blade.sell -->
+```
+Twenty. Sure.
+```
+Used: The player sells it.
+
+<!-- id: d95.p.dancard -->
+```
+Dan Marolt · Community Relations · Northmark Metals · Ely
+218-555-0144
+
+(on the back, in ballpoint) Anytime. —D.
+```
+Used: Dan's card (item dancard, 40 §3.1): the card's words are the doc's; the number is a build draft (218-555-01xx: a number set aside for fiction).
+
+<!-- id: d95.p.handout -->
+```
+NORTHMARK METALS — THE KETTLE PROJECT
+The project area, shaded, south-west of Bald Eagle. The historic Kettle pad marked.
+Twelve small numbered dots along an unnamed creek: Historic baseline stations (1976–77). Seven to twelve are below the pad.
+Legend: Background water quality: naturally mineralised
+```
+Used: The Kettle project handout Maggie gives (40 §6.3, description only; the italic words are the doc's).
+
+<!-- id: d95.p.m.register -->
+```
+The bunkhouse register. W. Helstrom, day use, parked.
+```
+Used: Maggie, 40 §6.6: the player brings the 2019 register page.
+
+<!-- id: d95.p.m.receipt -->
+```
+A fuel receipt from the camp on the Isabella.
+```
+Used: Maggie, 40 §6.6: the Isabella receipt.
+
+<!-- id: d95.p.m.guestbook -->
+```
+Aili's guest book. He signed it.
+```
+Used: Maggie, 40 §6.6: Aili's guest book.
+
+<!-- id: d95.p.m.sheila -->
+```
+Sheila's report.
+```
+Used: Maggie, 40 §6.6: Sheila's report.
+
+<!-- id: d95.p.m.ollie -->
+```
+Ollie's search log. 1977.
+```
+Used: Maggie, 40 §6.6: Ollie's log.
+
+<!-- id: d95.p.m.tasha -->
+```
+Somebody at the company flagged the stations last year.
+```
+Used: Maggie, 40 §6.6: Tasha's 2025 flag (her name never said).
+
+<!-- id: d95.p.m.tauno -->
+```
+There's a man who'll go on the record.
+```
+Used: Maggie, 40 §6.6: Tauno will go on record.
+
+<!-- id: d95.p.m.dan -->
+```
+Dan called it 'proprietary exploration data'.
+```
+Used: Maggie, 40 §6.6: the phrase from Dan.
+
+<!-- id: d95.p.m.creek -->
+```
+A picture of the orange creek.
+```
+Used: Maggie, 40 §6.6: a photo of the creek.
+
+<!-- id: d95.p.m.farend -->
+```
+I think I know where it is.
+```
+Used: Maggie, 40 §6.6: anything that places the far end.
+
+<!-- id: d95.p.m.alive -->
+```
+I think Walt's alive.
+```
+Used: Maggie, 40 §6.6: "If the player says Walt is alive".
+
+<!-- id: d95.p.wade.dot -->
+```
+Man in clean boots.
+```
+Used: The dot on Wade at the counter after N39 is read (40 §4.3, the doc's words in a stage direction).
+
+<!-- id: d95.p.cig -->
+```
+A cigarette butt, still warm. A brand band on it.
+```
+Used: The stranger's cigarette, picked up (40 §3.4; the dot's words are 40:3.4.c1).

@@ -178,6 +178,7 @@ log page, a letter, the torn pages, the receipt). There is no verb for it, and n
 
 Asked about Walt's papers or journals at any time:
 DAN: "If there were any, sure."
+<!-- id: 40.w.danpapers q page -->
 *(This tells the player the company wants them. Walt page, once: "Dan would buy Walt's journals. He said 'if there
 were any'.")*
 
@@ -217,6 +218,7 @@ day, a handheld radio clipped to the jacket. No pack. No rods. No life jacket in
 turns the canoe over, sets it in the water, steps in without wetting his boots and pushes off. He does not look back.
 He paddles well, straight up the middle of the lake, and is a dot in four or five minutes. He does not come back.]
 
+<!-- id: 40.stranger.dot q -->
 [The dot on him while he is in reach: **"Man with a canoe"**, and no verb. If the player tries to talk anyway, the dot
 shows nothing; he is already pushing off. Watchers never speak.]
 
@@ -226,6 +228,7 @@ shows nothing; he is already pushing off. Watchers never speak.]
 - Boot prints. Before S4: nothing named. After S4: **"One man, boots. Sat a long while."**
 - No second set of prints going up the carry. He never went up it.
 
+<!-- id: 40.w.stranger q each page -->
 **Walt page:** "Man waiting at the end of the {portage}. Green Kevlar, no rods, a radio. Left when I came off the
 carry." If N31 has been read, the line adds: "Like Walt's green Kevlar."
 
@@ -234,6 +237,7 @@ sitting still.
 
 ### 3.5 Brekke: the one conversation (tier 2 on)
 
+<!-- id: 40.brekke.again q -->
 **Where.** Either the **open house** at Farm 31 (one Saturday in August; see the notice below) or **any Thursday lunch**
 at the Farm 31 café from tier 2 to the end of October. The conversation happens once, wherever the player first sits
 down with him. After it, at either place, he gives only a nod and "Hello again."
@@ -392,6 +396,7 @@ property, technically. Proprietary exploration data." [He says the last two word
 - **"No."**
   DAN: "Offer's good till the snow. After that I can't promise anything. Not up to me."
 
+<!-- id: 40.w.offer q page -->
 *(gives: the offer, $1,000, which **cannot be collected**: no item the player holds before the cellar can be offered to
 him (3.2). The book's Walt page, once: "The company would pay a thousand dollars for 'anything real' from the old
 days." The offer makes the money ending's later number land.)*
@@ -404,6 +409,7 @@ DAN: "You look tired. You all right? You look like you slept in a canoe."
 DAN: "Listen. That thing I said, about the old stuff? If it's ever more than junk, you call me before you call
 anybody. I can't tell you a number. I can tell you they'd find one."
 DAN: "I don't know what any of it is. I'm saying it because I'd rather it was you got paid than nobody."
+<!-- id: 40.w.setup q page -->
 *(gives: nothing new to hold; the player now knows the company's price has no ceiling. Walt page: "Dan: if it's 'more
 than junk', call him first. 'They'd find a number.'")*
 
@@ -432,6 +438,7 @@ of sight of the landing.]
 - **"Who are you?"** — [He lifts the mug.] [If the midpoint counter is done, he needs no introduction anyway.]
 - **[Walk on.]**
 
+<!-- id: 40.w.putin q each page -->
 *(gives: Walt page: "Wade at {EP}. Knew it was Walt's tent. Nobody's told anybody that. Nobody knows it but Marlys."
 If the player asks Marlys about it later, her guiding-arc line: "He asked me for Walt's things. Saturday morning. I
 told him his sister took them." **Wade is the only company man who says "Walt" first, and he says it about the tent.**
@@ -486,6 +493,7 @@ the player left it.** The player finds it in the order they happen to look.
 **"Not how I left it."** Nothing after that. The book's pack view shows the sorted grid without comment. Nothing is
 missing, so, by the game's rule, nothing is listed as missing.
 
+<!-- id: 40.w.search q each page -->
 **Walt page:** "Somebody went through camp while I was out. Nothing gone. Folded better than I fold it."
 If N36 has been read, it adds: "Same as Walt's pack in 2019."
 
@@ -515,6 +523,7 @@ world. **He never lies about anything the player can check; he only says less.**
   *(gives: who-was-who, 1.3; flag `wadeNamed`.)*
 - **"Were you out on {the lake of the search} yesterday?"**
   WADE: "Me? I don't go on the water." [A smile.] "Never learned to like it."
+<!-- id: 40.w.water q page -->
   *(True. He is never on the water. Walt page: "Wade says he doesn't go on the water.")*
 - **"Somebody went through my camp."**
   WADE: "That's a shame. Anything missing?"
@@ -524,6 +533,7 @@ world. **He never lies about anything the player can check; he only says less.**
 - **"W. Helstrom. Moose Lake, October 2019."** [If the player has seen the 2019 register.]
   WADE: "That's me. Long time ago. I needed a place to park." [He holds the player's eye one second longer than he
   needs to.]
+<!-- id: 40.w.helstrom q page -->
   *(gives: confirmation; Walt page: "Wade is the W. Helstrom in the bunkhouse book. He said he needed a place to
   park.")*
 - **[Look at his boots.]** / **"Clean boots."** [If N39 has been read. The dot on him shows **"Man in clean boots."**]
@@ -538,6 +548,7 @@ world. **He never lies about anything the player can check; he only says less.**
 
 **After he leaves**, the keeper, once, to nobody in particular:
 KEEPER: "Buys a dozen every week. I've never sold that man a hook."
+<!-- id: 40.wade.josie q -->
 [If it's Josie: "He buys leeches every single time. I've never seen him fish. Does he, like, release them?"]
 
 *(The scene gives no lead and no ring. It gives a face to everything the player has been feeling.)*
@@ -571,14 +582,17 @@ Pd: —
   JOSIE: "Just me. And now you. Do you want me to not tell people things? I can not tell people things."
   [If yes: "Okay. Vault." She means it. Josie never repeats anything the player asks her to keep.]
 
+<!-- id: 40.w.leech q page -->
 *(gives: a lead, **Maggie at Hog Creek 36**; the keeper rings Hog Creek on request. Walt page: "Somebody called
 'Maggie' sent a leech order. Three dozen, Hog Creek.")*
 
+<!-- id: 40.hog.early q -->
 **The number.** Three dozen means **three days**: Maggie is at Hog Creek from the third morning after the call, and every
 day after it. If the player comes earlier, the Hog Creek keeper says, "A woman booked a bunk from Thursday. Writer, I
 think. She bought a rod." (Replace the weekday with the real one.) She explains the code herself at the first meeting,
 which is how the player learns it before the meeting point needs it (6.9).
 
+<!-- id: 40.josie.hog q -->
 [If home is Hog Creek 36 itself: Josie points out of the window. "Also she's on the dock. She's been there since
 Tuesday. She's not catching anything."]
 
@@ -623,8 +637,10 @@ does not appear. [If the player raises it with anyone, they get a general line a
 reaction. Exceptions below.]
 
 **Walt page:**
+<!-- id: 40.w.adrift.echo q page -->
 - If the echo is known (the drift test, or Ollie's or Tauno's account): "Canoe off the landing at first light. No
   paddle. Paddle on the far shore, right where it would drift to. Eino's canoe. Walt's canoe. Mine."
+<!-- id: 40.w.adrift.plain q page -->
 - If not: "Canoe off the landing at first light. Paddle gone, then on the far shore. I tied it."
 
 **What follows, and only these:**
@@ -759,6 +775,7 @@ E-8   Gabbro L., S shore                              3 holes                   
 ```
 [Margin, Maggie's pencil, beside E-7: *Haapala — the brother?*]
 
+<!-- id: 40.w.e7 q each page -->
 *(gives: lake key C, the wrong hill: E-7 "on Pietro". A keeper rings Pietro's north-east hill on request. Walt page:
 "Boreal filed E-7 on Pietro. Eino wrote the report.")*
 
@@ -805,6 +822,7 @@ MAGGIE: "You're the leech order."
   two minutes."
   MAGGIE: "He said somebody's carrying Walt's pack and asking the right questions. I've been waiting seven years for
   somebody to ask the right questions."
+<!-- id: 40.maggie.callers q each -->
   [If the fallback made the call instead, her first line names the caller plainly, and the second stays ("She said" for a woman):
   Marlys: "Marlys from Moose Lake called me. She's been cutting out my pieces, apparently." Sheila: "A woman called me
   from Ely. Very cross with me for taking so long." Carol: "A woman called me from the Sawbill store. She said her husband
@@ -841,6 +859,7 @@ The state sent me one list and 'not located' for the rest. I called the company 
   [A silence. She reels the line in, slowly, all the way, and sets the rod down on the dock.]
   MAGGIE: "Okay. New rule. I don't call anybody for comment until it's in my hand. And I don't ask you where you go.
   Not once."
+<!-- id: 40.w.matched q page -->
   *(gives: Walt page: "The letter to the Ledger in 2019 is in Walt's hand. Maggie called the company about it. Four
   weeks later he was gone." Flag `maggieMatched`. This is her confession; it is why she will wait, and why she offers
   to stop later.)*
@@ -874,6 +893,7 @@ MAGGIE: "Go on. You'll lose the light. I'll be here, failing at this."
 
 ### 6.5 Where she is
 
+<!-- id: 40.hog.back q -->
 From the first meeting until the dawn lot: at Hog Creek 36 every day of the open season, 7 to 19 on the dock or the
 bunkhouse step. [She is a fixed person, not a scheduled party.] If the story runs into a second season, she is back from
 mid-May; the Hog Creek keeper says, "Your writer's back. Bought another rod."
@@ -939,6 +959,7 @@ the woods; calls the company before she has the paper; names Tauno, Tasha or any
 
 ### 6.7 After the warning: the offer to stop
 
+<!-- id: 40.maggie.adrift q -->
 **Condition.** Stage C or later; the player tells her about the canoe adrift (topic: "Somebody set my canoe loose.").
 
 MAGGIE: "With the paddle gone."
@@ -1000,6 +1021,7 @@ that morning on, every morning, till you come out of the woods."
 
 [Closing the topic:] MAGGIE: "Go on. Buy bait like a person who means to use it."
 
+<!-- id: 40.pad.keeper q -->
 **The leech order (the player's note).** At any counter, the order pad by the register carries the verb **Leave a leech
 order**: the player picks **Lake One** or **Little Gabbro** (only the two places she named) and **a number of dozens**
 (one to nine: the days from today). [Teach once: the first time, the pad shows the slip filled in with the player's
