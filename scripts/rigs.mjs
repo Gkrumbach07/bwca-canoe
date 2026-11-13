@@ -3,6 +3,8 @@
 // <fails>` line per rig at the end, in RIGS order (the old loop-r4-all.sh lines), and the wall time.
 //
 //   ~/pw/bwca-run.sh <wt> <vite-port> <wrangler-port> -- node scripts/rigs.mjs [options] [rig ...]
+//   The rigs test the game without the story (the story is on by default since 2026-11-13): start the server with
+//   VITE_STORY_DEFAULT=0 in its environment, e.g. VITE_STORY_DEFAULT=0 ~/pw/bwca-run.sh ... (story-flag.js).
 //   (or scripts/loop-r4-all.sh, which calls this)
 //
 // Options (each also an environment variable):
