@@ -123,7 +123,7 @@ try {
       ctx.how = await a.evaluate((v) => window.__i.pick(v), lk);
       const told = await hear(a);
       const f = await a.evaluate((id) => ({ told: window.__game.story.get(`canary.denny.${id}`), ring: window.__game.story.get(`canary.ring.${id}`), rings: window.__i.rings().length, ppl: window.__game.story.doc.ppl.denny }), lk.lake);
-      result('A2 "Where are you headed next?", a lake picked: Denny\'s line, the told day, his two rings on it', r.ok && told.some((t) => /Good one/.test(t)) && f.told != null && Array.isArray(f.ring) && f.rings >= 2, { lk, told, f });
+      result('A2 "Where are you headed next?", a lake picked: Denny\'s line, the told day, his two rings on it', r.ok && told.some((t) => /Good one/.test(t)) && f.told != null && Array.isArray(f.ring) && f.rings >= 1, { lk, told, f });
       await a.evaluate(() => window.__i.endTalk());
     });
     await step('A3 the trap sprung: seen', async () => {

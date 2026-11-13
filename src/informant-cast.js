@@ -336,7 +336,7 @@ class InformantCast {
     const run = new SceneRun(this.c.topics, def, { who, args: { ...args }, vars: this.vars, mark: n && n.mark ? (t) => n.mark(t) : null, hooks: this.hooks(who),
       onEnd: () => { field.talking = false; } });
     const canaryText = T(I.CANARY_ASK);
-    const pick = (ch) => (ch && ch.text === canaryText ? { ...ch, pick: 'lake', go: ((g) => (a) => { if (!a || !a.lake) return null; this.pending = a; const L = this.lakeOf(a.lake); this.vars.lake = a.name || (L && L.name) || ''; return g(); })(ch.go) } : ch);
+    const pick = (ch) => (ch && ch.text === canaryText ? { ...ch, pick: 'lake', go: ((g) => (a) => { const J = this.c.journal || (typeof window !== 'undefined' && window.__game && window.__game.journal); try { if (J && J.open) J.close(); } catch { /* the book's */ } if (!a || !a.lake) return null; this.pending = a; const L = this.lakeOf(a.lake); this.vars.lake = a.name || (L && L.name) || ''; return g(); })(ch.go) } : ch);
     field.talking = true;
     void s;
     return D.open({ speaker: field.speaker, name: field.name, role: '', room: null, start: () => decorate(run.node(start), pick), bye: () => { field.talking = false; return null; } });
