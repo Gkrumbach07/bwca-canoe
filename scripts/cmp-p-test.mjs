@@ -80,6 +80,14 @@ const PAGE = () => {
       window.__p.lastTo = { ep, store: g.storyCompany.debug.store(ep), d: Math.round(Math.hypot(g.player.x - L.door.x, g.player.z - L.door.z)) };
       if (inside) return window.__t.walkIn(ep); return true;
     },
+    // stand on foot a metre and a half from a person before a talk (a talk closes off foot, or with a paper up)
+    near(key) {
+      let x = null, z = null; const F = C.at.get(key), M = g.storyMining && g.storyMining.miningCast, st = M && M.live && M.live.get(key);
+      const sp = F ? F.speaker : st && st.h ? st.h.speaker : null;
+      if (sp && sp.pos) sp.pos({ set(a, b, c) { x = a; z = c; } });
+      const h = g.hud; for (let k = 0; k < 3 && h && h.paper; k++) { const cl = h.papers && h.papers.get(h.paper); try { if (cl) cl(); else h.closePaper(h.paper); } catch { /* */ } }
+      if (x == null) return false; window.__t.standAt(x + 1.2, z + 0.6); window.__L.step(3); return { x, z, onFoot: g.player.onFoot, paper: h && h.paper };
+    },
     lot() { const p = g.player, eps = g.storyCompany.debug.lots(); let best = null; for (const e of eps) { const L = g.storyCompany.debug.lot(e); const d = Math.hypot(L.lot.x - p.x, L.lot.z - p.z); if (!best || d < best.d) best = { ep: e, d, x: L.lot.x, z: L.lot.z }; } return best; },
     clock(addDays, hours, doy = null) { const d = g.day; if (doy != null) d.setClock(d.year, doy, hours); else d.setClock(d.year, d.doy + addDays, hours); window.__L.step(6); return { doy: d.doy, h: d.hours, abs: s.nowAbs() }; },
   };
@@ -121,7 +129,7 @@ try {
     // 4 Wade at the counter (Moose Lake 25, home)
     await a.evaluate(() => window.__p.to(25, false));
     const d4a = await a.evaluate(() => { const C = window.__game.storyCompany; const e = C.debug.enter(25); return { e, st: C.debug.state(), to: window.__p.lastTo }; });
-    await a.evaluate(() => window.__game.storyCompany.debug.wade());
+    await a.evaluate(() => { window.__p.near('wade'); return window.__game.storyCompany.debug.wade(); });
     const c4 = await a.evaluate(() => window.__t.convo());
     const r4 = await choose(a, 'Do I know you?'); const said4 = await hear(a, 6);
     const f4 = await a.evaluate(() => window.__p.has(['wade.counter', 'wade.named']));
@@ -129,21 +137,21 @@ try {
     result('4 Wade at the next counter: staged, "Do I know you?" → his name (wade.named)', !!(d4a.e && d4a.e.wade) && !!c4 && r4.ok && f4['wade.named'] === true, { d4a, c4, r4, said4, f4 });
     // 5 Dan: the card, then the offer
     const e5 = await a.evaluate(() => window.__game.storyCompany.debug.enter(25));
-    await a.evaluate(() => window.__game.storyCompany.debug.dan());
+    await a.evaluate(() => { window.__p.near('dan'); return window.__game.storyCompany.debug.dan(); });
     const r5a = await choose(a, 'Which company?'); const said5a = await hear(a, 8); await closeTalk(a);
     const e5b = await a.evaluate(() => { window.__L.step(10); return window.__game.storyCompany.debug.enter(25); });
-    await a.evaluate(() => window.__game.storyCompany.debug.dan());
+    await a.evaluate(() => { window.__p.near('dan'); return window.__game.storyCompany.debug.dan(); });
     const r5b = await choose(a, 'Go ahead.'); const said5b = await hear(a, 8); await closeTalk(a);
     const f5 = await a.evaluate(() => ({ ...window.__p.has(['dan.met', 'dan.card', 'dan.offer']), card: window.__game.inventory.count('dancard', { reachable: false }), walt: window.__game.story.walt().filter((w) => /^40/.test(w)) }));
     result('5 Dan: his card at the first counter after tier 1, then the $1,000 offer after the midpoint', e5 && e5.dan === 'meet' && r5a.ok && e5b && e5b.dan === 'offer' && r5b.ok && f5['dan.card'] && f5['dan.offer'] && f5.card > 0, { e5, r5a, said5a: said5a.slice(-2), e5b, r5b, said5b: said5b.slice(-2), f5 });
     // 6 Josie's slip
-    await a.evaluate(() => window.__game.storyCompany.debug.josie());
+    await a.evaluate(() => { const r = window.__game.storyCompany.debug.josie(); window.__p.near('josie'); return r; });
     const said6 = await hear(a, 6); await closeTalk(a);
     const f6 = await a.evaluate(() => ({ ...window.__p.has(['maggie.note']), slip: window.__game.inventory.count('page:leechslip', { reachable: false }) }));
     result('6 Josie\'s leech order at home: the slip in the book, maggie.note', f6['maggie.note'] !== false && f6.slip > 0, { said6: said6.slice(0, 2), f6 });
     // 7 Maggie at Hog Creek on the third morning
     const d7 = await a.evaluate(async () => { const P = window.__p; P.clock(3, 10); await P.to(36, false); for (let i = 0; i < 10; i++) { window.__L.step(6); await window.__L.wait(20); } return { at: window.__game.storyCompany.debug.maggieAt(), clock: P.clock(0, 10) }; });
-    await a.evaluate(() => window.__game.storyCompany.debug.maggie());
+    await a.evaluate(() => { window.__p.near('maggie'); return window.__game.storyCompany.debug.maggie(); });
     const said7 = await hear(a, 4);
     const r7 = [];
     for (const c of ['What do you want?', 'Hold it beside the notebook.', 'His notebook.']) { r7.push(await choose(a, c)); await hear(a, 14); }
@@ -176,7 +184,7 @@ try {
     // 10 Dan's set-up; Wade at the put-in
     await a.evaluate(() => window.__p.to(25, false));
     const e10 = await a.evaluate(() => window.__game.storyCompany.debug.enter(25));
-    await a.evaluate(() => window.__game.storyCompany.debug.dan()); const said10 = await hear(a, 6); await closeTalk(a);
+    await a.evaluate(() => { window.__p.near('dan'); return window.__game.storyCompany.debug.dan(); }); const said10 = await hear(a, 6); await closeTalk(a);
     const p10 = await a.evaluate(async () => { const C = window.__game.storyCompany; window.__p.clock(0, 10); const lot = window.__p.lot(); if (!lot) return { ok: false, lot }; await window.__L.tp(lot.x, lot.z); await window.__L.settle(); const ok = C.debug.putin(lot.ep); const t = C.debug.putinTalk(); return { ok, t, lot }; });
     const r10 = await choose(a, 'It\'s holding up.'); await closeTalk(a);
     const f10 = await a.evaluate(() => window.__p.has(['dan.setup', 'wade.putin']));
@@ -187,7 +195,7 @@ try {
       let doy = g.day.doy; for (let k = 0; k < 8; k++) { const dw = new Date(Date.UTC(g.day.year, 0, doy + k)).getUTCDay(); if (dw === 4) { doy += k; break; } }
       P.clock(0, 12, doy); await P.to(31, true);
       for (let i = 0; i < 30; i++) { window.__L.step(10); await window.__L.wait(20); if (g.storyMining.miningCast.live.get('brekke')) break; }
-      return { doy, staged: !!g.storyMining.miningCast.live.get('brekke'), talk: !!(g.storyMining.miningCast.live.get('brekke') && g.storyCompany.debug.brekke()), tier: s.tier };
+      return { doy, staged: !!g.storyMining.miningCast.live.get('brekke'), near: window.__p.near('brekke'), talk: !!(g.storyMining.miningCast.live.get('brekke') && g.storyCompany.debug.brekke()), tier: s.tier };
     });
     await hear(a, 10);
     const r11 = await choose(a, 'Stations seven to twelve.'); await hear(a, 6); await closeTalk(a);
