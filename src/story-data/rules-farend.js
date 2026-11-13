@@ -31,6 +31,10 @@ export const RULES_FAREND = [
   // 50 §4.6: the tally; the second sentence only with N25 and N26 (NB61, NB62) read
   { id: 'f.tally', when: 'f:camp.marks & read:NB61 & read:NB62', then: ['walt:50:4.6.w.tally'] },
   { id: 'f.tally2', when: 'f:camp.marks & !(read:NB61 & read:NB62)', then: ['walt:50:4.6.w.tally2'] },
+  // 50 §5.5: the cans opened (stream N's Open verb and its pages, cans.opened): the player's line for each paper on the
+  // Walt page, and the last line once all five are seen (they are seen together: a quarter of an hour on)
+  { id: 'f.cans', when: 'f:cans.opened', then: ['walt:50:5.5.p.fieldbooks', 'walt:50:5.5.p.report', 'walt:50:5.5.p.ledger', 'walt:50:5.5.p.memo', 'walt:50:5.5.p.core'] },
+  { id: 'f.cans.none', when: 'f:cans.opened', after: { hours: 0.25 }, then: ['walt:50:5.5.p.none'] },
   // 50 §5.2: the pit is only ground to someone without a lock-6 key; with one, the dot names it once
   { id: 'f.pit.seen', when: 'f:pit.seen & any(key.L6*)', then: ['f:pit.known'] },
 ];

@@ -429,6 +429,7 @@ headlamp on the run shows a light (section 6.4).
 On opening, the book adds a page, **"The papers"**, in the player's words, and each document can be looked at in
 close-up. Contents (bible 5.1), with the close-up text:
 
+<!-- id: 50:5.5.p.fieldbooks pick page -->
 **1. Four field books.** Pocket books, canvas covers stained orange at the edges, August 1976 to August 1977. The
 player's page: "Four field books. Creek readings below the pad, 1976 and '77. Three hands." Close-up of the 19 August
 1976 page:
@@ -448,6 +449,7 @@ Stn   pH    Cu     Ni
 E.H.  W.H.  T.K.
 ```
 
+<!-- id: 50:5.5.p.report pick page -->
 **2. The pencilled draft.** Typed onionskin, one corner charred brown and gone. The player's page: "A typed report
 with pencil all over it. Stations 7 to 12 moved to 'background'. Initialled C.B. Somebody pulled it out of a fire."
 Close-up:
@@ -462,6 +464,7 @@ BELOW PAD (Stations 7–12)      [the whole heading struck through in pencil]
   Field bk to be recopied 8/18–8/20.  — C.B.
 ```
 
+<!-- id: 50:5.5.p.ledger pick page -->
 **3. The green ledger.** A small green clothbound cash book, 1975–77. The player's page: "A cash book. Money to 'L.P.'
 and 'H.V.', two years of it. The last line is the second of September, 1977." Two spreads; close-up of one:
 
@@ -476,6 +479,7 @@ and 'H.V.', two years of it. The last line is the second of September, 1977." Tw
  9/02/77   L.P.    200
 ```
 
+<!-- id: 50:5.5.p.memo pick page -->
 **4. The carbon.** A carbon copy on thin yellow paper, letterhead faint. The player's page: "A memo from 1977. 'Re:
 Haapala, E.' Six weeks before he drowned." Close-up:
 
@@ -489,9 +493,11 @@ Re: Haapala, E. — has been spoken to re: field books.
 If he persists D.S. will handle it.
 ```
 
+<!-- id: 50:5.5.p.core pick page -->
 **5. The core.** A split piece of drill core, grey-green with brassy flecks, wrapped in a grey wool sock. The player's
 page: "A piece of rock in a sock. I don't know what it is." (Only Tauno knows: section 9.1.)
 
+<!-- id: 50:5.5.p.none pick page -->
 None of it says who killed Eino. The player's page ends, once all five are seen: "None of it says who was on the lake
 that morning."
 

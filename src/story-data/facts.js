@@ -102,6 +102,7 @@ export const FACTS = [
   { key: 'camp.', kind: 'bool', doc: '50 §4 Walt\'s camp: camp.found (reached: the carry inks) | corebox | photo | june | marks | shelf | shelf.taken | boots | sun | cot' },
   { key: 'pit.', kind: 'bool', doc: '50 §5 the cellar: pit.seen | cleared (the moss) | lifted (the lid broke) | note (Eino\'s: the run starts, stream R) | can.1 | can.2 (R gives the cans)' },
   { key: 'stash.', kind: 'bool', doc: '50 §6.9 the run\'s stashes found: stash.paddle (taken) | paddle.found | drybag | grumman | grumman.under' },
+  { key: 'cans.opened', kind: 'bool', doc: '50 §5.5 a can opened (stream N\'s Open verb on R\'s ammocan writes it; N declares the cans. row)' },
   { key: 'find.', kind: 'bool', doc: '§7.2 a big finding (find.big.camp: the torn pages under the floorboard)' },
   // f: end
 ];
