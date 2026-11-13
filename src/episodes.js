@@ -223,7 +223,9 @@ export class Episodes {
       st.ended = s.time().abs;
       const end = (rec.ends || []).find((e) => e.id === s.get(key));
       if (end && end.line) st.last = end.line;
-      if (rec.first) this.stamp(rec.first);
+      // s: an end may name its own stamp (`first`), or none (null): S1's beat or carried-twice, S8 stamped at the find
+      const f1 = end && end.first !== undefined ? end.first : rec.first; // s:
+      st.first = f1 || st.first || null; if (f1) this.stamp(f1); // s: (an earlier stamp kept: S8's at the find)
       this.dirty();
       this.emit('end', { id: rec.id, end: end ? end.id : s.get(key) });
       if (typeof s.emit === 'function') s.emit('episode:end', { id: rec.id, end: end ? end.id : null });
@@ -231,11 +233,20 @@ export class Episodes {
   }
   // a `first` on the trip card (record.js): its words, stamped once
   stamp(textId) {
-    const R = this.c.record, words = (this.words(textId) || '').replace(/^First stamped:\s*/i, ''); // (60's "First stamped: …" items, anchored whole)
+    const R = this.c.record, words = this.firstWords(textId); // s: (60's "First stamped: …" items, anchored whole; '#n' one of its alternatives)
     if (!R || typeof R.first !== 'function' || !words) return false;
     try { return R.first('story', String(textId), words, null); } catch (e) { console.warn('episodes: first', e); return false; }
   }
   words(id) { const T = this.c.text; if (typeof T === 'function') { const w = T(id); if (w) return w; } return null; }
+  // s: a stamp's words: 'S1.first' whole, or 'S1.first#1' the item's second alternative ("Beat the squad on the Stuart (or
+  // Carried the Stuart for Ollie)." → [Beat the squad on the Stuart, Carried the Stuart for Ollie]); always without the label
+  firstWords(spec) {
+    const m = /^(.*)#(\d)$/.exec(String(spec || '')), id = m ? m[1] : spec;
+    let w = (this.words(id) || '').replace(/^First stamped:\s*/i, '');
+    if (m && w) { const alts = w.replace(/\.\s*$/, '').split(/\s*\(or\s+/).map((x) => x.replace(/\)\s*$/, '').trim()).filter(Boolean); w = alts[Number(m[2])] || alts[0] || w; }
+    return w;
+  }
+  // /s
 
   // --- flyers (tasks.js board / props.js setStoreNotices hooks) ---------------------------------------------------------
   flyerOf(rec) { return rec && rec.flyer ? { ...rec.flyer, id: `ep:${rec.id}`, ep: rec.id } : null; }
@@ -302,7 +313,7 @@ export class Episodes {
     const st = this.st(id) || {}, lines = [];
     for (const p of rec.page || []) if (this.when(p.when)) { const w = this.words(p.text); if (w && !lines.includes(w)) lines.push(w); }
     const end = this.ended(id) ? this.words(st.last || ((rec.ends || []).find((e) => e.id === this.story.get(`ep.${id}.end`)) || {}).line) : null;
-    const first = this.ended(id) && rec.first ? (this.words(rec.first) || '').replace(/^First stamped:\s*/i, '') || null : null;
+    const f0 = st.first !== undefined ? st.first : rec.first, first = this.ended(id) && f0 ? this.firstWords(f0) || null : null; // s: (the end's own stamp, or none; a save from before: the record's)
     const title = ((rec.titles || []).find((t) => this.when(t.when)) || {}).title || rec.title || id;
     const prints = (rec.pins || []).flatMap((m) => this.prints(m));
     return { id, title, kind: rec.kind, lines, end, first, prints, since: st.at ?? null };

@@ -48,6 +48,8 @@ export const DOC_FILES = {
   '50': ['50-finale.md', 'finale.json'],
   '60': ['60-side-stories.md', 'side.json'],
   '70': ['70-world-texture.md', 'world.json'],
+  // x: the build's drafted lines (anchored only), for the writers to replace (campaign run, stream x)
+  '95': ['95-drafted-lines.md', 'drafted.json'],
 };
 const DESIGN_DOCS = ['00-owner-decisions.md', '01-bible.md', '02a-voice-journal.md', '02b-voice-people.md',
   '03-places.md', '90-game-needs.md', 'README.md'];

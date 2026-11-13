@@ -38,7 +38,7 @@ export const BEATS = [
   { id: 'b12.2', ep: 12, n: 2, what: 'Loon Lake, the Beatty Portage: the carved date (S6)', place: 'ws.c721', nb: 'NB14', line: STONE, prop: 'the carved date at the Beatty Portage (S6, Round 7): the Loon Lake starred site\'s stone stands' },
   { id: 'b12.3', ep: 12, n: 3, what: 'Lac La Croix: a second-ink line about "the other side"', place: null, line: null, wait: 'no place; the line points at the Canadian side (Quetico is DLC)' },
   // Moose River North 16 (rivers)
-  { id: 'b16.1', ep: 16, n: 1, what: 'The Stuart Portage, 563 r: N12 read on the carry (S1)', place: null, line: null, wait: 'S1 (Round 4): Ollie and the 563 r read-here are not built' },
+  { id: 'b16.1', ep: 16, n: 1, what: 'The Stuart Portage, 563 r: N12 read on the carry (S1)', place: 's1.stuart', nb: 'NB30', line: '70.6.1.5' }, // s: S1 built (Round 4): the road end in the layer
   { id: 'b16.2', ep: 16, n: 2, what: 'Nina Moose: a stone and a moose entry', place: 'ws.c649', nb: 'NB11', line: STONE },
   { id: 'b16.3', ep: 16, n: 3, what: 'Big Moose: the Squatch site (S2)', place: null, line: null, wait: 'S2 (Round 7): the Squatch site is not in the layer' },
   // Slim 6 (rivers)

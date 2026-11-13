@@ -4,5 +4,7 @@
 import S7 from './s7-mummos.js';
 import S9 from './s9-coffee.js';
 import mining from './arc-mining.js'; // a2: the mining years' arc (the join)
+import S1 from './s1-ollie.js'; // s: the man on the portage (Round 4)
+import S8 from './s8-sled.js'; // s: the sled on the lunch rock (Round 4)
 
-export const EPISODES = [S7, S9, mining];
+export const EPISODES = [S7, S9, mining, S1, S8]; // (s: S1, S8)
