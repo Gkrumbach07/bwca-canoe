@@ -154,7 +154,10 @@ try {
 
   // 6 an ending: Maggie's scene by keys (J) -------------------------------------------------------------------------------
   const trail = [];
-  const opened = await page.evaluate(async () => { const g = window.__game, L = window.__L; const ok = g.storyEndings.debug.maggie(); for (let k = 0; k < 4; k++) { L.step(3); await L.wait(60); } return { ok, convo: !!window.__t.convo(), dialogue: !!(g.dialogue && g.dialogue.convo) }; });
+  const opened = await page.evaluate(async () => { const g = window.__game, L = window.__L; const h = g.hud, P = g.player, why = { paper: !!(h && h.paper), big: !!(h && h.big), onFoot: !!P.onFoot, tp: !!P.teleporting, mode: P.mode };
+    if (h && h.paper) { try { (g.record && g.record.close) ? g.record.close() : null; } catch { /* */ } }
+    if (h && h.big && typeof h.big.close === 'function') { try { h.big.close(); } catch { /* */ } }
+    const ok = g.storyEndings.debug.maggie(); why.after = { paper: !!(h && h.paper), big: !!(h && h.big), onFoot: !!P.onFoot }; for (let k = 0; k < 4; k++) { L.step(3); await L.wait(60); } return { ok, why, convo: !!window.__t.convo(), dialogue: !!(g.dialogue && g.dialogue.convo) }; });
   log('maggie', JSON.stringify(opened));
   trail.push(await choose(page, 'That\'s it.'));
   trail.push(await choose(page, 'I don\'t know.'));
