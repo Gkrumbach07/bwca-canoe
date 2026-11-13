@@ -59,7 +59,7 @@ export const DRAFT = {
   'a4:danielle.c1': { k: 'choice', text: 'What do you do here?' },
   'a4:danielle.2': { k: 'line', text: 'Count canoes. Pick up what people leave. We log what we find. We don\'t always know what we found.' },
   'a4:danielle.c2': { k: 'choice', text: 'Ever find a canoe?' },
-  'a4:danielle.3': { k: 'line', text: 'October before last but four. The twenty-sixth, 2019. An aluminium canoe pulled up on our side, nobody\'s. We logged it. Nobody came for it.' },
+  'a4:danielle.3': { k: 'line', text: 'Fall of 2019. The twenty-sixth of October. An aluminium canoe pulled up on our side, nobody\'s. We logged it. Nobody came for it.' },
   'a4:danielle.c3': { k: 'choice', text: 'A white stone on a stump?' },
   'a4:danielle.4': { k: 'line', text: 'Somebody left a white stone on a stump at the Carp end. We found it the next spring when we opened up. Took it for a cairn. It\'s still on the pile there, your side of the line.' },
   'a4:danielle.c4': { k: 'choice', text: 'Thanks.' },

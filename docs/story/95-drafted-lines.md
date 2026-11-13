@@ -21,7 +21,7 @@ Danielle's scene is re-sited on the US side (docs/story/dlc-quetico.md): the doc
 |---|---|---|
 | `a4:danielle.1` | Morning. This is your end, so there's nothing I can sell you. I just like to see who's crossing. | Danielle's opener at the Sucker end of P194 (story-data/family.js DANIELLE meet) |
 | `a4:danielle.c1` / `.2` | What do you do here? / Count canoes. Pick up what people leave. We log what we find. We don't always know what we found. | her hub (the second half is bible 4.10's voice line) |
-| `a4:danielle.c2` / `.3` | Ever find a canoe? / October before last but four. The twenty-sixth, 2019. An aluminium canoe pulled up on our side, nobody's. We logged it. Nobody came for it. | the "went north" piece (`danielle.log`, bible 5.6 no. 3) |
+| `a4:danielle.c2` / `.3` | Ever find a canoe? / Fall of 2019. The twenty-sixth of October. An aluminium canoe pulled up on our side, nobody's. We logged it. Nobody came for it. | the "went north" piece (`danielle.log`, bible 5.6 no. 3) |
 | `a4:danielle.c3` / `.4` | A white stone on a stump? / Somebody left a white stone on a stump at the Carp end. We found it the next spring when we opened up. Took it for a cairn. It's still on the pile there, your side of the line. | after the stones are known (`danielle.stone`, rings the Carp end; bible 4.10 "Gives") |
 | `a4:danielle.c4` / `.5` | Thanks. / Paddle safe. It blows on Basswood after two. | her goodbye |
 | `a4:w.jon` | Jon, her son. Guides Crane and Sand Point. Cleans fish at the motel dock at dusk. | Walt page, People: 33 §6.7 "Gives: Jon pencilled on the Walt page" |

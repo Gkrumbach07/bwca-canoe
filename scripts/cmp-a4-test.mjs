@@ -94,6 +94,8 @@ const PAGE_HELPERS = () => {
       if (!g.player.onFoot) L.standAt(g.player.x, g.player.z, g.player.heading);
       L.step(4); this.was = was; return was;
     },
+    // a low prop at your feet: a few distances and pitches until the dot is on it (camera.js slides the look point down)
+    aimAt(q) { for (const d of [1.4, 2.0, 1.0, 2.6]) for (const dy of [0, -0.3, -0.6, 0.3, -0.9, 0.6, -1.2]) { L.face(q, d, q.y + dy); L.step(3); const t = L.target(); if (t && t.ref === `story:a4.${q.fact}`) return { ...t, d, dy }; } return L.target(); },
     talk(who) { this.clear(); const ok = F.talk(who); L.step(4); return ok; },
     has: (ks) => Object.fromEntries(ks.map((k) => [k, s.has(k) ? (s.get(k) === true ? true : s.get(k)) : false])),
     inv: (id) => g.inventory.count(id, { reachable: false }),
@@ -193,11 +195,11 @@ try {
     result('9 Danielle (re-sited: the US end of Prairie Portage): the canoe logged, "went north"; the Carp end named', r9.dn && r9.has['danielle.log'] && r9.north === true, r9);
 
     // 10 the Carp end: the stump with the clean ring and the cairn; the dot's Look on each (E)
-    const r10 = await a.evaluate(async () => { const f = window.__f, L = window.__L, g = window.__game; await L.tp(-10054, 2049); await L.settle(); for (let k = 0; k < 60 && !f.F.debug.carp(); k++) { L.step(10); await L.wait(30); } const dots = f.F.debug.carp() || []; f.clear(); const was = f.was; const seen = []; for (const q of dots) { L.face(q, 1.4, q.y); L.step(4); const t = L.target(); seen.push(t); } return { dots, seen, was, after: { paper: g.hud.paper, big: g.hud.big, mode: g.player.mode } }; });
+    const r10 = await a.evaluate(async () => { const f = window.__f, L = window.__L, g = window.__game; await L.tp(-10054, 2049); await L.settle(); for (let k = 0; k < 60 && !f.F.debug.carp(); k++) { L.step(10); await L.wait(30); } const dots = f.F.debug.carp() || []; f.clear(); const was = f.was; const seen = []; for (const q of dots) seen.push(window.__f.aimAt(q)); return { dots, seen, was, after: { paper: g.hud.paper, big: g.hud.big, mode: g.player.mode } }; });
     const looked = [];
     for (let k = 0; k < (r10.dots || []).length; k++) {
       const q = r10.dots[k];
-      await a.evaluate((q) => { const L = window.__L; L.face(q, 1.4, q.y); L.step(4); }, q);
+      await a.evaluate((q) => window.__f.aimAt(q), q);
       await a.keyboard.press('KeyE'); await a.evaluate(() => window.__L.step(4));
       looked.push(await a.evaluate((k) => window.__f.s.has(k), q.fact));
     }
