@@ -91,6 +91,16 @@ export class Run {
     // the freeze-up turn (stream w): its own ice check reads this field
     const T = g.seasonTurn;
     if (T && typeof T.field === 'function') T.field(() => (this.active && this.cp.cp ? { ep: this.meetingEp(), place: () => this.cp.place() } : null));
+    // j1: begin (join 1: the run frozen in, w's auto turn): after the wake at ice-out the run goes on from where it stood;
+    // the checkpoint is written again at the new date (a catch must never set the clock back a year), and the night's
+    // watchers are posted afresh, there from day one (n's dawn lot reads the meeting's first dawn: long past, so Maggie's
+    // wagon is in the lot from the first morning)
+    if (T && typeof T.on === 'function') T.on('year:open', (e) => {
+      if (!e || !e.auto || !this.active) return;
+      try { this.cp.write('icein', 'thaw', { force: true }); } catch (err) { console.warn('run: the thaw checkpoint', err); }
+      try { const s = this.story, denny = !!(s && (s.get('choice.denny') === 'turn' || s.has('denny.turned'))); this.seed = hash32(`thaw:${e.year}`); watchers.startRun(this.route || routeFor(this.meeting), { seed: this.seed, denny }); } catch (err) { console.warn('run: the thaw watchers', err); }
+    });
+    // j1: end
     // boot: a run under way resumes at its checkpoint (a reset the page closed on is finished first)
     if (this.active) this.resume();
     return this;
@@ -303,8 +313,7 @@ export class Run {
     // the paddle heard (calm water), now and then
     if (p.mode === 'paddle' && sig.moving && !sig.day) { this.padT = (this.padT || 0) + dt; if (this.padT > 3) { this.padT = 0; this.noise('paddle'); } }
     this.scanner(dt, sig);
-    this.headlampLens();
-    this.prevMode = p.mode;
+    this.prevMode = p.mode; // (j1: the lens is fitted in one place, feed-side7a.js lensTick: red while the glass is carried)
   }
   lotNear(x, z) {
     const g = this.g, m = this.meetAt();

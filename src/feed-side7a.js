@@ -35,7 +35,6 @@ import { pencil } from './pencil.js';
 import { defineItem, definePage, itemDef } from './items.js';
 import { storeLayout } from './props.js';
 import { julianDay, sunPosition, moonPosition, moonIllumination } from './astro.js';
-import { LAMP } from './headlamp.js';
 
 // --- the things (defined only under the flag, as mining-items.js does) ----------------------------------------------------
 if (!itemDef('redlens')) defineItem({ id: 'redlens', name: 'Red glass, cut round, wrapped in oilcloth', short: 'Red glass', kind: 'gear', w: 1, h: 1, kg: 0.02, price: 0, sold: false, unique: true, identity: 'Red glass, cut round, wrapped in oilcloth', story: '7a' });
@@ -142,17 +141,13 @@ export async function connect7a(t) {
 
   // --- the lamp's red lens (S3; the run's red light, stream r: headlamp.red / setLens) -------------------------------------
   const lensOn = () => live() && inventory && typeof inventory.count === 'function' && inventory.count('redlens', { reachable: true }) > 0;
-  if (lamp && typeof lamp.setLens !== 'function' && !lamp.wrapped7a) {
-    // (stream r's headlamp colours the beam itself; until the join, the same here, idempotent)
-    lamp.wrapped7a = true; const up0 = lamp.update.bind(lamp), white = new THREE.Color(LAMP.color), red = new THREE.Color(0xff2a14);
-    lamp.update = (dt) => { up0(dt); const L = lamp.light; if (!L) return; if (lamp.red) { L.color.copy(red); L.intensity *= 0.35; } else L.color.copy(white); };
-    lamp.shows = () => (lamp.on ? (lamp.red ? 'red' : 'white') : 'off');
-  }
+  // (j1: one lens. headlamp.js's setLens colours the beam (stream r); this is the only place that fits it: red while the
+  // glass is carried, on the run and off it. 7a's own fallback colouring is gone)
   const lampMode = () => (lamp && lamp.on ? (lamp.red ? 'red' : 'white') : 'off');
   const lensTick = () => {
     if (!lamp) return;
     const on = lensOn();
-    if (typeof lamp.setLens === 'function') { if ((lamp.lens === 'red') !== on) lamp.setLens(on ? 'red' : 'white'); } else lamp.red = on;
+    if (typeof lamp.setLens === 'function' && (lamp.lens === 'red') !== on) lamp.setLens(on ? 'red' : 'white'); // j1: one lens
     if (on && !has('lens.red')) apply(['f:lens.red'], 'lens');
   };
 

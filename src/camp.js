@@ -78,6 +78,7 @@ const SLEEP_IN = 7;         // this many hours,
 const SLEEP_IN_BY = 9;      // and up by this hour at the latest (a site reached after midnight still gives a night)
 const WORN_OUT = 0.3;       // a rest need under this (the 'tired' mark) lets the tent take you by day too, for SLEEP_IN hours
 const NAP_UNDER = 5;        // wc A: a rest shorter than this many hours is a nap, not a night (nap())
+const BENCH_Q = 0.55;       // j1: a night sat up on the dawn lot's bench (the run's tie-off is 0.62)
 const NAP_GAIN = 0.7;       // a nap gives this share of a night's rest for its hours (a 3 h nap about 0.3)
 const NAP_NO_BAG = 0.6;     // a nap with no bag in the tent (energy.js NO_BAG_REST)
 const NAP_AWAKE = 1.5;      // and takes this many hours off the hours awake for each hour napped (the rest's ceiling)
@@ -893,7 +894,8 @@ export class Camp {
     return { e, q, label: `your ${lower(d ? d.name : 'tent')}`, hint: K.words[c.stage], stage: c.stage };
   }
   // the Rest-until dial: first light, 7:00, 9:00, noon, 4 pm, dusk, 10 pm, or any hour by ← →; E rests until then
-  restDial() {
+  restDial(opt = {}) {
+    if (opt.bench) return this.benchDial(); // j1: the dawn lot's bench (endings.js), story.allows('rest', { bench })
     if (!storyAllows('rest:tent')) return false; // r
     const c = this.camp, d = this.day, { rise, set } = d.sunriseSunset;
     if (!c || c.stage < 3) { this.note('The tent isn’t up yet: carry on pitching it first.'); return false; }
@@ -921,6 +923,19 @@ export class Camp {
     this.dial.show({ kicker, opts, at: start, words, onPick: (at) => this.sleep('tent', at) });
     return true;
   }
+  // j1: begin (join 1: the dawn lot's bench, 50 §8.1; the run allows 'rest' there by ctx.bench, run.js): sat up on the
+  // bench with no tent, a short dial (first light, 7:00, noon), a cold night's rest (BENCH_Q); no bear, nothing stowed
+  benchDial() {
+    if (!storyAllows('rest', { bench: true })) return false;
+    if (this.night || this.busy || hold.active) return false;
+    const d = this.day, { rise } = d.sunriseSunset, first = ((rise ?? 6) + WAKE_AT) % 24;
+    if (!this.dial) this.dial = new RestDial();
+    const opts = [{ label: 'First light', small: clock12(first), at: first }, { label: '7:00', small: 'am', at: 7 }, { label: 'Noon', small: '12 pm', at: 12 }];
+    const words = (at) => { const w = this.wakeTime(at), M = Math.round(w.hours * 60), H = Math.floor(M / 60), m = M % 60; return `${`${H ? `${H} h` : ''}${m ? ` ${m} min` : ''}`.trim() || 'no time at all'} · on the bench, sitting up`; };
+    this.dial.show({ kicker: 'Rest · the bench', opts, at: first, words, onPick: (at) => this.sleep('bench', at) });
+    return true;
+  }
+  // j1: end
   // from an hour and a half before sunset to sunrise the tent takes you (night0), and by day too when worn out (sleepy)
   get night0() { const d = this.day, { rise, set } = d.sunriseSunset, h = d.hours; return h >= (set ?? 19) - SLEEP_FROM || h < (rise ?? 6); }
   get sleepy() { return this.night0 || this.wornOut; }
@@ -1038,7 +1053,7 @@ export class Camp {
       this.morningIn = `${S.moved.length ? `${cap(nm(S.moved))} went into the tent with you.` : ''}${S.out.length ? ` No room inside for ${nm(S.out)}: left by the door.` : ''}`.trim();
     } else this.morningIn = null;
     const fly = !c || c.stage >= 4, rain = !fly && this.rainyNight(hours);
-    const gear = this.tentGear(), q = this.nightQuality(fly, rain);
+    const gear = this.tentGear(), q = kind === 'bench' ? BENCH_Q : this.nightQuality(fly, rain); // j1: the bench, sat up
     const W = this.weather, fc0 = W && W.forecast ? W.forecast(Math.max(1, Math.ceil(hours))) : [];
     // the weather now leads the night's line (as rainyNight counts it): rain falling at bedtime is a wet night's first
     const fc = W && W.state && (!fc0.length || fc0[0].state !== W.state) ? [{ state: W.state }, ...fc0] : fc0;
@@ -1055,7 +1070,8 @@ export class Camp {
     };
     // cons A: a bear in the night (bear.js, main.js sets camp.bear): decided now, for a night's sleep (not a nap or a sleep
     // by day) whose hours hold the night's hour, with food not hung; the card is the visit, held while its sounds play
-    const B = !nap && !byDay && this.bear && typeof this.bear.bedtime === 'function' ? this.bear.bedtime({ x: p.x, z: p.z, from: this.now, to: this.now + hours }) : null;
+    const B = !nap && !byDay && kind !== 'bench' && this.bear && // j1: no bear at the bench
+      typeof this.bear.bedtime === 'function' ? this.bear.bedtime({ x: p.x, z: p.z, from: this.now, to: this.now + hours }) : null;
     if (B) { card.text = B.text; card.hold = B.hold; }
     this.night = { kind, q, hours, wakeAt, x: p.x, z: p.z, rain, nap, day: !!byDay, bear: !!B, bag: !!gear.bag, pad: !!gear.pad, fly, rest0: e && e.live && e.needs ? e.needs.rest : null, clockTo: shared && shared.to ? shared.to : null };
     // (the bear at the tent: its onDark is a promise, the card held while you have the moment to shout: bear.js tentNight)

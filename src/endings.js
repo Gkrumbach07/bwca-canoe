@@ -236,7 +236,7 @@ class Endings {
   }
   danToPhone() { const lot = this.lot; lot.danMoved = true; const P = lot.people.get('dan'); if (P && P.moveTo) P.moveTo(lot.L.box.x + 1.2, lot.L.box.z + 1.2); }
   rest() {
-    const cp = this.c.camp; if (cp && typeof cp.restDial === 'function') { try { this.story.benchRest = true; cp.restDial(); return true; } catch (e) { console.warn('n: the bench', e); } finally { this.story.benchRest = false; } }
+    const cp = this.c.camp; if (cp && typeof cp.restDial === 'function') { try { if (cp.restDial({ bench: true })) return true; } catch (e) { console.warn('n: the bench', e); } } // j1: camp's bench dial, story.allows('rest', { bench: true }) (r's rule)
     const d = this.c.day; if (d && typeof d.advance === 'function') d.advance(0.5); return true;
   }
   partyTick(p) {
