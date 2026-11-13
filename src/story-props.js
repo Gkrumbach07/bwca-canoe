@@ -380,9 +380,99 @@ function sandShape() {
 }
 // /e
 
+// s: S8's things (60 S8 "The place"; campaign stream S, Round 4): the trapper's freight sled on the lunch rock, and the
+// clearing up Emil's creek (the stovepipe, the square hollow, the bed spring, the tin under it, the rusted things in a
+// row), a beaver house at the creek's mouth; the brass spinner in the rock's crack (Walt's, N16 read there). The cut
+// stumps are Round 1's stumpCut (knee high, cut flat)
+const COL_S = { ash: C(0x8c8270), board: C(0x77705f), boardDark: C(0x5d574b), strap: C(0x7a4128), sash: C(0x6a6255), pane: C(0x8fa6a4), rope: C(0x8f8366),
+  pipe: C(0x5b3a26), moss: C(0x56663a), hollow: C(0x4a4434), spring: C(0x6e4128), tin: C(0x8a6a3a), sticks: C(0x6a5a44), mud: C(0x4f4232), brass: C(0xc2a050) };
+// a freight sled about 2.4 m: ash runners curled up at the front, iron straps rusted to lace, a deck of split grey boards,
+// two window sashes lashed on with rope rotted to threads, one pane cracked, one gone
+function sled({ rng }) {
+  const b = new PropBuilder(), L = 2.4, W = 0.34, rr = 0.035;
+  for (const x of [-W, W]) {
+    const run = []; for (let k = 0; k <= 10; k++) { const t = k / 10, z = -L / 2 + t * L, y = 0.04 + (t > 0.82 ? Math.pow((t - 0.82) / 0.18, 2) * 0.32 : 0); run.push(V(x, y, z)); }
+    b.tube(run, rr, 5, TILE.WOOD, COL_S.ash);
+    const strap = run.map((p) => p.clone().add(V(0, -rr * 0.7, 0))); b.tube(strap, rr * 0.45, 4, TILE.METAL, COL_S.strap);
+  }
+  for (let z = -L / 2 + 0.25; z < L / 2 - 0.3; z += 0.42) b.box(V(0, 0.13, z), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), W + 0.06, 0.03, 0.06, TILE.WOOD, COL_S.boardDark); // the cross-bars
+  for (let x = -W + 0.06; x <= W - 0.05; x += 0.135) b.box(V(x + (rng() - 0.5) * 0.02, 0.18, (rng() - 0.5) * 0.06), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), 0.06, 0.012, L / 2 - 0.35 - rng() * 0.12, TILE.SPLIT, rng() < 0.5 ? COL_S.board : COL_S.boardDark);
+  // the two sashes, flat on the deck one over the other, a little askew
+  for (let k = 0; k < 2; k++) {
+    const y = 0.21 + k * 0.045, a = (k ? 0.08 : -0.05), ax = V(Math.cos(a), 0, Math.sin(a)), az = V(-Math.sin(a), 0, Math.cos(a)), c = V((k ? 0.02 : -0.03), y, -0.15 + k * 0.1);
+    const hw = 0.3, hd = 0.42, f = 0.03;
+    for (const [dx, dz, ex, ez] of [[0, -hd, hw, f], [0, hd, hw, f], [-hw, 0, f, hd], [hw, 0, f, hd]]) b.box(c.clone().add(ax.clone().multiplyScalar(dx)).add(az.clone().multiplyScalar(dz)), ax, V(0, 1, 0), az, ex, 0.02, ez, TILE.WOOD, COL_S.sash);
+    if (k === 0) b.box(c.clone(), ax, V(0, 1, 0), az, hw - f, 0.004, hd - f, TILE.GLASS, COL_S.pane); // (the one pane left, cracked; the other's gone)
+  }
+  for (const z of [-0.45, 0.35]) b.tube([V(-W - 0.02, 0.2, z), V(-0.1, 0.27, z + 0.02), V(0.15, 0.27, z - 0.01), V(W + 0.02, 0.2, z)], 0.006, 3, TILE.ROPE, COL_S.rope);
+  return { geo: b.build(), dots: [{ y: 0.25, r: 1.3 }] };
+}
+// a stovepipe rusted through, lying in the moss, an elbow at one end
+function stovepipe({ rng }) {
+  const b = new PropBuilder(), a = rng() * 0.6;
+  const d = V(Math.cos(a), 0, Math.sin(a)), p0 = V(0, 0.05, 0).sub(d.clone().multiplyScalar(0.6)), p1 = V(0, 0.07, 0).add(d.clone().multiplyScalar(0.55));
+  b.cyl(p0, p1, 0.075, 0.075, 8, TILE.METAL, COL_S.pipe, { jitter: 0.012, rng });
+  b.cyl(p1, p1.clone().add(V(0, 0.02, 0)).add(V(-d.z, 0, d.x).multiplyScalar(0.22)), 0.07, 0.065, 8, TILE.METAL, COL_S.pipe);
+  return { geo: b.build(), dots: [{ y: 0.1, r: 0.7 }] };
+}
+// a square hollow where the floor sat, about 4 × 4.5 m: its rim of rotted sill logs under moss, its middle sunk
+function squareHollow({ rng }) {
+  const b = new PropBuilder(), hw = 2.0, hd = 2.25;
+  b.face([V(-hw, -0.12, -hd), V(hw, -0.12, -hd), V(hw, -0.12, hd), V(-hw, -0.12, hd)].reverse(), TILE.PLAIN, COL_S.hollow, { ref: V(0, 1, 0) });
+  for (const [ax, along, off] of [[1, hw, -hd], [1, hw, hd], [0, hd, -hw], [0, hd, hw]]) {
+    const a0 = ax ? V(-along, 0.04, off) : V(off, 0.04, -along), a1 = ax ? V(along, 0.04, off) : V(off, 0.04, along);
+    b.cyl(a0, a1, 0.16, 0.14, 6, TILE.BARK, COL_S.moss, { jitter: 0.03, rng });
+  }
+  return { geo: b.build(), dots: [{ y: 0.05, r: 2.2 }] };
+}
+// a bed spring half sunk in the moss, its coils rusted to the frame
+function bedSpring({ rng }) {
+  const b = new PropBuilder(), hw = 0.45, hd = 0.95, tilt = 0.12;
+  const P = (x, z) => V(x, 0.05 + z * Math.sin(tilt) * 0.3, z);
+  for (const x of [-hw, hw]) b.cyl(P(x, -hd), P(x, hd), 0.014, 0.014, 4, TILE.METAL, COL_S.spring);
+  for (const z of [-hd, hd]) b.cyl(P(-hw, z), P(hw, z), 0.014, 0.014, 4, TILE.METAL, COL_S.spring);
+  for (let z = -hd + 0.15; z < hd; z += 0.19) for (let x = -hw + 0.12; x < hw; x += 0.15) { if (rng() < 0.15) continue; const c = P(x, z); b.cyl(c.clone().add(V(0, -0.05, 0)), c.clone().add(V(0, 0.04, 0)), 0.045, 0.045, 6, TILE.METAL, COL_S.spring); }
+  return { geo: b.build(), dots: [{ y: 0.1, r: 0.9 }], top: 0.02 };
+}
+// the flat tobacco tin, its lid punched with nail dots ("E.R. 1947"): its words are the item's
+function tobaccoTin() {
+  const b = new PropBuilder();
+  b.box(V(0, 0.012, 0), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), 0.06, 0.012, 0.04, TILE.METAL, COL_S.tin);
+  return { geo: b.build(), dots: [{ y: 0.02, r: 0.25 }] };
+}
+// rusted things in a row along one side (a can, a trap's jaws, a bucket's hoop, a stove leg)
+function rustRow({ rng }) {
+  const b = new PropBuilder();
+  for (let k = 0; k < 5; k++) {
+    const x = -1.2 + k * 0.6 + (rng() - 0.5) * 0.15, z = (rng() - 0.5) * 0.15;
+    if (k % 2) b.cyl(V(x, 0, z), V(x, 0.11, z), 0.05, 0.05, 7, TILE.METAL, COLA.rust);
+    else b.tube([V(x - 0.12, 0.02, z), V(x, 0.07, z + 0.05), V(x + 0.12, 0.02, z)], 0.012, 4, TILE.METAL, COLA.rustRed);
+  }
+  return { geo: b.build(), dots: [{ y: 0.06, r: 1.4 }] };
+}
+// a beaver house at the creek's mouth: a dome of peeled sticks and mud standing in the water
+function beaverLodge({ rng, level = 0.6 }) {
+  const b = new PropBuilder(), R = 2.6, H = Math.max(1.3, level + 1.1);
+  chunkStone(b, new THREE.Matrix4().compose(V(0, -level - 0.2, 0), new THREE.Quaternion(), V(R, H + 0.2, R * 0.85)), rng, COL_S.mud);
+  for (let k = 0; k < 26; k++) {
+    const a = rng() * Math.PI * 2, r0 = R * (0.3 + rng() * 0.7), y0 = (1 - r0 / R) * H - level;
+    b.cyl(V(Math.cos(a) * r0, y0, Math.sin(a) * r0 * 0.85), V(Math.cos(a + 0.6) * (r0 + 0.5), y0 - 0.25, Math.sin(a + 0.6) * (r0 + 0.5) * 0.85), 0.03, 0.025, 4, TILE.BARK, COL_S.sticks);
+  }
+  return { geo: b.build(), dots: [{ y: Math.max(0.4, H - level) * 0.6, r: 2.4 }] };
+}
+// a brass spinner hooked into a crack in the rock
+function spinner() {
+  const b = new PropBuilder();
+  b.box(V(0, 0.015, 0), V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), 0.018, 0.004, 0.032, TILE.METAL, COL_S.brass);
+  b.cyl(V(0, 0.015, 0.03), V(0, 0.01, 0.075), 0.002, 0.002, 3, TILE.METAL, COL.iron);
+  return { geo: b.build(), dots: [{ y: 0.03, r: 0.22 }] };
+}
+// /s
+
 const REGISTRY = { stumpCut, quartzCobble, crib, landingRock, redPine, gradeMouth, slab, pole, drillRod,
   casing, coreRack, boxLid, trench, stockpile, stationStake, creekRun, beaverDam, digPit, surveyLath, surveyTag, shovelBlade, twoStumps, cafeTable, urn, coolers, launch, // (a2: the mining years' kits)
   lilacs, stoneStep, foundation, bedFrame, stoneRing, swimRock, enamelPot, sandShape, // e:
+  sled, stovepipe, squareHollow, bedSpring, tobaccoTin, rustRow, beaverLodge, spinner, // s: S8
 };
 // a2: the café's spots in a store's own frame (props.js's: a across, b toward the front wall and the door; every store's
 // inside is the same ±2.86 × ±3.86 m): the window table front left, the corner table front right clear of the board, the
