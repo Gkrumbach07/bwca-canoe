@@ -35,6 +35,7 @@ const SIDE = JSON.parse(readFileSync(path.join(ROOT, 'src/story-data/text/side.j
 const text = (id) => (SIDE[id] ? SIDE[id].text : null);
 const warn = console.warn; console.warn = () => {};
 const results = [];
+const notMini = (f) => !/^ep:M\d/.test(f.id); // 7c: the mini-campaigns' flyers (M1 on 25 and 31 in July–August) are not E's
 const result = (name, pass, more = {}) => { results.push({ name, pass: !!pass }); console.log(pass ? 'PASS' : 'FAIL', name, JSON.stringify(more).slice(0, 700)); };
 
 const io = () => { const m = new Map(); return { read: (ns, f = null) => (m.has(ns) ? JSON.parse(m.get(ns)) : f), write: (ns, v) => { m.set(ns, JSON.stringify(v)); return true; } }; };
@@ -109,7 +110,7 @@ function world({ y = 2026, m = 6, d = 9, h = 11 } = {}) {
   const G = world(); G.s.setMode('mirror'); G.E.dayTurn(true);
   const guestNo = !G.E.yes('S7') && G.E.flyers(25).length === 0 && G.E.pages().length === 0 && G.E.places().length === 0;
   const O = world({ m: 8, d: 1 });
-  const outNo = !O.E.yes('S7', 'unit') && O.E.flyers(25).length === 0;
+  const outNo = !O.E.yes('S7', 'unit') && O.E.flyers(25).filter(notMini).length === 0; // 7c: (the minis' own flyers aside)
   result('explicit: no yes while held (the run), on a guest (mirror: no flyers, no page) or out of the window; yes once released', heldNo && after && guestNo && outNo, { heldNo, after, guestNo, outNo });
 }
 
@@ -211,18 +212,18 @@ function world({ y = 2026, m = 6, d = 9, h = 11 } = {}) {
   const W = world({ m: 7, d: 14, h: 19 }), A = EPISODES.find((e) => e.id === 'mining');
   const MIN = JSON.parse(readFileSync(path.join(ROOT, 'src/story-data/text/mining.json'), 'utf8')).text; W.E.c.text = (id) => text(id) || (MIN[id] ? MIN[id].text : null);
   W.s.sensor('kettlenotice', () => true);
-  const none = W.E.flyers(31).length; // (before "The pads": nothing)
+  const none = W.E.flyers(31).filter(notMini).length; // 7c: // (before "The pads": nothing)
   W.s.set('tauno.said.pads', true); W.E.dayTurn(true);
-  const F = W.E.flyers(31), words = F[0] && F[0].paper;
+  const F = W.E.flyers(31).filter(notMini), words = F[0] && F[0].paper;
   const took = F[0] ? W.E.take(F[0].id) : false;
-  const after = W.E.flyers(31);
+  const after = W.E.flyers(31).filter(notMini);
   result('join: the mining arc on the runner: the Kettle notice a flyer on Farm\'s board only after "The pads" and in the rain\'s window; taken, kettle.notice (no yes: the arc\'s yes is the bench)',
     !!A && none === 0 && F.length === 1 && /^FIELD HELP/.test(words.title || '') && took && W.s.has('kettle.notice') && !W.E.started('mining') && after.length === 1 && after[0].taken, { none, F: F.length, words, took, after });
   W.s.set('door.mining.open', true);
   const yes = W.E.started('mining');
   W.s.set('door.mining.done', true);
   result('join: the arc\'s yes is the first Farm morning sat (door.mining.open: a place door, ep.mining.yes); it ends with door.mining.done; its flyer is down then',
-    yes && W.s.get('ep.mining.end') === 'done' && W.E.flyers(31).length === 0, { yes, end: W.s.get('ep.mining.end') });
+    yes && W.s.get('ep.mining.end') === 'done' && W.E.flyers(31).filter(notMini).length === 0, { yes, end: W.s.get('ep.mining.end') });
   // the director's places(): an open episode's place carries its line (S7's rumour), a layer place needed
   const P = world({ m: 6, d: 9 }); P.E.c.layer = { place: (id) => (id === 's7.mummos' ? { x: -17480, z: 3730 } : null) };
   P.E.take(P.E.flyers(25)[0].id);
