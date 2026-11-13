@@ -691,7 +691,7 @@ const JOIN3 = { id: 'join3', step: 3, title: 'the Kettle notice on Farm\'s board
     const flyers = [...div.querySelectorAll('.pin.flyer')], paper = flyers.map((f) => f.textContent.replace(/\s+/g, ' ').trim().slice(0, 120));
     return { slots: slots.length, pins: div.querySelectorAll('.pin').length, flyers: flyers.length, paper, hook: !!T.flyerHook, ids: flyers.map((f) => f.dataset.flyer), deadline: flyers.some((f) => /days? left|due/i.test(f.textContent)) };
   }, ctx.d0);
-  result('3 (join: A2 + E) the evening of the rain: the Kettle notice on Farm\'s board as a flyer through E\'s hook (paper beside the pins, not one of them), no deadline', r.hook && r.flyers === 1 && r.ids[0] === 'ep:mining' && r.pins === r.slots + 1 && /FIELD HELP/i.test(r.paper[0] || '') && !r.deadline, r);
+  result('3 (join: A2 + E) the evening of the rain: the Kettle notice on Farm\'s board as a flyer through E\'s hook (paper beside the pins, not one of them), no deadline', r.hook && r.ids.filter((i) => !/^ep:M\d/.test(i)).length === 1 && r.ids[0] === 'ep:mining' && r.pins === r.slots + r.flyers /* (final join: 7c's minis may pin their own flyer beside it) */ && /FIELD HELP/i.test(r.paper[0] || '') && !r.deadline, r);
 } };
 async function slice2() {
   const ctx = { home: 31, join: true, shots: SHOTS };

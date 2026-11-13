@@ -357,7 +357,7 @@ export const steps = [
     const f = await facts(page, ['door.mining.yield', 'tauno.e7sketch', 'key.L6B', 'stations.known', 'said.tauno.chkd', 'tauno.blazes', 'key.L5B', 'tauno.pit', 'key.L6C', 'knows.pit', 'nb.page.crewmap']);
     const page2 = await page.evaluate(() => ({ inv: window.__a2.inv('page:crewmap'), pages: window.__game.book && window.__game.book.pages ? window.__game.book.pages().map((p) => p.id) : null, big: window.__game.story.bigCount, w: ['30:4.5.w1', '30:4.5.w2'].filter((x) => window.__game.story.walt().includes(x)) }));
     result('7b the next visit, corrected: "It still runs orange." ("Fifty years. Rock doesn\'t change its mind."); the crew map from the glovebox into the book\'s Pages (door.mining.yield, L6B); "The stations" (stations.known), "chkd T.K.", "E-7" → the pit (L5B tauno.blazes, L6C tauno.pit)',
-      c2 && r.ok && r2.ok && mapSaid.some((x) => /Fifty years/.test(x || '')) && Object.values(f).every(Boolean) && page2.pages && page2.pages.includes('crewmap') && page2.big === 1 && page2.w.length === 2, { c2, mapSaid, f, page2, r: r.ok ? 'ok' : r, r2: r2.ok ? 'ok' : r2 });
+      c2 && r.ok && r2.ok && mapSaid.some((x) => /Fifty years/.test(x || '')) && Object.values(f).every(Boolean) && page2.pages && page2.pages.includes('crewmap') && page2.big >= 1 && page2.w.length === 2 /* (final join: p counts Mary's far end too) */, { c2, mapSaid, f, page2, r: r.ok ? 'ok' : r, r2: r2.ok ? 'ok' : r2 });
     // the dot vocabulary from then on: "Old blaze. Orange." and "Core chips" wherever they stand
     const dots = await page.evaluate(() => { const l = window.__game.storyLayer; return { pine2: l.dotName('crews.pine2'), chips: l.dotName('westpads.chips') }; });
     result('7c from then on the dot names "Old blaze. Orange." and "Core chips"', dots.pine2 === 'Old blaze. Orange.' && dots.chips === 'Core chips', dots);
@@ -422,7 +422,10 @@ async function pietro({ page, result, ctx, shots, log }) {
     // back on the porch: "Eino's sketch" → "turn your head" (30:4.5.w3)
     await page.evaluate(async (d) => { const A = window.__a2; A.at(d, 8); await A.toFarm(); window.__L.step(30); }, ctx.mapDay + 2);
     // (the first porch visit after the map's day opens with the clean book's ask: 9a "Not today." here, then E again)
-    const a1 = await talk(page, 'cast:tauno:31');
+    let a1 = await talk(page, 'cast:tauno:31');
+    // (final join: stream p's Tauno call, 30 §4.8, comes on the first porch visit after the second big finding: "Not yet.",
+    // and the clean book's ask is the next talk)
+    if (a1 && !/^You doing anything this morning\?/.test(a1.say || '') && /Ledger|paper/.test(JSON.stringify(a1))) { await choose(page, 'Not yet.'); await hear(page, 2); await page.evaluate(() => window.__a2.endTalk()); a1 = await talk(page, 'cast:tauno:31'); }
     const n1 = await choose(page, 'Not today.');
     const nt = await hear(page, 2);
     await page.evaluate(() => window.__a2.endTalk());
