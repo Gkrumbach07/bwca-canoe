@@ -85,7 +85,8 @@ const PAGE_HELPERS = () => {
     async stageWait(who, n = 60) { for (let k = 0; k < n; k++) { L.step(10); await L.wait(20); if (F.staged().some((q) => q.who === who)) return true; } return false; },
     // papers off (a talk can't stay open under one: the counter, the book, the trip card), the player on foot
     clear() {
-      const was = { paper: g.hud.paper, onFoot: g.player.onFoot, mode: g.player.mode };
+      const was = { paper: g.hud.paper, big: g.hud.big, hmode: g.hud.mode, onFoot: g.player.onFoot, mode: g.player.mode, tp: !!g.player.teleporting };
+      if (g.hud.big && typeof g.hud.setMode === 'function') g.hud.setMode('hidden');
       if (g.outfitter.open) g.outfitter.hide();
       if (g.journal && g.journal.open) g.journal.close();
       if (g.record && typeof g.record.close === 'function') { try { g.record.close(); } catch { /* */ } }
@@ -187,11 +188,11 @@ try {
     result('8 Gord on a Thursday (his boat tied): the old American who paid cash', r8.ok && r8.told && r8.said.some((x) => /thank you twice/.test(x)), r8);
 
     // 9 Danielle at the Sucker end of Prairie Portage (a weekday); the canoe logged: the line turns north
-    const r9 = await a.evaluate(async () => { const f = window.__f, L = window.__L, g = window.__game; f.at(2, 11); await L.tp(-16605, 4549); await L.settle(); for (let k = 0; k < 60 && !f.F.debug.danielle(); k++) { L.step(10); await L.wait(30); } const dn = f.F.debug.danielle(); f.clear(); f.F.debug.talkDanielle(); L.step(4); const said = await f.say(['Ever find a canoe?', 'A white stone on a stump?']); f.end(); return { dn, said, has: f.has(['danielle.met', 'danielle.log', 'danielle.stone']), north: f.s.north }; });
+    const r9 = await a.evaluate(async () => { const f = window.__f, L = window.__L, g = window.__game; f.at(2, 11); await L.tp(-16605, 4549); await L.settle(); for (let k = 0; k < 60 && !f.F.debug.danielle(); k++) { L.step(10); await L.wait(30); } const dn = f.F.debug.danielle(); const q = f.F.debug.danielle(); const w = g.world; let st = null; for (let k = 0; k < 16 && !st; k++) { const a = (k / 16) * Math.PI * 2, x = q.x + Math.cos(a) * 1.6, z = q.z + Math.sin(a) * 1.6; if (!w.isWater(x, z)) st = { x, z }; } if (st) L.standAt(st.x, st.z, Math.atan2(-(q.z - st.z), q.x - st.x)); f.clear(); f.F.debug.talkDanielle(); L.step(4); const open = f.convo(), was = f.was, after = { paper: g.hud.paper, big: g.hud.big, mode: g.player.mode, onFoot: g.player.onFoot, tp: !!g.player.teleporting }; const said = await f.say(['Ever find a canoe?', 'A white stone on a stump?']); f.end(); return { dn, open, was, after, said, has: f.has(['danielle.met', 'danielle.log', 'danielle.stone']), north: f.s.north }; });
     result('9 Danielle (re-sited: the US end of Prairie Portage): the canoe logged, "went north"; the Carp end named', r9.dn && r9.has['danielle.log'] && r9.north === true, r9);
 
     // 10 the Carp end: the stump with the clean ring and the cairn; the dot's Look on each (E)
-    const r10 = await a.evaluate(async () => { const f = window.__f, L = window.__L, g = window.__game; await L.tp(-10054, 2049); await L.settle(); for (let k = 0; k < 60 && !f.F.debug.carp(); k++) { L.step(10); await L.wait(30); } const dots = f.F.debug.carp() || []; f.clear(); const seen = []; for (const q of dots) { L.face(q, 1.4, q.y); L.step(4); const t = L.target(); seen.push(t); } return { dots, seen }; });
+    const r10 = await a.evaluate(async () => { const f = window.__f, L = window.__L, g = window.__game; await L.tp(-10054, 2049); await L.settle(); for (let k = 0; k < 60 && !f.F.debug.carp(); k++) { L.step(10); await L.wait(30); } const dots = f.F.debug.carp() || []; f.clear(); const was = f.was; const seen = []; for (const q of dots) { L.face(q, 1.4, q.y); L.step(4); const t = L.target(); seen.push(t); } return { dots, seen, was, after: { paper: g.hud.paper, big: g.hud.big, mode: g.player.mode } }; });
     const looked = [];
     for (let k = 0; k < (r10.dots || []).length; k++) {
       const q = r10.dots[k];
