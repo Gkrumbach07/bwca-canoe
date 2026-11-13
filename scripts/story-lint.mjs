@@ -490,7 +490,7 @@ if (!dataFiles.length) {
 // every line id resolves in the extract, every condition passes checkCond (the scene's own context names: topics.js
 // TALK_SENSORS), every fact a scene or topic writes is declared, every walt: id is a Walt-page line
 {
-  const files = ['porch-act1.js', 'topics-act1.js', 'cast.js', 'mining.js' /* a2: the mining years' scenes */, 'guiding.js' /* a3: the guiding years' scenes */].filter((f) => existsSync(path.join(DATA, f)));
+  const files = ['porch-act1.js', 'topics-act1.js', 'cast.js', 'mining.js' /* a2: the mining years' scenes */, 'guiding.js' /* a3: the guiding years' scenes */, 'informant.js' /* i: the informant's scenes */].filter((f) => existsSync(path.join(DATA, f)));
   if (!files.length || !existsSync(path.join(SRC, 'topics.js'))) result('talk: the Act I scenes and topics', null, { why: 'no stream T data yet' });
   else {
     const errs = [];
@@ -508,7 +508,7 @@ if (!dataFiles.length) {
       for (const id of tp.textIds(m)) if (tp.T(id) == null && !/^70\.8\./.test(id)) errs.push(`${f}: no text '${id}'`);
     }
     for (const c of new Set(conds)) {
-      let extra = []; try { extra = Object.keys((await import(pathToFileURL(path.join(DATA, 'mining.js')).href)).A2_SENSORS || {}); } catch { extra = []; } try { extra.push(...Object.keys((await import(pathToFileURL(path.join(DATA, 'guiding.js')).href)).GY_SENSORS || {})); } catch { /* a3 */ } // (a2: the arc's own scene flags)
+      let extra = []; try { extra = Object.keys((await import(pathToFileURL(path.join(DATA, 'mining.js')).href)).A2_SENSORS || {}); } catch { extra = []; } try { extra.push(...Object.keys((await import(pathToFileURL(path.join(DATA, 'guiding.js')).href)).GY_SENSORS || {})); } catch { /* a3 */ } try { extra.push(...Object.keys((await import(pathToFileURL(path.join(DATA, 'informant.js')).href)).I_SENSORS || {})); } catch { /* i */ } // (a2: the arc's own scene flags)
       const words = [...Object.keys(tp.TALK_SENSORS), ...extra].join('|');
       const r = checkCond(c.replace(new RegExp(`(^|[\\s!(&|])(?:${words})(?=$|[\\s)&|])`, 'g'), '$1f:nb.found'), `talk '${c}'`); // (the scene's own flags: true or false, either can hold)
       errs.push(...(Array.isArray(r) ? r : r.errs));

@@ -1,4 +1,4 @@
-{"$doc":"docs/story/95-drafted-lines.md","$hash":"c6849ff27352","$body":"fe71c279e6d3","$v":1,"text":{"d95.len.again":{"k":"block","text":"There they are. Sit, sit. Kim, another coffee over here."},
+{"$doc":"docs/story/95-drafted-lines.md","$hash":"f5ffd99c06e1","$body":"079807c0dea4","$v":1,"text":{"d95.len.again":{"k":"block","text":"There they are. Sit, sit. Kim, another coffee over here."},
 "d95.mary.again":{"k":"block","text":"You're in my light again. Sit. The bars are still lemon."},
 "d95.len.thanks":{"k":"block","text":"That's the crib. That's it exactly. And a casing, standing up like that. They'll go right up front at the open house. Thank you."},
 "d95.len.east.ask":{"k":"block","text":"Anything east of Bald Eagle? Gull, Pietro?"},
@@ -97,4 +97,15 @@
 "d95.s8.page.tin":{"k":"block","text":"A tobacco tin under the spring. E.R. 1947."},
 "d95.s8.end.heritage":{"k":"block","text":"The sled stays. Tom wrote it up as heritage."},
 "d95.s8.photo.clearing":{"k":"block","text":"the clearing up Emil's creek"},
-"d95.s8.photo.sled":{"k":"block","text":"the sled on the lunch rock"}}}
+"d95.s8.photo.sled":{"k":"block","text":"the sled on the lunch rock"},
+"d95.i.cabin.hello":{"k":"block","text":"There you are. Sit, sit. Radio's got the game, if you can call it a game."},
+"d95.i.clear.bob":{"k":"block","text":"I told Bob {lake}. Nobody came."},
+"d95.i.lied":{"k":"block","text":"I lied about a parking lot. I'd never — Walt was —"},
+"d95.i.way":{"k":"block","text":"Get out of my way. I mean that kindly. Get out of my way."},
+"d95.i.note.never":{"k":"block","text":"I'm sorry. Watch who you tell. — D."},
+"d95.i.folder":{"k":"block","text":"Six photocopies, slightly crooked. A file tab: HAAPALA, W. — open 11/17. A typed log, Oct 2018 – Oct 2019: 10/03/18 subj. in EP 30. Pietro, 2 nights (C1613). Did not proceed. … 07/28/19 per src: subj. planning Isabella R., wk of 8/5. … 10/15/19 subj. at ML bunkhouse, bunk 3. 10/17 18:20 per src: subj. in all week. 10/18 subj. missing. 10/19 canoe loc. Birch. CLOSED. An expense sheet, Helstrom Site Services: src — 1,600, every month, Nov 2017 to Oct 2019."},
+"95:stream-i-campaign-run.1":{"k":"line","text":"Denny's cabin Minnow bucket","when":"Where (code): informant-cast.js"},
+"95:stream-i-campaign-run.2":{"k":"line","text":"Josie: …","when":"Where (code): informant-cast.js"},
+"95:stream-i-campaign-run.3":{"k":"line","text":"A manila envelope behind the counter: KOSIR — HOLD.","when":"Where (code): informant-cast.js"},
+"95:stream-i-campaign-run.4":{"k":"line","text":"The next morning. The store yard.","when":"Where (code): informant-cast.js"},
+"95:stream-i-campaign-run.5":{"k":"line","text":"Survey flagging, pink, faded A coffee can A sapling, cut and lashed up An aerial. A receipt","when":"Where (code): story-places.json"}}}

@@ -779,3 +779,53 @@ the player's hand) and 02b (keepers, Tom, the guides, the soloists). M3 never na
 | `m6.end.done` |  | Thirty days and what I said I'd do. | M6 end |
 | `m6.end.yours` |  | Thirty days. Not all of it. It's still mine. | M6 end, the days over |
 | `m6.first` |  | First stamped: a long stay. | M6 the trip card |
+
+## Stream i (campaign run, Round 5: the informant; `src/story-data/informant.js`, `src/informant-cast.js`)
+
+32 §5.10–§5.17 are anchored in the writers' file (HTML comments only). These are the lines the game needs that 32 does
+not give as a quote the extract can reach; three of them are 32's own words, copied verbatim and marked so.
+
+<!-- id: d95.i.cabin.hello -->
+```
+There you are. Sit, sit. Radio's got the game, if you can call it a game.
+```
+Used: Denny on his porch of an evening before the reveal (`DENNY_CABIN` hello). Draft (32 §5.6 says only "Nothing else
+happens there before the reveal").
+
+<!-- id: d95.i.clear.bob -->
+```
+I told Bob {lake}. Nobody came.
+```
+Used: the Walt page when a lake told only to Bob comes back empty after five days (32 §5.11: "same for Bob").
+
+<!-- id: d95.i.lied -->
+```
+I lied about a parking lot. I'd never — Walt was —
+```
+<!-- id: d95.i.way -->
+```
+Get out of my way. I mean that kindly. Get out of my way.
+```
+Used: Frank, accused (`FRANK_NODES.accused`). **Verbatim 32 §5.14**: the lines sit in a quoted list inside a blockquote
+the extract can't reach without splitting the writers' quote; a writer's anchor there replaces these.
+
+<!-- id: d95.i.note.never -->
+```
+I'm sorry. Watch who you tell. — D.
+```
+Used: Denny's note when no lake was ever told to him. **Verbatim 32 §5.17** (the bracketed variant: the extract drops
+brackets).
+
+<!-- id: d95.i.folder -->
+```
+Six photocopies, slightly crooked. A file tab: HAAPALA, W. — open 11/17. A typed log, Oct 2018 – Oct 2019: 10/03/18 subj. in EP 30. Pietro, 2 nights (C1613). Did not proceed. … 07/28/19 per src: subj. planning Isabella R., wk of 8/5. … 10/15/19 subj. at ML bunkhouse, bunk 3. 10/17 18:20 per src: subj. in all week. 10/18 subj. missing. 10/19 canoe loc. Birch. CLOSED. An expense sheet, Helstrom Site Services: src — 1,600, every month, Nov 2017 to Oct 2019.
+```
+Used: the item *The folder (copies)*'s identity. **Verbatim 32 §5.13** (the numbered list of the six copies, joined).
+
+| Where (code) | Words | Used |
+|---|---|---|
+| informant-cast.js | "Denny's cabin" · "Minnow bucket" | the dot on the cabin's porch and the bucket (32 §5.6, §11 props) |
+| informant-cast.js | "Josie: …" | how a counter line shows when Josie isn't standing there (the line is the doc's) |
+| informant-cast.js | "A manila envelope behind the counter: KOSIR — HOLD." | the folder handed over at Farm (32 §5.13's prose, as a note) |
+| informant-cast.js | "The next morning. The store yard." | the card before Tell the boys plays away from the rock (32 §5.16.2 "At the store or cabin") |
+| story-places.json | "Survey flagging, pink, faded" · "A coffee can" · "A sapling, cut and lashed up" / "An aerial." · "A receipt" | the Isabella camp's dot names (32 §5.10's own words) |

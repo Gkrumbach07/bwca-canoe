@@ -20,6 +20,9 @@ export const WALT_SECTIONS = [
   ['odd', 'Things that don\'t add up'], ['leads', 'Leads'], ['farend', 'The far end'],
 ];
 
+// i: begin (the informant's heading: 32 §6 "The informant heading appears with the first piece")
+WALT_SECTIONS.splice(WALT_SECTIONS.findIndex(([k]) => k === 'leads'), 0, ['case', 'Somebody told them where Walt was.']);
+// i: end
 export const WALT_LINES = [
   // night one (rules-core.js night1): the notebook found, and the word he used for the cache (10 §11.3 walt.nb.night1)
   { id: 'w.found', section: 'walt', ref: 'walt.nb.night1.1', text: null },
@@ -126,6 +129,15 @@ export const WALT_LINES = [
   { id: '31:GY-04.gives.1', section: 'leads', done: 'f:rick.met' },
   { id: '31:GY-09b.2', section: 'leads', done: 'met:ollie>=1' },
   // /a3
+  // i: begin (the informant, Round 5: every piece and frame of 32 §6 under its own heading, "Somebody told them where
+  // Walt was." (32:6.c1, the section's label); its lines are the doc's, in the player's words)
+  ...['32:6.1', '32:6.2', '32:6.3', '32:6.4', '32:6.5', '32:6.6', '32:6.7', '32:6.8', '32:6.9', '32:6.10', '32:6.11', '32:6.12', '32:6.13',
+    '32:5.10.w', '32:5.10.w35', '32:5.11.seen', '32:5.11.heard', '32:5.11.clear', 'd95.i.clear.bob', '32:5.11.shared', '32:5.12.w2',
+    '32:5.12.w2b', '32:5.12.w3', '32:5.13.deduce', '32:5.13.folder.w', '32:5.13.folder.w2', '32:5.14.flare', '32:5.15.call', '32:5.15.hill',
+    '31:GY-12.c4'].map((id) => ({ id, section: 'case' })),
+  { id: '32:6.14', section: 'case', annotates: '32:6.12' }, // "Not Frank." beside the patch line
+  { id: '32:5.15.resolved', section: 'case' }, // "Denny. For Matt." (the heading resolved)
+  // i: end
 ];
 
 // a text id with no row: its section by its id's prefix (the longest that matches), else 'odd'. Leads are a person's or a

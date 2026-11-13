@@ -19,6 +19,13 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 // a line's words, *emphasis* as the docs write it
 const words = (s) => esc(s).replace(/\*([^*]+)\*/g, '<em>$1</em>');
 
+// i: begin (the canary's Walt-page lines name their lake: Denny's told lake that came back, or the one told Frank / Bob)
+function iVars(s, id, v) {
+  if (!/^(32:5\.11\.|d95\.i\.clear)/.test(id) || !s || !s.get) return v;
+  const lake = id === '32:5.11.clear' ? s.get('canary.clear.frank') : id === 'd95.i.clear.bob' ? s.get('canary.clear.bob') : id === '32:5.11.shared' ? s.get('canary.shared') : s.get('canary.hard');
+  return lake ? { ...v, lake } : v;
+}
+// i: end
 export class Casebook {
   constructor(book) { this.book = book; this.looked = false; }
   get story() { return this.book.story; }
@@ -39,7 +46,7 @@ export class Casebook {
     for (const id of ids) { const r = waltRow(id); if (r && r.replaces && have.has(r.replaces)) turned.add(r.replaces); }
     for (const id of ids) {
       if (turned.has(id)) continue;
-      const r = waltRow(id), t = say((r && r.ref) || id, v) || (r && r.text) || ''; // c: a build draft's own words (walt-lines.js `text`) until the writers anchor it
+      const r = waltRow(id), t = say((r && r.ref) || id, iVars(s, id, v)) || (r && r.text) || ''; // i: (iVars: the canary's {lake}) // c: a build draft's own words (walt-lines.js `text`) until the writers anchor it
       if (!t) continue;
       const line = { id, section: sectionOf(id), text: t };
       if (r && r.done) { try { line.done = !!s.when(r.done); } catch { line.done = false; } } // (a lead followed up: struck where it stands)
