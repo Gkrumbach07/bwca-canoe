@@ -20,7 +20,7 @@ import { propMaterial } from './prop-kit.js';
 import { registerSensor } from './story-cond.js';
 import { defineItem, definePage, itemDef } from './items.js';
 import { FieldPerson, decorate } from './kettle.js';
-import { addPosting } from './watchers.js';
+import { addPosting, watchers } from './watchers.js';
 import * as I from './story-data/informant.js';
 
 for (const k of Object.keys(I.I_SENSORS)) registerSensor(k, 'flag');
@@ -389,6 +389,8 @@ class InformantCast {
       cabin: () => this.cabinAt(),
       canary: (who, lake, name = null) => this.tell(who, { lake, name }),
       posting: () => (this.story ? this.canaryPostings(this.story, this.story.nowAbs()) : []),
+      wp: () => { try { return this.story ? watchers.postings(this.story.nowAbs()).filter((q) => /^i-/.test(q.id)) : []; } catch (e) { return String(e); } },
+      staged: () => ({ cabin: !!this.cabin, denny: !!this.denny, rock: !!this.rockDenny, visit: !!this.visitF }),
       watch: () => [...this.watch.entries()].map(([k, W]) => ({ k, x: Math.round(W.x), z: Math.round(W.z), leaving: W.leaving })),
       counter: (ep) => { this.storeEnter(ep); return this.lastCounter || null; },
       tick: () => { this.t = TICK; this.lastDay = null; this.update(0); },
