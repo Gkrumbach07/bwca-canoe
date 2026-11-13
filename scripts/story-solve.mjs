@@ -593,7 +593,7 @@ const BRANCHI = [
   { id: 'Tell the boys (Denny tells them)', via: UPTO_I, when: 'f:choice.denny=told & f:denny.toldon & f:denny.told.scene' },
   { id: 'Leave it', via: UPTO_I, when: 'f:choice.denny=left & f:denny.left' },
   { id: 'the note, with no case at all: the reveal from its silence', via: ['f:denny.note'], when: 'f:denny.revealed & f:key.L2E & f:choice.denny & !f:case.denny.canary', block: (T) => T.s.has('case.denny.canary') || T.s.has('denny.tell2') },
-  { id: 'the pad (a3\'s register and Denny\'s card), Bob\'s Rochester: the reveal without the canary', via: ['f:gy.register', 'f:denny.card', 'f:case.denny.message=hard', 'f:case.denny.rochester=hard', 'f:denny.met.1', 'f:denny.met.2', 'f:denny.reveal.open'], when: 'f:denny.revealed & !any(canary.denny.*)', block: (T) => T.s.keys('canary.denny.').length > 0 },
+  { id: 'the pad (a3\'s register and Denny\'s card), Bob\'s Rochester: the reveal without the canary', via: ['f:gy.register', 'f:denny.card', 'f:case.denny.message=hard', 'f:case.denny.rochester=hard', 'f:case.denny.nicknames', 'f:denny.met.2', 'f:denny.reveal.open'], when: 'f:denny.revealed & !any(canary.denny.*)', block: (T) => T.s.keys('canary.denny.').length > 0 },
   { id: 'the deduction (Frank\'s Kek, Denny\'s river, N34): Frank cleared, the river decoded', via: ['f:frank.kek', 'f:denny.rings', 'read:NB78'], when: 'f:denny.deduced & f:frank.cleared', block: (T) => T.s.has('boys.nicknames') || T.s.has('denny.sparky') },
   { id: 'the Isabella camp\'s receipt with Denny\'s rings: a soft piece', via: ['f:denny.rings'], when: 'f:case.denny.isabella=soft & f:isabella.receipt' },
   { id: 'Frank told a lake; it came back empty: cleared, then accused and sorry', via: ['any(canary.frank.*)', 'f:frank.cleared'], when: 'f:frank.cleared & f:canary.clear.frank' },
@@ -878,6 +878,7 @@ async function buildSetters() {
   for (const [sets, cond] of I_SETS) setter(condAtoms(cond), sets, `i:${sets[0]}`, cond, 1);
   for (const nb of READ_NBI) setter(['f:nb.found'], [`read:${nb}`], `read:${nb}`, 'f:nb.found', 1);
   setter(['f:nb.found'], ['f:denny.met.*'], 'i:meet', 'f:nb.found', 1);
+  SCENE_SET.dennyI.add('f:denny.met.*'); SCENE_SET.reveal.add('f:denny.met.*'); // (a talk with Denny is a meeting)
   setter(['f:denny.met.*'], ['f:denny.reveal.open'], 'i:met', 'f:denny.met.*', 0);
   setter(['f:gy.register', 'f:denny.met.*'], ['f:denny.tell2'], 'i:tell2', 'f:gy.register', 1); // (tell2Due: the register, or a third meeting)
   setter(['f:case.denny.*'], ['f:denny.tell3'], 'i:tell3', 'count(case.denny.*)>=2', 1); // (tell3Due: two pieces)
