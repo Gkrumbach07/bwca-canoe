@@ -42,7 +42,7 @@ export const CAST = {
   },
   josie: {
     name: 'Josie Hautala', first: 'Josie', known: null, role: 'the summer help',
-    look: { age: 'young', shirt: 0x5f7f45, hat: null },
+    look: { age: 'young', female: true, shirt: 0x5f7f45, hat: null }, // (ux 2026-11-13: female was missing: her figure was dressed, and would have been voiced, as a man)
     where: [
       // R1 (once) and R1b (once more, two trips on), then only if asked: "That old pack still in back?"
       { id: 'R1', at: 'counter:home', when: 'f:bundle.shelf & !f:bundle.later & !f:rehook.R1 & trips.since(bundle.shelf)>=1', push: 'R1', scene: 'R1', bark: '20:9.2#R1.0', fact: 'rehook.R1' },

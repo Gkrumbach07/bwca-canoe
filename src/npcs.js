@@ -236,6 +236,7 @@ export function dress(rng, { female = false, age = 'adult', shirt, pfd, pants, h
     skin, shirt: sh, cuff: shade(sh, 1.18), pants: pants != null ? pants : pickR(rng, PANTS), belt: 0x3a2c20, pfd: vest, pfdDark: shade(vest, 0.66), strap: 0x2a2a2a,
     boot: pickR(rng, BOOTS), sole: 0x2a221c, lace: 0x3b2a1c, hair: hairC, beard: beard ? (age === 'old' ? hairC : shade(hairC, 1.15)) : skin, hat: hatC, band: shade(hatC, 0.55),
     wear: { hat: rng() < hatChance, bun: female && age !== 'kid' && rng() < 0.65, scale: age === 'kid' ? 0.62 : female ? 0.95 + rng() * 0.03 : 0.98 + rng() * 0.05 },
+    voice: { female: !!female, age }, // (ux: the murmur their lines are said in, audio-speech.js voiceOf)
   };
 }
 function shade(hex, k) { const c = new THREE.Color(hex); c.r = Math.min(1, c.r * k); c.g = Math.min(1, c.g * k); c.b = Math.min(1, c.b * k); return c.getHex(); }
@@ -245,6 +246,9 @@ function shade(hex, k) { const c = new THREE.Color(hex); c.r = Math.min(1, c.r *
 // spots: where they like to be, best first (a pair names a pair of spots); hints: what they tell you, in order; task:
 // what they may ask (null: nothing); odds: how often they have one; wear: their clothes.
 const CITIES = ['Minneapolis', 'St. Paul', 'Duluth', 'Des Moines', 'Madison', 'Chicago', 'Milwaukee', 'Rochester', 'Fargo', 'Iowa City', 'Thunder Bay', 'Winnipeg', 'Eau Claire', 'Ames'];
+// (ux) a first name read as a woman's, for a voice with no figure behind it (a line `by` someone else in a talk)
+export const femaleName = (name) => { const f = String(name || '').split(' ')[0]; return FEMALE.has(f) || F_NAMES.includes(f) || STORY_F.has(f); };
+const STORY_F = new Set(['Josie', 'Mary', 'Tasha', 'Marlys', 'Sheila', 'Aili', 'Liisa', 'Danielle', 'Carol', 'Maggie', 'Heidi', 'Wendy', 'Yvonne', 'Agnes']);
 const F_NAMES = ['Marit', 'Anneli', 'Priya', 'Kate', 'Sue', 'Jo', 'Rosa', 'Nell', 'Britt', 'Maya', 'Hanna', 'Lucy', 'Liv', 'Ingrid', 'Pat', 'Dana', 'Gail', 'Lorna'];
 const M_NAMES = ['Jake', 'Dave', 'Wyatt', 'Sam', 'Anders', 'Russ', 'Luis', 'Ben', 'Mike', 'Eli', 'Gary', 'Hal', 'Cole', 'Rolf', 'Will', 'Joe', 'Drew', 'Kurt'];
 const OLD_NAMES = ['Gunnar', 'Otto', 'Hjalmar', 'Clem', 'Arvo', 'Reino', 'Edna', 'Ione', 'Lauri', 'Elmer'];
@@ -1429,6 +1433,7 @@ export class People {
       get speaker() {
         const h = this;
         return speaker || (speaker = { key: rec.key, person: rec.key, name, role: role || '',
+          get voice() { const v = h.person, f = v && v.figs && v.figs[0]; return (f && f.look && f.look.voice) || null; }, // (ux: audio.speak)
           pos(out) {
             // drawn: the head, and the top of the hat over it (measured once on the skinned body), less the guide's hand
             // over a speaker's point (guide.speakerPos +0.35), so the gem's point rides just over the hat
@@ -2234,6 +2239,7 @@ export class People {
     return (list[fig] = {
       key: `${v.key}#${fig}`, person: v.key, name: v.keeper ? v.first : names[fig] || v.first, role: roleOf(v, fig),
       hear: v.party ? v.hear || null : null, // round A-F: a party's greeting carries over the water (main.js: dialogue's reach)
+      get voice() { const f = v.figs && v.figs[fig]; return (f && f.look && f.look.voice) || null; }, // (ux: audio.speak)
       pos(out) {
         const f = v.figs[fig], roster = v.party ? null : v.lot ? self.lots.get(v.ep) : self.rosters.get(v.ep); // (gl-e: or a trailhead's lot)
         if (!f || (v.party ? !v.live : !roster || !roster.includes(v))) return null; // (round A-F: a party's, while its camp is drawn)

@@ -67,6 +67,7 @@ export class Dialogue {
     this.log = [];        // the last lines: { name, role, text, at }
     this.clock = 0; this.seq = 0;
     this.convo = null;    // { speaker, name, role, room, node, you, wait, bye, last }
+    this.voice = null;    // (sp, text, { talk, by }) → a murmur in their voice (main.js: audio.speak), or null
     const kept = save.read(NS, null);
     this.last = kept && kept.v === 1 && kept.by && typeof kept.by === 'object' ? kept.by : {}; // fb4 D: speaker key → { say, you, at }
     const root = this.root = div('talk'); root.id = 'talk';
@@ -116,6 +117,8 @@ export class Dialogue {
     this.log.push({ name, role: role || '', text, at: h != null ? `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.floor((h % 1) * 60)).padStart(2, '0')}` : '' });
     while (this.log.length > LOG_N) this.log.shift();
   }
+  // a line said aloud (audio-speech.js through main.js's hook): never a wait's ellipsis
+  speak(sp, text, o) { if (typeof this.voice === 'function' && text && !/^\s*…\s*$/.test(text)) { try { this.voice(sp, String(text), o); } catch (e) { console.warn('dialogue: voice', e); } } }
   // the head (or the spot above it) of a speaker, or null when they are gone
   headOf(sp, out) { try { return sp.pos ? sp.pos(out) : null; } catch { return null; } }
   distTo(sp) { const h = this.headOf(sp, _v), p = this.player; return h ? Math.hypot(h.x - p.x, h.z - p.z) : Infinity; }
@@ -161,6 +164,7 @@ export class Dialogue {
     const b = { ...q, el, box: el.firstElementChild, t: q.secs ?? holdFor(q.text), out: false, goneAt: 0, w: 0, h: 0, shownAt: this.clock };
     this.on.push(b);
     this.remember(sp.name, sp.role, q.text);
+    this.speak(sp, q.text, { talk: false });
     return b;
   }
 
@@ -240,6 +244,7 @@ export class Dialogue {
     if (node == null) { this.leave(); return; }
     if (node.end) { const after = node.after; this.close(false); if (typeof after === 'function') after(); return; }
     c.node = node; c.t = 0;
+    if (node.say && !node.plain && node.say !== '…') this.speak(c.speaker, node.say, { talk: true, by: node.by || null });
     if (node.say && !node.plain) { this.remember(node.by || c.speaker.name, c.speaker.role, node.say); if (c.you && !node.filler) { c.said = node.say; c.saidTo = c.you; } } // fb4 D: an answer, and what drew it (content B: not a "What else?", node.filler)
     this.render();
   }

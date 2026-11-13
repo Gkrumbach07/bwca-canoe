@@ -25,6 +25,8 @@ export const DEFAULTS = {
   renderScale: 1,       // 0.5..1 of the device pixel ratio (capped at 2)
   volume: 1,            // 0..1
   mute: false,
+  voices: 'murmur',     // 'murmur' (people's lines said as a soft murmur, audio-speech.js) | 'off'
+  voiceLevel: 1,        // 0..1.5, the voices against the rest
   invertLook: false,
   sensitivity: 1,       // mouse look, 0.3..3
   cursorSteer: false,   // the bow seeks the cursor's point on the water while you paddle
@@ -66,6 +68,8 @@ export const SECTIONS = [
   { id: 'sound', label: 'Sound', rows: [
     { key: 'volume', label: 'Volume', type: 'range', min: 0, max: 1, step: 0.05, format: pct },
     { key: 'mute', label: 'Mute', type: 'toggle' },
+    { key: 'voices', label: 'Voices', desc: 'What people say, said aloud as a murmur in their own voice (the words stay on the screen)', type: 'select', options: [['murmur', 'Murmur'], ['off', 'Off']] },
+    { key: 'voiceLevel', label: 'Voice level', type: 'range', min: 0, max: 1.5, step: 0.05, format: pct },
   ] },
   { id: 'controls', label: 'Controls', rows: [
     { key: 'sensitivity', label: 'Mouse sensitivity', type: 'range', min: 0.3, max: 3, step: 0.1, format: (v) => `${v.toFixed(1)}×` },
@@ -198,6 +202,8 @@ export class Settings {
       case 'fps': if (t.stats) t.stats.enabled = v; break;
       case 'volume': t.audio.setVolume(v); break;
       case 'mute': t.audio.setEnabled(!v); break;
+      case 'voices': t.audio.speech = v; break;
+      case 'voiceLevel': t.audio.voiceLevel = v; break;
       case 'invertLook': t.chase.invert = v; break;
       case 'sensitivity': t.chase.sensitivity = v; break;
       case 'cursorSteer': t.player.cursorSteer = v; t.chase.setCursorSteer(v); break;

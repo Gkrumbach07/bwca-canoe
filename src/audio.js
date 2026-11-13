@@ -6,6 +6,7 @@
 // its air temperature; update(...) is the old entry and still works) and sets `indoors` (inside a store: the walls
 // between you and the lake, the rain on the roof, plank floors); the player, the fishing and the loons call the one-shots below; anything with a place in the world
 // calls emit(kind, { x, y, z, size }). The AudioContext starts on the first key or pointer press (browser policy).
+import { speak as speakLine, voiceOf } from './audio-speech.js';
 import { GROUND } from './terrain-build.js';
 import { fbm, mulberry32 } from './rng.js';
 import { windHeight } from './waves.js';
@@ -522,6 +523,24 @@ export class Ambient {
   splash(size = 1) { if (this.ctx && this.enabled) this.say('splash', V.splash(this, null, size)); }
   bite(strength = 1) { if (this.ctx && this.enabled) this.say('bite', V.bite(this, strength)); }
   snap() { if (this.ctx && this.enabled) this.say('snap', V.snap(this)); }
+  // Someone says `text` (audio-speech.js): a murmur in their voice ({ key, name, female, age } or a voiceOf result), from
+  // their head (pos) or, without one, at your ear. A conversation's line is a little louder than a passing remark; a new
+  // line from the same speaker cuts the one before short. Off with the Voices setting.
+  speak(text, who, pos = null, { talk = false, max = 2.2 } = {}) {
+    if (!this.ctx || !this.enabled || this.speech === 'off' || !text) return null;
+    const V = who && who.f0 ? who : voiceOf(who || {}), key = (who && (who.key || who.name)) || '';
+    const was = this.speaking && this.speaking.get(key);
+    if (was && was.end > this.ctx.currentTime) { try { was.input.gain.setTargetAtTime(0, this.ctx.currentTime, 0.03); } catch { /* gone */ } }
+    const lv = (talk ? 0.55 : 0.45) * (this.voiceLevel ?? 1);
+    const ok = pos && Number.isFinite(pos.x + pos.y + pos.z);
+    const v = this.voice(ok ? { x: pos.x, y: pos.y, z: pos.z, gain: lv, ref: 4, roll: 1.2, wet: this.S.inside ? 0.3 : 0.1, echo: 0, pri: 2 } : { gain: lv, local: true, pri: 2 });
+    if (!v) return null;
+    const r = speakLine(v, String(text), V, { max });
+    (this.speaking || (this.speaking = new Map())).set(key, v);
+    this.count('speech');
+    return r;
+  }
+
   // a loon at `distance` metres ('wail' | 'tremolo' | 'yodel' | 'hoot'), placed out on the open water
   loonCall(distance, kind = 'wail') { if (this.ctx && this.enabled) this.loon(kind, this.waterSpot(Math.max(20, distance || 200)), 1); }
 

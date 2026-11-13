@@ -55,7 +55,7 @@ import { explored } from './explored.js'; // round A-B: the map filling in
 import { MapTable } from './maptable.js'; // fb2 D
 import { Shop } from './shop.js'; // hubs 2B
 import { PhotoCamera } from './photo.js'; // hubs 3B
-import { People } from './npcs.js'; // hubs 3C
+import { People, femaleName } from './npcs.js'; // hubs 3C
 import { Actors } from './actors.js'; // p2 A
 import { Coop } from './coop.js'; // co-op phase 1
 import { CoopGive } from './coop-give.js'; // co-op phase 2, stream B: purses, giving, a guest's things kept by the host
@@ -381,6 +381,19 @@ async function main() {
   // come first.
   const talk = new Dialogue({ camera, player, chase, hud, day, frame: () => !(outfitter.visit && outfitter.visit.inside) });
   npcs.dialogue = talk;
+  // (ux 2026-11-13) what people say, said aloud: a murmur in the speaker's own voice from their head (audio-speech.js);
+  // a line in a talk said by someone else (node.by: the keeper in the staffer's talk) in theirs, at your ear
+  {
+    const head = new THREE.Vector3();
+    talk.voice = (sp, text, o = {}) => {
+      if (!sp) return;
+      const other = o.by && o.by !== sp.name;
+      const who = other ? { key: `by:${o.by}`, name: o.by, female: femaleName(o.by) } : { key: sp.person || sp.key, name: sp.name, ...(sp.voice || { female: femaleName(sp.name) }) };
+      let pos = null;
+      if (!other && sp.pos) { try { pos = sp.pos(head); } catch { pos = null; } }
+      audio.speak(text, who, pos, { talk: !!o.talk });
+    };
+  }
   // p2 A: the actor layer (actors.js): people out on the water and the trails, posed with the player's own stroke, gait and
   // carry (poses.js). The parties drive it (people phase 2); __game.actors.demo() (test only) has two canoes crossing Lake
   // One and a party of four carrying over the Lake One - Kawishiwi River portage. Bodies come from the people's figure pool
