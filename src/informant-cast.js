@@ -63,7 +63,7 @@ class InformantCast {
     // the canary's watchers as a posting row (watchers.js `// i:`): the site Denny ringed on a lake told only to him, the
     // told day + 1 to + 5, 8:00–19:00, until any reveal choice; drawn here (they paddle off as you come in sight)
     try { if (!watchers.c.story) watchers.attach({ story: s, world: this.c.world, actors: this.c.actors, scene: this.c.scene }); } catch { /* the run attaches it too */ } // (postings() read in the day world before any run)
-    addPosting({ id: 'i-canary', when: 'true', drawnBy: 'i', hours: I.CANARY.hours, place: (st, abs) => this.canaryPostings(st, abs) });
+    addPosting({ id: 'i-canary', when: '!f:choice.denny', drawnBy: 'i', hours: I.CANARY.hours, place: (st, abs) => this.canaryPostings(st, abs) });
     // stream b5's rock on the 14th: its Denny held there while the reveal is ready (b5 calls onRock at 20:15)
     this.hookRock();
     return this;
