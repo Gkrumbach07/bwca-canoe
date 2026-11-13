@@ -1373,7 +1373,10 @@ async function main() {
       night.attach({ ...base, boats, motorboat, texts: st.texts || null });
       const updM = trip.update.bind(trip);
       trip.update = (dt) => { updM(dt); try { boats.update(dt); motorboat.update(dt); night.update(dt); } catch (e) { if (!night.warned) { night.warned = true; console.warn('story m: mechanics', e); } } };
-      window.__game.storyMech = { boats, motorboat, rescue, night, squadNight: (o) => night.squadNight(o), adrift: (o) => night.adrift(o), on: true };
+      // Brekke's launch at Farm on Thursdays, moving (a2's still prop until now: mining-cast.js launch(L) asks the actor)
+      const sm2 = window.__game.storyMining, { attachLaunch } = await import('./launch-run.js');
+      const launch = sm2 && sm2.miningCast ? attachLaunch({ miningCast: sm2.miningCast, motorboat, world }) : null;
+      window.__game.storyMech = { boats, motorboat, rescue, night, launch, squadNight: (o) => night.squadNight(o), adrift: (o) => night.adrift(o), on: true };
       console.log('story m: mechanics');
     } catch (e) { console.warn('story m: mechanics', e); }
   }

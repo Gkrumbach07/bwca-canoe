@@ -136,10 +136,13 @@ try {
       if (!mb || mb.why) return { refused, spawn: mb };
       let arrived = false; mb.on('arrived', () => { arrived = true; });
       for (let i = 0; i < 120 && !arrived; i++) { L.step(5, 1 / 15); await L.wait(5); }
-      const st = { refused, arrived, at: [Math.round(mb.x), Math.round(mb.z)], end: path[1].map(Math.round), driver: !!mb.driver, drawn: !!(mb.driver && mb.driver.bind), mode: mb.mode, sitN: mb.driver ? mb.driver.sitN || 0 : 0 };
+      // a guide boat close by: its driver drawn, sat at the tiller
+      const near = MB.spawn({ kind: 'guide', at: { x: path[0][0], z: path[0][1] }, force: true, driver: { name: 'Jon' } });
+      await L.tp(path[0][0] + 12, path[0][1]); await L.settle(); L.step(20, 1 / 30);
+      const st = { refused, arrived, at: [Math.round(mb.x), Math.round(mb.z)], end: path[1].map(Math.round), driver: !!mb.driver, mode: mb.mode, nearDrawn: !!(near.driver && near.driver.bind), sitN: near.driver ? near.driver.sitN || 0 : 0 };
       return st;
     });
-    result('3 motorboat: refused on Birch (no motors); on Moose Lake Brekke\'s launch runs its path with him sat at the wheel and arrives', d3.refused && d3.refused.why && d3.arrived && Math.hypot(d3.at[0] - d3.end[0], d3.at[1] - d3.end[1]) < 12 && d3.driver, d3);
+    result('3 motorboat: refused on Birch (no motors); on Moose Lake Brekke\'s launch runs its path with him sat at the wheel and arrives', d3.refused && d3.refused.why && d3.arrived && Math.hypot(d3.at[0] - d3.end[0], d3.at[1] - d3.end[1]) < 12 && d3.driver && d3.nearDrawn && d3.sitN > 0, d3);
     await shot(a, 'm3-launch');
 
     // 4 trailing: hold off, stop when you stop
@@ -219,6 +222,23 @@ try {
     });
     result('7 the canoe adrift: 30 m off the landing, loose, it grounds across the water (ev.adrift)', d7.got && d7.ev && d7.grounded, d7);
     await shot(a, 'm7-adrift');
+
+    // 8 Brekke's launch at Farm on a Thursday: it comes in to the dock's berth while he is in, and goes after
+    const d8 = await a.evaluate(async () => {
+      const g = window.__game, L = window.__L, m = window.__m, d = g.day;
+      m.M.boats.clear(); m.M.motorboat.clear(); g.wind.override = null;
+      let doy = d.doy; for (let k = 0; k < 8; k++, doy++) if (new Date(Date.UTC(d.year, 0, doy)).getUTCDay() === 4) break;
+      const Lg = g.outfitter.landing(31);
+      await L.tp(Lg.x, Lg.z); await L.settle();
+      d.setClock(d.year, doy, 11.8); L.step(10, 1 / 30);
+      const seen = [];
+      for (let i = 0; i < 80; i++) { L.step(6, 1 / 15); await L.wait(5); const s = m.M.launch ? m.M.launch.stats() : null; if (s && (!seen.length || seen[seen.length - 1] !== s.phase)) seen.push(s.phase); if (s && s.phase === 'tied') break; }
+      const tied = m.M.launch ? m.M.launch.stats() : null, brekke = !!(g.storyMining && g.storyMining.miningCast.live.has('brekke'));
+      d.setClock(d.year, doy, 13.6);
+      for (let i = 0; i < 40; i++) { L.step(6, 1 / 15); await L.wait(5); const s = m.M.launch.stats(); if (seen[seen.length - 1] !== s.phase) seen.push(s.phase); }
+      return { doy, brekke, tied, seen, prop: !!(g.storyMining && g.storyMining.miningCast.launchMesh), d: Math.round(Math.hypot(g.player.x - Lg.x, g.player.z - Lg.z)) };
+    });
+    result('8 Brekke\'s launch: on a Thursday it runs in to Farm\'s dock and lies tied while he is in, then goes (no still prop)', d8.seen.includes('in') && d8.seen.includes('tied') && d8.seen.includes('out') && !d8.prop, d8);
     await a.close();
   }
 } catch (e) { result('threw', false, { e: String(e && e.stack || e).slice(0, 800) }); }
