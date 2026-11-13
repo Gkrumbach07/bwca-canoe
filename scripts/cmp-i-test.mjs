@@ -219,7 +219,7 @@ try {
     });
     await n.close();
   }
-} finally {
+} catch (e) { result('the rig threw', false, { e: String(e && e.stack || e).slice(0, 900) }); } finally {
   result('no page errors', errors.length === 0, { errors: errors.slice(0, 8) });
   await browser.close();
   const fails = results.filter((r) => !r.pass);
