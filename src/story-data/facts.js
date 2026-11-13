@@ -134,6 +134,10 @@ export const FACTS = [
   // namespaces (maggie. dan. wade. brekke. josie. tauno. kettle.); these are the ones without a home
   { key: 'isabella.', kind: 'any', doc: '32/40 6.6 the Isabella camp: isabella.receipt (stream i\'s, read by Maggie\'s topic)' },
   // p: end
+  // a4: begin (the family, Round 6; docs/story/33-family.md): the people's own facts are under their namespaces (aili. jon.
+  // liisa. gord. danielle.; cards. is K1a's); the Carp-end stump and cairn, re-sited on the US side (dlc-quetico.md)
+  { key: 'carp.', kind: 'bool', doc: '33 / bible 5.4 the Carp end of Carp Portage: carp.stump (the ring where a stone sat), carp.stone (the cairn\'s white one)' },
+  // a4: end
 ];
 
 // the arcs whose yields are the big findings (§3.3 story.big), and the doors the player can be offered

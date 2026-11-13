@@ -589,7 +589,7 @@ if (!dataFiles.length) {
     for (const [who, R] of Object.entries(cast.CAST || {})) for (const w of R.where || []) {
       const stages = !!(w.scene || w.bark);
       if (!stages) continue;
-      const pull = /^(porch|counter|a2|a3):/.test(w.at || '') && !w.push; // (a3: Moose Lake's counter, bench, rail, dock, landing, store: the same) (a seat or a counter: the player walks to it; join c2: A2's Farm seats a2:dock/window/corner/store are the same)
+      const pull = /^(porch|counter|a2|a3|a4):/.test(w.at || '') && !w.push; // (a3: Moose Lake's counter, bench, rail, dock, landing, store: the same) (a4: the family's counters, docks and the Prairie landing are walked to the same) (a seat or a counter: the player walks to it; join c2: A2's Farm seats a2:dock/window/corner/store are the same)
       if (w.push || pull || ENG.test(` ${w.when || ''}`)) continue;
       PE.push(`cast ${who}.${w.id} (at ${w.at}): stages ${w.scene || w.bark} with no push and no engagement atom`);
     }

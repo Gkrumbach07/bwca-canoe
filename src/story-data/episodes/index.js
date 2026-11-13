@@ -13,6 +13,7 @@ const SIDE7A = [S2, S3, S4];
 import guiding from './arc-guiding.js'; // a3: the guiding years' arc (Round 4)
 import S1 from './s1-ollie.js'; // s: the man on the portage (Round 4)
 import S8 from './s8-sled.js'; // s: the sled on the lunch rock (Round 4)
+import family from './arc-family.js'; // a4: the family arc (Round 6)
 // 7c: begin (the mini-campaigns M1–M6: one record per cycle for the yearly ones, minis.js)
 import M1 from './m1-bear.js';
 import M2 from './m2-fog.js';
@@ -23,4 +24,5 @@ import M6 from './m6-longstay.js';
 export const MINIS = [...M1, M2, ...M3, ...M4, ...M5, M6];
 // 7c: end
 
-export const EPISODES = [S7, S9, mining, guiding, S1, S8, ...SIDE7A, ...MINIS]; // (a3: guiding; s: S1, S8; 7a: ...SIDE7A; 7c: ...MINIS)
+export const EPISODES = [S7, S9, mining, guiding, S1, S8, ...SIDE7A, ...MINIS, family]; // (a3: guiding; s: S1, S8; 7a: ...SIDE7A; 7c: ...MINIS; a4: family)
+

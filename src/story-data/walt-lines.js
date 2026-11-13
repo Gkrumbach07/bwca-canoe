@@ -126,6 +126,24 @@ export const WALT_LINES = [
   { id: '31:GY-04.gives.1', section: 'leads', done: 'f:rick.met' },
   { id: '31:GY-09b.2', section: 'leads', done: 'met:ollie>=1' },
   // /a3
+  // a4: begin (the family, 33): drafted lines (95-drafted-lines "Stream a4") and the sections other than 33's default (people)
+  { id: 'a4:w.jon', section: 'people' },
+  { id: 'a4:w.eino', section: 'odd' },
+  { id: 'a4:w.kitchen', section: 'years' },
+  { id: 'a4:w.guestbook', section: 'odd' },
+  { id: 'a4:w.danielle', section: 'odd' },
+  { id: 'a4:w.carp', section: 'odd' },
+  { id: '33:6.4.w.1', section: 'places' },
+  { id: '33:6.4.w.2', section: 'places' },
+  { id: '33:6.4.w.3', section: 'odd' },
+  { id: '33:6.7.w.1', section: 'odd' },
+  { id: '33:6.7.w.2', section: 'odd' },
+  { id: '33:6.8.w.1', section: 'odd' },
+  { id: '33:6.9.cards.1', section: 'places' },
+  { id: '33:6.9.cards.2', section: 'odd' },
+  { id: '33:6.13.w.1', section: 'odd' },
+  { id: '33:6.10.after', section: 'odd' },
+  // a4: end
 ];
 
 // a text id with no row: its section by its id's prefix (the longest that matches), else 'odd'. Leads are a person's or a

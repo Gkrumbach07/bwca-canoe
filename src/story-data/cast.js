@@ -119,6 +119,41 @@ export const CAST = {
     where: [{ id: 'store', at: 'a3:store', when: 'date:05-15..09-15 & (hour:5-7 | hour:18-21)', scene: 'a3:rick' }],
   },
   // /a3
+  // a4: begin (the family, Round 6; docs/story/33-family.md §3 "The calendar here", §4). Their `where` is read by
+  // family-cast.js (not cast.js's walkout or seats): 'a4:counter' (Aili behind her bait counter at the motel beside the
+  // Little Vermilion store), 'a4:jondock' (Jon at the dock below the motel's back porch), 'a4:counter12' (Liisa by the
+  // outfitter's counter), 'a4:dock12' (Gord at the outfitter's dock, his boat tied), 'a4:prairie' (Danielle at the Sucker end of
+  // Prairie Portage: re-sited off the Quetico side, docs/story/dlc-quetico.md). Their scenes are story-data/family.js's.
+  aili: {
+    name: 'Aili Niemi', first: 'Aili', known: 'aili.met', unknown: 'A woman behind the counter', role: '',
+    // 74, a cardigan over a work shirt, reading glasses on the counter, grey hair pinned up
+    look: { age: 'old', female: true, shirt: 0x7a5a4a, pants: 0x3e3a36, hat: null, hair: 0xc8c4bc, hatChance: 0 },
+    where: [{ id: 'counter', at: 'a4:counter', when: 'month:5-10 & !(dow:mon & hour:9-16) & hour:6-21', scene: 'a4:aili' }],
+  },
+  jon: {
+    name: 'Jon Niemi', first: 'Jon', known: 'jon.met', unknown: 'A man cleaning fish', role: '',
+    look: { age: 'adult', shirt: 0x4f5a3a, pants: 0x2f3236, hat: 0x6a2a24, hair: 0x5a4a3a, hatChance: 0.9 },
+    where: [
+      { id: 'dock', at: 'a4:jondock', when: 'month:5-10 & hour:19-21', scene: 'a4:jon' },
+      { id: 'morning', at: 'a4:dock12', when: 'month:5-10 & hour:6-8', scene: 'a4:jon' },
+    ],
+  },
+  liisa: {
+    name: 'Liisa Niemi', first: 'Liisa', known: 'liisa.met', unknown: 'The girl at the counter', role: 'the season staff',
+    look: { age: 'young', female: true, shirt: 0x9a4a4a, pants: 0x3a3e4a, hat: null, hair: 0x8a6a4a, hatChance: 0 },
+    where: [{ id: 'counter', at: 'a4:counter12', when: '(month:6-9 | (month:5 & date:05-24..05-31) | (month:10 & date:10-01..10-06)) & hour:8-18', scene: 'a4:liisa' }],
+  },
+  gord: {
+    name: 'Gord Pelletier', first: 'Gord', known: 'gord.met', unknown: 'A man off a boat', role: '',
+    look: { age: 'old', shirt: 0x8a3a2a, pants: 0x3a3a34, hat: 0x2a3a2a, hair: 0x9a9690, hatChance: 1 },
+    where: [{ id: 'dock', at: 'a4:dock12', when: 'dow:thu & (month:7-9 | (month:6 & date:06-15..06-30)) & hour:11-14', scene: 'a4:gord' }],
+  },
+  danielle: {
+    name: 'Danielle Carriere', first: 'Danielle', known: 'danielle.met', unknown: 'A ranger', role: 'the Canadian ranger',
+    look: { age: 'adult', female: true, shirt: 0x5a6a3a, pants: 0x3a3a2a, hat: 0x6a5a3a, hair: 0x4a3a2a, hatChance: 1 },
+    where: [{ id: 'landing', at: 'a4:prairie', when: 'month:6-9 & dow:mon|tue|wed|thu & hour:10-15', scene: 'a4:danielle' }],
+  },
+  // a4: end
 };
 // p: begin — the company and the press (Round 6, 40 §1.1): Dan, Wade and Maggie, placed by company.js (FieldPerson reads
 // their name and look here); no slots of the cast's own
