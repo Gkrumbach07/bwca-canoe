@@ -73,7 +73,9 @@ const HELPERS_A3 = () => {
   A.dock = () => { const S = A.store(); L.standAt(S.dockFoot.x, S.dockFoot.z, 0); L.step(30); };
   A.staged = () => A.GC().staged();
   // (the keeper's hello as you come in can take the talk a moment later: let it pass, close it, then talk)
-  A.talk = (who) => { L.step(90); A.endTalk(); const ok = A.GC().talk(who); L.step(3); A.lastTalk = { who, ok, convo: !!(g.dialogue && g.dialogue.convo) }; return ok; };
+  // (a trip card comes up as you walk in after a trip: closed first, as a player would, or it takes the talk)
+  A.paper = () => { for (let k = 0; k < 4 && g.hud.paper; k++) { try { if (g.record && typeof g.record.close === 'function') g.record.close(); } catch { /* */ } L.step(10); } };
+  A.talk = (who) => { L.step(90); A.paper(); A.endTalk(); const ok = A.GC().talk(who); L.step(3); A.lastTalk = { who, ok, convo: !!(g.dialogue && g.dialogue.convo) }; return ok; };
   A.endTalk = () => { const D = g.dialogue; if (D && D.convo) D.close(false); L.step(4); };
   A.facts = (ks) => Object.fromEntries(ks.map((k) => [k, g.story.has(k) ? g.story.get(k) : false]));
   A.inv = (id) => g.inventory.count(id, { reachable: false });
@@ -158,7 +160,7 @@ try {
       ctx.tue = await a.evaluate((d) => { const A = window.__a3; const t = A.next(d + 1, 2); A.at(t, 10); A.inside(); return t; }, ctx.thu);
       const st = await a.evaluate(() => window.__a3.staged());
       const pre = await a.evaluate(() => ({ met: window.__game.story.has('marlys.met'), entry: null }));
-      const trace = await a.evaluate(() => { const g = window.__game, L = window.__L, A = window.__a3; L.step(90); A.endTalk(); const ok = A.GC().talk('marlys'); const out = [{ ok, convo: !!g.dialogue.convo, say: g.dialogue.convo && g.dialogue.convo.node && g.dialogue.convo.node.say }]; for (let k = 0; k < 4 && g.dialogue.convo; k++) { L.step(1); out.push({ k, convo: !!g.dialogue.convo, paper: g.hud.paper || null, big: !!g.hud.big, onFoot: g.player.onFoot, tp: g.player.teleporting }); } return out; });
+      const trace = await a.evaluate(() => { const g = window.__game, L = window.__L, A = window.__a3; L.step(90); A.paper(); A.endTalk(); const ok = A.GC().talk('marlys'); const out = [{ ok, convo: !!g.dialogue.convo, say: g.dialogue.convo && g.dialogue.convo.node && g.dialogue.convo.node.say }]; for (let k = 0; k < 4 && g.dialogue.convo; k++) { L.step(1); out.push({ k, convo: !!g.dialogue.convo, paper: g.hud.paper || null, big: !!g.hud.big, onFoot: g.player.onFoot, tp: g.player.teleporting }); } return out; });
       log('marlys trace', JSON.stringify(trace));
       const lt = await a.evaluate(() => ({ ...window.__a3.lastTalk, now: window.__t.convo(), outOpen: !!window.__game.outfitter.open, visit: !!(window.__game.outfitter.visit && window.__game.outfitter.visit.inside) }));
       log('marlys talk', JSON.stringify({ pre, lt }));
