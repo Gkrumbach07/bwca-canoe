@@ -15,7 +15,7 @@
 //   N the note: no case at all, tier 4 three weeks gone: the note at the counter, the reveal from its silence
 //   (and no page errors)
 //
-//   APP=http://localhost:5360 node scripts/cmp-i-test.mjs [--only off|A|R|R1|R2|R3|N] [--shots dir]
+//   APP=http://localhost:5360 node scripts/cmp-i-test.mjs [--only off|A|A1..A7|R|R1|R2|R3|N] [--shots dir]
 import { createRequire } from 'node:module';
 import { readdirSync, existsSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -77,7 +77,7 @@ const HELPERS_I = () => {
   I.walt = () => g.story.walt();
   I.rings = () => { const P = g.storySeams && g.storySeams.pencil; return P ? P.marks().filter((m) => m.kind === 'ring' && /Denny/.test(m.who || m.by || '')) : []; };
 };
-const step = async (title, fn) => { log(`-- ${title}`); try { await fn(); } catch (e) { result(`${title}: threw`, false, { e: String(e && e.stack || e).slice(0, 600) }); } };
+const step = async (title, fn) => { if (ONLY && /^A\d/.test(ONLY) && /^A\d/.test(title) && !title.startsWith(ONLY)) return; /* polish: --only A7 (one step of A, on a fresh season) */ log(`-- ${title}`); try { await fn(); } catch (e) { result(`${title}: threw`, false, { e: String(e && e.stack || e).slice(0, 600) }); } };
 const say = async (page, prefix) => { const r = await choose(page, prefix); if (!r.ok) log('choose', prefix, r.why || ''); return r; };
 // to Denny at 18:00 on the porch: the talk open
 const toDenny = async (page, doy) => {
@@ -106,7 +106,7 @@ try {
     result('0 flag off: informant-cast.js not fetched, no storyInformant', rt.length === 0 && z.i === null, { rt });
     await off.close();
   }
-  if (!ONLY || ONLY === 'A') {
+  if (!ONLY || ONLY === 'A' || /^A\d/.test(ONLY)) {
     const a = await open(`${APP}/?story=1`);
     await newSeason(a, 38, 191);
     const ctx = { d0: await a.evaluate(() => window.__game.day.doy) };
