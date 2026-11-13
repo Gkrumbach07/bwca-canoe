@@ -1235,6 +1235,8 @@ route. They're spaced across the run, and they come only if the reveal ended in 
 From the first line on, **one watcher canoe is out of play**, south on the Isabella. That's one fewer light on the
 Pietro–Lake One route, which the run's tuning should feel.
 
+<!-- id: 32:9.duluth.1 pick n=1 -->
+<!-- id: 32:9.duluth.2 pick n=2 -->
 If the reveal ended in **Tell the boys** or **Leave it**, one line, once: *(Wade)* "Duluth's not picking up."
 *(Pause.)* "Doesn't matter."
 
