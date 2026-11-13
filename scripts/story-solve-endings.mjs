@@ -88,12 +88,11 @@ export function solveEndings() {
   const rows = [], fails = [];
   // the hooks: endings.js's, on the solver's own state
   const hooks = (S) => {
-    const st = S.solveHooks || (S.solveHooks = { read: null });
     return {
       handed: () => {}, carbon: () => S.set('end.carbon', 'maggie', 'solve'),
       named: () => N.commitEnding(S, { end: 'J', walt: 'named', lot: 30 }), kept: () => N.commitEnding(S, { end: 'J', walt: 'kept', lot: 30 }),
-      close: () => { if (!S.has('end') && st.scene === 'M') N.commitEnding(S, { end: 'M', read: st.read || 'silent', lot: 30 }); },
-      turnback: () => {}, readyes: () => { st.read = 'yes'; }, readno: () => { st.read = 'no'; }, readsilent: () => { st.read = 'silent'; },
+      handover: () => N.commitEnding(S, { end: 'M', lot: 30 }), close: () => {},
+      turnback: () => {}, readyes: () => S.set('end.read', 'yes', 'solve'), readno: () => S.set('end.read', 'no', 'solve'), readsilent: () => S.set('end.read', 'silent', 'solve'),
     };
   };
   for (const record of [false, true]) for (const north of [false, true]) for (const meeting of [false, true]) for (const met of [true, false]) {

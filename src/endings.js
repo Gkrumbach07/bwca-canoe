@@ -294,12 +294,12 @@ class Endings {
     const lot = this.lot; if (!lot) return false;
     const P = lot.people.get('dan');
     if (this.story.has('end')) return lot.letter !== 'M' && !lot.danAside ? this.danAside() : false;
-    let read = null;
+    const s = this.story, read = (v) => { if (!s.has('end.read')) s.set('end.read', v, 'n:brekke'); };
     return this.open(P, N.DAN_M, 'start', {
       turnback: () => {},
-      handed: () => { lot.handed = true; },
-      readyes: () => { read = 'yes'; }, readno: () => { read = 'no'; }, readsilent: () => { read = 'silent'; },
-      close: () => { this.commit('M', { read: read || 'silent' }); },
+      handover: () => { this.commit('M', {}); },
+      readyes: () => read('yes'), readno: () => read('no'), readsilent: () => read('silent'),
+      close: () => {},
     }, (at) => { if (at === 'ring') this.afterDan(); });
   }
   danAside() {

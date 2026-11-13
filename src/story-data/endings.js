@@ -131,8 +131,8 @@ export const DAN_M = {
     wade: { say: [{ id: '50:9.2.3', by: 'Wade' }], go: [
       { ask: '50:9.2.c6', to: 'hand' },
       { ask: '50:9.2.c7', then: ['do:turnback'], end: true }] },
-    // the hand-over: the cans to Dan; the passenger window comes down (the ending is written here)
-    hand: { then: ['do:handed'], say: [{ id: '50:9.2.4', by: 'Brekke' }], go: [
+    // the hand-over: the cans to Dan; the passenger window comes down (the ending is written here; Brekke's question after)
+    hand: { then: ['do:handover'], say: [{ id: '50:9.2.4', by: 'Brekke' }], go: [
       { ask: '50:9.2.c8', say: [{ id: '50:9.2.5', by: 'Brekke' }], then: ['do:readyes'], to: 'ring' },
       { ask: '50:9.2.c9', say: [{ id: '50:9.2.6', by: 'Brekke' }], then: ['do:readno'], to: 'ring' },
       { ask: '50:9.2.c10', then: ['do:readsilent'], to: 'ring' }] },
