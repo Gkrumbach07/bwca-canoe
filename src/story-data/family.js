@@ -185,7 +185,7 @@ export const AILI = {
       { ask: '33:6.4.c3', say: ['33:6.4.7'], then: ['f:aili.pot=kept', 'do:keepPot'], end: true },
       { ask: '33:6.4.c4', say: ['33:6.4.8'], then: ['f:aili.pot=cook'], end: true }] },
     // a second gift: thanked, changes nothing more
-    again: { say: ['33:6.4.9'], end: true },
+    again: { say: ['33:6.4.9'], then: ['f:aili.again'], end: true },
     // after "Liisa thought you'd want them in the house." with the stone not yet given: the kindness is the gift
     stone2: { say: ['33:6.10.4', '33:6.4.2'], then: [...GIFT], end: true },
     // after the can, "Thank you" path: coffee for good
@@ -232,7 +232,7 @@ export function ailiEntry(s, ctx = {}) {
     if (!ctx.nightOne) return s.has('aili.met') ? 'talk0' : (ctx.carrying ? 'first_A' : 'first_C');
     return ctx.carrying ? 'first_B' : 'first_C';
   }
-  if (ctx.gift) return s.has('aili.stone') && (ctx.gift === 'print' ? true : s.has('aili.print') || s.has('aili.pot')) ? 'again' : ctx.gift === 'print' ? 'lilacs' : 'pot';
+  if (ctx.gift) return s.has('aili.stone') ? 'again' : ctx.gift === 'print' ? 'lilacs' : 'pot';
   if (s.get('choice.aili') === 'know' && ailiStep(s, ctx.season) === 0) return 'cold';
   if (ctx.shut) return 'shut';
   if (s.get('choice.aili') === 'thanks' && !s.has('aili.stone')) return 'stone2';
@@ -242,9 +242,12 @@ export function ailiEntry(s, ctx = {}) {
 // her openers at step 1 (33 §6.3: she says one, by the day)
 export const OPENERS = ['33:6.3.open.1', '33:6.3.open.2', '33:6.3.open.3'];
 // the wants (show.js): the June print at Mummo's, June's pot shown (not taken: S9's choice is in her counter)
+// (the first opens her; a second, after the stone, is thanked and changes nothing more: 'again')
 export const WANTS = [
-  { who: 'aili', print: 's7.lilacs.camp', when: 'f:aili.met & ailistep>=1', to: 'lilacs', gift: 'print' },
-  { who: 'aili', item: 'junespot', give: false, when: 'f:aili.met & ailistep>=1 & !f:aili.pot', to: 'pot', gift: 'pot' },
+  { who: 'aili', print: 's7.lilacs.camp', when: 'f:aili.met & ailistep>=1 & !f:aili.stone', to: 'lilacs', gift: 'print' },
+  { who: 'aili', item: 'junespot', give: false, when: 'f:aili.met & ailistep>=1 & !f:aili.stone', to: 'pot', gift: 'pot' },
+  { who: 'aili', print: 's7.lilacs.camp', when: 'f:aili.stone & !f:aili.print & !f:aili.again', to: 'again', gift: 'print2' },
+  { who: 'aili', item: 'junespot', give: false, when: 'f:aili.stone & !f:aili.pot & !f:aili.again', to: 'again', gift: 'pot2' },
 ];
 
 // --- 6.10 the back porch: the can in your hands, Aili home early -----------------------------------------------------

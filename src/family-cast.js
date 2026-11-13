@@ -467,6 +467,9 @@ class FamilyCast {
       carp() { return self.far.has('carp') ? self.far.get('carp').dots.map((d) => ({ x: d.x, z: d.z, y: d.y, fact: d.fact })) : null; },
       danielle() { return self.dani ? { x: self.dani.x, z: self.dani.z } : null; },
       talkDanielle() { return self.dani ? self.dani.onTalk(self.dani) : false; },
+      // a gift shown to Aili as "Look at this…" would (the rigs: the print's match is the camera's; the pot is carried)
+      gift(kind = 'pot') { const w = show.wanted('aili').find((x) => (kind === 'pot' ? x.item : x.print)); return w ? self.talk('aili', { give: w }) : false; },
+      wants() { return show.wanted('aili').map((w) => w.id); },
       motel() { const M = self.motel; return M ? { x: M.at.x, z: M.at.z, porch: self.porchSpot(), key: M.key } : null; },
       state() { const s = self.story, p = (s.doc && s.doc.ppl) || {}; return { step: ailiStep(s, self.season()), aili: p.aili || null, chase: self.chase ? { mode: self.chase.mb.mode, x: +self.chase.mb.x.toFixed(0), z: +self.chase.mb.z.toFixed(0) } : null, can: !!self.can, porch: !!self.porchRun, staged: self.staged() }; },
     };
