@@ -305,7 +305,7 @@ export class Dialogue {
   before(dt) {
     const c = this.convo; if (!c) return;
     const p = this.player, hud = this.hud;
-    if ((hud && (hud.paper || hud.big)) || (!p.onFoot && !(c.afloat && p.mode === 'paddle')) || p.teleporting) { this.close(false); return; }
+    if (!c.wait && ((hud && (hud.paper || hud.big)) || (!p.onFoot && !(c.afloat && p.mode === 'paddle')) || p.teleporting)) { this.close(false); return; } // i: (not while a choice waits on its answer: the canary's map is a paper)
     p.input.paused = true;
     if (!p.onFoot) return; // (co-op, c.afloat: a word from the canoe; the view is left alone)
     const ch = this.chase, h = this.headOf(c.speaker, _v);

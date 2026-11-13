@@ -125,6 +125,10 @@ export const FACTS = [
   { key: 'mg.skywatch.', kind: 'bool', doc: '60 S3 a night on Fourtown: mg.skywatch.seen | onelight (minigames/skywatch.js)' },
   { key: 'mg.howl.', kind: 'bool', doc: '60 S4 the howl survey: mg.howl.answered | silent | marked (minigames/howl.js)' },
   // 7a: end
+  // i: begin (campaign stream i, Round 5: the informant; docs/story/32-the-boys.md §5.10–§5.17, §6, §11 "State"; story-data/informant.js)
+  { key: 'canary.', kind: 'any', doc: '32 §5.11 the canary: canary.<who>.<lakeId> (day told) · ring.<lakeId> · seen.<lakeId> · heard.<lakeId> · how (seen|heard) · hard (the lake) · shared (a lake told to two) · clear.frank | clear.bob (the lake)' },
+  { key: 'isabella.', kind: 'bool', doc: '32 §5.10 the watchers\' 2019 camp on the Isabella: isabella.flagging | can | aerial | receipt (the receipt taken)' },
+  // i: end
   // a3: the guiding years (Round 4, stream A3; docs/story/31-guiding-years.md). Hap, Marlys, Sheila are bible people;
   // Rick and Nate are the arc's own; gy. is the arc's places seen and the night's hours
   { key: 'gy.', kind: 'any', doc: '31 the guiding years: places seen (gy.dock, gy.tow, gy.prairie, gy.mummos, gy.reef[=walleye], gy.lunch, gy.lunch.photo, gy.photo81, gy.hogmap), the loft (gy.register, gy.rafter, gy.crew89, gy.bolts), the night (gy.night.<hhmm>, gy.lamp.*, gy.truck.looked), gy.tow.told' },
@@ -132,7 +136,6 @@ export const FACTS = [
   // /a3
   // p: begin (Round 6, the company and the press: 40; company.js, story-data/company.js). People's facts are under their
   // namespaces (maggie. dan. wade. brekke. josie. tauno. kettle.); these are the ones without a home
-  { key: 'isabella.', kind: 'any', doc: '32/40 6.6 the Isabella camp: isabella.receipt (stream i\'s, read by Maggie\'s topic)' },
   // p: end
   // a4: begin (the family, Round 6; docs/story/33-family.md): the people's own facts are under their namespaces (aili. jon.
   // liisa. gord. danielle.; cards. is K1a's); the Carp-end stump and cairn, re-sited on the US side (dlc-quetico.md)

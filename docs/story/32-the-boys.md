@@ -495,6 +495,7 @@ rang, which on a first play is an old man who wants to hear about a trip. On a s
 went.]
 
 **The calls** [Needs: the same lake told]. Once or twice a season after that, Josie (or the home keeper) at the counter
+<!-- id: 32:5.6.calls pick -->
 says: "Your friend Denny called. Asked were you back yet. He's sweet." [The words "your friend called" are on Marlys's
 2019 pad. Nobody points out the echo.]
 
@@ -778,6 +779,8 @@ At the river site Denny rang as "Walt's spot" (Bog 67's reach), the dot finds, a
   else. With Tauno's or Sheila's talk of radios, or on a second look: "An aerial."
 - **"A receipt"** (**Take**), wet and dried: *Ely · 08/06/19 · UNL 14.2 gal · $38.91 · ACCT HELSTROM SITE SERVICES*.
 
+<!-- id: 32:5.10.w pick n=1 page -->
+<!-- id: 32:5.10.w35 pick n=3 page -->
 **Gives:** item *Fuel receipt, Aug 2019*. Walt page: "Somebody camped on the Isabella in August 2019 with a radio. The
 receipt says Helstrom Site Services. Tuesday the 6th." With N35 read ("Green Kevlar on the river Tuesday"), it adds:
 "Walt saw them on the river that Tuesday. Someone was told 'the river'." (**soft piece:** *Isabella camp*). Maggie,
@@ -790,12 +793,22 @@ shown the receipt, asks for it (§9 of the bible's ending gathers it as the comp
 Denny, Frank and Bob each have the topic (as do Len, Jon and Maggie in their files). The player picks from up to four
 real lakes they own sheets for, in different reaches. Each pick is remembered per person.
 
+<!-- id: 32:5.11.denny.1 row=Denny n=1 -->
+<!-- id: 32:5.11.denny.2 row=Denny n=2 -->
+<!-- id: 32:5.11.heard.josie row=Denny n=3 -->
+<!-- id: 32:5.11.heard.party row=Denny n=4 -->
+<!-- id: 32:5.11.frank.1 row=Frank n=1 -->
+<!-- id: 32:5.11.frank.2 row=Frank n=2 -->
+<!-- id: 32:5.11.bob row=Bob n=1 -->
 | Who | When told {lake} | What comes back |
 |---|---|---|
 | **Denny** | "Oh, {lake}! Good one. Here —" *(rings it)* "— and the site on the point, and there's a walleye hole, I'll ring that. Call me when you're back. I mean it." (He always rings the same two: **{site}**, the site on the point, and **{hole}**, a walleye hole.) | **If the player goes to {lake} within 1–5 game days:** the green Kevlar is pulled up at **{site}**, exactly the site Denny ringed, and two men with no rods are sitting where his pencil said. They don't fish. When the player comes in sight they get in and paddle off slowly the other way. After S4 their boot prints are readable on the landing: two men, boots, and not one track down to the rocks where you'd cast from. **If the player doesn't go:** within 1–3 game days, Josie or the home keeper: "Party came off {lake}, said two fellas in a green Kevlar were asking after a solo." Or a party at a portage: "You the solo? Couple guys on {lake} asked after you. No rods. Weird." |
 | **Frank** | "{lake}? In this wind? Suit yourself." / "Good walleye. Don't tell anybody I said." | Nothing, ever. |
 | **Bob** | "{lake}. Take the long way. Take a picture of the cliffs for me." | Nothing, ever. |
 
+<!-- id: 32:5.11.seen pick n=1 page -->
+<!-- id: 32:5.11.heard pick n=2 page -->
+<!-- id: 32:5.11.clear pick n=3 page -->
 **Gives:** when a lake told only to Denny comes back, Walt page (**hard**). Seen: "I told Denny {lake}. They were at the
 site Denny ringed for me. Not the lake. The site." Heard only (the fallback): "I told Denny {lake}. Two days later, two
 men in a green Kevlar were asking after a solo on {lake}." [Builders: {site} is a real campsite on a point of {lake}
@@ -803,6 +816,7 @@ in v9, {hole} a deep spot off it; Denny's pencil and the watchers' camp read the
 party (kind `watchers`) placed on the told day + 1 and gone after day + 5.] When a lake told only to Frank, or only to Bob, has had five game
 days pass and comes back empty: "I told Frank {lake}. Nobody came." (clears Frank; same for Bob).
 
+<!-- id: 32:5.11.shared pick n=1 page -->
 [If one lake is told to two people, the page says so ("I told Denny and Len {lake}…") and it doesn't count as a hard
 piece. The page teaches the canary by being unhelpful about it, the way N34 does.]
 
@@ -811,9 +825,12 @@ piece. The page teaches the canary by being unhelpful about it, the way N34 does
 **Tell 2, mid-way.** [The first conversation with Denny after any of these: Marlys has told the player anything of the
 night (her "I don't remember much" doesn't count); tier 3 reached; or the third meeting with Denny.]
 - *"When did you last talk to Walt?"*
+  <!-- id: 32:5.12.tell2 q -->
   > "Sunday before. We talked Sundays, that last summer. I'd call. Ask about his knee." *(Beat.)* "He said he was in all
   > week, that's what kills me. In all week. And then he goes out on the lake in the dark."
 
+  <!-- id: 32:5.12.w2 pick n=1 page -->
+  <!-- id: 32:5.12.w2b pick n=2 page -->
   **Gives:** Walt page: "Denny: *He said he was in all week.* That's on the last page: *Asked was I in all week. Said
   yes.* Who else would know he said that?" (**soft piece:** *in all week*.) With Marlys's register held (check-in Mon
   14 Oct), the page adds: "Walt checked into the bunkhouse on Monday. On Sunday he wasn't in yet."
@@ -821,11 +838,15 @@ night (her "I don't remember much" doesn't count); tier 3 reached; or the third 
 **Tell 3, late.** [The first conversation with Denny after tier 4, or once the Walt page holds two pieces, whichever
 comes first.]
 - (any Walt topic, or the opener)
+  <!-- id: 32:5.12.tell3 q -->
   > "You know what I think? Somebody talked, back then. I've always thought somebody talked. Walt was careful. Walt
   > didn't just — somebody talked."
+  <!-- id: 32:5.12.who pick n=2 -->
   - *"Who?"* → "I don't know. How would I know. The mine guys? Somebody at the store?" *(He rings nothing.)*
+  <!-- id: 32:5.12.why pick n=2 -->
   - *"Why do you say that?"* → "I don't know why I say it. I say it at night."
 
+  <!-- id: 32:5.12.w3 pick n=1 page -->
   **Gives:** Walt page: "Denny brought it up himself: *Somebody talked.*" (**soft piece:** *somebody talked*.)
 
 ### 5.13 Clearing Frank, and the folder
@@ -833,6 +854,7 @@ comes first.]
 Frank is cleared on the Walt page by any of these:
 1. the canary: a lake told only to Frank comes back empty (5.11);
 2. the nicknames (5.4 or 5.9.3) **plus** N34–N35 read. Whiskey was told the Kek, and nobody came to the Kek;
+<!-- id: 32:5.13.deduce pick n=3 page -->
 3. **deduction:** Frank's "the Kek, summer of '19" (5.7) plus Denny's "the river" (5.5/5.6) plus N34 read. The page
    matches the nicknames itself: "Walt told Whiskey the Kek and Sparky the river. Frank says he was told the Kek. Denny
    says the river. **Whiskey is Frank. Sparky is Denny.**" (This counts as the *nicknames* piece too.);
@@ -871,9 +893,12 @@ slightly crooked:
    10/19 canoe loc. Birch. CLOSED.*
 6. An expense sheet, *Helstrom Site Services*, with one line repeated monthly from Nov 2017 to Oct 2019: *src — 1,600.*
 
+<!-- id: 32:5.13.pictures pick n=1 -->
 No names besides Walt's and the firm's. There were photographs in the folder, and Frank didn't copy those (he says so
 later: "There were pictures. I couldn't."). **No photo of Walt is ever shown** (bible §9).
 
+<!-- id: 32:5.13.folder.w pick n=1 page -->
+<!-- id: 32:5.13.folder.w2 pick n=2 page -->
 **Gives:** item *The folder (copies)* for Maggie. Walt page: "The company kept a file on Walt from November 2017 to the
 day his canoe was found. Someone, *src*, told them where he was going. Paid every month." It isn't a reveal piece,
 because it names no one. After the reveal, the page adds: "1,600 a month for 24 months is 38,400. Denny said 38,400."
@@ -886,25 +911,33 @@ Walt's." / "Doesn't matter."* Either way: "Then it doesn't matter. I protect peo
 
 **Accusing Frank** [Needs: the red-herring line on the page, Frank not cleared]:
 - *"You're Sparky. You told them."*
+  <!-- id: 32:5.14.say pick n=1 -->
   > *(He sets the coffee down very carefully.)* "Say that again."
   > - *"You work for them and you lied about it."* → "I lied about a parking lot. I'd never — Walt was —" *(He
   >   picks up his keys.)* "Get out of my way. I mean that kindly. Get out of my way."
 
+  <!-- id: 32:5.14.wrong pick n=1 -->
   Frank is **cold** for 10 game days, or until the player has cleared him and says *"I was wrong about you."*:
+  <!-- id: 32:5.14.sorry q -->
   > "Yeah. You were." *(Beat.)* "Everybody would've been. That's why I didn't tell anybody." (He's warm again. The
   > folder can be asked for.)
 
   While Frank is cold he won't tell 1998 (Bob tells it alone, 5.9.7), and at camp he goes to bed early. No key is lost.
+<!-- id: 32:5.14.whiskey pick n=2 -->
+<!-- id: 32:5.14.flare pick n=3 page -->
 - *"Are you Sparky?"* (softer) → "I'm *Whiskey*. Ask anyone. Ask Carol. Sparky's the one with the flare." (This is a
   nicknames route of its own: the page notes "Frank says Sparky's the one with the flare.")
 
 **Accusing Denny too early** [the reveal's conditions not met]:
 - *"Was it you?"* (after tell 3)
+  <!-- id: 32:5.14.me q -->
   > "Me? I can't keep a birthday secret. Ask Bob. I told his wife about the
   > party. Twice." *(Beat.)* "You think I'd — Walt was my best friend."
   Nothing changes. The topic stays, and the reveal still waits for the conditions.
 
 **Accusing Bob:**
+<!-- id: 32:5.14.bob.1 pick n=2 -->
+<!-- id: 32:5.14.bob.2 pick n=3 -->
 - *"Was it you, Bob?"* → "No." *(He looks at the player a while.)* "That's a fair question. It's still no." (Bob
   stays warm. The page notes nothing.)
 
@@ -917,8 +950,11 @@ Walt's." / "Doesn't matter."* Either way: "Then it doesn't matter. I protect peo
   crayon drawings taped inside the window. He's out on the step as if he'd been waiting. He has been.
 
 **Opener:**
+<!-- id: 32:5.15.rock.1 pick n=1 -->
+<!-- id: 32:5.15.rock.2 pick n=2 -->
 - rock: "Pull up some rock. There's plenty." *(The radio is back at the fire. You can hear the game from here,
   barely.)* "I don't know why I'm sitting here. I never sit here."
+<!-- id: 32:5.15.cabin pick n=1 -->
 - cabin: "Come up. I've got coffee. I've always got coffee. I don't sleep." *(He doesn't get the coffee.)*
 
 **The player lays down what they have.** The options shown are those whose pieces are on the page:
@@ -945,9 +981,11 @@ the first:
 | in all week | *"Marlys never told anyone."* | *(nothing)* |
 | the Tuesday | *"You know every number to the dollar, Den. You don't know a Thursday?"* | *(nothing)* |
 
+<!-- id: 32:5.15.silence pick n=1 -->
 Then the silence: "…" (one beat, held). Then he talks. The player's only choices inside it are *"Go on."* or
 silence. Either one advances, and the beats play in order:
 
+<!-- id: 32:5.15.conf -->
 > "Matt was thirty. Between jobs. It came back in November, the leukaemia. The second time, they tell you the numbers
 > first. Before the treatment. The numbers."
 >
@@ -980,11 +1018,15 @@ silence. Either one advances, and the beats play in order:
 > on, and every one of them's Little Sag." *(He almost laughs.)* "Which is true."
 
 **What he gives, whatever comes next** (the moment the speech ends):
+<!-- id: 32:5.15.gives q each -->
 > "His name's Wade Helstrom. Here." *(He takes his card back and writes on the back of it. He holds it out.)* "That's
 > the number. I don't know if it's still the number. I call it and it answers."
 > "And — the fall before. Eighteen. He was mad. He said, the old man's got us digging holes on the wrong hill. Pietro.
 > A hill on Pietro. He thought that was funny later. I didn't know what it meant."
 
+<!-- id: 32:5.15.call pick n=1 page -->
+<!-- id: 32:5.15.hill pick n=2 page -->
+<!-- id: 32:5.15.resolved pick n=4 page -->
 **Gives:** Wade's name and number (on the back of *Denny's card*; for Maggie), the call (Walt page: "Denny called the
 bunkhouse on 17 October 2019 for Wade Helstrom. He told him Walt was in all week."), and **key 2E** ("They dug the wrong
 hill on Pietro in '18"). Walt page's informant heading resolves: **"Somebody told them where Walt was." → "Denny. For
@@ -992,6 +1034,7 @@ Matt."**
 
 **Before the choice, one optional line** [Needs: the Walt page says Walt "went north"]:
 - *"Denny. He didn't drown."*
+  <!-- id: 32:5.15.alive q -->
   > *(He puts a hand up, flat, the way you stop a canoe at a dock.)* "Don't. Don't tell me anything. I'm the last man on
   > earth you should tell anything. You know that. You're sitting here because you know that."
   > *(Beat.)* "But if a fella — if. If, then I didn't —" *(He can't finish it.)* "Don't tell me. Let me think it. Let me
@@ -1026,6 +1069,7 @@ Matt."**
 > - *"He won't."* → "You don't know him." *(Beat.)* "Okay. Okay. I owe Walt a lie. I can do one lie."
 
 **What changes:**
+<!-- id: 32:5.16.1.josie pick n=1 -->
 - **The canary on Denny goes quiet.** Lakes told to Denny never come back again. Josie, once, a few days later: "Your
   friend Denny called. Said to tell you the fishing's lousy on the river. Weird message."
 - **Once a game week** (to the end of the run), at a meeting with Denny, one line of what Wade asked him. These are
@@ -1044,6 +1088,7 @@ Matt."**
 - *"No. I will."* → The player tells them.
 
 **At the rock (14 August):** they walk back to the fire. [The scene is written for Denny telling. When the player tells
+<!-- id: 32:5.16.2.player pick n=1 -->
 it, the player's line is *"Denny's been paying them back for Rochester. Since '17. He called the night Walt went."*,
 and the reactions are the same.]
 > **Denny:** "Bob. Frank. I have to say a thing."
@@ -1057,15 +1102,19 @@ and the reactions are the same.]
 > Nobody's on the water alone. That's the rule now. After that I don't know, Den. I don't know."
 > **Frank:** *(to the player, not unkindly)* "You should go to your own site."
 
+<!-- id: 32:5.16.2.carol pick n=1 -->
 The dot's only verb is **Leave**. On the 15th they paddle out together, and nobody comes up to the counter. Carol, any later
 day: "They didn't come in on the fifteenth. First time in forty years. I put the pie away."
 
+<!-- id: 32:5.16.2.carol2 pick n=1 -->
 **At the store or cabin (any other time):** Denny walks to the Sawbill store with the player the next morning (Tuesday
 or Saturday, when Bob is in; if Frank isn't there, Bob telephones him, and Frank arrives in twenty minutes in his
 work shirt). Same lines, in the store yard, with Carol watching through the window behind the counter. Her line later: "I saw. I
 knew about the money. Not where from. I didn't ask. Gene would have asked."
 
 **What changes:**
+<!-- id: 32:5.16.2.slept.1 pick n=1 -->
+<!-- id: 32:5.16.2.slept.2 pick n=2 -->
 - **Wade's hold is gone.** On the next meeting at his cabin (he still rents it to October): "He came by. I told him
   they know. He didn't have anything to say to that. He got in his truck." *(Beat.)* "First time I've slept since
   spring." [The cruelest choice frees him. Writers: keep it quiet.]
@@ -1074,6 +1123,8 @@ knew about the money. Not where from. I didn't ask. Gene would have asked."
   year. One canoe. It's lighter on the 473. That's the only good thing I've got to say about it."
 - Denny is not at the store in the afternoons. He's at his cabin through October, and after the next ice-out the cabin
   is let to someone else.
+<!-- id: 32:5.16.2.frank.1 pick n=1 -->
+<!-- id: 32:5.16.2.frank.2 pick n=2 -->
 - **Frank:** warmer to the player, but sadder. "Everybody would've thought it was me. You didn't. Thanks for that." (If
   the player accused him in 5.14 and apologised, the line is: "You thought it was me once. Then you didn't. That's
   more than most.")
@@ -1087,6 +1138,8 @@ knew about the money. Not where from. I didn't ask. Gene would have asked."
 
 **What changes:**
 - **The canary on Denny goes quiet** (he tells Wade nothing true).
+<!-- id: 32:5.16.3.hi pick n=1 -->
+<!-- id: 32:5.16.3.josie pick n=2 -->
 - **He knows you know.** At every meeting afterwards, the opener is the same quiet line ("Hi.") and he never over-helps
   again: no rings, no calls, no visits. Josie, after a week: "Your friend Denny hasn't called. You two fight?"
 - **The boys never know.** He's on next year's trip. On the last night he doesn't sit on the rock. He sits at the fire
@@ -1097,11 +1150,13 @@ knew about the money. Not where from. I didn't ask. Gene would have asked."
 
 If the reveal hasn't happened by the **canoe-adrift warning** (tier 4, bible §6.5), Denny breaks on his own. At the
 player's next counter visit Josie hands over a folded sheet of motel notepaper:
+<!-- id: 32:5.17.note -->
 > *I'm sorry. Don't go where you told me.*
 > *— D.*
 
 [If the player never told Denny a lake: *I'm sorry. Watch who you tell. — D.*]
 
+<!-- id: 32:5.17.got pick n=3 -->
 The note goes into the book. The Walt page says: "A note from Denny. *I'm sorry.*" (This counts as a soft piece.) It
 **opens the reveal at the cabin with no piece requirement** through October, and the confession plays from its
 silence beat ("…"). Denny's opener: "You got my note." If the cabin is never visited, the reveal's gives still reach
@@ -1200,6 +1255,8 @@ route. They're spaced across the run, and they come only if the reveal ended in 
 From the first line on, **one watcher canoe is out of play**, south on the Isabella. That's one fewer light on the
 Pietro–Lake One route, which the run's tuning should feel.
 
+<!-- id: 32:9.duluth.1 pick n=1 -->
+<!-- id: 32:9.duluth.2 pick n=2 -->
 If the reveal ended in **Tell the boys** or **Leave it**, one line, once: *(Wade)* "Duluth's not picking up."
 *(Pause.)* "Doesn't matter."
 

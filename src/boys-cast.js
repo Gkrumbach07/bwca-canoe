@@ -30,6 +30,7 @@ import {
   CAMP, CAMP_BYE, HAIL, SHARE, PAN_EAT, CUP_ROCK, CUP_BACK, CARRY_BARK, FRANK_FISH, WON, STORY98, SLIDES,
   carolEntry, bobEntry, dennyEntry, yardEntry, campEntry, campStart,
 } from './story-data/boys.js';
+import { extendBoys, frankIEntry } from './story-data/informant.js'; // final join: stream i's topics and nodes in b5's scenes
 
 for (const [k, v] of Object.entries(B5_SENSORS)) registerSensor(k, v);
 const NEAR = 130, TICK = 0.5, CAMP_R = 420, HAIL_R = 140;
@@ -44,6 +45,7 @@ class BoysCast {
     Object.assign(this.c, c);
     const s = this.c.story;
     if (!s) return this;
+    extendBoys({ DENNY, FRANK, BOB }); // final join: stream i's Denny/Frank/Bob topics and nodes into these hubs (idempotent, once)
     this.offs.push(s.on('season', () => this.clear()));
     // the minigame (minigames.js registry: E's), and the bet's catch (the player's lakers while it's on)
     if (this.c.minigames && typeof this.c.minigames.register === 'function') this.offs.push(this.c.minigames.register('silhouette', silhouette));
@@ -344,7 +346,7 @@ class BoysCast {
     const args = this.args(st.ep);
     let def = null, start = null, bye = null;
     if (who === 'carol') { def = CAROL; start = carolEntry(s); bye = CAROL_CLOSE; if (start === 'again') s.set('carol.favour.again', true, 'b5'); }
-    else if (who === 'frank' && st.slot.scene === 'b5:frank') { def = FRANK; start = 'hello'; bye = FRANK_CLOSE; }
+    else if (who === 'frank' && st.slot.scene === 'b5:frank') { def = FRANK; start = frankIEntry(s) === 'afterTold' && FRANK.nodes.afterTold ? 'afterTold' : 'hello'; bye = FRANK_CLOSE; } // (final join: i's frankIEntry first: after "Tell the boys")
     else if (who === 'denny') { def = DENNY; start = dennyEntry(s, { met: this.metOf('denny') }); }
     else { def = BOB; start = bobEntry(s, { frankHere: this.live.has('frank'), dennyHere: this.live.has('denny') }); }
     s.meet(who === 'frank' && st.slot.scene !== 'b5:frank' ? 'bob' : who, 'b5');

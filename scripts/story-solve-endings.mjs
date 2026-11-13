@@ -39,6 +39,7 @@ function fresh(br) {
   else if (br.record === false && s.doc.facts && s.doc.facts['tauno.record']) delete s.doc.facts['tauno.record']; // final: a real doc's record off
   if (br.north) s.set('drift.done', true, 'solve');
   if (br.met) s.meet('maggie', 'solve');
+  if (br.denny) { s.set('denny.revealed', true, 'solve'); s.set('choice.denny', br.denny, 'solve'); } // i: the Denny choice (stream i's reveal: turn | told | left)
   if (br.meeting) s.doc.meeting = { ep: 30, firstDawn: ABS0 - 1 };
   s.set('run.lifted', br.meeting ? 30 : 'any', 'solve'); // (r's fact at the lift)
   s.set('pit.note', true, 'solve');                      // (f's: Eino's note picked up)
@@ -117,8 +118,9 @@ export function solveEndings(opts = {}) {
     };
   };
   const RECORDS = FROM ? [!!(FROM.facts && FROM.facts['tauno.record'])] : [false, true]; // j1: a real doc keeps its own record
-  for (const record of RECORDS) for (const north of [false, true]) for (const meeting of [false, true]) for (const met of [true, false]) {
-    const br = { record, north, meeting, met }, name = `record=${+record} north=${+north} meeting=${meeting ? 30 : 'any'} maggie=${met ? 'met' : 'stranger'}`;
+  const DENNY = [null, 'turn', 'told', 'left']; // i: no reveal, or each of the reveal's three choices (32 §5.16)
+  for (const record of RECORDS) for (const north of [false, true]) for (const meeting of [false, true]) for (const met of [true, false]) for (const denny of DENNY) {
+    const br = { record, north, meeting, met, denny }, name = `record=${+record} north=${+north} meeting=${meeting ? 30 : 'any'} maggie=${met ? 'met' : 'stranger'} denny=${denny || 'none'}`;
     endsFor(br, name, rows, fails, hooks);
   }
   // the epilogue on the clock: from each ending, 31 days on, the dated facts (rules-endings.js) and the read points

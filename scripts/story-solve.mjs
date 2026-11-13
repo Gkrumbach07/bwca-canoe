@@ -65,6 +65,7 @@ import { RULES_BEATS } from '../src/story-data/rules-beats.js';
 // a3: the guiding years' data (Round 4): the scenes, their entries, the sensors, the leads' asks
 import * as GY from '../src/story-data/guiding.js';
 import { ASKS as ASKS_GY } from '../src/story-data/leads-guiding.js';
+import * as II from '../src/story-data/informant.js'; // i: the informant's scenes (Round 5)
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const argv = process.argv.slice(2);
@@ -73,7 +74,8 @@ const QUIET = !!arg('quiet', false), PLAN = !!arg('plan', false), MAX = Number(a
 const JSON_OUT = arg('json', null);
 for (const [k, v] of Object.entries(PENCIL_SENSORS)) registerSensor(k, v);
 for (const [k, v] of Object.entries(A2_SENSORS)) registerSensor(k, v);
-for (const [k, v] of Object.entries(GY.GY_SENSORS)) registerSensor(k, v); // a3 // (join c2: the arc's flags, as mining-cast.js registers them)
+for (const [k, v] of Object.entries(GY.GY_SENSORS)) registerSensor(k, v); // a3
+for (const k of Object.keys(II.I_SENSORS)) registerSensor(k, 'flag'); // i // (join c2: the arc's flags, as mining-cast.js registers them)
 // slice 2 on (the section below turns it on): its moves, its worlds, its scenes. Off, slice 1 is searched as before
 let R2 = false;
 let RF = false; // j1: slice 3 (Round 3's far end: the RF keys, the pit's lift) on, after slice 2
@@ -168,6 +170,12 @@ class State {
     s.sensor('has', (a) => W().has === String(a));
     s.sensor('southnight', () => !!W().south);
     for (const k of ['northwind2', 'lampLit', 'truckLooked', 'nightNow']) s.sensor(k, () => !!W()[k]);
+    // i: the informant's scene flags, read from the story as informant-cast.js reads them
+    s.sensor('tell2Due', () => s.when('f:marlys.loft | f:marlys.night | f:gy.register | tier>=3 | met:denny>=3'));
+    s.sensor('tell3Due', () => s.when('tier>=4 | count(case.denny.*)>=2'));
+    s.sensor('canaryOn', () => !s.has('choice.denny'));
+    s.sensor('frankCold', () => !!(s.doc.ppl.frank && s.doc.ppl.frank.cold));
+    for (const k of ['atRock', 'atCabin', 'weekSince']) s.sensor(k, () => false);
   }
   // every atom of the state (facts, notebook marks, the pencil's rings/inks/names/seen, leads), for relevance and keys
   atoms() {
@@ -201,7 +209,8 @@ class State {
 
 // --- scenes (the same data topics.js SceneRun plays) --------------------------------------------------------------------
 const SCENES = { porch: PORCH, josie: JOSIE, p1: P1, farm: FARM_SC, slab: SLAB, len: LEN, mary: MARY, tasha: TASHA, // (join c2: + the mining arc's)
-  hap: GY.HAP, marlys: GY.MARLYS, nate: GY.NATE, sheila: GY.SHEILA, statement: GY.STATEMENT, rick: GY.RICK, night: GY.NIGHT }; // a3
+  hap: GY.HAP, marlys: GY.MARLYS, nate: GY.NATE, sheila: GY.SHEILA, statement: GY.STATEMENT, rick: GY.RICK, night: GY.NIGHT, // a3
+  dennyI: II.DENNY_CABIN, reveal: II.REVEAL, frankI: II.FRANK_FARM }; // i
 const argsOf = (S, ep) => ({ ep, home: ep === HOME, farm: ep === FARM, homefarm: HOME === FARM, first: true, cold: false, raining: false, snowing: false, porch: !(S.W && S.W.noPorch), manner: 'warm', keeper: 'Ruth Aho' });
 function sceneAct(S, list, args) {
   for (const a of list || []) {
@@ -223,6 +232,10 @@ function hook(S, name, args) {
   else if (name === 'bottles') set('kettle.bottles');
   // a3: the guiding years' hooks (guiding-cast.js): the night asked (its day), the south night named, the print back
   else if (name === 'night') s.rules.apply({ id: 'hook', then: ['f:marlys.night=20600'] }, args);
+  // i: the informant's hooks (informant-cast.js): a lake told (the lake the solver tells), Frank accused, the folder asked
+  else if (name === 'canary') { const who = S.conv && S.conv.scene === 'frankI' ? 'frank' : S.conv && S.conv.scene === 'bobI' ? 'bob' : 'denny'; s.rules.apply({ id: 'hook', then: [`f:canary.${who}.${who === 'denny' ? 12 : 13}=20600`] }, args); }
+  else if (name === 'accuse') { s.rules.apply({ id: 'hook', then: ['f:frank.accused=20600'] }, args); s.person('frank', 'cold', '=', true, 'solve'); }
+  else if (name === 'folderAsk') s.rules.apply({ id: 'hook', then: ['f:frank.folder.asked=20600'] }, args);
   else if (name === 'arrange') { if (S.W.south || (S.conv && S.conv.world && S.conv.world.south)) s.rules.apply({ id: 'hook', then: ['f:drift.arranged=20601'] }, args); }
 }
 function enterNode(S, id) {
@@ -345,6 +358,7 @@ function moves(S) {
   if (R2) moves2(S, out);
   if (RF) movesFar(S, out); // j1
   if (R3) moves3(S, out); // a3
+  if (RI) movesI(S, out); // i
   return out;
 }
 
@@ -525,6 +539,95 @@ async function slice3(main, rp) {
   say(`slice A3: lock 2 after the arc: ${L2 ? L2.keys.join(', ') : '—'}`);
   if (PLAN && m3.ok) { console.log('\nSlice A3, as the solver plays it (from the end of slice 1):'); m3.path.forEach((m, i) => console.log(`${String(i + 1).padStart(3)}. ${m}`)); }
 }
+// --- i: begin: slice I (Round 5's second half, the informant; docs/story/32-the-boys.md §5.10–§5.17) ------------------------
+// From where slice 1 ends: Denny at his cabin of an evening (story-data/informant.js DENNY_CABIN: the canary, tell 2, tell 3),
+// the reveal (REVEAL) and its three choices, Frank (FRANK_FARM: the canary, the accusation, the confession); the world's moves
+// are the other streams' producers (b5: Denny met at the store with his card and rings, Carol's nicknames, Bob's "paid for
+// somehow", tell 1, Frank's Kek and patch; a3: the 2019 register) and this stream's own (the watchers at the ringed site seen,
+// the Isabella camp's verbs are the layer's, N34/N35 read, the note due after tier 4 and handed over at the counter).
+// A talk with Denny counts a meeting (met:denny reads the people state; the solver keeps it as denny.met.<n> facts too, so a
+// second talk is a new state).
+const WI = { cabin: { ep: 38, daylight: true, month: 7, date: '07-20', hour: 18, dow: 'mon' }, farm: { ep: FARM, daylight: true, month: 7, date: '07-21', hour: 6, dow: 'tue' } };
+const READ_NBI = ['NB78', 'NB79'];
+const I_WORLD = [
+  { id: 'b5: Denny at the Sawbill store (his card, his rings on the Isabella)', sets: ['f:denny.card', 'f:denny.rings', 'f:denny.met'], when: 'f:nb.found' },
+  { id: 'b5: Carol tells the nicknames', sets: ['f:boys.nicknames', 'f:case.denny.nicknames=soft'], when: 'f:nb.found' },
+  { id: 'b5: Bob after trust: Matt\'s Rochester "got paid for somehow"', sets: ['f:bob.rochester', 'f:case.denny.rochester=hard'], when: 'f:nb.found' },
+  { id: 'b5: tell 1, Carol asking at the counter ("Tuesday, it was a Tuesday")', sets: ['f:denny.tell1'], when: 'f:denny.met' },
+  { id: 'b5: Frank at Farm before seven: the Kek, the patch', sets: ['f:frank.met', 'f:frank.kek', 'f:frank.patch'], when: 'f:nb.found' },
+  { id: 'a3: the 2019 register in the boathouse loft', sets: ['f:gy.register'], when: 'f:nb.found' },
+  { id: 'the watchers seen at the site Denny ringed on the told lake', sets: ['f:canary.how=seen', 'f:canary.hard=Alton', 'f:case.denny.canary=hard'], when: 'any(canary.denny.*) & !f:choice.denny & !f:canary.shared & !f:case.denny.canary' },
+  { id: 'Frank\'s told lake five days on: nobody came', sets: ['f:canary.clear.frank=Cherokee'], when: 'any(canary.frank.*) & !f:canary.clear.frank' },
+  { id: 'tier 4, three weeks on, no reveal: the note due', sets: ['f:tier.4', 'f:denny.note.due'], when: 'f:nb.found & !f:denny.revealed & !f:denny.note.due' },
+  { id: 'the counter: Josie hands over Denny\'s note', sets: ['f:denny.note'], when: 'f:denny.note.due & !f:denny.note & !f:denny.revealed' },
+];
+const I_SETS = I_WORLD.map((g) => [g.sets.map((x) => x.split('=')[0]), g.when]);
+function talkI(T, scene, at, w) { T.W = { ...w }; T.conv = { scene, at, args: argsOf(T, w.ep), world: w }; enterNode(T, at); T.W = { ...NEUTRAL }; }
+function movesI(S, out) {
+  const s = S.s;
+  if (!s.has('nb.found')) return;
+  for (const nb of READ_NBI) if (!s.nbHas('read', nb)) out.push({ id: `read ${nb}`, kind: 'read', run: (T) => { T.s.markRead(nb, 'solve'); T.settle(); } });
+  // Denny on his porch of an evening: the reveal when it's ready, else his talk (the meeting counted first)
+  const ready = s.has('denny.reveal.open') && !s.has('denny.revealed');
+  out.push({ id: `denny on his porch (${ready ? 'the reveal' : 'a talk'})`, kind: 'cast', scene: ready ? 'reveal' : 'dennyI', run: (T) => {
+    const t = T.s; t.meet('denny', 'solve'); const n = (t.doc.ppl.denny && t.doc.ppl.denny.met) || 1; if (n <= 4) t.set(`denny.met.${n}`, true, 'solve');
+    if (t.has('denny.reveal.open') && !t.has('denny.revealed')) return talkI(T, 'reveal', II.revealEntry(t, {}), WI.cabin);
+    return talkI(T, 'dennyI', II.dennyIEntry(t, { tell3Due: t.when('tier>=4 | count(case.denny.*)>=2') }), WI.cabin);
+  } });
+  out.push({ id: 'frank at Farm\'s urn', kind: 'cast', scene: 'frankI', run: (T) => { T.s.meet('frank', 'solve'); talkI(T, 'frankI', II.frankIEntry(T.s), WI.farm); } });
+  for (const g of I_WORLD) if (S.when(g.when) && !g.sets.every((k) => s.has(k.replace(/^f:/, '').split('=')[0]))) out.push({ id: g.id, kind: 'world', run: (T) => { T.s.rules.apply({ id: 'i:world', then: g.sets }, {}); T.settle(); } });
+}
+const MAINI = [
+  { id: 'the canary set: a lake told to Denny (his two rings)', when: 'any(canary.denny.*)' },
+  { id: 'the canary sprung: the hard piece', when: 'f:case.denny.canary=hard' },
+  { id: 'tell 2: "He said he was in all week"', when: 'f:denny.tell2 & f:case.denny.inallweek' },
+  { id: 'tell 3: "Somebody talked"', when: 'f:denny.tell3 & f:case.denny.talked' },
+  { id: 'the reveal opens (three pieces, one hard, met twice)', when: 'f:denny.reveal.open' },
+  { id: 'the reveal: Wade\'s name, the wrong hill (L2E)', when: 'f:denny.revealed & f:key.L2E & f:denny.wade' },
+  { id: 'the choice made', when: 'f:choice.denny' },
+];
+const ENDI = 'f:denny.revealed & f:key.L2E & f:choice.denny & f:case.denny.canary';
+const UPTO_I = MAINI.slice(0, 5).map((g) => g.when); // (the main line to the reveal opened)
+const BRANCHI = [
+  { id: 'Turn him ("The river.", "He knew.", "He won\'t.")', via: UPTO_I, when: 'f:choice.denny=turn & f:denny.turned' },
+  { id: 'Tell the boys (Denny tells them)', via: UPTO_I, when: 'f:choice.denny=told & f:denny.toldon & f:denny.told.scene' },
+  { id: 'Leave it', via: UPTO_I, when: 'f:choice.denny=left & f:denny.left' },
+  { id: 'the note, with no case at all: the reveal from its silence', via: ['f:denny.note'], when: 'f:denny.revealed & f:key.L2E & f:choice.denny & !f:case.denny.canary', block: (T) => T.s.has('case.denny.canary') || T.s.has('denny.tell2') },
+  { id: 'the pad (a3\'s register and Denny\'s card), Bob\'s Rochester: the reveal without the canary', via: ['f:gy.register', 'f:denny.card', 'f:case.denny.message=hard', 'f:case.denny.rochester=hard', 'f:case.denny.nicknames', 'f:denny.met.1', 'f:denny.met.2', 'f:denny.reveal.open'], when: 'f:denny.revealed & !any(canary.denny.*)', block: (T) => T.s.keys('canary.denny.').length > 0 },
+  { id: 'the deduction (Frank\'s Kek, Denny\'s river, N34): Frank cleared, the river decoded', via: ['f:frank.kek', 'f:denny.rings', 'read:NB78'], when: 'f:denny.deduced & f:frank.cleared', block: (T) => T.s.has('boys.nicknames') || T.s.has('denny.sparky') },
+  { id: 'the Isabella camp\'s receipt with Denny\'s rings: a soft piece', via: ['f:denny.rings'], when: 'f:case.denny.isabella=soft & f:isabella.receipt' },
+  { id: 'Frank told a lake; it came back empty: cleared, then accused and sorry', via: ['any(canary.frank.*)', 'f:frank.cleared'], when: 'f:frank.cleared & f:canary.clear.frank' },
+];
+let RI = false;
+function onI() { RI = true; relCache.clear(); }
+async function sliceI(main, rp) {
+  const out = report.sliceI = { witnesses: [], plan: null, branches: [] };
+  if (!main.ok || !rp || !rp.ok) { res('slice I: slice 1\'s end to start from', false); return; }
+  on2(); onI();
+  const S1 = rp.S, M = { max: Math.max(MAX, 30000) };
+  const mI = chain([...MAINI.map((g) => g.when), ENDI], S1, M);
+  out.plan = mI.path;
+  if (!mI.ok) { const ms = moves(mI.S); console.log(`slice I stuck at '${mI.fail}': on offer ${ms.length}: ${ms.map((m) => m.id).join(' | ').slice(0, 1500)}`); }
+  res(`slice I (the informant) end to end from the end of slice 1: ${mI.ok ? `${mI.path.length} moves` : `stuck at '${mI.fail}' (${mI.states} states${mI.capped ? ', capped' : ''})`}`, mI.ok, { at: mI.fail || null });
+  const rI = mI.ok ? replay(mI.path, S1) : null;
+  res('slice I: the plan replays from the end of slice 1', !!(rI && rI.ok && rI.S.when(ENDI)), { at: rI && rI.at });
+  for (const g of MAINI) {
+    const n = mI.ok ? firstTrue(mI.path, g.when, S1) : -1;
+    out.witnesses.push({ id: g.id, when: g.when, moves: n });
+    res(`slice I witness: ${g.id}${n > 0 ? ` (${n} moves; made by "${mI.path[n - 1]}")` : ''}`, n >= 0, { when: g.when });
+  }
+  for (const b of BRANCHI) {
+    const c = chain([...b.via, b.when], S1, { ...M, block: b.block || null }), ok = c.ok && replay(c.path, S1).ok;
+    out.branches.push({ id: b.id, ok, moves: c.ok ? c.path.length : null, at: c.fail || null });
+    res(`slice I branch: ${b.id}${c.ok ? ` (${c.path.length} moves)` : ` (stuck at '${c.fail}')`}`, ok);
+  }
+  // 32 §0 "Never": no lock key sits behind Denny but L2E, and L2 has other keys; the reveal is not a big finding
+  const L2 = rI && rI.ok ? rI.S.s.lock(2) : null;
+  res(`slice I: lock 2 after the reveal holds E (${L2 ? L2.keys.join(', ') : '—'}); no other key needs Denny`, !!(L2 && L2.keys.includes('L2E')));
+  if (PLAN && mI.ok) { console.log('\nSlice I, as the solver plays it (from the end of slice 1):'); mI.path.forEach((m, i) => console.log(`${String(i + 1).padStart(3)}. ${m}`)); }
+}
+// i: end
+
 // where the cast's schedule puts a person in that world (cast.js: the first slot whose when holds); the walkout's
 // porch foot needs a porch or the truck (CAST noPorch)
 function castSlot(S, who, w) {
@@ -648,6 +751,7 @@ const condAtoms = (src) => {
   }
   return out;
 };
+const I_DO = { canary: ['f:canary.denny.*', 'f:canary.frank.*', 'f:canary.bob.*'], accuse: ['f:frank.accused'], folderAsk: ['f:frank.folder.asked'] }; // i
 const actAtoms = (list, who = null) => {
   const out = [];
   for (const a of list || []) {
@@ -657,6 +761,7 @@ const actAtoms = (list, who = null) => {
     else if (m[1] === 'und') out.push(`und:${m[2]}`);
     else if (m[1] === 'lead') out.push(`lead:${m[2].split('=')[0]}`);
     else if (m[1] === 'do') out.push(...(m[2] === 'decline' ? ['f:tauno.porch.declined1', 'f:tauno.porch.declined2'] : m[2] === 'take' ? ['f:bundle.taken', 'f:bundle.later'] : m[2] === 'shelf' ? ['f:bundle.shelf'] : m[2] === 'bottles' ? ['f:kettle.bottles'] : m[2] === 'night' ? ['f:marlys.night'] : m[2] === 'arrange' ? ['f:drift.arranged'] : []));
+    if (m[1] === 'do' && I_DO[m[2]]) out.push(...I_DO[m[2]]); // i: the informant's hooks (a lake told, Frank accused, the folder asked)
   }
   return out;
 };
@@ -683,13 +788,18 @@ const SCENE_ENTRIES = {
   sheila: { first: '!f:sheila.met', again: 'f:sheila.met', overdue: 'northwind2', found: 'f:sheila.overdue.found' },
   statement: { told: 'f:choice.sheila=in & !f:sheila.statement' },
   rick: { first: '!f:rick.met', hub: 'f:rick.met' },
+  // i: the informant's scenes, where informant.js's entries start them
+  dennyI: { hello: 'f:nb.found', tell3: 'count(case.denny.*)>=2 | tier>=4', relay: 'f:choice.denny=turn', slept: 'f:choice.denny=told', hi: 'f:choice.denny=left', visit: 'false' },
+  reveal: { cabin: 'f:denny.reveal.open', rock: 'false', note: 'f:denny.note' },
+  frankI: { hello: 'f:nb.found', afterTold: 'f:choice.denny=told' },
   night: { n1750: 'f:marlys.night', n1805: 'f:gy.night.1750', n2200: 'f:gy.night.1805', n2340: 'f:gy.night.2200', n0100: 'f:gy.night.2340', n0200: 'f:gy.night.0100', n0600: 'f:gy.night.0200' },
 };
 const ENTRY_READS = { porch: ['f:tauno.porch.done', 'f:tauno.porch.declined2', 'f:door.crews.taken', 'f:door.crews.declined', 'f:crews.seen', 'f:tauno.turn', 'f:tauno.killed', 'f:tauno.doors', 'f:tauno.said.u1.*', 'f:nb.found'], josie: ['f:bundle.shelf', 'f:bundle.later', 'f:rehook.R1b'], p1: [],
   farm: ['f:tauno.doors', 'f:tauno.farm.met', 'f:kettle.visited', 'f:door.mining.yield', 'f:tauno.ride', 's:trips'], slab: ['f:tauno.ride', 'f:tauno.slab', 'f:tauno.said.q.*'], len: ['f:len.met'],
   mary: ['f:mary.met', 'f:kettle.lid', 'f:mary.lid.given', 'f:mary.table'], tasha: ['f:kettle.notice', 'f:tasha.met', 'f:kettle.fill.*', 'f:kettle.secchi', 'f:kettle.done'], // (join c2: + slice 2's)
   hap: ['f:hap.met', 'f:hap.day', 'f:gy.tow', 'f:gy.tow.told', 'f:hap.tow.*', 's:trips'], marlys: ['f:marlys.met', 'f:gy.register', 'f:marlys.night', 'f:nb.found', 'f:tauno.porch.done'], nate: ['f:nate.met'], // a3
-  sheila: ['f:sheila.met', 'f:sheila.overdue.found'], statement: ['f:choice.sheila'], rick: ['f:rick.met'], night: ['f:marlys.night', 'f:gy.night.*'] };
+  sheila: ['f:sheila.met', 'f:sheila.overdue.found'], statement: ['f:choice.sheila'], rick: ['f:rick.met'], night: ['f:marlys.night', 'f:gy.night.*'],
+  dennyI: ['f:nb.found', 'f:choice.denny', 'f:denny.met.*'], reveal: ['f:denny.reveal.open', 'f:denny.note', 'f:denny.revealed'], frankI: ['f:nb.found', 'f:choice.denny'] }; // (i: the informant's)
 const SCENE_SET = {}; // scene → every atom it can set (a conversation begun is kept only if its scene can touch the goal)
 function sceneSetters(name, def, who) {
   const casts = who && CAST[who] ? CAST[who].where.flatMap((w) => condAtoms(w.when)) : [];
@@ -763,6 +873,18 @@ async function buildSetters() {
   // a3: the guiding years' scenes and moves (moves3)
   for (const [n, d, who] of [['hap', GY.HAP, 'hap'], ['marlys', GY.MARLYS, 'marlys'], ['nate', GY.NATE, 'nate'], ['sheila', GY.SHEILA, 'sheila'], ['statement', GY.STATEMENT, 'sheila'], ['rick', GY.RICK, 'rick'], ['night', GY.NIGHT, 'marlys']]) sceneSetters(n, d, who);
   for (const [sets, cond] of GY_WORLD_SETTERS) setter(condAtoms(cond), sets, `a3:${sets[0]}`, cond, 1);
+  // i: the informant's scenes and moves (movesI); a meeting (denny.met.<n>) feeds the reveal's and tell 2's met:denny
+  for (const [n, d, who] of [['dennyI', II.DENNY_CABIN, 'denny'], ['reveal', II.REVEAL, 'denny'], ['frankI', II.FRANK_FARM, 'frank']]) sceneSetters(n, d, who);
+  for (const [sets, cond] of I_SETS) setter(condAtoms(cond), sets, `i:${sets[0]}`, cond, 1);
+  for (const nb of READ_NBI) setter(['f:nb.found'], [`read:${nb}`], `read:${nb}`, 'f:nb.found', 1);
+  setter(['f:nb.found'], ['f:denny.met.*'], 'i:meet', 'f:nb.found', 1);
+  SCENE_SET.dennyI.add('f:denny.met.*'); SCENE_SET.reveal.add('f:denny.met.*'); // (a talk with Denny is a meeting)
+  setter(['f:denny.met.*'], ['f:denny.reveal.open'], 'i:met', 'f:denny.met.*', 0);
+  setter(['f:gy.register', 'f:denny.met.*'], ['f:denny.tell2'], 'i:tell2', 'f:gy.register', 1); // (tell2Due: the register, or a third meeting)
+  setter(['f:case.denny.*'], ['f:denny.tell3'], 'i:tell3', 'count(case.denny.*)>=2', 1); // (tell3Due: two pieces)
+  setter(['f:nb.found'], ['f:canary.denny.*'], 'i:canary', 'f:nb.found', 2);
+  setter(['f:nb.found'], ['f:canary.frank.*'], 'i:canary.frank', 'f:nb.found', 2);
+  setter(['f:frank.cleared'], ['f:frank.accused', 'f:frank.folder.asked'], 'i:frank', 'f:frank.cleared', 2);
 }
 const famMatch = (set, atom) => {
   if (set.has(atom)) return true;
@@ -1211,6 +1333,7 @@ res(`the slice end to end: ${main.ok ? `${main.path.length} moves` : `stuck at '
 const rp = main.ok ? replay(main.path) : null;
 res('the plan replays on a fresh story, every move on offer where it is played', !!(rp && rp.ok && rp.S.when(END)), { at: rp && rp.at });
 // a3: --only-a3: slice 1's plan, then slice A3 alone (a stream's quick check; the join runs everything)
+if (arg('only-i', false)) { await sliceI(main, rp); console.log(`story-solve --only-i: ${report.fail.length ? `${report.fail.length} FAIL` : 'all pass'}`); for (const f of report.fail) console.log('FAIL', f.name, f.at || ''); process.exit(report.fail.length ? 1 : 0); } // i
 if (arg('only-a3', false)) { await slice3(main, rp); console.log(`story-solve --only-a3: ${report.fail.length ? `${report.fail.length} FAIL` : 'all pass'}`); for (const f of report.fail) console.log('FAIL', f.name, f.at || ''); process.exit(report.fail.length ? 1 : 0); }
 // final: --only-final: slice 1's plan, slice 2's (fast, no proofs) and slice 3 to the lift, then the Round 6 gates alone
 if (arg('only-final', false)) {
@@ -1308,6 +1431,8 @@ if (!arg('r1', false) && !arg('r2', false)) SFEND = sliceFar(S2END);
 // j1: end
 // a3: the guiding years (Round 4), from where slice 1 ends
 if (!arg('r1', false) && !arg('no-a3', false)) await slice3(main, rp);
+// i: the informant (Round 5's second half), from where slice 1 ends
+if (!arg('r1', false) && !arg('no-i', false)) await sliceI(main, rp);
 
 // n: begin — slice 3's endings (Round 3, stream n; Part 4 Round 3): J, JN and M reachable in every branch with producers
 // by Round 3 (tauno.record ×2, the Walt page north or not, a meeting set or any served lot, Maggie met or a stranger),

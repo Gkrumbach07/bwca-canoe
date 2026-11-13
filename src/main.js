@@ -1377,6 +1377,23 @@ async function main() {
     } catch (e) { console.warn('story A3: the guiding years', e); }
   }
   // /a3
+  // i: begin (campaign stream i, Round 5: the informant; docs/story/32-the-boys.md §5.10–§5.17), only under STORY_ON: Denny's
+  // cabin and Denny on its porch, the canary (the lake pick, Denny's rings, the watchers at the ringed site, the word at the
+  // counter), the counter lines, the reveal and its three choices, the note (informant-cast.js). With the flag off none of
+  // it is fetched
+  if (STORY_ON && story.v === 2 && window.__game.storyTalk) {
+    try {
+      const [{ informantCast }, { loadWords }] = await Promise.all([import('./informant-cast.js'), import('./story-data/words.js')]);
+      const { topics, cast, texts } = window.__game.storyTalk, sm = window.__game.storySeams || {};
+      const Wi = await loadWords(['boys', 'drafted']); texts.add(Wi.boys); texts.add(Wi.drafted);
+      informantCast.attach({ story, talk, topics, npcs, cast, player, day, world, scene, tiles, actors, pointer, hud, veil, inventory, pencil: sm.pencil || null, profile });
+      const updI = outfitter.update.bind(outfitter);
+      outfitter.update = (dt) => { updI(dt); try { informantCast.update(dt); } catch (e) { if (!informantCast.warned) { informantCast.warned = true; console.warn('story i: the informant', e); } } };
+      window.__game.storyInformant = { informantCast, on: true };
+      console.log('story i: the informant');
+    } catch (e) { console.warn('story i: the informant', e); }
+  }
+  // i: end
   // e: the episodes (docs/build/campaign-design.md §10, Part 4 Round 2 stream E), only under STORY_ON: the one runner
   // (episodes.js) with S7 and S9 (and A2's arc at the join), the flyers on the boards (outside the count), the snag on
   // June's pot (fishing.snags), Rose at Moose Lake 25's window, "Look at this" (show.js), the Stories side of the book,

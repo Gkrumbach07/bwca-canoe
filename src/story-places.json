@@ -3779,6 +3779,150 @@
           ]
         }
       ]
+    },
+    {
+      "id": "i.isabella",
+      "name": "The Isabella River below Isabella Lake, C911: Denny's \"Walt's spot\", the watchers' 2019 camp",
+      "doc": "32 §5.10; 03 §1b (C911, alt. C910); stream i",
+      "i": true,
+      "x": -12549.6,
+      "z": 30699.5,
+      "lake": "Rice Lake",
+      "shore": true,
+      "clear": 4,
+      "search": 160,
+      "props": [
+        {
+          "id": "i.flag1",
+          "kit": "surveyTag",
+          "at": [
+            -5,
+            9
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Survey flagging, pink, faded"
+            }
+          ]
+        },
+        {
+          "id": "i.flag2",
+          "kit": "surveyTag",
+          "at": [
+            4,
+            11
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Survey flagging, pink, faded"
+            }
+          ]
+        },
+        {
+          "id": "i.flag3",
+          "kit": "surveyTag",
+          "at": [
+            0,
+            15
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Survey flagging, pink, faded"
+            }
+          ]
+        },
+        {
+          "id": "i.can",
+          "kit": "coffeeCan",
+          "at": [
+            3,
+            6
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "A coffee can"
+            }
+          ]
+        },
+        {
+          "id": "i.aerial",
+          "kit": "pole",
+          "at": [
+            -3,
+            12
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "f:isabella.aerial | f:tauno.radio | f:sheila.radio",
+              "name": "An aerial."
+            },
+            {
+              "when": "true",
+              "name": "A sapling, cut and lashed up"
+            }
+          ]
+        },
+        {
+          "id": "i.receipt",
+          "kit": "noteSquare",
+          "at": [
+            1,
+            7
+          ],
+          "show": "!f:isabella.receipt",
+          "dot": [
+            {
+              "when": "!f:isabella.receipt",
+              "name": "A receipt"
+            }
+          ]
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "i.flag1",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:isabella.flagging"
+          ]
+        },
+        {
+          "prop": "i.can",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:isabella.can"
+          ]
+        },
+        {
+          "prop": "i.aerial",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:isabella.aerial"
+          ]
+        },
+        {
+          "prop": "i.receipt",
+          "verb": "Take",
+          "when": "!f:isabella.receipt",
+          "then": [
+            "f:isabella.receipt",
+            "give:item.receipt19"
+          ]
+        }
+      ],
+      "triggers": []
     }
   ],
   "portages": [
@@ -5649,6 +5793,66 @@
         "lakeId": 281,
         "off": 0,
         "tried": 11
+      },
+      "i.isabella": {
+        "props": {
+          "i.flag1": {
+            "x": -12548.9,
+            "z": 30689.3,
+            "heading": -2.672,
+            "sd": 5.2,
+            "y": 464.6
+          },
+          "i.flag2": {
+            "x": -12556,
+            "z": 30695.1,
+            "heading": -2.672,
+            "sd": 8.7,
+            "y": 465.7
+          },
+          "i.flag3": {
+            "x": -12550.6,
+            "z": 30696.9,
+            "heading": -2.672,
+            "sd": 10.4,
+            "y": 465.7
+          },
+          "i.can": {
+            "x": -12557.4,
+            "z": 30690.2,
+            "heading": -2.672,
+            "sd": 4.8,
+            "y": 465.7
+          },
+          "i.aerial": {
+            "x": -12549.3,
+            "z": 30692.8,
+            "heading": -2.672,
+            "sd": 7.5,
+            "y": 464.6
+          },
+          "i.receipt": {
+            "x": -12555.1,
+            "z": 30690.2,
+            "heading": -2.672,
+            "sd": 5.7,
+            "y": 465.7
+          }
+        },
+        "lanes": [],
+        "x": -12557.4,
+        "z": 30683.5,
+        "n": [
+          0.4525,
+          0.8918
+        ],
+        "u": [
+          -0.8918,
+          0.4525
+        ],
+        "lakeId": 251,
+        "off": 18,
+        "tried": 62
       }
     },
     "portages": {

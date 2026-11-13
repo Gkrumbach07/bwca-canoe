@@ -19,6 +19,7 @@ import { PropBuilder, TILE, chunkStone } from './prop-kit.js';
 import { KITS_7B } from './story-props-7b.js'; // 7b
 import { FAR_KITS } from './story-props-far.js'; // f: the far end's kits (Round 3)
 import { KITS_7A } from './story-props-7a.js'; // 7a
+import { KITS_I } from './story-props-i.js'; // i: Denny's cabin
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const C = (hex) => new THREE.Color(hex);
@@ -730,6 +731,9 @@ const REGISTRY = { stumpCut, quartzCobble, crib, landingRock, redPine, gradeMout
 // 7a: begin (Round 7 stream 7a: S2's west site, S3's long rock and north bay, S4's kill: story-props-7a.js)
 Object.assign(REGISTRY, KITS_7A);
 // 7a: end
+// i: begin (campaign stream i, Round 5: Denny's cabin, story-props-i.js)
+Object.assign(REGISTRY, KITS_I);
+// i: end
 // a2: the café's spots in a store's own frame (props.js's: a across, b toward the front wall and the door; every store's
 // inside is the same ±2.86 × ±3.86 m): the window table front left, the corner table front right clear of the board, the
 // urn on the counter; each table's two seats facing it. Farm 31's café (mining-cast.js) and Rose's window table at Moose

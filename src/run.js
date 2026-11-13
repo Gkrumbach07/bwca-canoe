@@ -379,6 +379,9 @@ export class Run {
     if (this.windMph() > 15 && !this.said.has('scanner.wind.1')) this.scan('scanner.wind.1');
     const h = this.g.day.hours;
     if (watchers.run && watchers.run.denny && h >= 2 && h < 4) this.scan('scanner.denny.2');
+    // i: begin (32 §9: the reveal ended in Tell the boys or Leave it: one line, once, from Base: "Duluth's not picking up." … "Doesn't matter.")
+    if (watchers.run && !watchers.run.denny && !this.said.has('i.duluth') && this.hasScanner() && h >= 21 && /^(told|left)$/.test(String(this.story && this.story.get('choice.denny')))) { this.said.add('i.duluth'); const t1 = this.g.text && this.g.text('32:9.duluth.1'), t2 = this.g.text && this.g.text('32:9.duluth.2'); if (t1) { this.scanLine('Base', t1); if (t2) setTimeout(() => this.scanLine('Base', t2), 2600); } }
+    // i: end
     if (watchers.run && !watchers.run.denny && !watchers.run.placedWest && h >= 0 && h < 3 && this.legI >= 3) this.scan('scanner.seen.5');
     // the quiet lines, now and then while nothing else is said
     if ((this.scanT -= dt) <= 0 && w === 'unseen') {
