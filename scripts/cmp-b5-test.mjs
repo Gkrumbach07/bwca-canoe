@@ -192,6 +192,7 @@ try {
   await step('7 the slides', async () => {
     const st = await page.evaluate(async () => {
       const B = window.__b5, g = window.__game, s = g.story;
+      if (!s.has('carol.favour')) s.rules.apply({ id: 'rig:favour', then: ['f:door.boys.open', 'f:carol.favour'] }, {}); // (--from: step 1's favour)
       const want = g.storyEpisodes && g.storyEpisodes.show ? g.storyEpisodes.show.wanted('carol') : [];
       s.rules.apply({ id: 'rig:paddle-print', then: ['f:carol.paddle.shown', 'f:carol.slides.invited'] }, {}); // (the print of the paddle shown: the want's own then)
       B.at(B.doy(8, 20), 16); await B.toStore(38); B.at(B.doy(8, 20), 16); B.tick(6);
