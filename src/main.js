@@ -1373,6 +1373,23 @@ async function main() {
     } catch (e) { console.warn('story E: episodes', e); }
   }
   // /e
+  // n: the endings (story Round 3, stream n; campaign-design §9, Part 3 #5-#6; 50 §7-§12), only under STORY_ON: the dawn
+  // lot (endings.js: the vehicles, Maggie, Dan, Wade, the phone, the bench, the edge; the come-out held for the choice),
+  // the consulting fee on the tally, the postcard, the people's first lines after the paper, the board by ending and
+  // Tasha's sampling, the upcharge, the props by ending. With the flag off none of it is fetched
+  if (STORY_ON && story.v === 2 && window.__game.storyTalk) {
+    try {
+      const [{ endings }, { loadWords }] = await Promise.all([import('./endings.js'), import('./story-data/words.js')]);
+      const { topics, cast, texts, beats } = window.__game.storyTalk;
+      const Wn = await loadWords(['finale', 'company']); texts.add(Wn.finale); texts.add(Wn.company);
+      endings.attach({ story, talk, topics, npcs, cast, outfitter, player, day, world, scene, tiles, actors, pointer, hud, inventory, profile, tasks, camp, beats });
+      const updN = outfitter.update.bind(outfitter);
+      outfitter.update = (dt) => { updN(dt); try { endings.update(dt); } catch (e) { if (!endings.warnedU) { endings.warnedU = true; console.warn('story n: the endings', e); } } };
+      window.__game.storyEndings = endings;
+      console.log('story n: the endings');
+    } catch (e) { console.warn('story n: the endings', e); }
+  }
+  // /n
   // gl-d: the trip-end tally and the board (the game-loop round, stream D; docs/build/game-loop-brief.md). Pay lands on
   // the trip's card as it counts up (record.js ended → tasks.settle), never at the board; no cap on notices held
   // (the owner's call 2026-11-05), each with a deadline that fits it; the new kinds (task-kinds-2.js: creel, campsite, beaver, iceout, colour,

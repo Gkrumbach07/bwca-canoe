@@ -105,6 +105,11 @@ export const FACTS = [
   { key: 'cans.opened', kind: 'bool', doc: '50 §5.5 a can opened (stream N\'s Open verb on R\'s ammocan writes it; N declares the cans. row)' },
   { key: 'find.', kind: 'bool', doc: '§7.2 a big finding (find.big.camp: the torn pages under the floorboard)' },
   // f: end
+  // n: the endings (story Round 3, stream n; campaign-design §9, Part 3 #5-#6; 50 §7-§12; story-data/endings.js)
+  { key: 'end.', kind: 'any', doc: '§9 the ending\'s own facts: end.J (journalist: J and JN) · end.JN · end.M · end.walt (named|kept) · end.read (Brekke\'s question) · end.lot (ep)', world: true },
+  { key: 'cans.', kind: 'any', doc: '50 §5.5 the cans opened (cans.opened, cans.memo.read: endings.js openCans)' },
+  { key: 'phone.', kind: 'any', doc: '50 §9.2 the permit-box phone: phone.dan (the number on Dan\'s card dialled)' },
+  // /n
 ];
 
 // the arcs whose yields are the big findings (§3.3 story.big), and the doors the player can be offered

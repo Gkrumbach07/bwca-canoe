@@ -14,6 +14,7 @@
 //   ambient.said(id)            a `once` line said (amb.once)
 //   ambient.roadLine({ roads, towns, seed }) → text | null      the drive card's road line (rides.js)
 //   BANNED, WALT_LORE           the words no ambient line may say; what counts as Walt lore (needs nb.found)
+import { S7_POOLS, QUIET_KINDS } from './story-data/endings.js'; // n: the S6–S7 pools (Round 3)
 export const BANNED = /\b(cellar|cache|far end|flowage|Gull['’]s east bay|the cans|Eino|alive|Wade)\b/i;
 export const WALT_LORE = /\b(Walt|old guide|guide used to|BRM|Boreal|Tauno|Haapala|notebook|Finn kid)\b/i;
 // the cast's own names: never a visitor's (the reserved speakers, §5.4)
@@ -100,6 +101,13 @@ export class Ambient {
         const cond = [e.cond, walt ? 'f:nb.found' : null].filter(Boolean).map((c) => `(${c})`).join(' & ');
         out.push({ id, text: e.text, cond, once: !!e.once, who: e.who || null, topic: e.topic || null, walt, raw: e });
       }
+      // n: begin — 70 §6.8's S7 lines with the conditions the extract could not attach (the J/M split is a heading;
+      // story-data/endings.js S7_POOLS), into the rumour and bark pools as their own entries
+      for (const [id, cond] of Object.entries(S7_POOLS[base] || {})) {
+        const e = this.text[id]; if (!e || typeof e.text !== 'string' || out.some((l) => l.id === id)) continue;
+        out.push({ id, text: e.text, cond, once: false, who: null, topic: null, walt: false, raw: { ...e, pool: base, n: true } });
+      }
+      // n: end
       this.cache.set(key, out);
     }
     return this.cache.get(key);
@@ -115,6 +123,9 @@ export class Ambient {
   lines(kind, ctx = {}) {
     const P = POOLS[String(kind).split(':')[0]];
     if (!P) return [];
+    // n: begin — S6, the run: "Nobody talks." (70 §6.7): no rumours or barks between the cellar and the dawn lot
+    { const s = this.c.story; if (s && s.stageN === 6 && QUIET_KINDS.includes(String(kind).split(':')[0])) return []; }
+    // n: end
     const keeper = String(kind).startsWith('keeper:') ? String(kind).slice(7) : ctx.keeper || null;
     const g = this.c.grounded;
     return this.all(kind).filter((l) => (!P.test || P.test(l.raw, { ...ctx, keeper }, l)) && !(l.once && this.saidOnce(l.id)) && this.when(l.cond, ctx) && (!g || g(l.text))); // (d: the line itself to the test, for its id)

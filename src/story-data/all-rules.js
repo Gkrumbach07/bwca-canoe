@@ -10,5 +10,6 @@ import { RULES_BEATS } from './rules-beats.js'; // d: the director (stream D, Ro
 import { RULES_MINING } from './rules-mining.js'; // a2: the mining years (Round 2)
 import { RULES_EPISODES } from './rules-episodes.js'; // e: every episode's steps (episodes/index.js)
 import { RULES_FAREND } from './rules-farend.js'; // f: the far end (Round 3)
+import { RULES_ENDINGS } from './rules-endings.js'; // n: the endings' dated after-effects (Round 3)
 
-export const RULES_ALL = [...RULES_CORE, ...RULES_BOOK, ...RULES_LAYER, ...RULES_TALK, ...RULES_BEATS, ...RULES_MINING, ...RULES_EPISODES, ...RULES_FAREND];
+export const RULES_ALL = [...RULES_CORE, ...RULES_BOOK, ...RULES_LAYER, ...RULES_TALK, ...RULES_BEATS, ...RULES_MINING, ...RULES_EPISODES, ...RULES_FAREND, ...RULES_ENDINGS];
