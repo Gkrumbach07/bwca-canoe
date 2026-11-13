@@ -1285,13 +1285,7 @@
             2,
             4
           ],
-          "show": "f:ep.S4.yes",
-          "dot": [
-            {
-              "when": "true",
-              "name": "Survey stake"
-            }
-          ]
+          "show": "f:ep.S4.yes"
         }
       ],
       "verbs": [],
@@ -1316,13 +1310,7 @@
             2,
             4
           ],
-          "show": "f:ep.S4.yes",
-          "dot": [
-            {
-              "when": "true",
-              "name": "Survey stake"
-            }
-          ]
+          "show": "f:ep.S4.yes"
         }
       ],
       "verbs": [],
@@ -1347,13 +1335,7 @@
             3,
             5
           ],
-          "show": "f:ep.S4.yes",
-          "dot": [
-            {
-              "when": "true",
-              "name": "Survey stake"
-            }
-          ]
+          "show": "f:ep.S4.yes"
         }
       ],
       "verbs": [],
