@@ -48,6 +48,7 @@ import { HULL_PALETTES } from './hull.js';
 import './coop.css';
 
 export const VISITOR_KEY = 'bwca-canoe:visitor';
+const SHUT_WORDS = 'Out on the water tonight.'; // c: the room refuses joins while the host's run is on (a build draft: docs/story/95-drafted-lines.md)
 const POSE_HZ = 15;
 const BACK_MS = 150;          // the others are drawn this far behind their own timeline
 const EXTRAP_MS = 400;        // a gap is bridged by velocity this long, then the actor holds
@@ -352,6 +353,10 @@ export class Coop {
     if (this.role) throw new Error('Already on a trip.');
     this.setVisitor({ name, shirt });
     const r = await this.connect({ code, role: 'guest' });
+    // c: begin (the run is on: the room refuses, or the host's snapshot says so; campaign-design §8.3 "No company")
+    if (r.ok && r.welcome && r.welcome.snap && r.welcome.snap.shut) { this.disconnect(); r.ok = false; r.why = String(r.welcome.snap.shut); }
+    if (!r.ok && r.why === 'run') throw new Error(SHUT_WORDS);
+    // c: end
     if (!r.ok) throw new Error(({ 'no trip': 'No trip with that code. Check it with your friend.', full: 'That trip is full (four at most).', unreachable: 'The relay can’t be reached.' })[r.why] || `Couldn’t join (${r.why}).`);
     await this.enterAsGuest(r.welcome);
     return true;
@@ -400,6 +405,7 @@ export class Coop {
   async rejoin() {
     if (this.role !== 'guest' || this.live || !this.code) throw new Error('Not out of a trip.');
     const r = await this.connect({ code: this.code, role: 'guest' });
+    if (!r.ok && r.why === 'run') throw new Error(SHUT_WORDS); // c: the run is on
     if (!r.ok) throw new Error(({ 'no trip': 'That trip has ended.', full: 'That trip is full (four at most).', unreachable: 'The relay can’t be reached.' })[r.why] || `Couldn’t rejoin (${r.why}).`);
     this.say(`Back on ${this.hostName || 'your friend'}’s trip.`);
     this.status = '';
@@ -463,7 +469,7 @@ export class Coop {
       for (const r of this.remotes.values()) r.remove();
       this.remotes.clear();
       if (this.relay) this.relay.close();
-      this.say(why === 'lost' ? 'Lost the connection to the trip.' : 'The trip has ended.');
+      this.say(why === 'run' ? SHUT_WORDS : why === 'lost' ? 'Lost the connection to the trip.' : 'The trip has ended.'); // c: 'run' (the host is out on the run)
       this.status = 'lost';
       // phase 3: a clear choice on the pause card: Rejoin, or back to my own season
       const t = this.title;
@@ -592,7 +598,7 @@ export class Coop {
       if (this.role === 'host' && now - this.lastClock >= CLOCK_EVERY) {
         this.lastClock = now;
         const d = this.g.day;
-        this.relay.send({ t: 'clock', ts: Math.round(performance.now()), year: d.year, doy: d.doy, hours: +d.hours.toFixed(6), rate: d.rate, running: !!d.running });
+        this.relay.send({ t: 'clock', ts: Math.round(performance.now()), year: d.year, doy: d.doy, hours: +d.hours.toFixed(6), rate: d.rate, running: !!d.running, ...(this.clockExtra ? this.clockExtra() : null) }); // c: clockExtra (coop-story.js: shut 'run' while the run is on, so the room refuses joins)
       }
     }
     if (this.guest) this.g.day.locked = true; // the Sandbox clock keys are the host's

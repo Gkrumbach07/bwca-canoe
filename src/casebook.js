@@ -39,7 +39,7 @@ export class Casebook {
     for (const id of ids) { const r = waltRow(id); if (r && r.replaces && have.has(r.replaces)) turned.add(r.replaces); }
     for (const id of ids) {
       if (turned.has(id)) continue;
-      const r = waltRow(id), t = say((r && r.ref) || id, v);
+      const r = waltRow(id), t = say((r && r.ref) || id, v) || (r && r.text) || ''; // c: a build draft's own words (walt-lines.js `text`) until the writers anchor it
       if (!t) continue;
       const line = { id, section: sectionOf(id), text: t };
       if (r && r.done) { try { line.done = !!s.when(r.done); } catch { line.done = false; } } // (a lead followed up: struck where it stands)

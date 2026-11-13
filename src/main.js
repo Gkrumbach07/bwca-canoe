@@ -1390,6 +1390,21 @@ async function main() {
     } catch (e) { console.warn('story n: the endings', e); }
   }
   // /n
+  // c: begin (co-op and the story, Round 3 stream C; campaign-design §11, Part 3 calls 1 and 7), only under STORY_ON: the
+  // host's story mirrored to a guest, read-only (the notebook, the Walt page, the stones, the story's people where the host's
+  // stand), host-only topics and pushes, a guest's deeds credited to the host, story items the host's, the pit with no verb
+  // while a friend is in (and N42), no joins while the run is on, the shared night waiting on night one (coop-story.js)
+  if (STORY_ON && story.v === 2 && window.__game.coop) {
+    try {
+      const [{ CoopStory }, { minigames }] = await Promise.all([import('./coop-story.js'), import('./minigames.js')]);
+      const sm = window.__game.storySeams || {}, st = window.__game.storyTalk || {};
+      const cs = new CoopStory(window.__game.coop, { story, layer: sm.layer || window.__game.storyLayer || null, npcs, walt, camp, hud, inventory, minigames, ambient: st.ambient || null, book: window.__game.book || null });
+      const feedNow = () => { const f = (window.__game.storySeams || {}).feed; if (f) { cs.useFeed(f); return true; } return false; };
+      if (!feedNow()) { const iv = setInterval(() => { if (feedNow()) clearInterval(iv); }, 500); setTimeout(() => clearInterval(iv), 60000); }
+      window.__game.coopStory = cs;
+    } catch (e) { console.warn('story C: co-op', e); }
+  }
+  // c: end
   // gl-d: the trip-end tally and the board (the game-loop round, stream D; docs/build/game-loop-brief.md). Pay lands on
   // the trip's card as it counts up (record.js ended → tasks.settle), never at the board; no cap on notices held
   // (the owner's call 2026-11-05), each with a deadline that fits it; the new kinds (task-kinds-2.js: creel, campsite, beaver, iceout, colour,

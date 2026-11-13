@@ -177,7 +177,7 @@ class StoryLayer {
   dotName(id) {
     const q = this.prop(id); if (!q || !q.prop.dot || !q.prop.dot.length) return null;
     const list = q.prop.dot;
-    if (this.guest()) return list[list.length - 1].name;
+    if (this.guest() && !this.hostView()) return list[list.length - 1].name; // c: a guest with the host's story mirrored in reads it as the host's
     if (q.prop.visible && !this.when(q.prop.visible)) return list[list.length - 1].name;
     for (const d of list) if (this.when(d.when)) return d.name;
     return list[list.length - 1].name;
@@ -232,7 +232,8 @@ class StoryLayer {
   // a picture: the targets of the places near ({ id, x?, z?, face (deg, the bearing the lens looks along), tol: { d, deg },
   // silhouette? }); silhouette is the terrain's own horizon only (Round 4: Gene's slide)
   shot({ eye, dir }) {
-    if (this.guest() || !eye || !dir) return;
+    if (this.guest()) { if (this.credit && eye && dir) this.credit('shot', { eye: { x: eye.x, y: eye.y, z: eye.z }, dir: { x: dir.x, y: dir.y, z: dir.z } }); return; } // c: a guest's picture goes to the host
+    if (!eye || !dir) return;
     for (const pl of this.near(eye.x, eye.z, 800)) {
       const matches = [];
       for (const T of pl.photo || []) {
@@ -246,6 +247,33 @@ class StoryLayer {
     }
   }
 
+  // c: begin (co-op, Round 3, campaign-design §11: the host's story seen on a guest; a guest's deeds credited to the host)
+  // the guest's story is the host's, mirrored in by coop-story.js (read-only)
+  hostView() { const st = this.t && this.t.story; return !!(st && st.doc && st.doc.hostMirror); }
+  // a guest: enter / stand once a visit, as the host's poll does, but told to the host (layer.credit, coop-story.js) to apply
+  creditPoll(pl, d, now) {
+    const was = this.inside.get(pl.id);
+    if (d <= pl.r) {
+      const v = was || { since: now, done: new Set() };
+      if (!was) this.inside.set(pl.id, v);
+      (pl.triggers || []).forEach((tr, i) => {
+        if (v.done.has(tr) || d > (tr.r || pl.r)) return;
+        if (tr.on === 'enter' || (tr.on === 'stand' && now - v.since >= (tr.s || 20))) {
+          if (!this.when(tr.when)) return;
+          v.done.add(tr); this.credit('trig', { place: pl.id, on: tr.on, i });
+        }
+      });
+    } else if (was && d > pl.r + 10) this.inside.delete(pl.id);
+  }
+  // the host: a guest's trigger, applied as ours (coop-story.js checked they are in the party). → bool
+  creditTrigger(placeId, on, i) {
+    const pl = this.place(placeId), tr = pl && (pl.triggers || [])[i];
+    if (!tr || tr.on !== on || this.guest() || !this.when(tr.when)) return false;
+    this.apply(pl, on, tr.then); fire(on, { place: pl.id, r: tr.r || pl.r, by: 'guest' });
+    return true;
+  }
+  // c: end
+
   // --- the poll: builds, drops, enter / stand / readHere -----------------------------------------------------------------
   poll() {
     const t = this.t, p = this.me(); if (!t || !p) return;
@@ -258,7 +286,7 @@ class StoryLayer {
       const far = pl.far || 0; // f: a place seen from far off (the notch: a skyline from the bay) builds from its own `far`
       if (d <= Math.max(LAYER.build, far)) this.buildPlace(pl); else if (d > Math.max(LAYER.drop, far + 250)) this.dropPlace(pl.id);
       if (d <= Math.max(LAYER.build, far)) this.reseat(pl);
-      if (!host) continue;
+      if (!host) { if (this.credit) this.creditPoll(pl, d, now); continue; } // c: a guest's triggers go to the host (guest credit)
       // enter / stand: once per visit (the radius left and come back to is a new visit)
       const inR = (r) => d <= r;
       const was = this.inside.get(pl.id);

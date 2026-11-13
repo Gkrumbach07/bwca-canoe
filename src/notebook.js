@@ -49,7 +49,9 @@ export class Book {
   get story() { return this.t.story; }
   get doc() { const s = this.story; return s && s.doc ? s.doc : null; }
   get nb() { const d = this.doc; return d ? d.nb : null; }
-  visible() { const s = this.story; return !!(s && s.mode !== 'mirror' && s.has('nb.found')); }
+  // c: begin (co-op, Part 3 call 7: a guest reads the host's notebook and Walt page, mirrored in by coop-story.js; read-only)
+  visible() { const s = this.story; return !!(s && (s.mode !== 'mirror' || (s.doc && s.doc.hostMirror)) && s.has('nb.found')); }
+  // c: end
 
   // --- the side (journal.addSide) ------------------------------------------------------------------------------------
   makeSide(el) {
