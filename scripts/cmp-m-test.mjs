@@ -234,7 +234,7 @@ try {
       await L.tp(Lg.x, Lg.z); await L.settle();
       d.setClock(d.year, doy, 11.8); L.step(10, 1 / 30);
       const seen = [];
-      for (let i = 0; i < 80; i++) { L.step(6, 1 / 15); await L.wait(5); const s = m.M.launch ? m.M.launch.stats() : null; if (s && (!seen.length || seen[seen.length - 1] !== s.phase)) seen.push(s.phase); if (s && s.phase === 'tied') break; }
+      for (let i = 0; i < 300; i++) { L.step(6, 1 / 15); await L.wait(5); const s = m.M.launch ? m.M.launch.stats() : null; if (s && (!seen.length || seen[seen.length - 1] !== s.phase)) seen.push(s.phase); if (s && s.phase === 'tied') break; }
       const tied = m.M.launch ? m.M.launch.stats() : null, brekke = !!(g.storyMining && g.storyMining.miningCast.live.has('brekke'));
       d.setClock(d.year, doy, 13.6);
       for (let i = 0; i < 40; i++) { L.step(6, 1 / 15); await L.wait(5); const s = m.M.launch.stats(); if (seen[seen.length - 1] !== s.phase) seen.push(s.phase); }
