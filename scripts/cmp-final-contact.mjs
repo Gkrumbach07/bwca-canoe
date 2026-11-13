@@ -22,7 +22,7 @@ const TILES = [
   ['7-porch', 'The back porch: the can (a4)'],
   ['b5-camp', 'The boys\' camp at C1210 (b5)'],
   ['b5-slides', 'Carol\'s slides (b5)'],
-  ['s5', 'The plane on the Kek: the dive (7b)'],
+  ['s5-dive', 'The plane on the Kek: the dive (7b)'],
   ['s6', 'The whiskey road: the pit (7b)'],
   ['s4-meadow', 'The wolves\' meadow (7a)'],
   ['g-cave', 'A secret mission: Winchell\'s cave (g)'],
@@ -54,7 +54,7 @@ h1 { margin: 14px 18px 4px; font: 600 20px Georgia, serif; } p { margin: 0 18px 
 .g { display: grid; grid-template-columns: repeat(4, 480px); gap: 10px; padding: 0 18px 18px; }
 figure { margin: 0; background: #2a2723; } img, .miss { width: 480px; height: 300px; object-fit: cover; display: block; }
 .miss { display: grid; place-items: center; color: #c86; } .two { display: flex; gap: 2px; } .half { width: 239px; } .crop { background-repeat: no-repeat; } figcaption { padding: 6px 8px; } b { color: #d9a441; }
-</style><h1>The campaign, final join (claude/cmp-final, ?story=1)</h1><p>Rounds 3–7 by the stream rigs' input, fedora</p><div class="g">${cells}</div>`;
+</style><h1>The campaign, final join (claude/cmp-final, ?story=1)</h1><p>Rounds 3–7 by the stream rigs' input, fedora + ben (polish: the dawn lot, the dive, the camp reshot)</p><div class="g">${cells}</div>`;
 const browser = await chromium.launch({ executablePath: process.env.CHROME });
 const page = await (await browser.newContext({ viewport: { width: 1998, height: 1100 } })).newPage();
 await page.setContent(html);
