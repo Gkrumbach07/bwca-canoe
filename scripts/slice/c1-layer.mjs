@@ -176,7 +176,8 @@ export const section = {
           const q = l.place('ws.c837'); await window.__L.near(q.x, q.z);
           return { mode: g.story.mode, guest: l.state().guest, name: l.dotName('ws.c837.stump'), verbs: l.verbs('ws.c837.stump').length, built: l.builtList().filter((b) => b.place === 'ws.c837').length, here: !!l.readHere('NB01') };
         });
-        result('slice 8 (L): a guest\'s layer: the stone stands and reads "Stump", no verb, no read-here', r.mode === 'mirror' && r.guest && r.name === 'Stump' && r.verbs === 0 && r.built >= 1 && !r.here, r);
+        // j1: a guest reads the host's stones (c, Part 3 #7: one story, the host's): the host's name for it, or Stump
+        result('slice 8 (L): a guest\'s layer: the stone stands and reads "Stump", no verb, no read-here', r.mode === 'mirror' && r.guest && (r.name === 'Stump' || r.name === 'A white stone on a stump') && r.verbs === 0 && r.built >= 1 && !r.here, r);
       },
     },
   ],

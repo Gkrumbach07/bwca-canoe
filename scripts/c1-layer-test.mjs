@@ -63,9 +63,10 @@ try {
   await A.waitForFunction(() => !!(window.__game.storyLayer && window.__game.storySeams && window.__game.storySeams.feed), null, { timeout: 60000 });
   await A.evaluate(HELPERS);
   {
-    const on = await A.evaluate(() => { const g = window.__game, l = g.storyLayer, w = g.world; return { st: l.state(), clear: (w.storyClear || []).length, lawns: (w.storyClear || []).every((s) => s[4] < 0), feed: g.storySeams.feed.names(), pub: w.portagesPublic() === w.portages, stub: l.stub }; });
+    // j1: f's hidden carry is out of portagesPublic by design; runtime layers (7c) add places beyond the json's
+    const on = await A.evaluate(() => { const g = window.__game, l = g.storyLayer, w = g.world; return { st: l.state(), clear: (w.storyClear || []).length, lawns: (w.storyClear || []).every((s) => s[4] < 0), feed: g.storySeams.feed.names(), pub: w.portagesPublic().length === w.portages.filter((p) => !p.hidden).length, stub: l.stub }; });
     on.mods = await loaded(A, LAYER_MODS);
-    result('2 flag on: the layer attached (every story place and starred site, this release), World.load\'s clearings (lawns), the place adapter in the feed', on.st.places === N_PLACES && !on.st.stale && on.clear >= 80 && on.lawns && on.feed.includes('place') && on.pub && on.stub === false, on);
+    result('2 flag on: the layer attached (every story place and starred site, this release), World.load\'s clearings (lawns), the place adapter in the feed', on.st.places >= N_PLACES && !on.st.stale && on.clear >= 80 && on.lawns && on.feed.includes('place') && on.pub && on.stub === false, on);
   }
   // 3 the slice section -----------------------------------------------------------------------------------------------
   for (const s of section.steps.filter((x) => !x.guest)) {
