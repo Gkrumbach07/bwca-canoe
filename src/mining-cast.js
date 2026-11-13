@@ -30,6 +30,7 @@ import { FieldPerson, decorate } from './kettle.js';
 for (const [k, v] of Object.entries(A2_SENSORS)) registerSensor(k, v);
 const FARM_EP = 31, ROAD_END = 33;
 const NEAR = 120, TICK = 0.5, SIGHT = 7, BYE_R = 30;
+const CAFE_SEAT = 0.46; // x: the cafe stools' top (story-props.js cafeTable: 0.45 legs, a 0.02 seat)
 const PEOPLE = ['len', 'mary', 'brekke', 'tasha'];
 const SCENES = { len: LEN, mary: MARY, brekke: BREKKE, tasha: TASHA };
 const floorDay = (x) => Math.floor(x);
@@ -106,7 +107,7 @@ class MiningCast {
   spotOf(at, who, L) {
     const cafe = L.cafe || null;
     if (at === 'a2:dock' && L.dockDeck) { const h = L.dockHeading || 0, fx = Math.cos(h), fz = -Math.sin(h); return { x: L.dockDeck.x + fx * 1.8, z: L.dockDeck.z + fz * 1.8, y: L.dockDeck.y, heading: h }; }
-    if ((at === 'a2:window' || at === 'a2:corner') && cafe) { const T0 = at === 'a2:window' ? cafe.window : cafe.corner, k = who === 'brekke' ? 1 : 0, q = T0.seats[k]; return { x: q.x, z: q.z, y: q.y, heading: q.heading }; }
+    if ((at === 'a2:window' || at === 'a2:corner') && cafe) { const T0 = at === 'a2:window' ? cafe.window : cafe.corner, k = who === 'brekke' ? 1 : 0, q = T0.seats[k]; return { x: q.x, z: q.z, y: q.y, heading: q.heading, pose: 'sit', seat: CAFE_SEAT }; } // (x: seated on the table's stool, so foot traffic can't nudge them)
     if (at === 'a2:store' && L.counter) { const A = L.axes.a; return { x: L.counter.x - A.x * 1.1, z: L.counter.z - A.z * 1.1, y: L.floorY, heading: L.counter.heading }; }
     return null;
   }
@@ -192,7 +193,7 @@ class MiningCast {
     st.talked = true; s.meet(who, 'a2');
     if (who === 'mary' && !s.has('mary.seen')) s.set('mary.seen', true, 'a2');
     const tasks = this.c.mtasks;
-    if (who === 'len' && tasks) { const r = tasks.handIn('len'); if (r === 'wrong') { const w = T('30:4.2.1.wrong'); if (w) { try { st.h.say(w); } catch { /* not drawn */ } } } }
+    if (who === 'len' && tasks) { const r = tasks.handIn('len'); if (r === 'wrong') { const w = T('30:4.2.1.wrong'); if (w) { try { st.h.say(w); } catch { /* not drawn */ } } } if (r === 'paid') { const w = T('d95.len.thanks'); if (w) { try { st.h.say(w); } catch { /* not drawn */ } } } } // (x: his thanks for the two pictures, drafted)
     const run = this.run(def, who, { hooks: {
       rings: () => this.lenRings(),
       favour: () => { if (tasks) tasks.offerLen(FARM_EP); },

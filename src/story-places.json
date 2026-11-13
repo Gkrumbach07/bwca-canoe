@@ -204,6 +204,53 @@
       ]
     },
     {
+      "id": "x.c902.stone",
+      "name": "Bald Eagle Lake, C902's landing: a white stone on a flat rock (30 §9, \"V.'s water\")",
+      "doc": "docs/story/30-mining-years.md §9 (\"A white stone on a flat rock at the landing, set long before 2018\"); unstarred as walt-sites.js keeps C902 (stream x)",
+      "x": -24773.5,
+      "z": 29969.1,
+      "lake": "Bald Eagle Lake",
+      "shore": true,
+      "search": 60,
+      "props": [
+        {
+          "id": "x.c902.rock",
+          "kit": "flatRock",
+          "at": [
+            0,
+            1.2
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Flat rock"
+            }
+          ],
+          "wet": "edge"
+        },
+        {
+          "id": "x.c902.stone",
+          "kit": "quartzCobble",
+          "at": [
+            0,
+            1.2
+          ],
+          "on": "x.c902.rock",
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "White stone"
+            }
+          ],
+          "wet": "edge"
+        }
+      ],
+      "verbs": [],
+      "triggers": []
+    },
+    {
       "id": "ep33.crewcamp",
       "name": "The old crew camp at the EP 33 road end: a slab and a pole",
       "doc": "docs/story/20-opening.md §11.1 step 2; 30-mining-years.md §3",
@@ -955,6 +1002,37 @@
           },
           "wet": true,
           "show": "wind<3 & hour:10-15"
+        },
+        {
+          "id": "x.s7.rhubarb",
+          "kit": "rhubarb",
+          "at": [
+            -5,
+            15.5
+          ],
+          "show": "month:5-6",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Rhubarb"
+            }
+          ],
+          "x": "70 §2.3 rhubarb at an old cabin site, May–June (stream x)"
+        },
+        {
+          "id": "x.s7.rhubarb2",
+          "kit": "rhubarb",
+          "at": [
+            -3.4,
+            16.4
+          ],
+          "show": "month:5-6",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Rhubarb"
+            }
+          ]
         }
       ],
       "verbs": [
@@ -996,6 +1074,24 @@
           "when": "true",
           "then": [
             "f:ep.S7.rock"
+          ]
+        },
+        {
+          "prop": "x.s7.rhubarb",
+          "verb": "Look",
+          "when": "!f:ep.S7.rhubarb",
+          "then": [
+            "f:ep.S7.rhubarb",
+            "think:70.2.3.1"
+          ]
+        },
+        {
+          "prop": "x.s7.rhubarb2",
+          "verb": "Look",
+          "when": "!f:ep.S7.rhubarb",
+          "then": [
+            "f:ep.S7.rhubarb",
+            "think:70.2.3.1"
           ]
         }
       ],
@@ -2676,6 +2772,38 @@
           29969.1
         ]
       },
+      "x.c902.stone": {
+        "props": {
+          "x.c902.rock": {
+            "x": -24773.9,
+            "z": 29970,
+            "heading": 2.7148,
+            "sd": 1.2,
+            "y": 443.7
+          },
+          "x.c902.stone": {
+            "x": -24773.9,
+            "z": 29970,
+            "heading": 2.7148,
+            "sd": 1.2,
+            "y": 443.7
+          }
+        },
+        "lanes": [],
+        "x": -24773.4,
+        "z": 29968.9,
+        "n": [
+          -0.4139,
+          0.9103
+        ],
+        "u": [
+          -0.9103,
+          -0.4139
+        ],
+        "lakeId": 77,
+        "off": 0,
+        "tried": 11
+      },
       "ep33.crewcamp": {
         "props": {},
         "lanes": [],
@@ -2987,6 +3115,20 @@
             "heading": 2.5165,
             "sd": -4.8,
             "y": 395.5
+          },
+          "x.s7.rhubarb": {
+            "x": -17487.6,
+            "z": 3739,
+            "heading": 2.5165,
+            "sd": 13.8,
+            "y": 397.9
+          },
+          "x.s7.rhubarb2": {
+            "x": -17489.4,
+            "z": 3738.8,
+            "heading": 2.5165,
+            "sd": 14.6,
+            "y": 397.9
           }
         },
         "lanes": [],

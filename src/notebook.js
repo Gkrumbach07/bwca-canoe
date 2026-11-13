@@ -283,7 +283,7 @@ export class Book {
     const photos = (leaf.photos || []).map((id) => `<button type="button" class="nbw-print${s.nbHas('nbphoto', id) ? '' : ' undot'}" data-nbloose="${id}" style="--tilt:${side === 'left' ? -3 : 2.5}deg" aria-label="A photograph">${s.nbHas('nbphoto', id) ? '' : '<i class="nbw-dot"></i>'}</button>`).join('');
     const fresh = this.here && this.here.nb === nb && performance.now() - this.here.t < 4000;
     return `<div class="nbw-leaf nbw-e ${n <= BLUE_UNTIL ? 'blue' : 'lead'}" data-nb="${nb}">
-      <div class="nbw-scroll"><div class="nbw-hand">${this.inkHtml(unwrap(leaf.text), nb)}</div>${und && leaf.part !== 2 ? `<div class="nbw-margin nbw-mine">${esc(und.note)}</div>` : ''}${here ? `<div class="nbw-here nbw-mine${fresh ? ' fresh' : ''}">he was here</div>` : ''}</div>
+      <div class="nbw-scroll"><div class="nbw-hand">${this.inkHtml(unwrap(leaf.text), nb)}</div>${und && leaf.part !== 2 ? `<div class="nbw-margin nbw-mine">${esc(und.note || (und.noteId ? say(und.noteId) : ""))}</div>` : ''}${here ? `<div class="nbw-here nbw-mine${fresh ? ' fresh' : ''}">he was here</div>` : ''}</div>
       ${photos ? `<div class="nbw-prints">${photos}</div>` : ''}</div>`;
   }
   // Walt's text: his first ink, the [second ink], and every decoded word faintly underlined in the player's pencil

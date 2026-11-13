@@ -311,11 +311,11 @@ export const steps = [
     await page.evaluate((d) => { const A = window.__a2; let x = d + 1; while (A.dow(x) === 4) x++; A.at(x, 9); }, ctx.kettleDay);
     await page.evaluate(async () => { await window.__a2.toFarm(); const S = window.__a2.store(); window.__L.standAt(S.dockFoot.x, S.dockFoot.z, 0); window.__L.step(40); });
     await talk(page, 'cast:len:31'); await hear(page, 2); await page.evaluate(() => window.__a2.endTalk());
-    const r = await page.evaluate((join) => { const A = window.__a2, before = window.__game.profile.s.money, owed = A.M().miningCast.debug.pays().due, paid = join ? [] : A.M().miningCast.debug.payNow(); return { task: A.task('lenphotos'), owed, paid, money: window.__game.profile.s.money - before, photos: A.facts(['len.photos', 'photo.crib', 'photo.casing']) }; }, !!ctx.join);
+    const r = await page.evaluate((join) => { const A = window.__a2, before = window.__game.profile.s.money, owed = A.M().miningCast.debug.pays().due, now = A.M().miningCast.debug.pays().paid.filter((p) => p.line === '30:4.3.pay.1' && p.n === 35), paid = join ? [] : A.M().miningCast.debug.payNow(); return { task: A.task('lenphotos'), owed, now, paid, money: window.__game.profile.s.money - before, photos: A.facts(['len.photos', 'photo.crib', 'photo.casing']) }; }, !!ctx.join);
     if (ctx.join) result('5 (A2) Len takes the two pictures (the favour done: $40 at the tally, tasks.settle); "Field help, Kettle creek" $35 owed through D\'s pay: for the trip\'s end (D\'s half pays them)',
-      r.task && r.task.status === 'done' && r.photos['len.photos'] && r.owed.some((p) => p.n === 35 && p.line === '30:4.3.pay.1'), r);
+      r.task && r.task.status === 'done' && r.photos['len.photos'] && (r.owed.some((p) => p.n === 35 && p.line === '30:4.3.pay.1') || r.now.length > 0), r); // (cmp-x: with no trip on at the tailgate, D's pay: pays it at once, owner 2026-11-12)
     else result('5 (A2) Len takes the two pictures (the favour done: $40 at the tally, tasks.settle); D\'s pay: owes "Field help, Kettle creek" $35, paid by the tally (here its pay now)',
-      r.task && r.task.status === 'done' && r.photos['len.photos'] && r.paid.some((l) => /^Field help, Kettle creek · \$35/.test(l)) && r.money === 35, r);
+      r.task && r.task.status === 'done' && r.photos['len.photos'] && ((r.paid.some((l) => /^Field help, Kettle creek · \$35/.test(l)) && r.money === 35) || r.now.length > 0), r); // (cmp-x: or paid at once, no trip on)
   } },
   // step 6: Mary, Tuesday or Friday, the lid carried: the dot's Give (A2's want, E's show.js: the join), the back table, Far End (L2A)
   { id: 'table', step: 6, title: 'the back table: the lid given, the papers, the typewriter, L.P., the promise, Far End (L2A)', run: async ({ page, result, ctx }) => {

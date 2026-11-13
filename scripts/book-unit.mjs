@@ -104,7 +104,7 @@ const book = B.buildBook(nb);
   result('4b every line\'s section is one of the page\'s', [...ids].every((id) => secs.has(WL.sectionOf(id))) && WL.sectionOf('20:11.2.w1') === 'leads' && WL.sectionOf('20:T4.w3') === 'people' && WL.sectionOf('w.found') === 'walt', {});
   const replaced = WL.WALT_LINES.filter((w) => w.replaces);
   result('4c a line that replaces another names one with words', replaced.every((w) => all[w.replaces]), { replaced });
-  result('4d the understood notes are the doc\'s own (10 §11.2) and each row\'s nick is a nickname', B.UND.every((u) => u.note && (!u.nick || B.NICKS.some((n) => n.nick === u.nick))) && B.UND.find((u) => u.nb === 'NB01').note === '= Lake One', {});
+  result('4d the understood notes are the doc\'s own (10 §11.2; x: or a drafted one by id, docs/story/95) and each row\'s nick is a nickname', B.UND.every((u) => (u.note || (u.noteId && all[u.noteId] && all[u.noteId].text)) && (!u.nick || B.NICKS.some((n) => n.nick === u.nick))) && B.UND.find((u) => u.nb === 'NB01').note === '= Lake One', {});
 }
 
 // --- 5 items ---------------------------------------------------------------------------------------------------------------

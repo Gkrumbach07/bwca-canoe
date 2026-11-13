@@ -23,8 +23,9 @@ export default {
   steps: [
     { when: 'f:mg.snag.landed', then: ['f:ep.S9.pot', 'give:item.junespot'] },
   ],
-  ends: [{ id: 'pot', when: 'f:ep.S9.pot' }],
-  page: [],
+  ends: [{ id: 'pot', when: 'f:ep.S9.pot', line: 'd95.S9.end' }], // (x: its last line, drafted: docs/story/95)
+  // x: the page's lines, drafted in the player's hand (60 §0.3; docs/story/95)
+  page: [{ when: 'f:mg.snag.hooked', text: 'd95.S9.page.hooked' }, { when: 'read:NB06', text: 'd95.S9.page.nb06' }],
   titles: [{ when: 'read:NB06', title: 'Coffee Lake' }, { when: 'true', title: 'Alice Lake' }],
   first: 'S9.first',
   feeds: ['ink.coffeelake'],

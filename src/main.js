@@ -1285,6 +1285,9 @@ async function main() {
         import('./story-data/rules-talk.js'), import('./feed-talk.js'), import('./story-data/words.js')]);
       const W = await loadWords(['opening', 'world', 'mining']), w70 = { default: W.world };
       texts.add(W.opening); texts.add(W.world); texts.add(W.mining); texts.add(A1.TEXT); // (A1.TEXT: the doc's prose lines with no anchor yet, 20 §5.2 W.H.) // (mining: Tauno's seat reads Two Stump and V.'s water, 30 §4.1)
+      // x: begin (the build's drafted lines, docs/story/95-drafted-lines.md: the writers' gaps until they write them)
+      try { const Wx = await loadWords(['drafted']); if (Wx.drafted) texts.add(Wx.drafted); } catch (e) { console.warn('story: the drafted lines', e); }
+      // x: end
       const seams = window.__game.storySeams || {};
       beats.attach(story);
       void RULES_TALK; // (st-t: in the story from its construction, story-data/all-rules.js; never added after attach (chk-coop C2). cast.js still plays t.armed on its own store:enter, guarded by the fact)

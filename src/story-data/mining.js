@@ -37,8 +37,11 @@ export const KETTLE = {
   at: { x: -26950, z: 30600 },     // the provisional pad (owner call 11; 90 §13 check 1, scripts/c2-mining-unit.mjs reports it)
   secchi: 0.8,                     // m: the pond's clarity ("milky and orange-brown at under a metre", 30 §4.3)
   pay: 35,                         // $: "Field help, Kettle creek" at the trip's end (owner call 10: Tasha's pay:)
-  notice: { from: 18, days: 5 },   // the notice: up from 18:00 of a forecast two-day rain's first day, until 5 days after it
-  rainDay: 6,                      // hours of rain that make a day of rain (feed-weather.js)
+  notice: { from: 18, days: 5 },   // the notice: up from 18:00 of a forecast rain's first day, until 5 days after it
+  // x: begin (owner 2026-11-12: any 4-hour wet day counts as the spell; was 6 hours and two days running, 0–4 a season)
+  rainDay: 4,                      // hours of rain that make a wet day (feed-weather.js)
+  spellDays: 1,                    // wet days running that make the spell
+  // x: end
   runDays: 2,                      // the creek runs orange this many days after the rain stops; else the stain only
   tasha: { hours: [7, 14], dows: [1, 2, 3, 4, 5], stay: 19 }, // the morning after the rain quits (a weekday), at the tailgate; once her bottles are out, till 19:00 that day
 };
@@ -197,6 +200,7 @@ export const LEN = {
   id: 'len', who: 'len',
   nodes: {
     first: { say: ['30:4.2/len-saari-first-meeting.1'], then: ['f:len.met'], to: 'hub' },
+    again: { say: ['d95.len.again'], to: 'hub' }, // x: a later talk's opener (drafted: docs/story/95)
     hub: { go: [
       // three rings in his voice: the landing, the grade, the west pads (true and public: L1A); a ring Len draws goes into
       // his next Thursday report (Round 6's canary reads len.westpads.rings)
@@ -206,17 +210,21 @@ export const LEN = {
       { ask: '30:4.2/len-saari-first-meeting.c3', once: 'eino', when: 'f:knows.eino', say: ['30:4.2/len-saari-first-meeting.4'], then: ['walt:30:4.2/len-saari-first-meeting.w2'] },
       { ask: '30:4.2/len-saari-first-meeting.c4', once: 'now', say: ['30:4.2/len-saari-first-meeting.6', '30:4.2.1.1'], then: ['f:len.favour', 'do:favour'] },
       { ask: '30:4.2/len-saari-first-meeting.c5', once: 'elsie', when: 'f:len.said.now', say: ['30:4.2/len-saari-first-meeting.7'], then: ['f:len.elsie'] },
+      // x: "Gull" / "Pietro" / "east of Bald Eagle" (the player names one: offered once they have a reason to, the crew
+      // map, the far end or Pietro's dig); the lie (steering) heard; its Walt line waits for what shows it (rules-x.js)
+      { ask: 'd95.len.east.ask', once: 'east', when: 'f:door.mining.yield | f:maggie.e7copy | f:pietro.dig.seen | f:mary.farend | f:ink.farend', say: ['30:4.2/len-saari-first-meeting.5'], then: ['f:said.len.east'] },
       // the canary (bible 5.7): a real lake picked, told.len kept; nothing leaks this round
       { ask: '30:4.2/len-saari-first-meeting.c6', say: ['30:4.2/len-saari-first-meeting.8'], then: ['do:pick'] }] },
   },
 };
-export function lenEntry(s) { return s.has('len.met') ? 'hub' : 'first'; }
+export function lenEntry(s) { return s.has('len.met') ? 'again' : 'first'; } // (x: 'again', was 'hub': a bare "…")
 
 // --- 4.2 Mary at the window; 4.4 the back table -------------------------------------------------------------------------
 export const MARY = {
   id: 'mary', who: 'mary',
   nodes: {
     first: { say: ['30:4.2/mary-pelto-first-meeting.1'], then: ['f:mary.met'], to: 'hub' },
+    again: { say: ['d95.mary.again'], to: 'hub' }, // x: a later talk's opener (drafted: docs/story/95)
     hub: { go: [
       { ask: '30:4.2/mary-pelto-first-meeting.c1', once: 'office', say: ['30:4.2/mary-pelto-first-meeting.2'], then: ['f:said.mary.never'] },
       { ask: '30:4.2/mary-pelto-first-meeting.c2', once: 'leo', say: ['30:4.2/mary-pelto-first-meeting.3'], to: 'leo' },
@@ -235,7 +243,8 @@ export const MARY = {
     papers: { say: ['30:4.4.5'], go: [{ ask: '30:4.4.c3', say: ['30:4.4.6'], then: ['walt:30:4.4.w1'], to: 'lp' }] },
     lp: { say: ['30:4.4.7'], then: ['walt:30:4.4.w2'], go: [
       { ask: '30:4.4.c4', say: ['30:4.4.8'], then: ['f:mary.promised'], to: 'farend' },
-      { ask: '30:4.4.c5', say: ['30:4.4.9'], to: 'farend' }] },
+      { ask: '30:4.4.c5', say: ['30:4.4.9'], to: 'farend' },
+      { ask: 'd95.mary.saynothing', to: 'farend' }] }, // x: 30 §4.4 "[Say nothing.]": she waits, nods, and goes on
     // the lake key (L2A), the arc's second big finding (owner call 12: the fact written, the count left)
     farend: { say: ['30:4.4.10'], then: ['f:mary.farend', 'walt:30:4.4.w3', 'f:mary.table'], end: true },
   },
@@ -244,7 +253,7 @@ export const MARY = {
 export function maryEntry(s, ctx = {}) {
   if (ctx.give && s.has('kettle.lid') && !s.has('mary.lid.given')) return 'table';
   if (s.has('mary.lid.given') && !s.has('mary.table')) return 'papers';
-  return s.has('mary.met') ? 'hub' : 'first';
+  return s.has('mary.met') ? 'again' : 'first'; // (x: 'again', was 'hub': a bare "…")
 }
 // the want Mary has (E's show.js reads it: the dot on her offers Give with the lid carried)
 export const WANTS = [{ who: 'mary', item: 'leolid', when: 'f:kettle.lid & !f:mary.lid.given', scene: 'table' }];

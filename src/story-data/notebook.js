@@ -98,6 +98,9 @@ export const UND = [
   { nb: 'NB66', when: 'f:stash.paddle.found', note: 'Spare paddle. Stone.', words: [] },
   { nb: 'TP2', when: 'f:nb.torn & (f:tauno.e7sketch | f:maggie.e7sketch) & at:waltcamp', note: '620 m. Towards the sunrise in December.', words: [] },
   // f: end
+  // x: the back door = Pietro (30 §4.7): 10 §11.2 has no note for it; a drafted one by id (docs/story/95), read through
+  // words.js where the note is drawn (noteId)
+  { nb: 'NB70', when: 'f:ink.backdoor | f:knows.backdoor', note: null, noteId: 'd95.und.backdoor', words: ['back door'], nick: 'backdoor' },
 ];
 // (every note is 10 §11.2's own words; the easy nicknames other than the Front Porch have no note written there yet, so
 // they underline nothing until the writers give one: a leftover for the owner, not invented here)

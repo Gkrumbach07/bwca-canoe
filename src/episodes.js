@@ -157,7 +157,20 @@ export class Episodes {
 
   // --- time ----------------------------------------------------------------------------------------------------------
   dateNow() { const s = this.story; if (s && typeof s.date === 'function') return s.date(); return { year: 2026, month: 6, day: 15, dow: 2, doy: 166, hours: 9 }; }
-  tick() { const s = this.story; if (!s) return; const t = s.time(); if (t.abs !== this.lastDay) this.dayTurn(); }
+  tick() {
+    const s = this.story; if (!s) return; const t = s.time(); if (t.abs !== this.lastDay) this.dayTurn();
+    // x: begin (a flyer whose `when` reads the hour or the weather (the Kettle notice from 18:00 of a rain; its re-post
+    // on a later rain) goes up or comes back between day turns: the boards are told once an hour when the set changes)
+    const hr = Math.floor(t.abs * 24 + (t.hours || 0));
+    if (hr !== this.flyHr && this.live) { this.flyHr = hr; const sig = this.flyerSig(); if (sig !== this.flySig) { const was = this.flySig; this.flySig = sig; if (was != null) this.emit('flyers', {}); } }
+    // x: end
+  }
+  // x: begin (which flyers are up and untaken, and which posting: the hourly board check above)
+  flyerSig() { const out = []; for (const rec of this.recs.values()) { const f = rec.flyer; if (!f || !this.window(rec.id) || this.ended(rec.id) || !this.when(f.when)) continue; out.push(`${rec.id}:${this.taken(rec.id) ? 1 : 0}:${this.posting(rec) ?? ''}`); } return out.join(','); }
+  // a flyer's posting (flyer.posting: a sensor's name, the Kettle notice's `kettlespell`): a flyer taken in one posting is
+  // up again, untaken, in the next (owner 2026-11-12: the notice re-posts on a later rain until the Kettle day is done)
+  posting(rec) { const f = rec && rec.flyer, s = this.story; if (!f || !f.posting || !s || typeof s.readSensor !== 'function') return null; try { const v = s.readSensor(f.posting); return v == null || v === false ? null : v; } catch { return null; } }
+  // x: end
   // windows are judged at day turn (and once at attach), kept in memory (wins); a window that closed on a started episode
   dayTurn(force = false) {
     const s = this.story; if (!s || !s.doc) return;
@@ -250,7 +263,14 @@ export class Episodes {
     }
     return out;
   }
-  taken(id) { const s = this.story; return !!(s && s.has(`ep.${id}.flyer`)); }
+  taken(id) {
+    const s = this.story; if (!(s && s.has(`ep.${id}.flyer`))) return false;
+    // x: begin (a reposting flyer is taken only in the posting it was taken in)
+    const rec = this.recs.get(id), p = this.posting(rec);
+    if (p != null) { const st = this.doc && this.doc[id]; return !!(st && st.post === p); }
+    // x: end
+    return true;
+  }
   // the paper as flyers.js draws it: the notice's own words, its last "— " line the sign (no pay: never paid at the tally)
   paper(rec) {
     const f = rec.flyer, raw = this.words(f.text) || '';
@@ -264,8 +284,10 @@ export class Episodes {
     const id = String(flyerId || '').replace(/^ep:/, ''), rec = this.recs.get(id);
     if (!rec || !rec.flyer || !this.live || this.held() || this.taken(id)) return false;
     if (!this.window(id)) return false;
+    const again = !!(this.story && this.story.has(`ep.${id}.flyer`)); // x: a re-posted flyer taken again
     this.apply(id, [`f:ep.${id}.flyer`, ...(rec.flyer.then || [])], 'flyer');
-    if (rec.flyer.yes !== false && !rec.flyer.noYes) this.yes(id, 'flyer');
+    { const p = this.posting(rec), st = this.st(id); if (st) { if (p != null) st.post = p; if (st.flyerAt == null) st.flyerAt = this.story.time().abs; this.dirty(); } } // x: the posting, and the day it was first taken
+    if (!again && rec.flyer.yes !== false && !rec.flyer.noYes) this.yes(id, 'flyer');
     this.emit('flyers', { id, taken: true });
     return true;
   }
@@ -276,9 +298,11 @@ export class Episodes {
     const L = this.c.layer, out = [];
     for (const id of this.open()) {
       const rec = this.recs.get(id); if (!this.window(id) || !rec.places) continue;
-      for (const pid of rec.places) {
+      for (const p0 of rec.places) {
+        // x: a place may be { id, when, line } (the mining arc's Kettle pad: only while the Kettle day isn't done)
+        const pid = typeof p0 === 'string' ? p0 : p0 && p0.id; if (!pid || (typeof p0 === 'object' && p0.when && !this.when(p0.when))) continue;
         const pl = L && typeof L.place === 'function' ? L.place(pid) : null;
-        if (pl && Number.isFinite(pl.x)) out.push({ id: pid, ep: id, place: pid, x: pl.x, z: pl.z, r: pl.r || 60, line: beatLine(rec) });
+        if (pl && Number.isFinite(pl.x)) out.push({ id: pid, ep: id, place: pid, x: pl.x, z: pl.z, r: pl.r || 60, line: (typeof p0 === 'object' && p0.line) || beatLine(rec) });
       }
     }
     return out;
@@ -298,8 +322,10 @@ export class Episodes {
 
   // --- the page (stories.js) ---------------------------------------------------------------------------------------------
   page(id) {
-    const rec = this.recs.get(id); if (!rec || !this.started(id)) return null;
+    const rec = this.recs.get(id); if (!rec) return null;
+    if (rec.kind === 'arc' || !this.started(id)) return this.noticePage(rec); // x: an arc's taken notice has a page of its own
     const st = this.st(id) || {}, lines = [];
+    { const n = this.notice(rec); if (n) lines.push(n); } // x: a taken notice's words head its page (owner 2026-11-12)
     for (const p of rec.page || []) if (this.when(p.when)) { const w = this.words(p.text); if (w && !lines.includes(w)) lines.push(w); }
     const end = this.ended(id) ? this.words(st.last || ((rec.ends || []).find((e) => e.id === this.story.get(`ep.${id}.end`)) || {}).line) : null;
     const first = this.ended(id) && rec.first ? (this.words(rec.first) || '').replace(/^First stamped:\s*/i, '') || null : null;
@@ -307,7 +333,29 @@ export class Episodes {
     const prints = (rec.pins || []).flatMap((m) => this.prints(m));
     return { id, title, kind: rec.kind, lines, end, first, prints, since: st.at ?? null };
   }
-  pages() { if (!this.live) return []; return this.records().filter((r) => r.kind !== 'arc' && this.started(r.id)).sort((a, b) => (this.st(a.id).at || 0) - (this.st(b.id).at || 0)).map((r) => this.page(r.id)).filter(Boolean); }
+  pages() {
+    if (!this.live) return [];
+    const on = (r) => (r.kind !== 'arc' && this.started(r.id)) || this.noticeKept(r); // x: + a taken notice's own page
+    const at = (r) => { const st = this.st(r.id) || {}; return st.at ?? st.flyerAt ?? 0; };
+    return this.records().filter(on).sort((a, b) => at(a) - at(b)).map((r) => this.page(r.id)).filter(Boolean);
+  }
+  // x: begin (owner 2026-11-12: a taken story notice keeps its words on the episode's page in Stories)
+  //   notice(rec) → the notice's words once its flyer was taken (any posting), else null
+  //   noticeKept(rec) → an arc whose record names a notice page (flyer.page: the Kettle notice) and whose flyer was taken
+  //   noticePage(rec) → { id, title, lines, end, first, prints } for that page: the notice's words, then its own lines
+  notice(rec) {
+    const s = this.story; if (!rec || !rec.flyer || !s || !s.has(`ep.${rec.id}.flyer`)) return null;
+    const w = this.words(rec.flyer.text); return w ? w.replace(/\s*\n\s*/g, ' ').trim() : null;
+  }
+  noticeKept(rec) { return !!(rec && rec.kind === 'arc' && rec.flyer && rec.flyer.page && this.notice(rec)); }
+  noticePage(rec) {
+    if (!this.noticeKept(rec)) return null;
+    const f = rec.flyer, lines = [this.notice(rec)];
+    for (const p of f.page || []) if (this.when(p.when)) { const w = this.words(p.text); if (w && !lines.includes(w)) lines.push(w); }
+    const st = this.st(rec.id) || {};
+    return { id: rec.id, title: (f.title && this.words(f.title)) || rec.title || rec.id, kind: rec.kind, lines, end: null, first: null, prints: [], since: st.flyerAt ?? null };
+  }
+  // x: end
 }
 
 export const episodes = new Episodes();

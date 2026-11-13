@@ -91,6 +91,10 @@ const OLD_LOCAL = ['pair', 'solo'];
 // fallback lore in Farm's reach (30 §9 "The day's beat in Farm's reach"): the history side (the Walt side's "white rock on
 // a stump at a site on Bald Eagle" waits: walt-sites.js leaves C902 unstarred, so no stone stands there to find)
 export const FARM_LORE = [{ id: '30:9.beat.1', eps: [31] }, { id: '30:9.beat.3', eps: [31] }, { id: '30:9.beat.4', eps: [31] }];
+// x: the Walt side of 30 §9's day's beat: the white stone, which now stands at C902's landing (story-places.json
+// bald.c902, unstarred); its line drafted "on a flat rock" as 30 §9's place note has it (docs/story/95). The Walt pool
+// only (after the notebook), in Farm's reach
+export const FARM_WALT_LORE = [{ id: 'd95.beat.whitestone', eps: [31] }];
 
 const hashS = (s) => { let h = 2166136261; for (const c of String(s)) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; };
 const nbsOf = (pl) => { const out = new Set(); for (const n of [].concat(pl.nb || [])) if (n) out.add(n); for (const t of pl.triggers || []) if (t.on === 'readHere' && t.nb) out.add(t.nb); return [...out]; };
@@ -231,13 +235,26 @@ export class Beats {
     return true;
   }
   // pay:<amount> <text id | words> (or pay:<amount>@<text id>, A2's and E's form: the join): owed now, paid at the
-  // trip-end tally with its line
+  // trip-end tally with its line; with no trip on, paid at once with its line as a note (x)
   pay(arg, meta = {}) {
     const D = this.dir; if (!D || !this.live()) return false;
     const m = /^\s*(-?\d+(?:\.\d+)?)(?:\s+|@)(.+)$/.exec(String(arg || ''));
     if (!m) { this.note({ pay: arg, why: 'not "<amount> <line>" or "<amount>@<text id>"' }); return false; }
     const line = m[2].trim(), text = this.text(line) || line;
     if (!Array.isArray(D.pay)) D.pay = [];
+    // x: begin (owner 2026-11-12: story pay with no trip on is paid at once, its line said as a short note; during a
+    // trip it is owed and lands on the trip-end tally as before. A $0 line (Tauno paid the gas outright) says nothing)
+    if (!this.onTrip()) {
+      const amt = +m[1], prof = this.story.profile || (this.story.ctx && this.story.ctx.profile) || null;
+      D.pay.push({ amt, line, text, trip: this.trip(), abs: this.today(), rule: meta.rule || null, paid: true, paidAbs: this.today(), now: true });
+      try { this.story.flush(); } catch { this.story.dirty(); } // (as the tally: the paid flag in the purse's batch)
+      if (amt > 0 && prof && typeof prof.earn === 'function') { try { prof.earn(amt, 'story'); } catch (e) { console.warn('beats: pay', e); } }
+      if (amt > 0) { const hud = (this.story.ctx && this.story.ctx.hud) || (typeof window !== 'undefined' && window.__game && window.__game.hud) || null; try { if (hud && typeof hud.note === 'function') hud.note(`${text} · +$${amt}`, 6); } catch { /* not drawn */ } }
+      this.note({ pay: line, amt, why: 'no trip on: paid at once' });
+      this.story.dirty();
+      return true;
+    }
+    // x: end
     D.pay.push({ amt: +m[1], line, text, trip: this.trip(), abs: this.today(), rule: meta.rule || null, paid: false });
     this.story.dirty();
     return true;
@@ -422,6 +439,7 @@ export class Beats {
     let L = [];
     try { L = ambient.lines(pool, ctx).map((l) => ({ id: l.id, walt: l.walt })); } catch { L = []; }
     if (pool === 'history') for (const r of FARM_LORE) if (this.fits(r, party, host)) L.push({ id: r.id, walt: false });
+    if (pool === 'lore') for (const r of FARM_WALT_LORE) if (this.fits(r, party, host)) L.push({ id: r.id, walt: true }); // x
     // never Walt lore before the notebook, nor in the history pool at all
     return L.filter((r) => { const t = this.text(r.id); return t && (pool === 'lore' ? this.story.has('nb.found') : !WALT_LORE.test(t)); });
   }

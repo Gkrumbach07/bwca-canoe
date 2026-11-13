@@ -461,7 +461,7 @@ class Record {
     try {
       const S = this.story;
       if (S && typeof S.tallyLines === 'function') {
-        const lines = S.tallyLines({ trip: T, ep: o.ep ?? null }) || [];
+        const lines = (S.tallyLines({ trip: T, ep: o.ep ?? null }) || []).filter((l) => Number(l.pay) !== 0); // (x: a $0 story line is hidden: "Gas, Tauno" when he paid outright)
         if (lines.length) { if (!Array.isArray(paid.lines)) paid.lines = []; for (const l of lines) { paid.lines.push(l); paid.total = (paid.total || 0) + (Number(l.pay) || 0); } }
         storyT = { lines: typeof S.tripLine === 'function' ? S.tripLine({ all: true }) || [] : [], beats: typeof S.tripBeats === 'function' ? (S.tripBeats() || []).length : 0 };
       }

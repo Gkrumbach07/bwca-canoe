@@ -7,7 +7,7 @@
 //   kettle.attach({ story, layer, scene, actors, pointer, talk, topics, inventory, hud, world, tiles, player, mtasks })
 //   kettle.update(dt)                 Tasha and her coolers by the day; the creek's run or stain; the lid seen taken
 //   kettle.flyers(ep) → [{ id, paper: { title, text }, keeper, take() }]   the Kettle notice on Farm's board while it
-//                                     is up and not taken: E's runner's own flyer (episodes.flyers, arc-mining.js's
+//                                     is up and not taken in this posting (x: it re-posts on each later rain): E's runner's own flyer (episodes.flyers, arc-mining.js's
 //                                     `flyer`), read here for the rigs (the join: no stand-in)
 //   kettle.takeNotice() → bool        the flyer taken (episodes.take): kettle.notice; its rule rings the pad
 //   kettle.day() → { spell, day, here, run, notice }   where the weather stands for the Kettle (rigs, why())
@@ -109,11 +109,11 @@ class Kettle {
   door() { return arc.flyer; }
   flyers(ep) {
     const s = this.story, D = this.door();
-    if (!this.on || !D || s.has('kettle.notice')) return [];
+    if (!this.on || !D) return []; // (x: up again on a later rain while the Kettle day isn't done: the runner's posting)
     return episodes.flyers(ep).filter((f) => f.id === `ep:${arc.id}` && !f.taken)
       .map((f) => ({ id: f.id, paper: { title: f.paper.title, text: T(D.text), sign: f.paper.sign }, keeper: KEEPER_NOTICE.map((id) => T(id)).filter(Boolean), take: () => this.takeNotice() }));
   }
-  takeNotice() { const s = this.story; if (!this.on || s.has('kettle.notice')) return false; return episodes.take(`ep:${arc.id}`) && s.has('kettle.notice'); }
+  takeNotice() { const s = this.story; if (!this.on) return false; return episodes.take(`ep:${arc.id}`) && s.has('kettle.notice'); } // (x: a re-posted notice can be taken again)
   flyersOk() { const s = this.story, D = this.door(); return !!(D && s.when(D.when)); }
 
   // --- each frame ---------------------------------------------------------------------------------------------------------

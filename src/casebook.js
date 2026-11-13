@@ -60,7 +60,7 @@ export class Casebook {
       const u = UND.find((q) => q.nick === n.nick);
       const matched = s.has(`ink.${n.nick}`) || s.has(`knows.${n.nick}`) || !!(u && s.nbHas('und', u.nb));
       const seen = matched || cut.includes(n.match) || (data.nicks[n.nick] || []).some(read); // (a nickname someone explained is known, read or not)
-      return seen ? { ...n, matched, note: matched && u ? u.note : null } : null;
+      return seen ? { ...n, matched, note: matched && u ? u.note || (u.noteId ? say(u.noteId) || null : null) : null } : null; // (x: a drafted note by id)
     }).filter(Boolean);
   }
   // a chip only where the pencil has the nickname's lake (pencil.js INK): a chip that does nothing is not shown

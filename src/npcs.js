@@ -1454,7 +1454,7 @@ export class People {
     for (const rec of recs) {
       const S = typeof rec.spot === 'string' ? SPOTS[rec.spot] || SPOTS.counterEnd : null;
       const look = rec.look && rec.look.wear ? rec.look : dress(seeded(hashKey(rec.key), 0x5ea), { female: FEMALE.has(String(rec.name).split(' ')[0]), hatChance: 0.2, ...(rec.look || {}) });
-      const f = S ? this.placeAt(L, S, look) : { x: rec.spot.x, z: rec.spot.z, y: rec.spot.y ?? L.floorY, heading: rec.spot.heading || 0, look, spec: { pose: 'stand', lean: 0.02 } };
+      const f = S ? this.placeAt(L, S, look) : { x: rec.spot.x, z: rec.spot.z, y: rec.spot.y ?? L.floorY, heading: rec.spot.heading || 0, look, spec: rec.spot.pose === 'sit' ? { pose: 'sit', seat: rec.spot.seat || 0.46 } : { pose: 'stand', lean: 0.02 } }; // (x: a spot may be a seat: the café's stools, seated and still)
       const first = String(rec.name).replace(/^the /, '');
       out.push({ key: rec.key, ep: Number(ep), arch: 'extra', name: rec.name, first: rec.name, who: rec.role || '', figs: [f], extra: rec, figNames: [first] });
     }
@@ -1488,7 +1488,7 @@ export class People {
     if (!best) return null;
     const { ep: _ep, ...r } = rec; void _ep;
     const y = Number.isFinite(spot.y) ? spot.y : this.groundAt(best.L, spot.x, spot.z);
-    return this.extraAt(best.L.ep, { ...r, spot: { x: spot.x, z: spot.z, y, heading: spot.heading || 0 } });
+    return this.extraAt(best.L.ep, { ...r, spot: { x: spot.x, z: spot.z, y, heading: spot.heading || 0, ...(spot.pose === 'sit' ? { pose: 'sit', seat: spot.seat || 0.46 } : {}) } }); // (x: a seat's pose kept)
   }
   // /st-t
 

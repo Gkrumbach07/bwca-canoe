@@ -156,7 +156,8 @@ export class Rides {
     const card = {
       kicker: `${a.name} → ${b.name}${who ? ` · with ${who}` : ''}`, text: '', sub: `${kmWords(r.km)} miles to ${r.lake}, ${rideTime(r.hours)}.`,
       fadeIn: this.sandbox ? 0.6 : 1.2, hold: this.sandbox ? 0.4 : 3.2, fadeOut: this.sandbox ? 0.8 : 1.8,
-      onDark: () => this.arrive(a, b, r, toP, { with: who || 'someone' }), // (the final pass: the lot's set-down note is not said on a ride with a person)
+      // x: (owner 2026-11-12) a ride with a person ends a running trip: logged as came in at the far end, its card there
+      onDark: async () => { const tripOn = this.tripOn(); const ok = await this.arrive(a, b, r, toP, { with: who || 'someone' }); if (ok && tripOn) this.rideEndsTrip(b); return ok; }, // (the final pass: the lot's set-down note is not said on a ride with a person)
     };
     let ok = false;
     const done = (v) => { this.busy = false; ok = v !== false; return { ok, price: r.price, km: r.km, hours: r.hours }; };
@@ -164,6 +165,15 @@ export class Rides {
     return Promise.resolve(card.onDark()).then(done, () => done(false));
   }
   // /a2
+  // x: begin (owner 2026-11-12: a ride with a person (Tauno) ends a running trip, with the trip card at the far end:
+  // outfitter.comeIn there, as a landing walked up to would, so the record's card and the tally follow as they always do)
+  tripOn() { const c = this.core; return !!(c && c.active && !c.sandbox); }
+  rideEndsTrip(to) {
+    const o = this.outfitter; if (!o || !to || !this.tripOn()) return false;
+    try { if (typeof o.comeIn === 'function') { o.comeIn(to); return true; } } catch (e) { console.warn('rides: the trip at the far end', e); }
+    return false;
+  }
+  // x: end
   // the clock for a drive of `hours` starting now: { night } after moving it (a late one is a bunk night: at the far
   // end, or before the truck goes)
   clock(hours, { bunkFirst = false } = {}) {
