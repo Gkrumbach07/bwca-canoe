@@ -118,6 +118,9 @@ export const IN_EVENTS = new Set([
   'run:start', 'run:checkpoint', 'run:caught', 'run:reset', 'run:end', 'ending', 'postcard',
   // d: the director (stream D, Round 2): the trip's evening and days (feed-beats.js), and its own out-events
   'trip:evening', 'trip:day', 'beat:armed', 'beat:said', 'beat:stall',
+  // w: begin (the winter turn's feed, feed-season.js: a trip caught by the ice, the open-water season's close)
+  'iced', 'season:close',
+  // w: end
 ]);
 const eventOk = (e) => IN_EVENTS.has(e) || /^mg:[\w-]+$/.test(e);
 export const ACTIONS = ['f', 'ppl', 'lead', 'walt', 'und', 'ring', 'scene', 'line', 'give', 'pay', 'queue', 'emit', 'beat', 'card']; // (d: beat: the director's moments, card: the trip card's story line)

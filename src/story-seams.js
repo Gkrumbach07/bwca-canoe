@@ -32,6 +32,7 @@ export async function startFeed({ story, mods = {}, guest = () => false } = {}) 
     import('./feed-beats.js'),     // d: the director: the trip's evening and days, its hooks on the card, the parties, the counter
     import('./feed-weather.js'),   // a2: the rain days (the Kettle notice, the creek's run)
     import('./feed-episodes.js'),  // e: the camera's prints against the episodes' targets (the runner: connect, main.js e:)
+    import('./feed-season.js'),    // w: the winter turn (year.turned.<y>, year:open, the quiet winter timers, the run's field turn)
     // (Round 1 streams: their feed-*.js here, one line each)
   ]);
   return feed.start({ story, mods, guest });
