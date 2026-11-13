@@ -21,7 +21,7 @@ import * as THREE from 'three';
 import { SceneRun, T } from './topics.js';
 import { registerSensor } from './story-cond.js';
 import { PropBuilder, propMaterial, TILE } from './prop-kit.js';
-import { trailheadAt, trailheadLayout } from './trailhead.js';
+import { trailheadAt, trailheadLayout, trailheadLayouts } from './trailhead.js';
 import { storeLayout } from './props.js';
 import { FieldPerson } from './kettle.js';
 import { SPOT_OF } from './cast.js';
@@ -569,6 +569,8 @@ class Company {
       adrift() { return self.adrift(self.c.camp && self.c.camp.camp); },
       stranger(name = 'test carry') { self.carried({ name }); return !!self.stranger; },
       sightings() { return [...self.sight.keys()]; },
+      lots() { return trailheadLayouts().map((L) => L.ep); },
+      lot(ep) { return trailheadLayout(ep); },
       brekke() { const M = self.c.mining; return M && M.talk ? M.talk('brekke') : false; },
       tauno() { const M = self.c.mining, C0 = self.c.cast, st = C0 && C0.live && [...C0.live.values()].find((q) => q.who === 'tauno'); return st && M ? M.farmTalk(st) : false; },
     };

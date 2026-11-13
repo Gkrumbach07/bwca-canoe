@@ -65,7 +65,14 @@ const PAGE = () => {
     set(list) { for (const k of list) { const [key, v] = k.split('='); if (!s.has(key)) s.set(key, v == null ? true : v, 'rig'); } return s.tier; },
     has(list) { return Object.fromEntries(list.map((k) => [k, s.has(k) ? (s.get(k) ?? true) : false])); },
     st() { return C.debug.state(); },
-    async to(ep, inside = false) { const L = g.outfitter.layout(ep); if (!L) return false; await window.__L.tp(L.door.x + L.axes.b.x * 6, L.door.z + L.axes.b.z * 6); await window.__L.settle(); if (inside) return window.__t.walkIn(ep); return true; },
+    async to(ep, inside = false) {
+      const L = g.outfitter.layout(ep); if (!L) return false;
+      await window.__L.tp(L.door.x + L.axes.b.x * 6, L.door.z + L.axes.b.z * 6); await window.__L.settle();
+      // the store built and its keeper stood (the counter's spot reads the keeper): a far jump loads it a little later
+      for (let i = 0; i < 150; i++) { const K = g.outfitter.layout(ep), k = (g.npcs.at(ep) || []).some((v) => v.keeper); if (K && K.keeper && k) break; window.__L.step(10); await window.__L.wait(40); }
+      if (inside) return window.__t.walkIn(ep); return true;
+    },
+    lot() { const p = g.player, eps = g.storyCompany.debug.lots(); let best = null; for (const e of eps) { const L = g.storyCompany.debug.lot(e); const d = Math.hypot(L.lot.x - p.x, L.lot.z - p.z); if (!best || d < best.d) best = { ep: e, d, x: L.lot.x, z: L.lot.z }; } return best; },
     clock(addDays, hours, doy = null) { const d = g.day; if (doy != null) d.setClock(d.year, doy, hours); else d.setClock(d.year, d.doy + addDays, hours); window.__L.step(6); return { doy: d.doy, h: d.hours, abs: s.nowAbs() }; },
   };
 };
@@ -162,7 +169,7 @@ try {
     await a.evaluate(() => window.__p.to(25, false));
     const e10 = await a.evaluate(() => window.__game.storyCompany.debug.enter(25));
     await a.evaluate(() => window.__game.storyCompany.debug.dan()); const said10 = await hear(a, 6); await closeTalk(a);
-    const p10 = await a.evaluate(() => { const C = window.__game.storyCompany; window.__p.clock(0, 10); const ok = C.debug.putin(25); const t = C.debug.putinTalk(); return { ok, t }; });
+    const p10 = await a.evaluate(async () => { const C = window.__game.storyCompany; window.__p.clock(0, 10); const lot = window.__p.lot(); if (!lot) return { ok: false, lot }; await window.__L.tp(lot.x, lot.z); await window.__L.settle(); const ok = C.debug.putin(lot.ep); const t = C.debug.putinTalk(); return { ok, t, lot }; });
     const r10 = await choose(a, 'It\'s holding up.'); await closeTalk(a);
     const f10 = await a.evaluate(() => window.__p.has(['dan.setup', 'wade.putin']));
     result('10 Dan\'s set-up after the adrift ("they\'d find a number"); Wade at the put-in ("That old tent of Walt\'s holding up?")', e10 && e10.dan === 'setup' && f10['dan.setup'] && p10.ok && r10.ok && !!f10['wade.putin'], { e10, said10: said10.slice(-1), p10, r10, f10 });
