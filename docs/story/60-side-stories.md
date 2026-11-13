@@ -1097,6 +1097,7 @@ for wolf, moose, bear, boots). The **Howl** and **Mark** verbs at stations; a pe
   first Monday of September in later years).
 - **Trips:** one or two.
 - **Person:** Pete Haldane, 39.
+<!-- id: S5.first whole -->
 - **First stamped:** *Dived a wreck.*
 
 ### The hook
@@ -1142,8 +1143,10 @@ shore near the portage** for three summers, because that's where Grandpa's story
 
 ### How it starts
 
+<!-- id: S5.pete q -->
 - **The person:** Pete says so at the Round Lake counter to everyone, June to Labor Day: "I'm looking for an airplane.
   Seriously. Red and cream, on skis, 1950. Anybody says they saw it, I buy them a beer."
+<!-- id: S5.rumour q each -->
 - **Rumour:** 70 6.1 ("There's a plane in the Kek. Down by the north shore. On a calm day you can see the red."); Arvid
   Strand (70 8.4). The Round Lake keeper's own extra, for players who ask where: "Fella off the Kek last year said he
   saw something red off the north side, in the calm. Pete didn't believe him."
@@ -1186,8 +1189,11 @@ Map sheets kept in it don't get wet in a capsize. *[Items never explain.]*
 
 A 1949 printed map of the canoe country, folded and soft, with Arne's pencil over it:
 - small crosses at resorts, each with an initial; dotted tow routes on Basswood; dashed winter roads;
+<!-- id: S5.chart.head q each -->
 - compass headings between lakes: "Kek → home 212°", "Basswood → the narrows 088°";
+<!-- id: S5.chart.ice q -->
 - in the margin: "ice no good after the 10th of April";
+<!-- id: S5.chart.cut q each -->
 - north of the chain past Bald Eagle, one **ruler-straight pencil line**, labelled **"straight cut — good to steer
   by"**, running down from the north-north-west and ending at the **east bay of a dead-end lake**, with "beaver ponds"
   written small at its end. *[The line runs down from the north-north-west, north of the Bald Eagle–Gull chain (never the
@@ -1269,6 +1275,7 @@ map of lodges that aren't there any more. The straight line means nothing.
 ### The window and how it ends without you
 
 Pete dives calm days from 1 August, and finds it on the first calm, bright day after 20 August, at the latest by Labor
+<!-- id: S5.without q -->
 Day. He takes the map case; **the chart goes up framed on the Round Lake wall**, where the player can still read it. The
 key survives; the case doesn't. The page's last line: *"Pete found it. The chart's on the wall at Round Lake."*
 
@@ -1298,6 +1305,7 @@ Re-entry from the water. The chart as a book page and as a framed prop on a stor
 - **Window:** ice-out to freeze-up.
 - **Trips:** two or three (the Beatty from Crane Lake; Bootleg from EP 9; or the whole road in one long trip).
 - **Person:** Orrin Gilbertson, 71.
+<!-- id: S6.first whole -->
 - **First stamped:** *Found a bootlegger's pit.*
 
 ### The hook
@@ -1347,6 +1355,7 @@ can take the ledger to the historical society.
 ### How it starts
 
 - **Aili** (family arc, step 1): "Pekka's dad ran whiskey when he was sixteen…" → "Ask Orrin Gilbertson." (33 6.3)
+<!-- id: S6.rene q each -->
 - **René** *(any player, at the counter, "Heard anything?" or asked about Loon Lake)*: "Old man Niemi used to say he
   ran whiskey over the Beatty when he was a kid. Aili's father-in-law, that was. Orrin in cabin four's been chasing
   that story for ten summers. He'd buy you a beer to hear it again."
@@ -1368,6 +1377,7 @@ can take the ledger to the historical society.
 the Beatty, Loon Lake, up the Sioux past where the Echo Trail crosses now, "a little lake off the east side with a
 beaver pond at the back". The 206 r P226 is the carry off the river's east side. The lake's name does the rest.
 
+<!-- id: S6.carving q -->
 **The carving.** At the Beatty's low end, a flat rock at the water: **N.N. 1928**, cut deep with a knife point and
 worn soft. The dot: *"Carved: N.N. 1928."* A print of it is worth showing to Aili.
 
@@ -1383,6 +1393,7 @@ width at a time, until the crate is reached by leaning in. There is no single li
 tin-lined crate: broken amber glass, three whole bottles (one still full, its seal on), and an oilcloth packet: **the
 1928 ledger**.
 
+<!-- id: S6.pitdot q -->
 From then on the dot names an old pit anywhere: *"A square slump. Somebody dug here and covered it."* That is
 **lock 6 key C** (bible 5.2), the same eye Tauno's description gives.
 
@@ -1430,15 +1441,18 @@ ORRIN: "You've got the look. Old maps? Bottles? Anything with a date on it? Orri
   it?" → ORRIN: "Keep it. Look at it. Maybe pass it on to somebody who'll appreciate it."
 
 **The choice** *(the ledger in hand; Orrin, then René)*
+<!-- id: S6.sell each -->
 - ▸ **Sell it to Orrin.** → ORRIN: "Pleasure." *Gives:* $250; the full bottle another $40 if offered ("Seal's on.
   Forty."). Next season, René: "Heard Orrin sold that book to a fella in the Cities. Twelve hundred." → "Well. Fifty
   cents."
+<!-- id: S6.society each -->
 - ▸ **Give it to the historical society.** → RENÉ: "I'm driving down Tuesday. I'll take it in. They'll put it under
   glass with a card." *[Next visit, a photo of the case taped by René's till: "Ledger of a liquor-running outfit,
   Little Indian Sioux River, 1928. Found by a canoeist, 2026."]* Orrin, after: "Under glass. Well. It's safe, I'll say
   that." *[He's sore for a week, then buys the player a beer anyway.]*
 - ▸ **Keep it.** Allowed. It sits in the book. Orrin asks again once a season.
 
+<!-- id: S6.split q each -->
 Keepers split (one line each, once): RENÉ: "History belongs where people can see it." / LEON (Moose River North, whose
 reach Bootleg is in): "Orrin pays. The society thanks you. You can't put a thank-you in a gas tank."
 
@@ -1478,6 +1492,7 @@ The joke works best on a player who expected treasure.
 
 ### The window and how it ends without you
 
+<!-- id: S6.without q -->
 Orrin leaves at freeze-up. If the pit wasn't opened, next spring a stranger has dug it: the planks thrown aside, the
 crate gone, the hole half full of meltwater. René: "Somebody got the bootleggers' pit. Well. It was never ours
 either." Walt's N08 still reads; the eye for a pit can still come from Tauno.

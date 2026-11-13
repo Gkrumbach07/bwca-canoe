@@ -3219,6 +3219,453 @@
           ]
         }
       ]
+    },
+    {
+      "id": "kek.plane",
+      "name": "Kekekabic Lake, the north shore: the plane on the bed (60 S5)",
+      "doc": "60 S5 \"The set piece: seeing and diving\"; 03 §5",
+      "x": 2825,
+      "z": 2495,
+      "lake": "Kekekabic Lake",
+      "shore": true,
+      "clear": 0,
+      "search": 160,
+      "r": 320,
+      "ep": "S5",
+      "props": [
+        {
+          "id": "s5.wreck",
+          "kit": "wreck",
+          "at": [
+            0,
+            -26
+          ],
+          "wet": true,
+          "show": "true"
+        }
+      ],
+      "verbs": [],
+      "triggers": [
+        {
+          "on": "readHere",
+          "nb": "NB29",
+          "r": 320,
+          "when": "f:nb.found",
+          "then": [
+            "f:s5.here"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "s6.bootleg",
+      "name": "Bootleg Lake, the quiet shore: the cut line, the beaver pond and the bootleggers' pit (60 S6)",
+      "doc": "60 S6 \"The set piece\"; 03 §5",
+      "x": -73055,
+      "z": 6265,
+      "lake": "Bootleg Lake",
+      "shore": true,
+      "clear": 0,
+      "search": 220,
+      "r": 220,
+      "ep": "S6",
+      "props": [
+        {
+          "id": "s6.blaze.1",
+          "kit": "catface",
+          "at": [
+            -2,
+            28
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "f:tauno.blazes",
+              "name": "Old blaze, no paint"
+            },
+            {
+              "when": "true",
+              "name": "Old blaze"
+            }
+          ]
+        },
+        {
+          "id": "s6.blaze.2",
+          "kit": "catface",
+          "at": [
+            -4,
+            66
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "f:tauno.blazes",
+              "name": "Old blaze, no paint"
+            },
+            {
+              "when": "true",
+              "name": "Old blaze"
+            }
+          ]
+        },
+        {
+          "id": "s6.blaze.3",
+          "kit": "catface",
+          "at": [
+            -5,
+            104
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "f:tauno.blazes",
+              "name": "Old blaze, no paint"
+            },
+            {
+              "when": "true",
+              "name": "Old blaze"
+            }
+          ]
+        },
+        {
+          "id": "s6.pond",
+          "kit": "beaverPond",
+          "at": [
+            16,
+            124
+          ],
+          "show": "true"
+        },
+        {
+          "id": "s6.slump",
+          "kit": "pit",
+          "at": [
+            -6,
+            150
+          ],
+          "show": "!f:s6.moss & !f:s6.dug",
+          "dot": [
+            {
+              "when": "f:ep.S6.done | f:key.L6C",
+              "name": "A square slump. Somebody dug here and covered it."
+            },
+            {
+              "when": "f:s6.know",
+              "name": "Moss, sunk in a square"
+            },
+            {
+              "when": "true",
+              "name": "Moss"
+            }
+          ]
+        },
+        {
+          "id": "s6.plank.1",
+          "kit": "pitPlank",
+          "at": [
+            -6,
+            150
+          ],
+          "opts": {
+            "i": 1
+          },
+          "show": "f:s6.moss & !f:s6.plank.1",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Plank"
+            }
+          ]
+        },
+        {
+          "id": "s6.plank.2",
+          "kit": "pitPlank",
+          "at": [
+            -6,
+            150
+          ],
+          "opts": {
+            "i": 2
+          },
+          "show": "f:s6.moss & !f:s6.plank.2",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Plank"
+            }
+          ]
+        },
+        {
+          "id": "s6.plank.4",
+          "kit": "pitPlank",
+          "at": [
+            -6,
+            150
+          ],
+          "opts": {
+            "i": 4
+          },
+          "show": "f:s6.moss & !f:s6.plank.4",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Plank"
+            }
+          ]
+        },
+        {
+          "id": "s6.plank.5",
+          "kit": "pitPlank",
+          "at": [
+            -6,
+            150
+          ],
+          "opts": {
+            "i": 5
+          },
+          "show": "f:s6.moss & !f:s6.plank.5",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Plank"
+            }
+          ]
+        },
+        {
+          "id": "s6.tossed.1",
+          "kit": "plankTossed",
+          "at": [
+            -6,
+            150
+          ],
+          "opts": {
+            "i": 1
+          },
+          "show": "f:s6.plank.1"
+        },
+        {
+          "id": "s6.tossed.2",
+          "kit": "plankTossed",
+          "at": [
+            -6,
+            150
+          ],
+          "opts": {
+            "i": 2
+          },
+          "show": "f:s6.plank.2"
+        },
+        {
+          "id": "s6.tossed.4",
+          "kit": "plankTossed",
+          "at": [
+            -6,
+            150
+          ],
+          "opts": {
+            "i": 4
+          },
+          "show": "f:s6.plank.4"
+        },
+        {
+          "id": "s6.tossed.5",
+          "kit": "plankTossed",
+          "at": [
+            -6,
+            150
+          ],
+          "opts": {
+            "i": 5
+          },
+          "show": "f:s6.plank.5"
+        },
+        {
+          "id": "s6.crate",
+          "kit": "bootCrate",
+          "at": [
+            -6,
+            150
+          ],
+          "show": "f:s6.moss & !f:s6.ledger",
+          "dot": [
+            {
+              "when": "f:ep.S6.done",
+              "name": "Oilcloth packet"
+            },
+            {
+              "when": "true",
+              "name": "Crate"
+            }
+          ]
+        },
+        {
+          "id": "s6.crate.taken",
+          "kit": "bootCrate",
+          "at": [
+            -6,
+            150
+          ],
+          "opts": {
+            "ledger": false
+          },
+          "show": "f:s6.ledger & !f:s6.bottle",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Bottle, seal on"
+            }
+          ]
+        },
+        {
+          "id": "s6.crate.empty",
+          "kit": "bootCrate",
+          "at": [
+            -6,
+            150
+          ],
+          "opts": {
+            "ledger": false,
+            "bottle": false
+          },
+          "show": "f:s6.ledger & f:s6.bottle",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Broken glass"
+            }
+          ]
+        },
+        {
+          "id": "s6.dughole",
+          "kit": "bootCrate",
+          "at": [
+            -6,
+            150
+          ],
+          "opts": {
+            "dug": true
+          },
+          "show": "f:s6.dug & !f:s6.moss",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Somebody dug here"
+            }
+          ]
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "s6.slump",
+          "verb": "Clear the moss",
+          "when": "f:s6.know & !f:s6.dug",
+          "then": [
+            "f:s6.moss"
+          ]
+        },
+        {
+          "prop": "s6.plank.1",
+          "verb": "Pull",
+          "when": "true",
+          "then": [
+            "f:s6.plank.1"
+          ]
+        },
+        {
+          "prop": "s6.plank.2",
+          "verb": "Pull",
+          "when": "true",
+          "then": [
+            "f:s6.plank.2"
+          ]
+        },
+        {
+          "prop": "s6.plank.4",
+          "verb": "Pull",
+          "when": "true",
+          "then": [
+            "f:s6.plank.4"
+          ]
+        },
+        {
+          "prop": "s6.plank.5",
+          "verb": "Pull",
+          "when": "true",
+          "then": [
+            "f:s6.plank.5"
+          ]
+        },
+        {
+          "prop": "s6.crate",
+          "verb": "Take",
+          "when": "f:ep.S6.done | (f:s6.plank.1 & f:s6.plank.2 & f:s6.plank.4 & f:s6.plank.5)",
+          "then": [
+            "f:s6.ledger",
+            "give:page.ledger1928"
+          ]
+        },
+        {
+          "prop": "s6.crate.taken",
+          "verb": "Take",
+          "when": "true",
+          "then": [
+            "f:s6.bottle",
+            "give:item.rye1928"
+          ]
+        }
+      ],
+      "triggers": [
+        {
+          "on": "readHere",
+          "nb": "NB23",
+          "r": 220,
+          "when": "f:nb.found",
+          "then": [
+            "f:s6.here"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "s6.beatty",
+      "name": "The Beatty Portage, the Loon Lake end of the foot trail: N.N. 1928 cut in the rock (60 S6)",
+      "doc": "60 S6 \"The carving\"; 03 §5",
+      "portage": "s6.p357",
+      "end": [
+        -80368,
+        -20771
+      ],
+      "r": 25,
+      "ep": "S6",
+      "props": [
+        {
+          "id": "s6.carving",
+          "kit": "carvedRock",
+          "at": [
+            2.4,
+            -1.2
+          ],
+          "wet": "edge",
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Carved: N.N. 1928."
+            }
+          ]
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "s6.carving",
+          "verb": "Look",
+          "when": "!f:s6.carving",
+          "then": [
+            "f:s6.carving"
+          ]
+        }
+      ],
+      "triggers": []
     }
   ],
   "portages": [
@@ -3298,6 +3745,13 @@
       "v3": "P26",
       "name": "Clearwater Lake – Rock Island Lake",
       "doc": "50 §6.7 leg 5, §6.9 (the Grumman); drawn 217 rods, Walt's 214"
+    },
+    {
+      "id": "s6.p357",
+      "v3": "P357",
+      "rods": 41,
+      "name": "Beatty Portage",
+      "doc": "60 S6 \"At a glance\": the old foot trail beside the rail-cart carry (P962)"
     }
   ],
   "resolved": {
@@ -4831,6 +5285,193 @@
         "lakeId": null,
         "off": 0,
         "tried": 1
+      },
+      "kek.plane": {
+        "props": {
+          "s5.wreck": {
+            "x": 2817.1,
+            "z": 2476.7,
+            "heading": -2.7217,
+            "sd": -22.1,
+            "y": 452.6
+          }
+        },
+        "lanes": [],
+        "x": 2827.7,
+        "z": 2500.4,
+        "n": [
+          0.4076,
+          0.9131
+        ],
+        "u": [
+          -0.9131,
+          0.4076
+        ],
+        "lakeId": 55,
+        "off": 6,
+        "tried": 52
+      },
+      "s6.bootleg": {
+        "props": {
+          "s6.blaze.1": {
+            "x": -73048.8,
+            "z": 6297,
+            "heading": -3.0155,
+            "sd": 27.2,
+            "y": 431.6
+          },
+          "s6.blaze.2": {
+            "x": -73042,
+            "z": 6334.5,
+            "heading": -3.0155,
+            "sd": 64.9,
+            "y": 436.4
+          },
+          "s6.blaze.3": {
+            "x": -73036.3,
+            "z": 6372,
+            "heading": -3.0155,
+            "sd": 102.6,
+            "y": 434.8
+          },
+          "s6.pond": {
+            "x": -73054.6,
+            "z": 6394.5,
+            "heading": -3.0155,
+            "sd": 124.5,
+            "y": 433.9
+          },
+          "s6.slump": {
+            "x": -73029.5,
+            "z": 6417.6,
+            "heading": -3.0155,
+            "sd": 148.6,
+            "y": 432.6
+          },
+          "s6.plank.1": {
+            "x": -73029.5,
+            "z": 6417.6,
+            "heading": -3.0155,
+            "sd": 148.6,
+            "y": 432.6
+          },
+          "s6.plank.2": {
+            "x": -73029.5,
+            "z": 6417.6,
+            "heading": -3.0155,
+            "sd": 148.6,
+            "y": 432.6
+          },
+          "s6.plank.4": {
+            "x": -73029.5,
+            "z": 6417.6,
+            "heading": -3.0155,
+            "sd": 148.6,
+            "y": 432.6
+          },
+          "s6.plank.5": {
+            "x": -73029.5,
+            "z": 6417.6,
+            "heading": -3.0155,
+            "sd": 148.6,
+            "y": 432.6
+          },
+          "s6.tossed.1": {
+            "x": -73029.5,
+            "z": 6417.6,
+            "heading": -3.0155,
+            "sd": 148.6,
+            "y": 432.6
+          },
+          "s6.tossed.2": {
+            "x": -73029.5,
+            "z": 6417.6,
+            "heading": -3.0155,
+            "sd": 148.6,
+            "y": 432.6
+          },
+          "s6.tossed.4": {
+            "x": -73029.5,
+            "z": 6417.6,
+            "heading": -3.0155,
+            "sd": 148.6,
+            "y": 432.6
+          },
+          "s6.tossed.5": {
+            "x": -73029.5,
+            "z": 6417.6,
+            "heading": -3.0155,
+            "sd": 148.6,
+            "y": 432.6
+          },
+          "s6.crate": {
+            "x": -73029.5,
+            "z": 6417.6,
+            "heading": -3.0155,
+            "sd": 148.6,
+            "y": 432.6
+          },
+          "s6.crate.taken": {
+            "x": -73029.5,
+            "z": 6417.6,
+            "heading": -3.0155,
+            "sd": 148.6,
+            "y": 432.6
+          },
+          "s6.crate.empty": {
+            "x": -73029.5,
+            "z": 6417.6,
+            "heading": -3.0155,
+            "sd": 148.6,
+            "y": 432.6
+          },
+          "s6.dughole": {
+            "x": -73029.5,
+            "z": 6417.6,
+            "heading": -3.0155,
+            "sd": 148.6,
+            "y": 432.6
+          }
+        },
+        "lanes": [],
+        "x": -73054.3,
+        "z": 6269.5,
+        "n": [
+          0.1258,
+          0.9921
+        ],
+        "u": [
+          -0.9921,
+          0.1258
+        ],
+        "lakeId": 248,
+        "off": 5,
+        "tried": 46
+      },
+      "s6.beatty": {
+        "props": {
+          "s6.carving": {
+            "x": -80365.3,
+            "z": -20772,
+            "heading": 0.7896,
+            "sd": 2.1
+          }
+        },
+        "lanes": [],
+        "x": -80369.9,
+        "z": -20773.2,
+        "n": [
+          -0.7100840331707814,
+          -0.7041169404551468
+        ],
+        "u": [
+          0.7041169404551468,
+          -0.7100840331707814
+        ],
+        "lakeId": 31,
+        "portage": 123,
+        "end": 0,
+        "off": 0
       }
     },
     "portages": {
@@ -5021,6 +5662,25 @@
             -20475,
             22625,
             2577
+          ]
+        ]
+      },
+      "s6.p357": {
+        "i": 123,
+        "name": "Beatty Portage",
+        "rods": 41,
+        "shown": 41,
+        "off": 0,
+        "ends": [
+          [
+            -80365,
+            -20755,
+            31
+          ],
+          [
+            -80485,
+            -20955,
+            3
           ]
         ]
       }

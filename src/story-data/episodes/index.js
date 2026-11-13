@@ -10,6 +10,11 @@ import S3 from './s3-lights.js';
 import S4 from './s4-wolves.js';
 const SIDE7A = [S2, S3, S4];
 // 7a: end
+// 7b: begin
+import S5 from './s5-plane.js';
+import S6 from './s6-whiskey.js';
+const SIDE7B = [S5, S6];
+// 7b: end
 import guiding from './arc-guiding.js'; // a3: the guiding years' arc (Round 4)
 import S1 from './s1-ollie.js'; // s: the man on the portage (Round 4)
 import S8 from './s8-sled.js'; // s: the sled on the lunch rock (Round 4)
@@ -24,5 +29,5 @@ import M6 from './m6-longstay.js';
 export const MINIS = [...M1, M2, ...M3, ...M4, ...M5, M6];
 // 7c: end
 
-export const EPISODES = [S7, S9, mining, guiding, S1, S8, ...SIDE7A, ...MINIS, family]; // (a3: guiding; s: S1, S8; 7a: ...SIDE7A; 7c: ...MINIS; a4: family)
+export const EPISODES = [S7, S9, mining, guiding, S1, S8, ...SIDE7A, ...MINIS, family, ...SIDE7B]; // (a3: guiding; s: S1, S8; 7a: ...SIDE7A; 7c: ...MINIS; a4: family; 7b: ...SIDE7B)
 

@@ -1527,6 +1527,21 @@ async function main() {
     } catch (e) { console.warn('story a4: the family', e); }
   }
   // a4: end
+  // 7b: begin (Round 7 stream 7b, docs/story/60-side-stories.md S5, S6), only under STORY_ON, after the e: block: Pete at
+  // Round Lake 51 and the plane on the Kek (the dive, the case, the chart on the wall, the notch from Gull's east bay:
+  // lock 2 key D, lock 3 key D), Orrin at Little Vermilion 12 and the whiskey road (the Beatty's carving, the cut line,
+  // the pit opened plank by plank: lock 6 key C), René's and Leon's words. With the flag off none of it is fetched or hung
+  if (STORY_ON && story.v === 2 && window.__game.storyEpisodes) {
+    try {
+      const [{ connect7b }, { T, SceneRun, texts }, { loadWords }] = await Promise.all([import('./feed-side7b.js'), import('./topics.js'), import('./story-data/words.js')]);
+      const st = window.__game.storyTalk || {}, sm = window.__game.storySeams || {};
+      const S7B = await connect7b({ story, layer: sm.layer || window.__game.storyLayer || null, topics: st.topics || null, texts: st.texts || texts, T, SceneRun, loadWords, talk, npcs, scene, inventory, hud, record, player, wind, world, tiles, camera, lamp, audio, day, pointer, weather, energy, input,
+        E: window.__game.storyEpisodes, guest: () => !!(window.__game.coop && window.__game.coop.guest) });
+      window.__game.side7b = { ...S7B, on: true };
+      console.log('story 7b: S5, S6');
+    } catch (e) { console.warn('story 7b', e); }
+  }
+  // 7b: end
   // gl-d: the trip-end tally and the board (the game-loop round, stream D; docs/build/game-loop-brief.md). Pay lands on
   // the trip's card as it counts up (record.js ended → tasks.settle), never at the board; no cap on notices held
   // (the owner's call 2026-11-05), each with a deadline that fits it; the new kinds (task-kinds-2.js: creel, campsite, beaver, iceout, colour,

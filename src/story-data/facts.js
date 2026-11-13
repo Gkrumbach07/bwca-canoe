@@ -138,6 +138,14 @@ export const FACTS = [
   // liisa. gord. danielle.; cards. is K1a's); the Carp-end stump and cairn, re-sited on the US side (dlc-quetico.md)
   { key: 'carp.', kind: 'bool', doc: '33 / bible 5.4 the Carp end of Carp Portage: carp.stump (the ring where a stone sat), carp.stone (the cairn\'s white one)' },
   // a4: end
+  // 7b: begin (Round 7 stream 7b: 60 S5 the plane on the Kek, S6 the whiskey road)
+  { key: 'pete.', kind: 'any', doc: '60 S5 Pete Haldane: his scene (pete.met, pete.said.<choice>)' },
+  { key: 'orrin.', kind: 'any', doc: '60 S6 Orrin Gilbertson: his scene (orrin.met, orrin.said.<choice>)' },
+  { key: 's5.', kind: 'any', doc: '60 S5 the wreck: s5.wreck.seen (read through calm water) | here (N11 at the north shore) | dived | case (brought up) | notch (Gull\'s notch looked at, the chart in the book) | pete.found (Pete has it: the chart on the wall) | wall (framed at Round Lake 51) | wall.read', world: true },
+  { key: 's6.', kind: 'any', doc: '60 S6 the whiskey road: s6.story (heard) | route (Orrin\'s telling, the ring) | here (N08 at the pond) | know | carving | blazes | moss | plank.1..5 | ledger | bottle | dug (a stranger, the spring after) | split.rene | split.leon', world: true },
+  { key: 'mg.dive.', kind: 'bool', doc: '60 S5 the dive: mg.dive.seen | case | up | brought (minigames/dive.js)' },
+  { key: 'mg.pitOpen.', kind: 'bool', doc: '60 S6 the pit at Bootleg opened plank by plank: mg.pitOpen.open (minigames/dive.js pitOpen)' },
+  // 7b: end
 ];
 
 // the arcs whose yields are the big findings (§3.3 story.big), and the doors the player can be offered
