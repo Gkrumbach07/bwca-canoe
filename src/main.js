@@ -1343,6 +1343,20 @@ async function main() {
     } catch (e) { console.warn('story A2: the mining years', e); }
   }
   // /a2
+  // f: begin (story Round 3, stream F; docs/story/50-finale.md §2–§5, §6.9), only under STORY_ON: the far end's glue
+  // (farend.js): the dot's quiet facts, the camp's walls, the hidden carry pencilled as walked, the cellar → the run, the
+  // stashes. The places are story-places.json's (the layer). With the flag off none of it is fetched
+  if (STORY_ON && story.v === 2) {
+    try {
+      const { connect } = await import('./farend.js');
+      const sm = window.__game.storySeams || {};
+      const far = await connect({ story, layer: sm.layer || window.__game.storyLayer, pencil: sm.pencil || null, inventory, hud, player, pointer, tiles, world,
+        guest: () => !!(window.__game.coop && window.__game.coop.guest) });
+      window.__game.storyFar = far;
+      console.log('story F: the far end');
+    } catch (e) { console.warn('story F: the far end', e); }
+  }
+  // f: end
   // e: the episodes (docs/build/campaign-design.md §10, Part 4 Round 2 stream E), only under STORY_ON: the one runner
   // (episodes.js) with S7 and S9 (and A2's arc at the join), the flyers on the boards (outside the count), the snag on
   // June's pot (fishing.snags), Rose at Moose Lake 25's window, "Look at this" (show.js), the Stories side of the book,
