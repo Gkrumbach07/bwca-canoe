@@ -255,7 +255,7 @@ export class Watchers {
     let m = this.beams.get(w.id);
     if (!m) {
       const g = new THREE.ConeGeometry(1, 1, 18, 1, true); g.translate(0, -0.5, 0); g.rotateZ(Math.PI / 2); // tip at the origin, along +x
-      const mat = new THREE.MeshBasicMaterial({ color: 0xfff2d8, transparent: true, opacity: 0.09, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: true });
+      const mat = beamMaterial();
       m = new THREE.Mesh(g, mat); m.name = `watcher beam ${w.id}`; m.frustumCulled = false; m.renderOrder = 14;
       const dot = new THREE.Mesh(new THREE.SphereGeometry(0.25, 8, 6), new THREE.MeshBasicMaterial({ color: 0xfff6e0, fog: true }));
       m.userData.dot = dot; this.c.scene.add(m, dot); this.beams.set(w.id, m);
@@ -274,5 +274,33 @@ export class Watchers {
     const m = this.beams.get(w.id);
     if (m) { m.visible = false; m.userData.dot.visible = false; }
   }
+}
+// (ux 2026-11-13) a beam in the haze, not a solid cone: a flat additive cone drew as hard-edged grey wedges across the
+// lake and the sky on the run. Brightest at the lamp, gone by its far end, soft at its sides (faces seen edge-on fade),
+// fainter far from the eye and faint when you look straight down it from inside.
+function beamMaterial() {
+  return new THREE.ShaderMaterial({
+    uniforms: { uColor: { value: new THREE.Color(0xfff2d8) }, uLevel: { value: 0.11 } },
+    vertexShader: `
+      varying float vAlong; varying vec3 vN; varying vec3 vV; varying float vDist;
+      void main() {
+        vAlong = position.x; // 0 at the lamp, 1 at the far end (the cone's geometry, before its scale)
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vN = normalize(mat3(modelMatrix) * normal);
+        vec3 toEye = cameraPosition - wp.xyz; vDist = length(toEye); vV = toEye / max(vDist, 1e-3);
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }`,
+    fragmentShader: `
+      uniform vec3 uColor; uniform float uLevel;
+      varying float vAlong; varying vec3 vN; varying vec3 vV; varying float vDist;
+      void main() {
+        float along = pow(clamp(1.0 - vAlong, 0.0, 1.0), 2.2) * smoothstep(0.0, 0.03, vAlong);
+        float side = pow(abs(dot(normalize(vN), normalize(vV))), 1.6);
+        float far = 1.0 - smoothstep(80.0, 600.0, vDist);
+        float a = uLevel * along * side * (0.35 + 0.65 * far);
+        gl_FragColor = vec4(uColor * a, 1.0);
+      }`,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
+  });
 }
 export const watchers = new Watchers();

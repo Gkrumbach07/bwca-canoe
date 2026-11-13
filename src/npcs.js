@@ -110,6 +110,8 @@ const TALK_FACE = 0.5;        // cos of how squarely you must face someone to ta
 const LOOK_R = 4.5;           // metres within which a visitor looks at you
 const KEEPER_LOOK_R = 8;      // the keeper watches you anywhere in the store
 const DECK_CLEAR = 1.2;       // m: no store spot on the dock this near your berth's deck point (a party loaded 0.9 m off it)
+const COUNTER_CLEAR = 3.0;    // m: (ux) no store spot this near the counter while a talk is open there (counterTalk)
+const FACED_CLEAR = 1.1;      // m: (ux) no store spot this near the shelf you face, near it (facedHot)
 const STEP_CLEAR = 1.6;       // m: no store spot this near the main path's step's target (act: the shelf, the staffer)
 const BODY_KEEP = 0.62;       // metres the walker is held off a standing person (their body and his)
 const SEAT_KEEP = 0.7;        // and off a sitting one's knees
@@ -1693,6 +1695,13 @@ export class People {
     // over (the tackle shelf, the food shelf, the summer help at the counter's end), so they never stand between you and
     // it and the dot goes to it, not to Dave browsing in front of it; the counter's pay slots by the staffer the same)
     { const q = this.stepAt(L); if (q) for (const o of this.smart.at(where)) o.slots.forEach((sl, k) => { if (Math.hypot(sl.x - q.x, sl.z - q.z) < STEP_CLEAR) (blocked || (blocked = new Set())).add(`${o.id}#${k}`); }); }
+    // (ux 2026-11-13) and the shelf or counter you walk up to and face: whoever browses in front of it moves on, so the
+    // dot meets the shelf and not Sue's back (held a few seconds after you turn away, so nobody steps in and out)
+    // (ux 2026-11-13) a talk at the counter has the counter to itself: nobody of the store's stands in front of it or in
+    // the aisle before it while it lasts (the opening talk was held in a crowd of ten, three in the camera's way)
+    const counterTalk = this.counterTalk(ep, L);
+    if (counterTalk) for (const o of this.smart.at(where)) o.slots.forEach((sl, k) => { if (Math.hypot(sl.x - L.counter.x, sl.z - L.counter.z) < COUNTER_CLEAR) (blocked || (blocked = new Set())).add(`${o.id}#${k}`); });
+    { const q = this.facedHot(L); if (q) for (const o of this.smart.at(where)) o.slots.forEach((sl, k) => { if (Math.hypot(sl.x - q.x, sl.z - q.z) < FACED_CLEAR) (blocked || (blocked = new Set())).add(`${o.id}#${k}`); }); }
     const m = this.smart.assign(where, people, clock, blocked);
     for (const [v, f] of figs) {
       if (f.held) { // talked to: stop, and turn to you
@@ -1716,6 +1725,10 @@ export class People {
         const q = this.spareSpot(L, figs, f) || this.besideLane(L, f);
         if (q) { f.at = null; f.act = 'wait'; f.goal = { ...q, spec: { pose: 'stand', lean: 0.02 } }; if (snap) this.settle(f); else f.path = this.route(L, f, f.goal); }
         f.fresh = false;
+      } else if (counterTalk && !f.path && f.spec && f.spec.pose !== 'sit' && Math.hypot(f.x - L.counter.x, f.z - L.counter.z) < COUNTER_CLEAR) { // (ux) out of the talk's way
+        const q = this.spareSpot(L, figs, f) || this.besideLane(L, f);
+        if (q) { f.at = null; f.act = 'wait'; f.goal = { ...q, spec: { pose: 'stand', lean: 0.02 } }; f.path = this.route(L, f, f.goal); }
+        f.fresh = false;
       } else if (f.fresh) { f.fresh = false; } // (nothing free: they stay where they stand)
       else if (!a && !f.path && f.spec && f.spec.pose !== 'sit') this.wander(L, figs, f, dt); // (r2: nor frozen there)
       if (a) f.wHome = null;
@@ -1724,6 +1737,30 @@ export class People {
     this.keepApart(figs, dt);
   }
   // the main path's step's target when it is in or about this store ({ x, z }), else null (guide.js)
+  // (ux) a talk open at this store's counter (the keeper's, the staffer's at its end): the room, or the speaker by it
+  counterTalk(ep, L) {
+    const D = this.dialogue, c = D && D.convo;
+    if (!c || !L || !L.counter) return false;
+    if (String(c.room) === String(ep)) return true;
+    const h = D.headOf(c.speaker, this._ctV || (this._ctV = new THREE.Vector3()));
+    return !!(h && Math.hypot(h.x - L.counter.x, h.z - L.counter.z) < 6);
+  }
+  // (ux) the store's hotspot (a shelf, the board, the counter) you stand within 3.5 m of and face, kept 6 s after
+  facedHot(L) {
+    const p = this.player, now = performance.now(), hot = L && Array.isArray(L.hot) ? L.hot : null;
+    const held = this._faced && this._faced.L === L && now < this._faced.until ? this._faced.q : null;
+    if (!hot || !p.onFoot || !p.forward) return held;
+    let best = null, bc = 0.86;
+    for (const h of hot) {
+      if (h.key === 'counter' && this.dialogue && this.dialogue.talking) continue;
+      const dx = h.x - p.x, dz = h.z - p.z, d = Math.hypot(dx, dz);
+      if (d > 3.5 || d < 1e-3) continue;
+      const c = (dx * p.forward.x + dz * p.forward.z) / d;
+      if (c > bc) { bc = c; best = h; }
+    }
+    if (best) { this._faced = { L, q: { x: best.x, z: best.z, key: best.key }, until: now + 6000 }; return this._faced.q; }
+    return held;
+  }
   stepAt(L) {
     try {
       const cur = guide.current(), tg = cur && cur.target, q = tg && typeof tg.pos === 'function' ? tg.pos() : null;
@@ -2082,6 +2119,9 @@ export class People {
       if (!b.who || b.lent) continue;
       const v = b.who.person, f = v.figs[b.who.fig];
       if (!f) { b.who = null; b.park(); continue; } // (round A-F: a party's figure gone in for the night)
+      // (ux 2026-11-13) whoever you talk with turns to face you, the story's people too (Tauno said "That's BRM fourteen"
+      // with his back to you: storeTick turns only the store's visitors it holds)
+      { const D = this.dialogue; if (D && D.convo && !v.keeper && f.spec && f.spec.pose !== 'sit' && f.spec.pose !== 'walk' && !f.path && (D.talkingTo(v.key) || D.talkingTo(`${v.key}#${b.who.fig}`))) { const want = Math.atan2(-(p.z - f.z), p.x - f.x); f.heading += clamp(wrapPi(want - f.heading), -3 * dt, 3 * dt); } }
       this.look(b, v, f, eye, dt, inStore);
       b.s.walk = f.walked || 0; // gl-e: the stride follows the metres walked; a browser's hand to the shelf
       if (f.spec.pose === 'browse') { f.reachT = (f.reachT || 0) + dt; const c = (f.reachT % 7) / 7; b.s.reach = c < 0.12 ? c / 0.12 : c < 0.3 ? 1 : c < 0.42 ? (0.42 - c) / 0.12 : 0; } else b.s.reach = 0;
@@ -2177,6 +2217,11 @@ export class People {
     if (!e && keeper && !s) e = { ...keeper, key: 'E' };
     const q = keeper && s && s.key === 'counter' ? { ...keeper, key: 'Q' } : null;
     if (!e && !q) return;
+    // (ux 2026-11-13) with the dot on (pointer.js, on foot) it alone says what E does: this facing-based line said "Talk
+    // to Sue" while the dot's label said "Open · the provisions shelf" and E opened the shelf (the dot takes E first).
+    // The dot already names a person you point at ("E Talk · Sue"); the keeper's Q at the counter is on its label too.
+    const ptr = o && o.pointer;
+    if (ptr && ptr.on) { this.focus = e || q; this.qFocus = q; return; }
     // (fb4 join) the dot on the counter has the keeper's Q on its own label (outfitter.js asks keeperWord): no line here
     if (!e && q && o && o.pointer) { this.focus = q; this.qFocus = q; return; }
     const qText = q ? ` &nbsp; <kbd>Q</kbd>A word with ${esc(q.person.first)}` : '';

@@ -397,6 +397,22 @@ async function main() {
       if (!other && sp.pos) { try { pos = sp.pos(head); } catch { pos = null; } }
       audio.speak(text, who, pos, { talk: !!o.talk });
     };
+    // (ux) where someone named in a talk's line stands (the keeper's line in the staffer's talk): their drawn head
+    talk.whereIs = (name, out) => {
+      const first = String(name || '').split(' ')[0];
+      if (!first) return null;
+      let best = null, bd = 20;
+      for (const b of npcs.bodies) {
+        const v = b.who && b.who.person; if (!v || b.lent || !b.group || !b.group.visible) continue;
+        if (v.first !== first && String(v.name || '').split(' ')[0] !== first) continue;
+        const f = v.figs && v.figs[b.who.fig]; if (!f) continue;
+        const d = Math.hypot(f.x - player.x, f.z - player.z); if (d >= bd) continue;
+        bd = d; best = b;
+      }
+      if (!best || !best.fig || !best.fig.bones || !best.fig.bones.head) return null;
+      best.fig.bones.head.getWorldPosition(out); out.y += 0.16;
+      return out;
+    };
   }
   // p2 A: the actor layer (actors.js): people out on the water and the trails, posed with the player's own stroke, gait and
   // carry (poses.js). The parties drive it (people phase 2); __game.actors.demo() (test only) has two canoes crossing Lake

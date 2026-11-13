@@ -28,4 +28,8 @@
 #tracker .tr-gi.gi-side svg { display: block; }
 #tracker .tr-box { width: 12px; height: 12px; border: 1.6px solid var(--pencil, #4a4036); border-radius: 2px 3px 2px 3px; box-sizing: border-box; }
 body.talking #tracker { visibility: hidden; }
+/* (ux 2026-11-13) a tutorial step's card read for a while: its next line alone, small, so it stays in sight without the card */
+#tracker.small { padding: 5px 12px 6px 11px; box-shadow: 0 4px 14px rgba(0, 0, 0, .28); }
+#tracker.small .tr-head, #tracker.small .tr-title, #tracker.small .tr-key { display: none; }
+#tracker.small .tr-next { margin-top: 0; font-size: 18px; }
 @media (max-width: 900px) { #tracker { left: 24px; max-width: calc(100vw - 48px); } }

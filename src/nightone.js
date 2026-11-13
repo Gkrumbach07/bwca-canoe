@@ -25,20 +25,25 @@ const LAST_DRIFT = 8; // s held on the last page before the circle drifts to the
 const CSS = `
 #nightone { position: fixed; inset: 0; z-index: 60; background: #000; display: none; overflow: hidden; cursor: none; }
 #nightone.on { display: block; }
-#nightone .no-page { position: absolute; left: 50%; top: 50%; width: min(620px, 82vw); height: min(760px, 88vh); translate: -50% -50%; rotate: -1.2deg; padding: 54px 58px; box-sizing: border-box;
+/* (ux 2026-11-13) the page is as wide as his lines: the pages are hard-wrapped at up to 66 characters, and at 620 px
+   nearly every line broke a word onto a line of its own; the type shrinks with a narrow window rather than wrapping */
+#nightone .no-page { position: absolute; left: 50%; top: 50%; width: min(770px, 94vw); height: min(760px, 88vh); translate: -50% -50%; rotate: -1.2deg; padding: 50px 48px; box-sizing: border-box;
   background: #e9dfc3; border-radius: 2px; box-shadow: 0 0 0 9px #5a4430, 0 30px 60px rgba(0,0,0,.6);
-  font: 400 27px/31px "Reenie Beanie", Caveat, cursive; color: #1f2c55; white-space: pre-wrap; transition: opacity .5s; }
+  font: 400 min(27px, 3.3vw)/1.15 "Reenie Beanie", Caveat, cursive; color: #1f2c55; white-space: pre-wrap; transition: opacity .5s; }
 #nightone .no-page.cover { background: #6e5038; box-shadow: 0 30px 60px rgba(0,0,0,.6); }
 #nightone .no-page.cover .wh { position: absolute; right: 60px; top: 70px; padding: 14px 18px; background: #e9dfc3; font-size: 30px; }
 #nightone .no-page .soft { filter: blur(2.4px); opacity: .55; }
 #nightone .no-page .lit { filter: none; opacity: 1; }
-#nightone .no-page.last { font-size: 30px; line-height: 38px; color: #2d2a28; rotate: .6deg; }
+#nightone .no-page.last { font-size: min(30px, 3.6vw); line-height: 1.27; color: #2d2a28; rotate: .6deg; }
 #nightone .no-page.last .soft { filter: none; opacity: .9; }
 #nightone .no-page.riffle { animation: no-riffle .16s steps(2) infinite; }
 @keyframes no-riffle { 50% { translate: -50.6% -50%; rotate: -2.4deg; } }
 #nightone .no-lamp { position: absolute; inset: 0; pointer-events: none; transition: background .6s;
-  background: radial-gradient(circle var(--r, 190px) at var(--x, 50%) var(--y, 40%), rgba(0,0,0,0) 0, rgba(0,0,0,0) 62%, rgba(0,0,0,.78) 86%, rgba(0,0,0,.96) 100%); }
+  background: radial-gradient(ellipse var(--rx, var(--r, 190px)) var(--r, 190px) at var(--x, 50%) var(--y, 40%), rgba(0,0,0,0) 0, rgba(0,0,0,0) 62%, rgba(0,0,0,.78) 86%, rgba(0,0,0,.96) 100%); }
 #nightone.dark .no-lamp { background: #000; }
+/* (ux) the held last page says how to go on, faintly, after a few seconds */
+#nightone .no-hint { position: absolute; left: 50%; bottom: 4vh; translate: -50% 0; font: 500 15px/1 "Alegreya Sans SC", "Alegreya Sans", sans-serif; letter-spacing: .14em; color: #e9dfc3; opacity: 0; transition: opacity 1.2s; z-index: 2; }
+#nightone.ask .no-hint { opacity: .5; }
 #nightone .no-hands { position: absolute; left: 50%; bottom: -14vh; width: 70vw; height: 30vh; translate: -50% 0; border-radius: 50% 50% 0 0; background: radial-gradient(ellipse at 50% 20%, #3a2a1e, #120c08 70%); opacity: .9; }
 `;
 
@@ -62,7 +67,7 @@ export class NightOne {
     if (!document.getElementById('nightone-css')) { const st = document.createElement('style'); st.id = 'nightone-css'; st.textContent = CSS; document.head.appendChild(st); }
     const el = this.el = document.createElement('div');
     el.id = 'nightone'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Night one, by headlamp');
-    el.innerHTML = '<div class="no-page"></div><div class="no-hands"></div><div class="no-lamp"></div>';
+    el.innerHTML = '<div class="no-page"></div><div class="no-hands"></div><div class="no-lamp"></div><div class="no-hint">any key or a click</div>';
     document.body.appendChild(el);
     this.onKey = (e) => {
       if (!this.active) return;
@@ -87,6 +92,7 @@ export class NightOne {
   skip() { if (!this.active) return false; this.end(true); return true; }
   go(i) {
     this.i = i; this.t = 0;
+    if (this.el) this.el.classList.remove('ask');
     const b = CUT[i];
     if (!b) { this.end(false); return; }
     this.log.push(b.id);
@@ -102,9 +108,10 @@ export class NightOne {
       const k = Math.min(1, this.t / 6), drift = this.t > LAST_DRIFT && this.t < LAST_DRIFT + 2.2;
       this.lamp(drift ? 44 : 50, drift ? 37 : 30 + k * 36, 210);
     }
+    if (b.hold && this.t > 4 && !this.el.classList.contains('ask')) this.el.classList.add('ask');
     if (this.t >= (BEAT_SECS[b.id] ?? 5)) this.go(this.i + 1);
   }
-  lamp(x, y, r) { const l = this.el.querySelector('.no-lamp'); l.style.setProperty('--x', `${x}%`); l.style.setProperty('--y', `${y}%`); l.style.setProperty('--r', `${r}px`); }
+  lamp(x, y, r, rx = r) { const l = this.el.querySelector('.no-lamp'); l.style.setProperty('--x', `${x}%`); l.style.setProperty('--y', `${y}%`); l.style.setProperty('--r', `${r}px`); l.style.setProperty('--rx', `${rx}px`); }
   T(id) { const e = this.text[id]; return e && e.text ? e.text : ''; }
   // the page a legible line is on (the real page, soft outside the circle)
   pageOf(line) {
@@ -135,8 +142,16 @@ export class NightOne {
     const before = k >= 0 ? whole.slice(0, k) : '', after = k >= 0 ? whole.slice(k + line.length) : '';
     page.innerHTML = `<span class="soft">${esc(before)}</span><span class="lit">${esc(lit)}</span><span class="soft">${esc(after)}</span>`;
     if (b.page === 'riffle') page.classList.add('riffle'), setTimeout(() => { if (this.el) this.el.querySelector('.no-page').classList.remove('riffle'); }, 700);
-    const rows = before.split('\n').length; // (the circle on the lit line)
-    this.lamp(50, Math.min(78, 18 + rows * 4.2), 180);
+    // the circle on the lit line where it lies on the page (ux: measured, the row count missed wrapped lines), wide
+    // enough to take the whole line in: a head turning along it
+    const lit$ = page.querySelector('.lit'), E = el.getBoundingClientRect(), R = lit$ ? lit$.getBoundingClientRect() : null;
+    if (R && R.height > 0 && E.height > 0) {
+      const cx = ((R.left + R.width / 2 - E.left) / E.width) * 100, cy = ((R.top + R.height / 2 - E.top) / E.height) * 100;
+      this.lamp(cx, cy, Math.max(150, R.height / 2 + 90), Math.max(180, R.width / 2 + 70));
+    } else {
+      const rows = before.split('\n').length;
+      this.lamp(50, Math.min(78, 18 + rows * 4.2), 180);
+    }
   }
   end(skipped) {
     if (!this.active) return;

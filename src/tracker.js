@@ -27,6 +27,7 @@ export const TRACKER = {
   nearAgainS: 120,   // the same task's 'near' is said again only after this many real seconds
   queueMax: 3,       // events waiting behind the one shown (the oldest dropped)
   tutFirstS: 4,      // r3 replay: a new tutorial step's card is up this long before other news (a job, a ticket) is said
+  smallS: 8,         // (ux 2026-11-13) a tutorial step's card read this long shrinks to its one line (it was 330 × 115 px in every shot)
 };
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const SIDE_STAR = '<svg viewBox="0 0 20 20" width="100%" height="100%"><path d="M10 1.6 12.4 7.6 18.4 10 12.4 12.4 10 18.4 7.6 12.4 1.6 10 7.6 7.6Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/></svg>';
@@ -144,6 +145,13 @@ export class Tracker {
       const cur = G.current();
       if (cur && cur.tutorial && !cur.done) card = { mode: 'tutorial', head: 'Next', e: cur, fade: false };
     }
+    // (ux) a tutorial card up a while shrinks to its next line: the step stays in sight, the card stops taking the left
+    if (card && card.mode === 'tutorial') {
+      const k = `${card.e.id}|${card.e.next || ''}`;
+      if (k !== this.tutKey) { this.tutKey = k; this.tutAge = 0; }
+      this.tutAge += step;
+      card.small = this.tutAge >= TRACKER.smallS;
+    } else this.tutKey = null;
     this.draw(card);
   }
   draw(card, hold = false) {
@@ -164,6 +172,7 @@ export class Tracker {
     }
     if (!this.shown) { void this.el.offsetWidth; this.el.classList.add('on'); } // (fades in from a fresh start)
     this.el.classList.toggle('out', !!card.fade);
+    this.el.classList.toggle('small', !!card.small);
     this.shown = true;
     this.mode = card.mode;
     this.cur = { id: e.id, next, head: card.head, title: e.title };

@@ -45,6 +45,7 @@ const FAR = 22;                 // metres beyond which a queued bark's speaker i
 const LOG_N = 6;                // lines kept in the history
 const LAST_N = 40;              // fb4 D: the people whose last words to you are kept (the `talk` namespace)
 const NS = 'talk';
+const QUIET_R = 15;             // (ux 2026-11-13) m: while you talk, nobody this near says a passing line (it waits)
 const ABOVE = 0.34;             // metres over the head the tail points at
 const EDGE = { side: 28, top: 24, bottom: 132 }; // px kept clear at the screen's edges (the bottom: the action line)
 const holdFor = (text) => 3 + 0.06 * String(text || '').length;
@@ -68,11 +69,13 @@ export class Dialogue {
     this.clock = 0; this.seq = 0;
     this.convo = null;    // { speaker, name, role, room, node, you, wait, bye, last }
     this.voice = null;    // (sp, text, { talk, by }) → a murmur in their voice (main.js: audio.speak), or null
+    this.whereIs = null;  // (ux) (name, outVec3) → the head of someone named in a talk's line (node.by), or null (main.js)
     const kept = save.read(NS, null);
     this.last = kept && kept.v === 1 && kept.by && typeof kept.by === 'object' ? kept.by : {}; // fb4 D: speaker key → { say, you, at }
     const root = this.root = div('talk'); root.id = 'talk';
     this.barksEl = div('barks'); root.appendChild(this.barksEl);
     this.panel = div('convo'); root.appendChild(this.panel);
+    this.tag = div('tag'); root.appendChild(this.tag); // (ux) the name over the head of whoever is speaking in a talk
     document.body.appendChild(root);
     this.panel.addEventListener('click', (e) => { const o = e.target.closest('[data-i]'); if (o) this.choose(Number(o.dataset.i)); });
     this.panel.addEventListener('pointerdown', (e) => e.stopPropagation()); // a click on a choice is not a look or a cast
@@ -149,6 +152,7 @@ export class Dialogue {
         if (live.some((b) => b.room === q.room || b.sp.key === q.sp.key)) continue;
         if ((this.gapUntil.get(q.room) || 0) > this.clock) continue;
         if (c && (q.room === String(c.room) || q.sp.key === c.speaker.key) && q.pri < PRI.reply) continue; // the room listens while you talk
+        if (c && q.pri < PRI.reply && this.distTo(q.sp) < QUIET_R) continue; // (ux) and so does anyone near, the keeper by the porch too
         const s = q.pri * 100 - this.distTo(q.sp) - q.age * 0.5;
         if (s > bs) { bs = s; best = q; }
       }
@@ -225,7 +229,7 @@ export class Dialogue {
     if (this.convo) this.close(false);
     this.convo = { ...c, node: null, you: null, wait: false, t: 0, last: this.lastFrom(c.speaker.key), said: null, saidTo: null };
     // what they were saying is now said here; the room waits while you talk
-    for (const b of this.on) if (b.sp.key === c.speaker.key && !b.out) b.t = 0;
+    for (const b of this.on) if (!b.out && (b.sp.key === c.speaker.key || this.distTo(b.sp) < QUIET_R)) b.t = 0; // (ux: anyone near hushes)
     this.queue = this.queue.filter((q) => q.sp.key !== c.speaker.key);
     document.body.classList.add('talking');
     this.panel.classList.add('show');
@@ -289,6 +293,7 @@ export class Dialogue {
     if (this.shot && this.chase && this.chase.focus === this.shot) this.chase.focus = null; // the chase eases back
     this.shot = null;
     this.panel.classList.remove('show');
+    this.tag.classList.remove('on');
     document.body.classList.remove('talking');
   }
   render() {
@@ -346,6 +351,29 @@ export class Dialogue {
     if (this.hud && this.hud.paper) return; // a paper is up (the counter, the journal, the map): the barks wait under it
     this.pump(dt);
     this.layout();
+    this.tagLayout();
+  }
+  // (ux 2026-11-13: "Gus Lindgren" in the panel and four people at the counter, no telling which) the speaker's name
+  // over their head while their line is up: the one you talk with, or the one a line is said by (node.by)
+  tagLayout() {
+    const c = this.convo, t = this.tag, n = c && c.node;
+    const hide = () => { if (t.classList.contains('on')) t.classList.remove('on'); };
+    if (!c || c.wait || !n || !n.say || n.plain || n.say === '…') return hide();
+    const name = n.by || c.name || c.speaker.name, other = n.by && n.by !== c.speaker.name;
+    let head = null;
+    if (other) { try { head = this.whereIs ? this.whereIs(n.by, _v) : null; } catch { head = null; } } else head = this.headOf(c.speaker, _v);
+    if (!head) return hide();
+    const cam = this.camera; cam.updateMatrixWorld();
+    _c.copy(head).applyMatrix4(cam.matrixWorldInverse);
+    if (_c.z > -0.1) return hide(); // (behind you)
+    _v.copy(head); _v.y += ABOVE + 0.05; _v.project(cam);
+    const W = window.innerWidth, H = window.innerHeight, sx = ((_v.x + 1) / 2) * W, sy = ((1 - _v.y) / 2) * H;
+    if (!Number.isFinite(sx + sy) || sx < 16 || sx > W - 16 || sy < 24) return hide();
+    const top = this.panel.getBoundingClientRect().top || H;
+    if (sy > top - 8) return hide(); // (under the panel: the panel's own name says it)
+    if (t.dataset.name !== name) { t.dataset.name = name; t.textContent = name; }
+    t.style.transform = `translate(${Math.round(sx)}px, ${Math.round(sy)}px)`;
+    if (!t.classList.contains('on')) t.classList.add('on');
   }
 
   // --- fb4 D: what each person last said to you ----------------------------------------------------------------------

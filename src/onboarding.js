@@ -314,8 +314,22 @@ export class Onboarding {
     // dock" up while it lay in the lot: the canoe gone from the home dock by the truck counts as taken)
     const away = s.loan && p && !p.teleporting && this.canoeAway(p);
     if (!pa.canoe && away) { pa.canoe = true; ch = true; }
+    // (ux 2026-11-13) the shopping steps are a help, not a gate: once you have set out (paddled off the home landing, or
+    // taken away by a ride) a step not done is let go, and the card goes to the trip's job. "Buy leeches" had followed a
+    // player who skipped the tackle shelf onto the lake, to the site, through the night and home again. Their lack is
+    // still said where it matters (the "no food" mark, the bait at a cast)
+    if (pa.canoe && (!pa.food || !pa.leeches) && p && !p.teleporting && (away || (p.mode === 'paddle' && this.offHome(p)))) {
+      if (!pa.food) pa.food = 'skipped';
+      if (!pa.leeches) pa.leeches = 'skipped';
+      ch = true;
+    }
     if (ch) this.write();
     if (s.step === 'gear' && !s.done && s.loan && p && p.mode === 'paddle' && !p.teleporting) this.leaving(p);
+  }
+  // (ux) out on the water past the home landing's reach (the leaving distance)
+  offHome(p) {
+    const ep = this.home, o = this.t.outfitter, L = ep != null && o && typeof o.landing === 'function' ? o.landing(ep) : null;
+    return !!L && Math.hypot(p.x - L.x, p.z - L.z) > LEAVE_R;
   }
   // the canoe (lying, or with you) far from the home store's landing: taken away by a ride
   canoeAway(p) {
