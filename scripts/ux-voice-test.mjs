@@ -29,7 +29,11 @@ try {
   await page.waitForFunction(() => window.__game && window.__game.title && window.__game.title.state === 'title' && typeof window.__game.step === 'function', null, { timeout: 300000, polling: 500 });
   await page.keyboard.press('Shift'); // the audio starts on a key
   await ev(async () => { const g = window.__game; g.title.setPick('adventure'); await g.title.newSeason(g.world.entryPoints.find((e) => e.ep === 25), { confirm: false, start: { year: 2026, doy: 191 } }); });
-  await page.waitForFunction(() => { const g = window.__game; return g.title.state === 'game' && !g.player.teleporting && g.audio.ctx; }, null, { timeout: 240000, polling: 250 });
+  await page.waitForFunction(() => { const g = window.__game; return g.title.state === 'game' && !g.player.teleporting; }, null, { timeout: 240000, polling: 250 });
+  await page.keyboard.press('Shift'); await page.mouse.click(5, 5).catch(() => {}); // (the audio starts on a key or a click)
+  await page.waitForFunction(() => !!window.__game.audio.ctx, null, { timeout: 20000, polling: 250 }).catch(() => {});
+  const ctx = await ev(() => { const A = window.__game.audio; return A.ctx ? A.ctx.state : null; });
+  log('audio', ctx);
   await page.waitForTimeout(3000);
   // every speak call, who and where (the hook wrapped, the engine's own call kept)
   await ev(() => {

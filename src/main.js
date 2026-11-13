@@ -388,7 +388,11 @@ async function main() {
     talk.voice = (sp, text, o = {}) => {
       if (!sp) return;
       const other = o.by && o.by !== sp.name;
-      const who = other ? { key: `by:${o.by}`, name: o.by, female: femaleName(o.by) } : { key: sp.person || sp.key, name: sp.name, ...(sp.voice || { female: femaleName(sp.name) }) };
+      // one voice a person wherever they speak: the story's cast by its id (Josie is the staffer too, and "An old man"
+      // is Tauno before his name), everyone else by their first name (names are claimed once: npcs.js names)
+      const id = String(sp.person || sp.key || ''), first = (n) => String(n || '').split(' ')[0];
+      const cast = /^cast:/.test(id) ? id.split(':').slice(0, 2).join(':') : /^staffer:/.test(id) && first(sp.name) === 'Josie' ? 'cast:josie' : null;
+      const who = other ? { key: `name:${first(o.by)}`, name: o.by, female: femaleName(o.by) } : { key: cast || (sp.name ? `name:${first(sp.name)}` : id), name: sp.name, ...(sp.voice || { female: femaleName(sp.name) }) };
       let pos = null;
       if (!other && sp.pos) { try { pos = sp.pos(head); } catch { pos = null; } }
       audio.speak(text, who, pos, { talk: !!o.talk });
