@@ -1691,7 +1691,9 @@ async function main() {
     const storeParty = { id: 'storeparty', prio: 1, recur: 'once', text: 'Going in or just out, they know the water. E to talk.' };
     if (!MOMENTS.some((q) => q.id === storeParty.id)) MOMENTS.push(storeParty);
     const dueE = hints.due.bind(hints);
-    hints.due = (id, rec) => (id === storeParty.id ? npcs.partyHere() : dueE(id, rec));
+    // (ux 2026-11-13: said while the dot was on the provisions shelf, "E to talk" against the dot's "E Open"): only
+    // while the dot is on one of them, so its E is the talk it teaches
+    hints.due = (id, rec) => (id === storeParty.id ? npcs.partyHere() && !!(pointer.target && pointer.target.kind === 'person') : dueE(id, rec));
   }
   // The start round (2026-11-05; starter.js). The owner: "sometimes just randomly you can start and it will be raining …
   // In the intro, it should be very easy and take you on a very simple route … each outfitter has a starter route and task
