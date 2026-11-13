@@ -23,6 +23,7 @@ import { OLLIE, CARRY, OLLIE_A, OLLIE_B, OLLIE_C, EVENING, CARRY_SAYS, TOM, TOM_
 import { defineItem, definePage, itemDef } from './items.js';
 import { registerSensor } from './story-cond.js';
 import { storeLayout } from './props.js';
+import { FIXED_PARTIES, fixedDay } from './parties.js';
 
 registerSensor('dayPermit', 'flag');
 const TICK = 0.1;            // s: Ollie's place is set this often (the actor eases between)
@@ -224,12 +225,21 @@ export async function connect(t) {
     // Monday mornings at the Moose Lake 25 store (his crew's supply run), by the steps
     if (d.dow === 1 && n.h >= 8 && n.h < 12 && d.month >= 6 && d.month <= 9) { const L = storeLayout(25); if (L) { const f = L.stepsFoot || L.door; return { x: f.x + L.axes.b.x * 3.5 + L.axes.a.x * 2, z: f.z + L.axes.b.z * 3.5 + L.axes.a.z * 2, store: true }; } }
     if (n.h < 7 || n.h >= 21) return null;
-    const c = fixedCamp('tom'); return c ? { x: c.x + 3, z: c.z + 2 } : null;
+    // by day he works his route round the day's site (the camp itself stands from mid-afternoon: FIXED_PARTIES land)
+    const c = fixedCamp('tom') || daySite('tom'); return c ? { x: c.x + 3, z: c.z + 2 } : null;
+  }
+  // a fixed party's site for today (the nearest campsite to its entry's site for the day), camp or no camp
+  function daySite(id) {
+    const e = FIXED_PARTIES.find((q) => q.id === id), n = hrs(story); if (!e || !live()) return null;
+    const k = fixedDay(e, n.abs); if (k < 0) return null;
+    const at = e.sites[Math.min(k, e.sites.length - 1)]; let best = null, bd = 400;
+    for (const c of (world && world.campsites) || []) { const d = Math.hypot(c.x - at[0], c.z - at[1]); if (d < bd) { bd = d; best = c; } }
+    return best ? { x: best.x, z: best.z } : null;
   }
   function ostbySpot() {
     const n = hrs(story);
     if (n.h < 7 || n.h >= 21) return null;
-    const c = fixedCamp('ostbys'); if (!c) return null;
+    const c = fixedCamp('ostbys') || daySite('ostbys'); if (!c) return null;
     // they eat lunch on the rock (60 S8)
     if (n.h >= 12 && n.h < 13.2 && layer) { const q = layer.prop('s8.lunchrock'); if (q && Number.isFinite(q.prop.x)) return { x: q.prop.x + 1.2, z: q.prop.z + 1.6 }; }
     return { x: c.x + 2.5, z: c.z - 1.5 };
@@ -268,6 +278,6 @@ export async function connect(t) {
   return {
     ollie: () => O.f, tom: () => TM.f, ostbys: () => OS.f, carry: () => K.h,
     ollieTalk, tomTalk: () => (TM.f ? openScene(TOM, 'open') : false), ostbyTalk: () => (OS.f ? openScene(OSTBYS, 'open') : false),
-    debug: { line: () => line, LEN, ROAD, RIVER, ollieAt, at, O, K, S1st, fixedCamp, tomSpot, ostbySpot, stuartIndex: si },
+    debug: { line: () => line, LEN, ROAD, RIVER, ollieAt, at, O, K, S1st, fixedCamp, daySite, tomSpot, ostbySpot, stuartIndex: si },
   };
 }

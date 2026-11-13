@@ -47,6 +47,7 @@ const HELPERS_S = () => {
   S.sides = () => g.storySides;
   S.tick = async (ms = 400) => { L.step(6); await L.wait(ms); L.step(4); };
   S.use = (prop) => { const l = g.storyLayer, q = l.prop(prop), v = l.verbs(prop)[0]; if (!q || !v) return false; l.use(q.place, v); L.step(3); return true; };
+  S.by = (f) => { if (f) window.__t.standAt(f.x + 1.4, f.z + 0.9, Math.atan2(-(f.z - (f.z + 0.9)), f.x - (f.x + 1.4))); L.step(3); return !!f; };
   S.doyOf = (m, d) => Math.round((Date.UTC(2026, m - 1, d) - Date.UTC(2026, 0, 0)) / 864e5);
   S.dowOf = (doy) => new Date(Date.UTC(2026, 0, doy)).getUTCDay();
   return true;
@@ -75,7 +76,8 @@ try {
       const S = window.__s, D = S.sides().debug, L = window.__L;
       S.at(tue, 19.33);
       const pos = D.ollieAt(), p = D.at(pos ? pos.d : 0);
-      await L.near(p.x + 40, p.z + 40); await S.tick(600);
+      await L.near(p.x + 20, p.z + 20);
+      for (let k = 0; k < 20 && !S.sides().ollie(); k++) { S.at(tue, 19.33); await S.tick(300); }
       const o = S.sides().ollie();
       return { len: Math.round(D.LEN), idx: D.stuartIndex, pos, staged: !!o, at: o ? [Math.round(o.x), Math.round(o.z)] : null };
     }, tue);
@@ -131,19 +133,19 @@ try {
     const t1 = await page.evaluate(async (thu) => {
       const S = window.__s, D = S.sides().debug, L = window.__L;
       S.at(thu, 10);
-      const c = D.fixedCamp('tom'), sp = D.tomSpot();
+      const c = D.fixedCamp('tom') || D.daySite('tom'), sp = D.tomSpot();
       if (sp) { await L.near(sp.x + 8, sp.z + 6); await S.tick(800); }
       return { camp: c, spot: sp, tom: !!S.sides().tom() };
     }, thu);
     result('s8.1 Tom\'s ranger crew camps on Insula on a Thursday (a fixed party), Tom staged there', t1.camp && t1.tom, t1);
-    await page.evaluate(() => window.__s.sides().tomTalk());
+    await page.evaluate(() => { const S = window.__s; S.by(S.sides().tom()); return S.sides().tomTalk(); });
     const tc = [await choose(page, 'The sled on the rock?'), await choose(page, 'Why not?'), await choose(page, 'When?'), await choose(page, 'What would an old cabin site look like?')];
     await hear(page); await closeTalk(page);
     const f1 = await page.evaluate(() => window.__s.f(['tom.said.sled', 'tom.said.why', 'tom.said.when', 'ep.S8.taught', 'ep.S8.yes']));
     result('s8.2 Tom: the sled on his list, the fifty-year rule, the third week of September, the teaching (and nothing started)', tc.every((x) => x.ok) && f1['ep.S8.taught'] && !f1['ep.S8.yes'], { tc, f1 });
     // 3. the Ostbys: the snapshot, the creek
     const o1 = await page.evaluate(async (thu) => { const S = window.__s, D = S.sides().debug, L = window.__L; S.at(thu, 16); const sp = D.ostbySpot(); if (sp) { await L.near(sp.x + 6, sp.z + 6); await S.tick(800); } return { spot: sp, vern: !!S.sides().ostbys() }; }, thu);
-    await page.evaluate(() => window.__s.sides().ostbyTalk());
+    await page.evaluate(() => { const S = window.__s; S.by(S.sides().ostbys()); return S.sides().ostbyTalk(); });
     const oc = [await choose(page, 'Have you got a picture?'), await choose(page, 'Where was the trapper')];
     await hear(page); await closeTalk(page);
     const f3 = await page.evaluate(() => window.__s.f(['ep.S8.ostbys', 'ep.S8.snap', 'ep.S8.creekknown', 'nb.page.ostbysnap']));
@@ -162,7 +164,7 @@ try {
     result('s8.5 the clearing in the burn: found and stamped, the stump read with Tom\'s eye, the tin taken, lock 5 key B\'s reading', s5.f['ep.S8.found'] && /standing in snow/.test(s5.stump || '') && s5.f['ep.S8.tin'] && s5.tin > 0 && s5.f['ep.S8.done'] && s5.first === 'S8.first', s5);
     // 6. back to Tom: "I found where it came from." → "Older than fifty. Leave it." → "Take it."
     await page.evaluate(async (thu) => { const S = window.__s, D = S.sides().debug, L = window.__L; S.at(thu + 1, 10); const sp = D.tomSpot(); if (sp) { await L.near(sp.x + 8, sp.z + 6); await S.tick(800); } }, thu);
-    await page.evaluate(() => window.__s.sides().tomTalk());
+    await page.evaluate(() => { const S = window.__s; S.by(S.sides().tom()); return S.sides().tomTalk(); });
     const ac = [await choose(page, 'I found where it came from.'), await choose(page, 'Older than fifty'), await choose(page, 'Take it.')];
     await hear(page); await closeTalk(page);
     const f6 = await page.evaluate(async (thu) => {
