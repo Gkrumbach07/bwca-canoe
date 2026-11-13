@@ -144,6 +144,30 @@ export async function connect7b(t) {
   }
 
   // --- S5: the wreck from the canoe, the dive ----------------------------------------------------------------------------
+  // the wreck seated on the game's own bed in 12 ft (60 S5: 3.7 m): the resolved spot is 22 m off the shore in the tiles'
+  // data, but the drawn bed there (tiles.groundAt) is deeper; walk in toward the shore anchor to the first spot between
+  // 2.8 and 4.2 m, and build it there (done once its tiles are in; the same every load: it reads only the terrain)
+  let seated = false;
+  const seatWreck = () => {
+    if (seated || !layer || !world) return;
+    const q = layer.prop('s5.wreck'), pl = q && q.place; if (!q || !Number.isFinite(q.prop.x)) return;
+    const T0 = t.tiles; if (T0 && typeof T0.readyAt === 'function' && (!T0.readyAt(q.prop.x, q.prop.z) || !T0.readyAt(pl.x, pl.z))) return;
+    const gAt = (x, z) => (T0 && typeof T0.groundAt === 'function' ? T0.groundAt(x, z) : world.heightAt(x, z));
+    const x0 = q.prop.x, z0 = q.prop.z, dx = pl.x - x0, dz = pl.z - z0, L = Math.hypot(dx, dz) || 1;
+    let best = null;
+    for (let s = 0; s <= L + 0.01 && !best; s += 0.5) {
+      for (const off of [0, 3, -3, 6, -6]) {
+        const x = x0 + (dx / L) * s + (-dz / L) * off, z = z0 + (dz / L) * s + (dx / L) * off;
+        if (!world.isWater(x, z)) continue;
+        const dep = world.levelAt(x, z) - gAt(x, z);
+        if (dep >= 2.8 && dep <= 4.2 && world.shoreAt(x, z) < -6) { best = { x, z, dep }; break; }
+      }
+    }
+    seated = true;
+    if (!best) return;
+    q.prop.x = best.x; q.prop.z = best.z;
+    try { if (typeof layer.dropProp === 'function') layer.dropProp(pl.id, 's5.wreck'); } catch { /* rebuilt on the next poll */ }
+  };
   const wreckAt = () => { const w = P('s5.wreck'); if (!w || !world) return null; const g = layer.groundAt ? layer.groundAt(w.x, w.z) : world.heightAt(w.x, w.z), lv = world.levelAt(w.x, w.z); return { x: w.x, z: w.z, bed: g, level: lv, depth: Math.max(0, lv - g), heading: w.heading || 0 }; };
   const secchi = () => { try { const id = world.lakeIdAt ? world.lakeIdAt(player.x, player.z) : 0, l = id > 0 && world.lakes ? world.lakes[id - 1] : null; return (l && l.secchi) || 4.3; } catch { return 4.3; } };
   const readsNow = (W, dist) => seeing({ wind: wind ? wind.speed : 0, hour: hours(), cloud: cloud(), dist, depth: W.depth, secchi: secchi(), month: dateNow().month });
@@ -266,8 +290,9 @@ export async function connect7b(t) {
     if (dist <= DIVE.near && readsNow(W, dist)) apply(['f:s5.wreck.seen'], 'seen');
   };
   // Pete: told, the next calm bright day; without you, the first after 20 August, Labor Day (7 September) at the latest
+  const inGame = () => { try { const tl = typeof window !== 'undefined' && window.__game && window.__game.title; return !tl || tl.state === 'game'; } catch { return true; } };
   const peteTick = () => {
-    if (!live() || has('s5.pete.found') || has('s5.case')) return;
+    if (!live() || !inGame() || has('s5.pete.found') || has('s5.case')) return; // (never behind the title card: its clock is the real one)
     const d = doc(), today = dateNow(), key = `${today.year}:${today.doy}`;
     if (has('ep.S5.told') && d.toldDay == null) { d.toldDay = key; dirty(); }
     const after = md() > 820, last = md() >= 907, toldOk = has('ep.S5.told') && d.toldDay !== key;
@@ -345,7 +370,7 @@ export async function connect7b(t) {
     try {
       if (live()) { diveTick(dt); swimTick(dt); }
       slow += dt;
-      if (slow > 0.5) { slow = 0; peopleTick(); seenTick(); peteTick(); notchTick(); blazeTick(); pitTick(); if (!wall.mesh) wall.build(); }
+      if (slow > 0.5) { slow = 0; peopleTick(); seatWreck(); seenTick(); peteTick(); notchTick(); blazeTick(); pitTick(); if (!wall.mesh) wall.build(); }
     } catch (e) { if (!warned) { warned = true; console.warn('7b: the tick', e); } }
   };
   if (lamp && typeof lamp.update === 'function') { const u0 = lamp.update.bind(lamp); lamp.update = (dt) => { u0(dt); frame(dt); }; }
@@ -356,7 +381,7 @@ export async function connect7b(t) {
     debug: {
       doc, stage, staged: () => [...staged.keys()], talkTo, scene: (who) => new SceneRun(topics, PEOPLE[who].scene, { who, args: { ep: PEOPLE[who].ep }, hooks }),
       wreck: wreckAt, reads: () => { const W = wreckAt(); return W && player ? readsNow(W, Math.hypot(W.x - player.x, W.z - player.z)) : false; },
-      calmBright, overSide, startDive, dive: () => dv, endDive, wall, pit: () => pitState((k) => has(k)), peteTick, notchTick,
+      calmBright, seatWreck, seated: () => seated, overSide, startDive, dive: () => dv, endDive, wall, pit: () => pitState((k) => has(k)), peteTick, notchTick,
     },
   };
 }

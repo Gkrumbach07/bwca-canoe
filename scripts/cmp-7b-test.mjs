@@ -88,9 +88,11 @@ try {
       const g = window.__game, L = window.__L, S = window.__s7;
       window.__e.at(2026, 201, 12); S.calm();
       const w0 = window.__e.prop('s5.wreck');
-      await L.tp(w0.x + 9, w0.z + 2); for (let k = 0; k < 40 && !S.d().wreck(); k++) { L.step(5); await L.wait(100); g.storyLayer.poll(); }
-      const W0 = S.d().wreck(); g.player.x = W0.x + 7; g.player.z = W0.z; g.player.placeOnWater(); L.step(20); g.storyLayer.poll(); L.step(20);
-      return { W: W0 && { depth: +W0.depth.toFixed(2) }, reads: S.d().reads(), seen: g.story.has('s5.wreck.seen'), mode: g.player.mode };
+      await L.tp(w0.x, w0.z); for (let k = 0; k < 60 && !S.d().seated(); k++) { L.step(5); await L.wait(100); g.storyLayer.poll(); }
+      const W0 = S.d().wreck(), n = window.__e.place('kek.plane').n || [0, 1];
+      // in the canoe 6 m out from it (away from the shore), still
+      g.player.x = W0.x - n[0] * 6; g.player.z = W0.z - n[1] * 6; g.player.speed = 0; g.player.placeOnWater(); L.step(20); g.storyLayer.poll(); L.step(20);
+      return { W: W0 && { depth: +W0.depth.toFixed(2), x: Math.round(W0.x), z: Math.round(W0.z) }, seated: S.d().seated(), reads: S.d().reads(), seen: g.story.has('s5.wreck.seen'), mode: g.player.mode, water: g.world.isWater(g.player.x, g.player.z) };
     });
     result('S5b calm and bright on the Kek: the wreck reads from the canoe (s5.wreck.seen)', b.reads && b.seen && b.mode === 'paddle', b);
     // Dive (the water's dot verb: its run), the first dive sees it; Space up (a real key)
