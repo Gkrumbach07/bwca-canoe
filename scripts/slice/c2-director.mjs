@@ -120,7 +120,7 @@ export const steps = [
     log('a day with a party on Bald Eagle', JSON.stringify({ fx, c902, found }));
     if (!found) { result('10 the day\'s beat: a day with a party camped on Bald Eagle in the next 60 days (the voice the slice needs)', false, { c902 }); return; }
     // the trip: from Farm, the day set, the player on Bald Eagle by the evening, nothing story-like today
-    const t0 = await page.evaluate(async (f) => { const d = window.__d; d.setDay(f.abs, 9); const n = d.trip(31); d.setDay(f.abs, 16); await d.tp(f.camp.x + 350, f.camp.z + 350); return { n, armed: d.state().armed, beatToday: d.beats().beatToday() }; }, found);
+    const t0 = await page.evaluate(async (f) => { const d = window.__d; d.setDay(f.abs, 9); const n = d.trip(31); d.setDay(f.abs, 16); await d.tp(f.camp.x + 350, f.camp.z + 350); return { n, armed: d.state().armed, beatToday: d.beats().beatToday(), days: d.beats().tripBeats() }; }, found);
     const A = await page.evaluate(() => window.__d.evening());
     const order = A ? A.kind : null;
     result('10a at 19:00 on a trip day with no story fact, the director arms one beat in §12\'s order, for a party at the next site (a Walt place in reach: the crews\' landing on Bald Eagle; else Farm\'s beats; else lore)', A && ['walt', 'outfitter', 'lore'].includes(order) && !!A.party && !t0.beatToday && (A.kind !== 'walt' || ['crews.landing', 'bald.c902'].includes(A.id) || /^ws\./.test(A.id)), { t0, A, found: found.camp });
