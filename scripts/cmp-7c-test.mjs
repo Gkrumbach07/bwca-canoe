@@ -41,14 +41,24 @@ const HELPERS_M = () => {
   M.f = (keys) => Object.fromEntries(keys.map((k) => [k, g.story.has(k)]));
   M.end = (id) => g.story.get(`ep.${id}.end`) || null;
   M.polls = (n = 1) => { for (let i = 0; i < n; i++) { M.D().poll(); } };
-  M.lake = (name) => { const l = (g.world.lakes || []).find((q) => q && g.world.lakeName(q.id) === name && q.cells > 50); return l ? { id: l.id, x: l.cx, z: l.cz } : null; };
-  // a water point on a named lake: its centroid if it is water, else the nearest water cell on a spiral out
-  M.waterOn = (name) => { const l = M.lake(name); if (!l) return null; const w = g.world; for (let r = 0; r < 3000; r += 40) for (let k = 0; k < 16; k++) { const a = (k / 16) * Math.PI * 2, x = l.x + Math.cos(a) * r, z = l.z + Math.sin(a) * r; if (w.isWater(x, z) && (w.lakeIdAt(x, z) === l.id)) return { x, z }; if (r === 0) break; } return null; };
-  M.onLake = async (name) => { const p = M.waterOn(name); if (!p) return null; await L.near(p.x, p.z); L.step(10); return { name, at: [Math.round(g.player.x), Math.round(g.player.z)], lake: g.world.lakeName(g.world.lakeIdAt(g.player.x, g.player.z) || 0), mode: g.player.mode }; };
+  // a named lake (the biggest of that name): its id and middle
+  M.lake = (name) => { let best = null; for (const q of g.world.lakes || []) { if (!q || String(g.world.lakeName(q.id) || '').toLowerCase() !== name.toLowerCase()) continue; if (!best || (q.cells || 0) > (best.cells || 0)) best = q; } return best ? { id: best.id, x: best.cx, z: best.cz, cells: best.cells } : null; };
+  // on a named lake's water: to its middle (the tiles in), then the nearest water of that lake on a spiral out
+  M.onLake = async (name) => {
+    const l = M.lake(name); if (!l || !Number.isFinite(l.x)) return { name, none: true, l };
+    await L.near(l.x, l.z); const w = g.world; let p = null;
+    for (let r = 0; r < 4000 && !p; r += 50) for (let k = 0; k < (r ? 24 : 1) && !p; k++) { const a = (k / 24) * Math.PI * 2, x = l.x + Math.cos(a) * r, z = l.z + Math.sin(a) * r; if (w.isWater(x, z) && w.lakeIdAt(x, z) === l.id) p = { x, z }; }
+    if (!p) return { name, nowater: true, l };
+    await L.near(p.x, p.z); L.step(10);
+    return { name, at: [Math.round(g.player.x), Math.round(g.player.z)], lake: g.world.lakeName(g.world.lakeIdAt(g.player.x, g.player.z) || 0), mode: g.player.mode };
+  };
+  // to an added place: near its anchor (the tiles in), refit inland, built
+  M.toPlace = async (pid) => { const pl = g.storyLayer.place(pid); await L.near(pl.x + 2, pl.z + 2); M.D().refit(); const q = g.storyLayer.place(pid); await L.near(q.x + 2, q.z + 2); for (let k = 0; k < 6; k++) { g.storyLayer.poll(); L.step(4); } return { x: Math.round(q.x), z: Math.round(q.z), fitted: !!q.fitted }; };
   M.shot = (yaw = 0) => { L.look(yaw, 0.05); L.step(4); g.photo.raise(); L.look(yaw, 0.05); L.step(4); const rec = g.photo.capture(); L.step(4); g.photo.lower(); L.step(4); return rec ? rec.id : null; };
   M.go = (node, i = 0) => { const c = node && node.choices && node.choices[i]; return c && typeof c.go === 'function' ? c.go() : null; };
   M.topic = (id) => { const T = g.storyTalk && g.storyTalk.topics; const t = T && T.data && T.data.keeper ? T.data.keeper.find((q) => q.id === id) : null; return t; };
-  M.runTopic = (id, ep) => { const t = M.topic(id); if (!t) return { id, found: false }; const ok = g.story.when(t.when, { ep }); g.storyTalk.topics.run(t.then || [], { ep }, `topic:${id}`); return { id, found: true, when: ok }; };
+  // a keeper topic as topics.say runs it (its once fact, its Gives), only when its condition holds at that counter
+  M.runTopic = (id, ep) => { const t = M.topic(id); if (!t) return { id, found: false }; const ok = g.story.when(t.when, { ep, home: ep === 25, farm: ep === 31 }); if (ok) { if (t.once) g.storyTalk.topics.run([`f:asked.walt.${t.id}`], { ep }, `topic:${id}`); g.storyTalk.topics.run(t.then || [], { ep }, `topic:${id}`); } return { id, found: true, when: ok }; };
   M.at = (y, doy, h) => { E.at(y, doy, h); M.D().dayTurn(); };
   M.done = (tk) => { tk.status = 'done'; g.tasks.update(0.1); };
 };
@@ -91,12 +101,12 @@ try {
     const b = await page.evaluate(async () => {
       const g = window.__game, L = window.__L, M = window.__m, B = M.D().M1(), out = [];
       for (const s of B.signs.slice(0, 2)) {
-        await L.near(s.x + 3, s.z + 3); g.storyLayer.poll(); L.step(6); g.storyLayer.poll();
+        const at = await M.toPlace(`m1.0.${s.sign}`);
         const id = `m1.0.${s.sign}.p`, built = g.storyLayer.builtList().some((q) => q.prop === id);
         const t = L.faceTo(id, 1.6, 0.4), viaDot = !!(t && t.ref === `story:${id}`);
         const verbs = g.storyLayer.verbs(id).map((v) => v.verb);
         const used = g.storyLayer.look(id);
-        out.push({ sign: s.sign, built, viaDot, dot: g.storyLayer.dotName(id), verbs, used });
+        out.push({ sign: s.sign, at, built, viaDot, dot: g.storyLayer.dotName(id), verbs, used });
       }
       return { out, f: M.f(['ep.M1_0.sign.claw', 'ep.M1_0.sign.scat', 'ep.M1_0.sign.barrel', 'ep.M1_0.range']) };
     });
@@ -132,9 +142,9 @@ try {
     const a = await page.evaluate(async () => {
       const g = window.__game, L = window.__L, M = window.__m, P = M.D().FOGP[0];
       M.at(2026, 190, 10);
-      await L.near(P.x + 2, P.z + 2); g.storyLayer.poll(); L.step(6); g.storyLayer.poll();
+      const at = await M.toPlace('m2.loon');
       const built = g.storyLayer.builtList().some((q) => q.prop === 'm2.loon.box'), used = g.storyLayer.look('m2.loon.box');
-      return { past: P, built, used, yes: g.story.has('ep.M2.yes') };
+      return { P: [P.id, Math.round(P.x), Math.round(P.z)], at, built, used, yes: g.story.has('ep.M2.yes') };
     });
     result('M2a: the logbook box at Loon Falls (US side), read → the yes', a.built && a.used && a.yes, a);
     const b = await page.evaluate(async () => {
@@ -154,7 +164,7 @@ try {
     result('M2b: dawn fog on Lac La Croix: the voices (fogvoices), followed east, never caught → heard', b.started && b.f['ep.M2.heard'], b);
     const c = await page.evaluate(async () => {
       const g = window.__game, L = window.__L, M = window.__m, out = [];
-      for (const P of M.D().FOGP.slice(1)) { await L.near(P.x + 2, P.z + 2); g.storyLayer.poll(); L.step(6); g.storyLayer.poll(); out.push([P.id, g.storyLayer.look(`m2.${P.id}.box`)]); }
+      for (const P of M.D().FOGP.slice(1)) { const at = await M.toPlace(`m2.${P.id}`); out.push([P.id, at, g.storyLayer.builtList().some((q) => q.prop === `m2.${P.id}.box`), g.storyLayer.look(`m2.${P.id}.box`)]); }
       const filled = g.story.has('ep.M2.filled');
       g.story.ingest('store:enter', { ep: 25 }); // (feed-outfitter's event: the counter after the fifth box)
       await L.wait(2600); L.step(4);
@@ -218,7 +228,7 @@ try {
       const route = M.R().record(D.rec('M5')).route, bet = M.runTopic(`${D.rec('M5')}.bet`, route.from);
       const out = [];
       D.dbg.skim = true; D.dbg.stroke = true;
-      for (const n of route.lakes) { const on = await M.onLake(n); M.polls(12); out.push({ n, on: on && on.lake }); }
+      for (const n of route.lakes) { const on = await M.onLake(n); M.polls(30); out.push({ n, on: on && (on.lake || on), skim: g.story.has(`ep.${D.rec('M5')}.skim`) }); }
       D.dbg.skim = false; D.dbg.stroke = false;
       const id = D.rec('M5'), round = g.story.has(`ep.${id}.round`), skim = g.story.has(`ep.${id}.skim`);
       const back = M.runTopic(`${id}.back`, route.from);

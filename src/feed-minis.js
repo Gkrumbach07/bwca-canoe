@@ -84,12 +84,30 @@ export async function connect(t) {
 
   // --- layer places added at runtime (the year's) ----------------------------------------------------------------------------
   const added = new Set();
+  const setAt = (pl, x, z) => { pl.x = x; pl.z = z; for (const pr of pl.props || []) { const a = pr.at || [0, 0]; pr.x = x + a[0]; pr.z = z + a[1]; } };
   const addPlace = (pl) => {
     if (!layer || !layer.byId || layer.byId.has(pl.id)) return;
     pl.r = pl.r || 40; pl.triggers = pl.triggers || []; pl.photo = pl.photo || [];
+    setAt(pl, pl.x, pl.z); // (the layer builds a prop at its own x, z)
     layer.list.push(pl); layer.byId.set(pl.id, pl);
     for (const pr of pl.props || []) layer.propIx.set(pr.id, { place: pl, prop: pr });
     layer.bin(pl); added.add(pl.id);
+  };
+  // a place set from an anchor at the water's edge (a site's ring, a carry's end): moved `off` m inland on dry ground once
+  // its tiles are in (the shore's direction is the tiles'), before its props are built
+  const refit = () => {
+    const tiles = G().tiles; if (!layer || !tiles || typeof tiles.readyAt !== 'function') return;
+    for (const id of added) {
+      const pl = layer.byId.get(id); if (!pl || pl.fitted || !pl.anchor) continue;
+      if (player && Math.hypot(pl.anchor.x - player.x, pl.anchor.z - player.z) > 600) continue;
+      if (!tiles.readyAt(pl.anchor.x, pl.anchor.z)) continue;
+      let best = null;
+      for (const m of [pl.off, pl.off * 0.6, pl.off * 1.5, pl.off * 0.3]) { const q = inland(pl.anchor.x, pl.anchor.z, m); let wet = false; try { wet = world.isWater(q.x, q.z); } catch { wet = false; } if (!wet) { best = q; break; } }
+      pl.fitted = true; if (!best) continue;
+      const cell = layer.grid.get(layer.cellKey(pl.x, pl.z)); if (cell) { const j = cell.indexOf(pl); if (j >= 0) cell.splice(j, 1); }
+      try { layer.dropPlace(id); } catch { /* not built */ }
+      setAt(pl, best.x, best.z); layer.bin(pl);
+    }
   };
   const dropPlaces = (prefix) => {
     if (!layer || !layer.byId) return;
@@ -120,12 +138,12 @@ export async function connect(t) {
     if (!sites.length) { M1 = { id, k, lakes: ids, names: ch.lakes, sites: [], signs: [], watch: null }; return; }
     const pickS = pickN(sites, SIGNS.length, seedOf('M1', k), 'signs');
     const signs = SIGNS.map((sign, j) => {
-      const i = pickS[j % pickS.length], c = world.campsites[i], f = (c.layout && c.layout.fire) || c, p = inland(f.x, f.z, SIGN_OFF);
-      return { sign, i, x: p.x, z: p.z };
+      const i = pickS[j % pickS.length], c = world.campsites[i], f = (c.layout && c.layout.fire) || c;
+      return { sign, i, x: f.x, z: f.z, anchor: { x: f.x, z: f.z } };
     });
     for (const s of signs) {
       const pid = `m1.${k}.${s.sign}`, kitName = { claw: 'bearClaw', scat: 'bearScat', barrel: 'bearBarrel' }[s.sign];
-      addPlace({ id: pid, name: 'A bear\'s sign', x: s.x, z: s.z, r: 40, kind: 'mini',
+      addPlace({ id: pid, name: 'A bear\'s sign', x: s.x, z: s.z, r: 40, kind: 'mini', anchor: s.anchor, off: SIGN_OFF,
         props: [{ id: `${pid}.p`, kit: kitName, at: [0, 0], show: 'true', dot: [{ name: T(`m1.dot.${s.sign}`) || 'Sign', when: 'true' }] }],
         verbs: [{ prop: `${pid}.p`, verb: 'Look', when: `f:ep.${id}.yes & !f:ep.${id}.sign.${s.sign}`, then: [`f:ep.${id}.sign.${s.sign}`] }] });
     }
@@ -188,6 +206,7 @@ export async function connect(t) {
     if (!m1Live() || !episodes.started(M1.id) || !M1.watch || !player) return;
     const P = `ep.${M1.id}`;
     if (has(`${P}.seen`) && has(`${P}.photo`)) return;
+    { const pl = layer && layer.byId && layer.byId.get(`m1.${M1.k}.${M1.signs[0].sign}`); if (pl) M1.watch = { x: pl.x, z: pl.z }; }
     const d = Math.hypot(player.x - M1.watch.x, player.z - M1.watch.z);
     if (!watch) {
       if (d > WATCH_R || !story.when('dark')) return;
@@ -214,12 +233,11 @@ export async function connect(t) {
   // ========================================================================================================================
   const FOGP = FOG_ROUTE.map((r) => {
     const end = r.ends.find((e) => { try { return !isPast(e[0], e[1]); } catch { return true; } }) || r.ends[0];
-    const p = inland(end[0], end[1], LOG_OFF);
-    return { ...r, x: p.x, z: p.z };
+    return { ...r, x: end[0], z: end[1] };
   });
   for (const r of FOGP) {
     const pid = `m2.${r.id}`;
-    addPlace({ id: pid, name: r.name, x: r.x, z: r.z, r: 40, kind: 'mini',
+    addPlace({ id: pid, name: r.name, x: r.x, z: r.z, r: 40, kind: 'mini', anchor: { x: r.x, z: r.z }, off: LOG_OFF,
       props: [{ id: `${pid}.box`, kit: 'logBox', at: [0, 0], show: 'true', dot: [{ name: T('m2.dot.box') || 'Logbook', when: 'true' }] }],
       verbs: [{ prop: `${pid}.box`, verb: 'Read', when: `!f:ep.M2.log.${r.id}${r.id === 'loon' ? '' : ' & f:ep.M2.yes'}`, then: [`f:ep.M2.log.${r.id}`] }] });
   }
@@ -326,7 +344,11 @@ export async function connect(t) {
   async function giveFavour(id, n) {
     const kind = FAVOURS[n - 1];
     let tk = null;
-    try { tk = tasks && typeof tasks.makeKind === 'function' ? await tasks.makeKind(kind, FAVOUR_EP, 'near') : null; if (!tk) tk = await tasks.makeKind(kind, tom ? tom.ep : 25, 'near'); } catch (e) { console.warn('7c: a favour', e); }
+    // (the board's bands: local, medium, far; Lake One's landing first, then the counter he is at, near then a day out)
+    for (const [ep, band] of [[FAVOUR_EP, 'local'], [tom ? tom.ep : 25, 'local'], [FAVOUR_EP, 'medium'], [tom ? tom.ep : 25, 'medium']]) {
+      if (tk || !tasks || typeof tasks.makeKind !== 'function') break;
+      try { tk = await tasks.makeKind(kind, ep, band); } catch (e) { console.warn('7c: a favour', kind, ep, band, e); tk = null; }
+    }
     if (tk && tasks.take(tk.id)) { const s = st(id); (s.fav || (s.fav = {}))[tk.id] = n; episodes.dirty(); }
     else apply([`f:ep.${id}.done.${n}`], `m4.nofavour.${n}`); // (no notice could be written there: the favour is done as asked, never stuck)
     if (tasks && tasks.changed) tasks.changed();
@@ -454,14 +476,14 @@ export async function connect(t) {
     if (soloHere() && near(homeEp())) { if (!solo || solo.id !== (rec('M3') || {}).id) { unstageSolo(); stageSolo(); } } else if (solo && !(talk && talk.convo && talk.convo.speaker && /^cast:soloist/.test(talk.convo.speaker.key || ''))) unstageSolo();
     const te = tomHere();
     if (te && near(te)) { if (!tom || tom.ep !== te) { unstageTom(); stageTom(te); } } else if (tom && !(talk && talk.convo && talk.convo.speaker && /^cast:tom/.test(talk.convo.speaker.key || ''))) unstageTom();
-    m1Watch(); m2Fog(); m4Water(); m5Tick();
+    refit(); m1Watch(); m2Fog(); m4Water(); m5Tick();
   };
   bindM1();
   const timer = setInterval(() => { try { poll(); } catch (e) { if (!timer.warned) { timer.warned = true; console.warn('7c: the minis\' poll', e); } } }, TICK * 1000);
   story.on('season', () => { unstageSolo(); unstageTom(); watch = null; fog = null; skim = null; bindM1(); });
 
   const debug = {
-    dbg, poll, bindM1, M1: () => M1, FOGP, cycle: cyc, rec: (b) => (rec(b) || {}).id || null,
+    dbg, poll, bindM1, refit, M1: () => M1, FOGP, cycle: cyc, rec: (b) => (rec(b) || {}).id || null,
     stageSolo: () => { unstageSolo(); stageSolo(); return !!solo; }, soloTalk, solo: () => solo, soloNodes: () => (solo ? soloNodes() : null), tomNodes: () => (tom ? tomNodes() : null),
     stageTom: (ep = 25) => { dbg.tomEp = ep; unstageTom(); stageTom(ep); return !!tom; }, tomTalk, tom: () => tom,
     watch: () => watch, fog: () => fog, skim: () => skim, m6: () => st('M6').long || null,
