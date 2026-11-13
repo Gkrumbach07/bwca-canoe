@@ -25,7 +25,7 @@ import { HELPERS } from './slice/c1-layer.mjs';
 
 const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i > 0 ? process.argv[i + 1] : d; };
 const APP = (process.env.APP || 'http://localhost:5270').replace(/\/$/, '');
-const ONLY = arg('only', null), SHOTS = arg('shots', null);
+const ONLY = arg('only', null), SHOTS = arg('shots', null), UPTO = Number(arg('upto', 99));
 if (SHOTS) mkdirSync(SHOTS, { recursive: true });
 function findPw() { if (process.env.PW) return process.env.PW; const base = path.join(homedir(), '.npm/_npx'); for (const d of existsSync(base) ? readdirSync(base) : []) { const p = path.join(base, d, 'node_modules/playwright-core'); if (existsSync(p)) return p; } return 'playwright-core'; }
 function findChrome() { if (process.env.CHROME) return process.env.CHROME; const base = path.join(homedir(), 'Library/Caches/ms-playwright'); const shells = existsSync(base) ? readdirSync(base).filter((d) => d.startsWith('chromium_headless_shell-')).sort() : []; for (const s of shells.reverse()) for (const d of readdirSync(path.join(base, s))) { const p = path.join(base, s, d, 'chrome-headless-shell'); if (existsSync(p)) return p; } return undefined; }
@@ -158,7 +158,8 @@ try {
       ctx.tue = await a.evaluate((d) => { const A = window.__a3; const t = A.next(d + 1, 2); A.at(t, 10); A.inside(); return t; }, ctx.thu);
       const st = await a.evaluate(() => window.__a3.staged());
       const pre = await a.evaluate(() => ({ met: window.__game.story.has('marlys.met'), entry: null }));
-      await a.evaluate(() => window.__a3.talk('marlys'));
+      const trace = await a.evaluate(() => { const g = window.__game, L = window.__L, A = window.__a3; L.step(90); A.endTalk(); const ok = A.GC().talk('marlys'); const out = [{ ok, convo: !!g.dialogue.convo, say: g.dialogue.convo && g.dialogue.convo.node && g.dialogue.convo.node.say }]; for (let k = 0; k < 4 && g.dialogue.convo; k++) { L.step(1); out.push({ k, convo: !!g.dialogue.convo, paper: g.hud.paper || null, big: !!g.hud.big, onFoot: g.player.onFoot, tp: g.player.teleporting }); } return out; });
+      log('marlys trace', JSON.stringify(trace));
       const lt = await a.evaluate(() => ({ ...window.__a3.lastTalk, now: window.__t.convo(), outOpen: !!window.__game.outfitter.open, visit: !!(window.__game.outfitter.visit && window.__game.outfitter.visit.inside) }));
       log('marlys talk', JSON.stringify({ pre, lt }));
       const hi = await hear(a); await say(a, '\'M.\' in his notebook.'); const m = await hear(a); await say(a, 'I\'ll go up.'); await hear(a);
@@ -167,6 +168,7 @@ try {
       await a.evaluate(() => window.__a3.endTalk());
     });
 
+    if (UPTO < 7) throw new Error('upto');
     await step(a, '7 the loft', async () => {
       const r = await a.evaluate(async () => {
         const A = window.__a3, L = window.__L, g = window.__game, GC = A.GC();
