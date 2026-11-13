@@ -199,11 +199,16 @@ try {
       for (const [i, s] of S.d().stations().entries()) {
         if (!s.at) { await E.ashore(s.place, 4); }
         await E.ashore(s.place, 4); const at = E.prop(s.prop); if (!at) { out.push({ id: s.id, why: 'no stake' }); continue; }
-        L.standAt(at.x + 1.5, at.z + 1.5, 0); E.at(2026, 178 + i, 3.0); L.step(4);
-        S.d().startHowl({ ...s, x: at.x, z: at.z });
-        let hw = S.d().hw(), k = 0; for (; k < 20 && hw && hw.phase === 'quiet'; k++) { g.day.setClock(2026, 178 + i, 3.0 + (k + 1) * 0.01); L.step(2); hw = S.d().hw(); }
-        let r = { id: s.id, phase: hw && hw.phase };
-        if (hw && hw.answer) { const yaw = hw.answer.deg * Math.PI / 180, dx = Math.sin(yaw), dz = -Math.cos(yaw); const y = Math.atan2(-dz, dx); g.chase.viewYaw = y; g.chase.forwardYaw = y; g.chase.viewPitch = 0; L.step(2); S.d().markHowl(); }
+        let r = { id: s.id, nights: 0 };
+        // a silent night is the pack's, not the rig's: up to four nights at a stake
+        for (let night = 0; night < 4 && !g.story.has(`ep.S4.${s.id}`); night++) {
+          const doy = 178 + i * 4 + night; r.nights++;
+          L.standAt(at.x + 1.5, at.z + 1.5, 0); E.at(2026, doy, 3.0); L.step(4);
+          S.d().startHowl({ ...s, x: at.x, z: at.z });
+          let hw = S.d().hw(); for (let k = 0; k < 20 && hw && hw.phase === 'quiet'; k++) { g.day.setClock(2026, doy, 3.0 + (k + 1) * 0.01); L.step(2); hw = S.d().hw(); }
+          r.phase = hw && hw.phase;
+          if (hw && hw.answer) { const yaw = hw.answer.deg * Math.PI / 180, dx = Math.sin(yaw), dz = -Math.cos(yaw); const y = Math.atan2(-dz, dx); g.chase.viewYaw = y; g.chase.forwardYaw = y; g.chase.viewPitch = 0; L.step(2); S.d().markHowl(); }
+        }
         r.marked = g.story.has(`ep.S4.${s.id}`); out.push(r);
       }
       return { out, ring: g.story.has('ep.S4.ring'), bearings: window.__t.marks().filter((m) => m.kind === 'bearing').length, pencilRing: window.__t.marks().some((m) => m.kind === 'ring' && m.id === 's4.ring') };
@@ -214,7 +219,7 @@ try {
       if (!g.story.has('ep.S4.ring')) g.story.rules.apply({ id: 'rig:ring', then: ['f:ep.S4.st1', 'f:ep.S4.st2', 'f:ep.S4.st3'] }, {});
       E.at(2026, 226, 19.5); const m = E.place('s4.meadow');
       let px = m.x + 420, pz = m.z; for (let k = 0; k < 12 && g.world.isWater(px, pz); k++) { px += 30; pz += (k % 2 ? 40 : -40); }
-      await L.near(px, pz); L.standAt(g.player.x, g.player.z, Math.atan2(-(m.z - 8 - g.player.z), m.x + 22 - g.player.x)); L.step(10);
+      await g.world.tiles.ensure(px, pz, 130); L.standAt(px, pz, Math.atan2(-(m.z - 8 - pz), m.x + 22 - px)); for (let k = 0; k < 40 && !g.tiles.readyAt(px, pz); k++) { L.step(5); await L.wait(50); } L.standAt(px, pz, Math.atan2(-(m.z - 8 - pz), m.x + 22 - px)); L.step(10);
       const diag = { at: [Math.round(g.player.x), Math.round(g.player.z)], m: [m.x, m.z], d: Math.round(Math.hypot(m.x - g.player.x, m.z - g.player.z)), month: g.story.date().month, doc: { ...S.d().doc() } };
       const drawn = g.side7a.draw.root.children.filter((c) => /7a (wolf|pup)$/.test(c.name) && c.visible).length;
       const shot = await S.shot({ x: m.x + 22, z: m.z - 8 }, 0);
