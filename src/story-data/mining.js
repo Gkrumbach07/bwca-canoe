@@ -247,10 +247,15 @@ export const MARY = {
       { ask: 'd95.mary.saynothing', to: 'farend' }] }, // x: 30 §4.4 "[Say nothing.]": she waits, nods, and goes on
     // the lake key (L2A), the arc's second big finding (owner call 12: the fact written, the count left)
     farend: { say: ['30:4.4.10'], then: ['f:mary.farend', 'walt:30:4.4.w3', 'f:mary.table'], end: true },
+    // p: the lid sold to Dan (30 §4.4): cool, then the radio memory and nothing else
+    cool: { say: ['30:4.4.11', '30:4.4.10'], then: ['f:mary.farend', 'walt:30:4.4.w3'], end: true },
   },
 };
 // ctx.give: the lid handed over now (the want)
 export function maryEntry(s, ctx = {}) {
+  // p: begin (30 §4.4 "If the lid was sold to Dan": cool, the radio memory only, her lock key kept)
+  if (s.has('kettle.lid.sold') && !s.has('mary.lid.given') && s.has('mary.met') && !s.has('mary.farend')) return 'cool';
+  // p: end
   if (ctx.give && s.has('kettle.lid') && !s.has('mary.lid.given')) return 'table';
   if (s.has('mary.lid.given') && !s.has('mary.table')) return 'papers';
   return s.has('mary.met') ? 'again' : 'first'; // (x: 'again', was 'hub': a bare "…")

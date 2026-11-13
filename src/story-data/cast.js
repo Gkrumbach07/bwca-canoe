@@ -120,6 +120,14 @@ export const CAST = {
   },
   // /a3
 };
+// p: begin — the company and the press (Round 6, 40 §1.1): Dan, Wade and Maggie, placed by company.js (FieldPerson reads
+// their name and look here); no slots of the cast's own
+Object.assign(CAST, {
+  dan: { name: 'Dan Marolt', first: 'Dan', known: 'dan.met', unknown: 'A man in a company fleece', role: '', look: { age: 'mid', shirt: 0x2f4a3a, pants: 0x3a3a40, hat: null, hair: 0x5a4030, hatChance: 0 }, where: [] },
+  wade: { name: 'Wade Helstrom', first: 'Wade', known: 'wade.named', unknown: 'A man in a quilted vest', role: '', look: { age: 'mid', shirt: 0x3a3a3c, pants: 0x2c3448, hat: null, hair: 0x8a8278, hatChance: 0 }, where: [] },
+  maggie: { name: 'Maggie Tomczak', first: 'Maggie', known: 'maggie.met', unknown: 'A woman with a new rod', role: '', look: { age: 'mid', female: true, shirt: 0x6a5a4a, pants: 0x3a3a3a, hat: null, hair: 0x4a3a2e, hatChance: 0 }, where: [] },
+});
+// p: end
 // n: begin — the endings (story Round 3, stream n; 50 §9.1 "the last Thursday", §12.1): in the journalist ending, after the
 // last Thursday the launch never comes to Farm again and Len eats alone
 for (const w of CAST.brekke.where) w.when = `(${w.when}) & !f:world.lastThursday`;

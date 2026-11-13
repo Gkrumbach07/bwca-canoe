@@ -1490,6 +1490,26 @@ async function main() {
     } catch (e) { console.warn('story 7c: the mini-campaigns', e); }
   }
   // 7c: end
+  // p: begin (campaign Round 6, stream p: the company and the press; docs/story/40-company-and-press.md, 30 §4.6, §4.8),
+  // only under STORY_ON: Tauno's call and the fallback callers, the midpoint's three scenes (the camp search, Wade at the
+  // counter, Josie's leech order), Maggie at Hog Creek and the leech-order pad (story.doc.meeting), Dan at the counters (his
+  // card, junk and Leo's lid, the $1,000 offer, "they'd find a number"), Wade at the put-in, the stranger at the far
+  // landing, the watchers' postings drawn as sightings, tier 4's truck, the canoe adrift, Maggie's Little Gabbro note,
+  // Brekke's one conversation on a Thursday. window.__game.storyCompany. With the flag off none of it is fetched
+  if (STORY_ON && story.v === 2 && window.__game.storyTalk) {
+    try {
+      const [{ company }, { watchers }, { loadWords }] = await Promise.all([import('./company.js'), import('./watchers.js'), import('./story-data/words.js')]);
+      const st = window.__game.storyTalk, sm = window.__game.storySeams || {};
+      const Wp = await loadWords(['company', 'mining', 'drafted']); st.texts.add(Wp.company); st.texts.add(Wp.mining); st.texts.add(Wp.drafted);
+      company.attach({ story, talk, topics: st.topics, npcs, cast: st.cast, outfitter, player, day, world, scene, tiles, actors, pointer, hud, inventory, profile, camp, trip,
+        pencil: sm.pencil || null, mining: (window.__game.storyMining || {}).miningCast || null, mech: window.__game.storyMech || null, watchers, wind, texts: st.texts });
+      const updP = outfitter.update.bind(outfitter);
+      outfitter.update = (dt) => { updP(dt); try { company.update(dt); } catch (e) { if (!company.warnedU) { company.warnedU = true; console.warn('story p: the company', e); } } };
+      window.__game.storyCompany = company;
+      console.log('story p: the company and the press');
+    } catch (e) { console.warn('story p: the company', e); }
+  }
+  // p: end
   // gl-d: the trip-end tally and the board (the game-loop round, stream D; docs/build/game-loop-brief.md). Pay lands on
   // the trip's card as it counts up (record.js ended → tasks.settle), never at the board; no cap on notices held
   // (the owner's call 2026-11-05), each with a deadline that fits it; the new kinds (task-kinds-2.js: creel, campsite, beaver, iceout, colour,

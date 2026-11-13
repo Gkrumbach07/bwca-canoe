@@ -469,7 +469,14 @@ export class StoryV2 {
     return Math.min(t, cap);
   }
   get big() { const o = {}; for (const a of ARCS) o[a] = this.has(`door.${a}.yield`); return o; }
-  get bigCount() { return ARCS.filter((a) => this.has(`door.${a}.yield`)).length; }
+  get bigCount() {
+    let n = ARCS.filter((a) => this.has(`door.${a}.yield`)).length;
+    // p: begin (Round 6: the big findings that are not an arc's yield, each once: Mary's far end, 30 §4.8 and §6.1, the
+    // mining arc's second; the drift test, 31 #27; the far end's camp, find.big.camp)
+    for (const k of ['mary.farend', 'drift.done', 'find.big.camp']) if (this.has(k)) n++;
+    // p: end
+    return n;
+  }
   get north() { return this.has('drift.done') || ['cards.seen', 'danielle.log', 'birch.stone', 'gord.told'].filter((k) => this.has(k)).length >= 2; }
   lock(n) {
     const L = lockById(n);

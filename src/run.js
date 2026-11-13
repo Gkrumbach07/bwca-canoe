@@ -448,6 +448,10 @@ export class Run {
   firstTired() {
     const s = this.story;
     if (s.has('run.n14') || s.has('run.tieoff') || s.has('tieoff.learned')) return;
+    // p: begin (join 1's dawn-lot paper: the book fell open on N14 when the night's tiredness cued in the lot, under
+    // Maggie's talk; never once the run has arrived on a lot, or while a talk is open)
+    if (s.has('run.arrived') || (s.endings && s.endings.lot) || (this.g.talk && this.g.talk.convo)) return;
+    // p: end
     s.set('run.n14', true, 'run');
     this.openN14();
   }

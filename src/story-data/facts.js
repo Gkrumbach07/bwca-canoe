@@ -130,6 +130,10 @@ export const FACTS = [
   { key: 'gy.', kind: 'any', doc: '31 the guiding years: places seen (gy.dock, gy.tow, gy.prairie, gy.mummos, gy.reef[=walleye], gy.lunch, gy.lunch.photo, gy.photo81, gy.hogmap), the loft (gy.register, gy.rafter, gy.crew89, gy.bolts), the night (gy.night.<hhmm>, gy.lamp.*, gy.truck.looked), gy.tow.told' },
   { key: 'echo.canoes', kind: 'bool', doc: '31 GY-11, GY-09b: two canoes on the shore the wind could not put them on' },
   // /a3
+  // p: begin (Round 6, the company and the press: 40; company.js, story-data/company.js). People's facts are under their
+  // namespaces (maggie. dan. wade. brekke. josie. tauno. kettle.); these are the ones without a home
+  { key: 'isabella.', kind: 'any', doc: '32/40 6.6 the Isabella camp: isabella.receipt (stream i\'s, read by Maggie\'s topic)' },
+  // p: end
 ];
 
 // the arcs whose yields are the big findings (§3.3 story.big), and the doors the player can be offered

@@ -990,3 +990,9 @@ Used: The dot on Wade at the counter after N39 is read (40 §4.3, the doc's word
 A cigarette butt, still warm. A brand band on it.
 ```
 Used: The stranger's cigarette, picked up (40 §3.4; the dot's words are 40:3.4.c1).
+<!-- id: d95.p.m.wadenum -->
+```
+That number Denny gave me. It's Wade's.
+```
+Used: Maggie, 40 §6.6: Wade's number, from Denny after the reveal (her reply is 40:6.6.9).
+

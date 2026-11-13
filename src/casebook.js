@@ -30,7 +30,10 @@ export class Casebook {
     let name = null;
     try { const g = this.story && this.story.get ? Number(this.story.get('walt.gear')) : NaN; const ep = Number.isFinite(g) && g > 0 ? g : o && o.profile ? o.profile.home : null; // (the store asked: T's walt.gear=<ep>)
       const L = ep != null && ts && ts.landing ? ts.landing(ep) : null; name = L ? L.name : null; } catch { name = null; }
-    return { outfitter: name || 'the outfitter', I: 'I' };
+    // p: begin (40 §3.8, §3.4: the Walt page's {EP} and {portage}, the names the facts keep)
+    const s = this.story, pv = (k) => { try { const v = s && s.get ? s.get(k) : null; return typeof v === 'string' ? v : null; } catch { return null; } };
+    return { outfitter: name || 'the outfitter', I: 'I', EP: pv('wade.putin') || 'the lot', portage: pv('ev.stranger') || 'the portage' };
+    // p: end
   }
   // the lines in the order earned, each with its section and words; a replaced line moves above the one that turned it
   lines() {

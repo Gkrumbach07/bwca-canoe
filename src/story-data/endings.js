@@ -248,6 +248,10 @@ export function lotFor(s, ep, { abs = 0, hours = 0, served = true } = {}) {
   if (hours < FIRST_LIGHT || hours >= LAST_LIGHT) return { stage: false, why: 'dark' };
   const met = !!(s.doc && s.doc.ppl && s.doc.ppl.maggie && s.doc.ppl.maggie.met) || s.has('maggie.met');
   const M = s.doc && s.doc.meeting;
+  // p: begin (40 §6.9 "The note under the Little Gabbro permit box"): a meeting set at Little Gabbro is too many trucks;
+  // company.js leaves Maggie's note under the box and moves the meeting to Farm, first light tomorrow
+  if (M && Number(ep) === 33 && (Number(M.ep) === 33 || M.from === 33) && abs >= Number(M.firstDawn || 0) - (M.from === 33 ? 1 : 0)) return { stage: false, why: 'trucks' };
+  // p: end
   let wagon;
   if (!met) wagon = 'stranger';
   else if (M && Number(M.ep) === Number(ep) && abs >= Number(M.firstDawn || 0)) wagon = 'here';

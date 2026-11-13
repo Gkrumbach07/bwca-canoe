@@ -13,5 +13,6 @@ import { RULES_FAREND } from './rules-farend.js'; // f: the far end (Round 3)
 import { RULES_ENDINGS } from './rules-endings.js'; // n: the endings' dated after-effects (Round 3)
 import { RULES_X } from './rules-x.js'; // x: the campaign run's chapter 2 finish
 import { RULES_GUIDING } from './rules-guiding.js'; // a3: the guiding years (Round 4)
+import { RULES_COMPANY } from './rules-company.js'; // p: the company and the press (Round 6)
 
-export const RULES_ALL = [...RULES_CORE, ...RULES_BOOK, ...RULES_LAYER, ...RULES_TALK, ...RULES_BEATS, ...RULES_MINING, ...RULES_EPISODES, ...RULES_FAREND, ...RULES_ENDINGS, ...RULES_X, ...RULES_GUIDING];
+export const RULES_ALL = [...RULES_CORE, ...RULES_BOOK, ...RULES_LAYER, ...RULES_TALK, ...RULES_BEATS, ...RULES_MINING, ...RULES_EPISODES, ...RULES_FAREND, ...RULES_ENDINGS, ...RULES_X, ...RULES_GUIDING, ...RULES_COMPANY];
