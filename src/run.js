@@ -81,8 +81,10 @@ export class Run {
     // the camp moments muted (hints.js: "Tired. Rest in the tent." and the campsite moments)
     if (g.hints && typeof g.hints.due === 'function') {
       const due = g.hints.due.bind(g.hints);
-      g.hints.due = (id, rec) => (this.active && /tent|camp|pitch|site|fire|tarp|rest/i.test(String(id)) ? false : due(id, rec));
+      g.hints.due = (id, rec) => (this.active && /^tired$|tent|camp|pitch|site|fire|tarp|^rest/i.test(String(id)) ? false : due(id, rec));
     }
+    // "Tired. Rest in the tent." (energy's rest cue) is never said on the run
+    if (g.energy) { const cue = g.energy.onCue; g.energy.onCue = (id, words) => (this.active && (id === 'rest' || id === 'tired') ? true : cue ? cue(id, words) : false); }
     // the dusk fine skips while the run is on
     if (g.permits && typeof g.permits.checkDusk === 'function') { const cd = g.permits.checkDusk.bind(g.permits); g.permits.checkDusk = (...a) => (this.active ? false : cd(...a)); }
     // the headlamp's red lens (S3, stream 7a: item `redlens` or fact `lens.red`)
