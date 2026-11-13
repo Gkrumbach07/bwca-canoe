@@ -1359,6 +1359,19 @@ async function main() {
     } catch (e) { console.warn('story E: episodes', e); }
   }
   // /e
+  // 7c: begin (the mini-campaigns M1–M6 on E's runner: feed-minis.js; only under STORY_ON, after E's connect)
+  if (STORY_ON && story.v === 2 && window.__game.storyEpisodes) {
+    try {
+      const [{ connect: connectMinis }, { T, texts }] = await Promise.all([import('./feed-minis.js'), import('./topics.js')]);
+      const st = window.__game.storyTalk || {}, sm = window.__game.storySeams || {}, E = window.__game.storyEpisodes;
+      const M = await connectMinis({ story, episodes: E.episodes, minigames: E.minigames, layer: sm.layer || window.__game.storyLayer || null, topics: st.topics || null, texts: st.texts || texts, T,
+        talk, npcs, scene, photo, tasks, record, profile, day, player, parties, world, hud, trip, camp, bear, lamp, mist, canoe, partyCamps,
+        guest: () => !!(window.__game.coop && window.__game.coop.guest) });
+      window.__game.storyMinis = { ...M, on: true };
+      console.log('story 7c: the mini-campaigns');
+    } catch (e) { console.warn('story 7c: the mini-campaigns', e); }
+  }
+  // 7c: end
   // gl-d: the trip-end tally and the board (the game-loop round, stream D; docs/build/game-loop-brief.md). Pay lands on
   // the trip's card as it counts up (record.js ended → tasks.settle), never at the board; no cap on notices held
   // (the owner's call 2026-11-05), each with a deadline that fits it; the new kinds (task-kinds-2.js: creel, campsite, beaver, iceout, colour,

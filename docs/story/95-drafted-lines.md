@@ -131,14 +131,14 @@ the player's hand) and 02b (keepers, Tom, the guides, the soloists). M3 never na
 | `m4.end.last` |  | Did their last check. Tom said "Good camp" and meant the summer. | M4 end |
 | `m4.end.rotated` |  | The rangers rotated out for the winter. Somebody else's district till spring. | M4 end without you |
 | `m4.first` |  | First stamped: a favour for the district. | M4 the trip card |
-| `m5.say.bet.0` | Ernie | Vern says you can't do Farm, South Kawishiwi River and Clear and be back at this counter before the ice. I say you can. Twenty dollars says one of us is wrong. | M5 the bet, the year the route is Farm Lake / South Kawishiwi River / Clear Lake |
-| `m5.page.bet.0` |  | Two old guides bet on me: Farm, South Kawishiwi River and Clear and back before the ice. | M5 page |
+| `m5.say.bet.0` | Ernie | Vern says you can't do Farm, Garden and Clear and be back at this counter before the ice. I say you can. Twenty dollars says one of us is wrong. | M5 the bet, the year the route is Farm Lake / Garden Lake / Clear Lake |
+| `m5.page.bet.0` |  | Two old guides bet on me: Farm, Garden and Clear and back before the ice. | M5 page |
 | `m5.say.bet.1` | Ernie | Vern says you can't do Lake One, Lake Two, Lake Three and Lake Four and be back at this counter before the ice. I say you can. Twenty dollars says one of us is wrong. | M5 the bet, the year the route is Lake One / Lake Two / Lake Three / Lake Four |
 | `m5.page.bet.1` |  | Two old guides bet on me: Lake One, Lake Two, Lake Three and Lake Four and back before the ice. | M5 page |
-| `m5.say.bet.2` | Ernie | Vern says you can't do Isabella, Bog and Perent and be back at this counter before the ice. I say you can. Twenty dollars says one of us is wrong. | M5 the bet, the year the route is Isabella Lake / Bog Lake / Perent Lake |
-| `m5.page.bet.2` |  | Two old guides bet on me: Isabella, Bog and Perent and back before the ice. | M5 page |
-| `m5.say.bet.3` | Ernie | Vern says you can't do Hog Creek, Perent and Isabella and be back at this counter before the ice. I say you can. Twenty dollars says one of us is wrong. | M5 the bet, the year the route is Hog Creek / Perent Lake / Isabella Lake |
-| `m5.page.bet.3` |  | Two old guides bet on me: Hog Creek, Perent and Isabella and back before the ice. | M5 page |
+| `m5.say.bet.2` | Ernie | Vern says you can't do Perent, Isabella and Bog and be back at this counter before the ice. I say you can. Twenty dollars says one of us is wrong. | M5 the bet, the year the route is Perent Lake / Isabella Lake / Bog Lake |
+| `m5.page.bet.2` |  | Two old guides bet on me: Perent, Isabella and Bog and back before the ice. | M5 page |
+| `m5.say.bet.3` | Ernie | Vern says you can't do Perent and Isabella and be back at this counter before the ice. I say you can. Twenty dollars says one of us is wrong. | M5 the bet, the year the route is Perent Lake / Isabella Lake |
+| `m5.page.bet.3` |  | Two old guides bet on me: Perent and Isabella and back before the ice. | M5 page |
 | `m5.ask.bet` |  | What's the bet? | M5 counter topic at Farm 31 or Hog Creek 36 |
 | `m5.ask.back` |  | I made the run. | M5 back at the counter |
 | `m5.say.back` | Ernie | Well. Vern, pay up. Not you. Him. Twenty dollars and he's still not happy about it. | M5 back at the counter |

@@ -102,10 +102,10 @@ export const FAVOUR_EP = 30; // Lake One's landing (their district; Farm 31's re
 
 // --- M5: the freeze-up run (Farm 31, Hog Creek 36; two retired guides' bet) --------------------------------------------
 export const FREEZE_ROUTES = [
-  { from: 31, lakes: ['Farm Lake', 'South Kawishiwi River', 'Clear Lake'] },
+  { from: 31, lakes: ['Farm Lake', 'Garden Lake', 'Clear Lake'] },
   { from: 31, lakes: ['Lake One', 'Lake Two', 'Lake Three', 'Lake Four'] },
-  { from: 36, lakes: ['Isabella Lake', 'Bog Lake', 'Perent Lake'] },
-  { from: 36, lakes: ['Hog Creek', 'Perent Lake', 'Isabella Lake'] },
+  { from: 36, lakes: ['Perent Lake', 'Isabella Lake', 'Bog Lake'] },
+  { from: 36, lakes: ['Perent Lake', 'Isabella Lake'] },
 ];
 export const freezeRoute = (cycle) => { const i = slotOf('M5', cycle, FREEZE_ROUTES.length); return { i, ...FREEZE_ROUTES[i] }; };
 export const SKIM = { cells: 6, hits: 3 }; // skimice: a lead of skim ice is this many breaks wide; each break this many strokes
