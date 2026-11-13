@@ -81,7 +81,8 @@ try {
   await page.evaluate(() => window.__L.at('cellar'));
   const steps = [];
   for (const [id, want, verb] of [['cellar.pit', 'Old pit', 'Clear the moss'], ['cellar.lid', 'Lid', 'Lift'], ['cellar.note', 'Note', 'Pick up'], ['cellar.can.1', 'Can', 'Take'], ['cellar.can.2', 'Can', 'Take']]) {
-    await page.evaluate(() => { window.__game.storyLayer.poll(); window.__L.step(4); });
+    // (a prop shown by a fact the last E wrote is built on a later poll: wait for it)
+    await page.evaluate(async (id) => { const g = window.__game, l = g.storyLayer, L = window.__L; for (let k = 0; k < 40; k++) { l.poll(); L.step(4); const m = l.built.get('cellar'); if (m && m.get(id)) break; try { l.buildPlace(l.place('cellar')); } catch { /* */ } await L.wait(80); } }, id);
     const t = await page.evaluate((id) => window.__L.dotOn(id), id);
     steps.push({ id, t, ok: t.label === want && t.verb === verb });
     await press('e');
