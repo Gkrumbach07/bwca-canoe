@@ -40,6 +40,13 @@ try {
   await page.waitForFunction(() => { const g = window.__game; return g.title.state === 'game' && !g.player.teleporting && g.storyLayer && g.storyFar && g.storyRun && g.storyEndings; }, null, { timeout: 240000, polling: 250 });
   await page.evaluate(() => { const g = window.__game; if (g.outfitter.open) g.outfitter.hide(); if (g.onboarding.pending && g.onboarding.pending()) { g.onboarding.give(); g.onboarding.finish(31, false); } });
   await page.evaluate(HELPERS_L); await page.evaluate(HELPERS_T);
+  // polish: who opens the book (journal.show / a side turned to Walt), with the caller, so a book open at the lot names its opener
+  await page.evaluate(() => {
+    const g = window.__game, J = g.journal; window.__opens = [];
+    const rec = (what, side) => window.__opens.push({ what, side, from: J.side, open: J.open, h: +g.day.hours.toFixed(2), doy: g.day.doy, stack: String(new Error().stack).split('\n').slice(2, 9).map((l) => l.trim().replace(/https?:\/\/[^/]+/, '')).join(' | ') });
+    const show = J.show.bind(J); J.show = (side = null) => { if (!J.open) rec('show', side); return show(side); };
+    const set = J.setSide.bind(J); J.setSide = (side) => { if (J.open && side !== J.side) rec('setSide', side); return set(side); };
+  });
   // where chapter 2 leaves a player who has the far end: night one, a lock-6 key (Tauno's old test pit), the stones known;
   // the meeting set at Lake One 30 for tomorrow's first light (wave 2's leech-order pad writes it in the game)
   await page.evaluate(async () => {
@@ -138,12 +145,12 @@ try {
     for (let k = 0; k < 120 && !g.trailhead.trailheadLayout(30); k++) { L.step(5); await L.wait(100); }
     const TL = g.trailhead.trailheadLayout(30);
     T.standAt(TL.lot.x, TL.lot.z); for (let k = 0; k < 12; k++) { L.step(10); await L.wait(40); }
-    return { arrived: s.get('run.arrived'), staged: en.staged(), hold: g.outfitter.storyHold ? g.outfitter.storyHold(30) : null, stage: s.stage, cans: g.inventory.count('ammocan', { reachable: false }), hours: +g.day.hours.toFixed(2), active: R.active };
+    return { book: { open: !!g.journal.open, side: g.journal.side, opens: (window.__opens || []).slice(-4) }, arrived: s.get('run.arrived'), staged: en.staged(), hold: g.outfitter.storyHold ? g.outfitter.storyHold(30) : null, stage: s.stage, cans: g.inventory.count('ammocan', { reachable: false }), hours: +g.day.hours.toFixed(2), active: R.active };
   });
   await snap(page, 'j1-dawn-lot');
   const S = r4.staged || {};
-  result('4 the dawn lot at Lake One 30 with the cans: run.arrived = 30, Dan, Wade and Maggie\'s wagon (her first dawn), the come-out held, still S6',
-    r4.arrived === 30 && !!r4.staged && ['dan', 'wade'].every((w) => (S.people || []).includes(w)) && S.maggie && r4.hold === true && r4.stage === 'S6' && r4.cans === 2 && r4.active, r4);
+  result('4 the dawn lot at Lake One 30 with the cans: the book shut, run.arrived = 30, Dan, Wade and Maggie\'s wagon (her first dawn), the come-out held, still S6',
+    !r4.book.open && r4.arrived === 30 && !!r4.staged && ['dan', 'wade'].every((w) => (S.people || []).includes(w)) && S.maggie && r4.hold === true && r4.stage === 'S6' && r4.cans === 2 && r4.active, r4);
 
   // 5 the bench -----------------------------------------------------------------------------------------------------------
   const r5 = await page.evaluate(async () => {
@@ -158,11 +165,11 @@ try {
 
   // 6 an ending: Maggie's scene by keys (J) -------------------------------------------------------------------------------
   const trail = [];
-  const opened = await page.evaluate(async () => { const g = window.__game, L = window.__L; const h = g.hud, P = g.player, why = { paper: !!(h && h.paper), big: !!(h && h.big), onFoot: !!P.onFoot, tp: !!P.teleporting, mode: P.mode };
+  const opened = await page.evaluate(async () => { const g = window.__game, L = window.__L; const h = g.hud, P = g.player, why = { bookOpen: !!g.journal.open, opens: (window.__opens || []).length, paper: !!(h && h.paper), big: !!(h && h.big), onFoot: !!P.onFoot, tp: !!P.teleporting, mode: P.mode };
     why.paperName = h && h.paper; // (a paper up eats a talk: the rig traps' "close a paper before E on a person")
     for (let k = 0; k < 3 && h && h.paper; k++) { const c = h.papers.get(h.paper); try { if (c) c(); else h.closePaper(h.paper); } catch { /* */ } L.step(2); }
     if (h && h.big && typeof h.big.close === 'function') { try { h.big.close(); } catch { /* */ } }
-    const ok = g.storyEndings.debug.maggie(); why.after = { paper: !!(h && h.paper), big: !!(h && h.big), onFoot: !!P.onFoot }; for (let k = 0; k < 4; k++) { L.step(3); await L.wait(60); } return { ok, why, convo: !!window.__t.convo(), dialogue: !!(g.dialogue && g.dialogue.convo) }; });
+    const ok = g.storyEndings.debug.maggie(); why.after = { paper: !!(h && h.paper), big: !!(h && h.big), onFoot: !!P.onFoot }; for (let k = 0; k < 4; k++) { L.step(3); await L.wait(60); } return { ok, why, convo: !!window.__t.convo(), dialogue: !!(g.dialogue && g.dialogue.convo), bookAtTalk: !!g.journal.open }; });
   log('maggie', JSON.stringify(opened));
   trail.push(await choose(page, 'That\'s it.'));
   trail.push(await choose(page, 'I don\'t know.'));
@@ -172,8 +179,8 @@ try {
   trail.push(await hear(page));
   await page.waitForTimeout(3000);
   const r6 = await page.evaluate(async () => { const g = window.__game, s = g.story, L = window.__L, R = g.storyRun; for (let k = 0; k < 6; k++) { L.step(5); await L.wait(100); } return { end: s.get('end'), J: s.has('end.J'), done: s.get('run.done'), stage: s.stage, active: R.active, sensor: s.readSensor('run.active'), watchers: R.watchers.list.length, pitch: s.allows('pitch'), cans: g.inventory.count('ammocan', { reachable: false }) }; });
-  result('6 an ending (J) by keys: end=J, run.done, the run over (S7), the watchers stood down, the verbs back',
-    r6.end === 'J' && r6.J && r6.done === 'J' && r6.stage === 'S7' && !r6.active && !r6.sensor && r6.watchers === 0 && r6.pitch === true, { r6, trail: trail.map((t) => (t && t.ok === false ? t : 'ok')) });
+  result('6 an ending (J) by keys: the book shut when Maggie\'s talk opens, end=J, run.done, the run over (S7), the watchers stood down, the verbs back',
+    !opened.why.bookOpen && !opened.bookAtTalk && r6.end === 'J' && r6.J && r6.done === 'J' && r6.stage === 'S7' && !r6.active && !r6.sensor && r6.watchers === 0 && r6.pitch === true, { r6, book: { atLot: opened.why.bookOpen, atTalk: opened.bookAtTalk }, trail: trail.map((t) => (t && t.ok === false ? t : 'ok')) });
 } catch (e) {
   result('threw', false, { e: String((e && e.stack) || e).slice(0, 900) });
 } finally {
