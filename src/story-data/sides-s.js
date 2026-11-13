@@ -130,7 +130,7 @@ export const TOM_BARKS = [
 
 // --- the Ostbys, 3–9 August at their fire by the lunch rock (60 S8) ----------------------------------------------------
 export const OSTBYS = {
-  id: 's8.ostbys', who: 'ostbys',
+  id: 's8.ostbys', who: 'ep.S8', fig: 'ostbys', // (their choices' once keys under ep.S8.said.*: the Ostbys are no bible person)
   nodes: {
     open: { say: [{ id: 'S8.conv.23', by: 'Vern', when: '!f:ep.S8.ostbys' }, { id: 'S8.conv.24', by: 'Lloyd', when: '!f:ep.S8.ostbys' }, { id: 'S8.conv.25', by: 'Vern', when: '!f:ep.S8.ostbys' }],
       then: ['f:ep.S8.ostbys'], go: [
@@ -156,7 +156,7 @@ export const KEEPER_S = [
     at: { 25: ['S8.rumour.2', 'S8.conv.30'], 31: ['S8.conv.31'] } },
   // 60 S1 "How it starts": Leon at Moose River North 16, handing the Stuart over (the ring if it isn't on your sheet)
   { id: 's1.stuart', pri: 4, once: true, label: 'The Stuart Portage?', when: 'ep:16 & month:6-9',
-    say: ['S1.leon'], ring: { place: 's1.stuart', label: 'the Stuart Portage', r: 700 } },
+    say: ['S1.leon'], ring: { x: -57740, z: -1500, r: 1500, place: 's1.stuart', label: 'the Stuart Portage' } },
 ];
 
 // --- the rings' places (leads-act1.js PLACES, its s: block) -------------------------------------------------------------

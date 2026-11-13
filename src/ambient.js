@@ -48,6 +48,12 @@ const D_KIND = { pair: [1, 2, 3, 4, 5, 6, 15, 16, 17], friends: [1, 2, 3, 4, 5, 
 const D_KIND_6 = { '70.6.1.14': ['solo'] }; // (§6.1's bark of "an old solo on a carry")
 const D_REGION = { '70.6.1.1': [25, 31], '70.6.1.4': [31, 25], '70.6.1.7': [6], '70.6.1.9': [51], '70.6.1.10': [12], '70.6.1.11': [25], '70.6.3.3': [38] };
 const D_WAIT = new Set(['70.2.1.1', '70.2.3.1', '70.2.6.1', '70.2.6.2', '70.6.1.2', '70.6.1.5', '70.6.1.12', '70.7.2.9', '70.7.2.10', '70.7.2.21']);
+// s: Round 4 built S1 (Ollie) and S8 (Tom's crew): their §6.1 hooks no longer wait, each by its own outfitter; the
+// ranger party (parties.js FIXED_PARTIES 'tom', his partner at the camp) says §7.2's ranger lines
+for (const id of ['70.6.1.5', '70.6.1.12']) D_WAIT.delete(id);
+Object.assign(D_REGION, { '70.6.1.5': [16], '70.6.1.12': [25, 31] });
+D_KIND.ranger = [22, 23];
+// /s
 const dNum = (id) => Number(String(id).split('.').pop());
 const dRegion = (id, ctx) => !D_REGION[id] || (ctx && ctx.host != null && D_REGION[id].includes(Number(ctx.host)));
 function D_PARTY(e, ctx, l) {
