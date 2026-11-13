@@ -59,6 +59,8 @@ export const UNIT_WITNESS = {
   'frank.eastbay': ['scripts/cmp-b5-unit.mjs', 'the laker bet'],
   'gene.slide.matched': ['scripts/cmp-b5-unit.mjs', 'the slide: taken'],
   'ep.S8.done': ['scripts/cmp-s-unit.mjs', 'S8\'s reading is a rule'],
+  'door.boys.yield': ['scripts/cmp-b5-unit.mjs', 'lock 3\'s yield counts once'],
+  'door.family.yield': ['scripts/cmp-a4-unit.mjs', 'Aili\'s door'],
   'maggie.kettlemap': 'company', 'maggie.ostrander': 'company', 'maggie.e7sketch': 'company',
 };
 const ranCache = new Map();
@@ -78,6 +80,8 @@ function runUnit(script, pattern) {
   }
   const out = { ok, how }; ranCache.set(k, out); return out;
 }
+// the arcs' yields (each Round 5–6 arc's big finding), proved beside the locks
+export const YIELDS = ['door.boys.yield', 'door.family.yield', 'door.guiding.yield', 'door.mining.yield', 'denny.revealed', 'midpoint'];
 export function unitWitness(fact, companyDoc = null) {
   const w = UNIT_WITNESS[fact];
   if (!w) return null;

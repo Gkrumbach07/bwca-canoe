@@ -1244,12 +1244,12 @@ function sliceFar(rp2) {
 // A way (one fact of a key's when) is witnessed by this solver's own moves (searched alone from where slice 1 ends with
 // every subgraph on, or from where slice 2 ends with the far end on) or by a stream's Node proof (UNIT_WITNESS)
 async function finalGates(rp1, S2, SF) {
-  const { WAYS, UNIT_WITNESS, unitWitness, proveLocks } = await import('./story-solve-locks.mjs');
+  const { WAYS, UNIT_WITNESS, YIELDS, unitWitness, proveLocks } = await import('./story-solve-locks.mjs');
   const { solveCompany } = await import('./story-solve-company.mjs');
   const CO = solveCompany();
   const out = report.final = { ways: {}, locks: null, choices: null };
   const witnessed = new Set();
-  const facts = [...new Set(Object.values(WAYS).flatMap((t) => Object.keys(t)))];
+  const facts = [...new Set([...Object.values(WAYS).flatMap((t) => Object.keys(t)), ...YIELDS])];
   const all = () => { on2(); on3(); if (typeof onI === 'function') onI(); relCache.clear(); };
   for (const f of facts) {
     const goal = `f:${f}`;
@@ -1271,6 +1271,8 @@ async function finalGates(rp1, S2, SF) {
     if (how) witnessed.add(f);
     say(`${how ? 'PASS' : 'MISS'} final way ${f}: ${out.ways[f]}`);
   }
+  if (!witnessed.has('midpoint') && CO.doc && CO.doc.facts && CO.doc.facts.midpoint != null) { witnessed.add('midpoint'); out.ways.midpoint = 'story-solve-company.mjs (the midpoint on a trip start)'; }
+  for (const y of YIELDS) res(`final yield ${y}: ${out.ways[y]}`, witnessed.has(y));
   const P = proveLocks(witnessed);
   out.locks = P.locks;
   for (const L of P.locks) res(`final lock ${L.lock}: keys ${L.independent.join(', ')} independent and witnessed${L.witnessed.length > L.independent.length ? ` (+ ${L.witnessed.filter((k) => !L.independent.includes(k)).join(', ')} confirming)` : ''}; no articulation point among ${Object.keys(L.knockouts).length} support nodes`, !L.fails.length, { fails: L.fails });
