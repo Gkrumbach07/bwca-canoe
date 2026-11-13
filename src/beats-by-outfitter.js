@@ -40,7 +40,9 @@ export const BEATS = [
   // Moose River North 16 (rivers)
   { id: 'b16.1', ep: 16, n: 1, what: 'The Stuart Portage, 563 r: N12 read on the carry (S1)', place: null, line: null, wait: 'S1 (Round 4): Ollie and the 563 r read-here are not built' },
   { id: 'b16.2', ep: 16, n: 2, what: 'Nina Moose: a stone and a moose entry', place: 'ws.c649', nb: 'NB11', line: STONE },
-  { id: 'b16.3', ep: 16, n: 3, what: 'Big Moose: the Squatch site (S2)', place: null, line: null, wait: 'S2 (Round 7): the Squatch site is not in the layer' },
+  // 7a: begin (S2's west site is in the layer: s2.ridge, story-places.json)
+  { id: 'b16.3', ep: 16, n: 3, what: 'Big Moose: the Squatch site (S2)', place: 's2.ridge', nb: 'NB36', line: '70.6.1.6' },
+  // 7a: end
   // Slim 6 (rivers)
   { id: 'b6.1', ep: 6, n: 1, what: 'Fourtown C1000: a stone; the lights entry (S3)', place: 'ws.c1000', nb: 'NB22', line: STONE },
   { id: 'b6.2', ep: 6, n: 2, what: 'Mudro: a starred site with a white stone, and a rain entry read there', place: null, line: null, wait: 'no place: walt-sites.js has no Mudro site (the writers pick it)' },
