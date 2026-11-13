@@ -17,7 +17,11 @@
 //   7 no page errors
 //
 //   npx vite --port 5511 --strictPort &
-//   APP=http://localhost:5511 node scripts/r4-roads-test.mjs [--only 16,67] [--shots <dir>] [--step 2]
+//   APP=http://localhost:5511 node scripts/r4-roads-test.mjs [--only 16,67] [--shots <dir>] [--step 2] [--regress]
+//
+// --regress (what scripts/rigs.mjs and loop-r4-all.sh pass; FULL=1 there drops it): checks 2 and 3 drive a fixed sample
+// of routes (REGRESS_ROUTES below: the round-4 known spots and the known failures, then starts spread west to east)
+// instead of all 51; checks 1, 4, 5, 6 and 7 are unchanged. By hand, without the flag, every route is driven.
 import { createRequire } from 'node:module';
 import { readdirSync, existsSync, mkdirSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
@@ -27,6 +31,12 @@ const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i > 0 ?
 const APP = process.env.APP || 'http://localhost:5511';
 const ONLY = arg('only', null) ? arg('only').split(',') : null;
 const STEP = Number(arg('step', 2));
+// the regression sample: the round-4 known spots (50 tilt, 80 wheel gap, 49 junction, 40 bridge end, 25 the Moose Lake
+// Boat Access), the rest of the known failures (60 a trunk, 41 and 43 the grade), then starts spread over the map: 12 and
+// 6 far west, 16 and h16 (the moved Moose River North store), 77, 34, 67 and h67 (Bog Lake's moved store), 75 and 84 by
+// the south edge, 62 east (shared with r5-roads-test)
+const REGRESS_ROUTES = ['25', '40', '41', '43', '49', '50', '60', '80', '6', '12', '16', 'h16', '34', '62', '67', 'h67', '75', '77', '84'];
+const REGRESS = process.argv.includes('--regress') && process.env.FULL !== '1';
 const SHOTS = arg('shots', path.join(tmpdir(), 'r4-roads-shots'));
 mkdirSync(SHOTS, { recursive: true });
 function findPw() { if (process.env.PW) return process.env.PW; const base = path.join(homedir(), '.npm/_npx'); for (const d of existsSync(base) ? readdirSync(base) : []) { const p = path.join(base, d, 'node_modules/playwright-core'); if (existsSync(p)) return p; } return 'playwright-core'; }
@@ -104,7 +114,8 @@ try {
   result('1 every start the truck can drive (a store from its stand); lots 150 m and more in from the map\'s edge', t1.none.length === 0 && t1.parkOnly.length === 0 && t1.edge.length === 0, { routes: t1.keys.length, none: t1.none, parkOnly: t1.parkOnly, edge: t1.edge, places: Object.keys(places).length });
 
   // ---- 2 every route driven, frame by frame; 3 the roads graded round each stop ----------------------------------------
-  const keys = (ONLY || t1.keys).filter((k) => t1.keys.includes(k));
+  const keys = (ONLY || (REGRESS ? REGRESS_ROUTES : t1.keys)).filter((k) => t1.keys.includes(k));
+  if (REGRESS) log('regress: driving', keys.length, 'of', t1.keys.length, 'routes', keys.join(','), (ONLY || REGRESS_ROUTES).filter((k) => !t1.keys.includes(k)).length ? `(missing: ${(ONLY || REGRESS_ROUTES).filter((k) => !t1.keys.includes(k)).join(',')})` : '');
   const drives = {}, grades = { pts: 0, off: [], trunks: [] };
   for (const key of keys) {
     const r = await page.evaluate(async ([key, STEP]) => {
@@ -159,7 +170,7 @@ try {
     log(key, JSON.stringify({ m: r.m, samples: r.samples, wet: r.wet && r.wet.length, trunks: r.trunks && r.trunks.length, tilt: r.tilt && r.tilt.length, wheels: r.wheels, gradedOff: r.graded && r.graded.off.length, roadTrunks: r.graded && r.graded.trunks.length }));
   }
   const bad = Object.values(drives).filter((r) => r.none || r.wet.length || r.trunks.length || r.tilt.length > 2 || (r.wheels && r.wheels.worst > 0.6));
-  result(`2 every route driven every ${STEP} m: never over water off a deck, no trunk in the truck's way, level across, on its wheels`, keys.length > 0 && bad.length === 0,
+  result(`2 ${REGRESS ? 'the sampled routes' : 'every route'} driven every ${STEP} m: never over water off a deck, no trunk in the truck's way, level across, on its wheels`, keys.length > 0 && bad.length === 0,
     { routes: keys.length, samples: Object.values(drives).reduce((t, r) => t + (r.samples || 0), 0), bad: bad.map((r) => ({ key: r.key, none: r.none, wet: r.wet && r.wet.slice(0, 4), trunks: r.trunks && r.trunks.slice(0, 4), tilt: r.tilt && r.tilt.slice(0, 4), wheels: r.wheels })) });
   result('3 the roads graded round every stop (the detail within 0.3 m of the road\'s height) and no trunk on a road\'s core', grades.pts > 500 && grades.off.length <= grades.pts * 0.01 && grades.trunks.length === 0, { pts: grades.pts, off: grades.off.length, offFirst: grades.off.slice(0, 12), trunks: grades.trunks.slice(0, 12) });
 

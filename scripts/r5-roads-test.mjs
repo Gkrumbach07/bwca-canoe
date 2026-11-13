@@ -14,7 +14,12 @@
 //     Boat Access): shots of the truck there, their worst tyres logged
 //   4 no page errors
 //
-//   APP=http://localhost:5701 node scripts/r5-roads-test.mjs [--only 40,50] [--shots <dir>] [--looks ely,gunflint] [--off]
+//   APP=http://localhost:5701 node scripts/r5-roads-test.mjs [--only 40,50] [--shots <dir>] [--looks ely,gunflint] [--off] [--regress]
+//
+// --regress (what scripts/rigs.mjs and loop-r4-all.sh pass; FULL=1 there drops it): check 2 poses the truck along a fixed
+// sample of routes (REGRESS_ROUTES: r4-roads-test's sample, the known spots of check 3 among them) and check 1 visits
+// four looks spread west to east (REGRESS_LOOKS) instead of all ten; every check's rule is unchanged. By hand, without
+// the flag, every route and every look.
 import { createRequire } from 'node:module';
 import { readdirSync, existsSync, mkdirSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
@@ -25,6 +30,10 @@ const APP = process.env.APP || 'http://localhost:5701';
 const ONLY = arg('only', null) ? arg('only').split(',') : null;
 const LOOKS = arg('looks', null) ? arg('looks').split(',') : null;
 const SHOTS = arg('shots', path.join(tmpdir(), 'r5-roads-shots'));
+const REGRESS = process.argv.includes('--regress') && process.env.FULL !== '1';
+// (the same sample as r4-roads-test.mjs: the known spots 25 40 49 50 80, the known failures 41 43 60, then spread)
+const REGRESS_ROUTES = ['25', '40', '41', '43', '49', '50', '60', '80', '6', '12', '16', 'h16', '34', '62', '67', 'h67', '75', '77', '84'];
+const REGRESS_LOOKS = ['echo', 'ely', 'sawbill', 'arrowhead'];
 const OFF = process.argv.includes('--off'); // (the baseline's own run: the looks and the truck only, no road checks judged)
 mkdirSync(SHOTS, { recursive: true });
 function findPw() { if (process.env.PW) return process.env.PW; const base = path.join(homedir(), '.npm/_npx'); for (const d of existsSync(base) ? readdirSync(base) : []) { const p = path.join(base, d, 'node_modules/playwright-core'); if (existsSync(p)) return p; } return 'playwright-core'; }
@@ -190,7 +199,7 @@ try {
   }
   // ---- 1 the roads at each look -----------------------------------------------------------------------------------------
   const looks = {}, cost = {};
-  for (const name of LOOKS || Object.keys(PLACES)) {
+  for (const name of LOOKS || (REGRESS ? REGRESS_LOOKS : Object.keys(PLACES))) {
     const [lat, lon] = PLACES[name];
     const look = async (p) => p.evaluate(async ([lat, lon]) => {
       const g = window.__game, H = window.__r5r, w = g.world;
@@ -241,7 +250,9 @@ try {
   // ---- 2 the truck, frame by frame ------------------------------------------------------------------------------------
   const keys = await page.evaluate(() => [...window.__game.world.roads.routes.keys()]);
   const drives = {};
-  for (const key of (ONLY || keys).filter((k) => keys.includes(k))) {
+  const want = ONLY || (REGRESS ? REGRESS_ROUTES : keys);
+  if (REGRESS) log('regress: posing', want.filter((k) => keys.includes(k)).length, 'of', keys.length, 'routes', want.join(','), want.some((k) => !keys.includes(k)) ? `(missing: ${want.filter((k) => !keys.includes(k)).join(',')})` : '');
+  for (const key of want.filter((k) => keys.includes(k))) {
     drives[key] = await page.evaluate(async (key) => {
       const g = window.__game, H = window.__r5r, T = g.truck, S0 = T.spot(key, true);
       if (!S0) return { key, none: true };
@@ -250,7 +261,7 @@ try {
       let here = [S.x, S.z];
       for (let s = S.s0; s <= S.path.len - 2; s += 0.3) {
         T.pose(S.path, s);
-        if (Math.hypot(T.x - here[0], T.z - here[1]) > 140) { await H.goNear(T.x, T.z); here = [T.x, T.z]; T.pose(S.path, s); }
+        if (Math.hypot(T.x - here[0], T.z - here[1]) > 140) { here = [T.x, T.z]; await H.goNear(T.x, T.z); T.pose(S.path, s); } // (here taken before the frames: main.js settles the truck on its own job each frame, which moved it back to the store and made every later pose a new stop: the 3600 s)
         const t = H.tyres(); out.frames++; if (t.gap > 0.1) out.over10 = (out.over10 || 0) + 1;
         if (t.gap > out.gap) { out.gap = t.gap; out.worst = [Math.round(T.x), Math.round(T.z), +t.gap.toFixed(2), 'gap']; }
         if (t.sink > out.sink) out.sink = t.sink;
@@ -266,7 +277,7 @@ try {
   // (a rigid body on four wheels over a twisted surface: the twist is split, two tyres a little off and two a little in;
   // 0.15 m either way at most, and the frames with one more than 0.10 m off counted)
   const badT = Object.values(drives).filter((r) => r.none || r.gap > 0.15 || r.sink > 0.15 || r.belly > 0);
-  result('2 the truck on its four tyres every 0.3 m of every route: none 0.15 m off the ground drawn under it (or on a deck), none 0.15 m in, the ground never through the body', badT.length === 0,
+  result(`2 the truck on its four tyres every 0.3 m of ${REGRESS ? 'the sampled routes' : 'every route'}: none 0.15 m off the ground drawn under it (or on a deck), none 0.15 m in, the ground never through the body`, badT.length === 0,
     { routes: Object.keys(drives).length, frames: Object.values(drives).reduce((t, r) => t + (r.frames || 0), 0), framesOver10cm: Object.values(drives).reduce((t, r) => t + (r.over10 || 0), 0), worstGap: Math.max(...Object.values(drives).map((r) => r.gap || 0)), worstSink: Math.max(...Object.values(drives).map((r) => r.sink || 0)), bad: badT.map((r) => ({ key: r.key, none: r.none, gap: r.gap, sink: r.sink, belly: r.belly, over: r.over })) });
 
   // ---- 3 the known spots: the truck there, a shot ---------------------------------------------------------------------
