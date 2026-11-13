@@ -87,7 +87,7 @@ const say = async (page, prefix) => { const r = await choose(page, prefix); if (
 
 try {
   if (!ONLY || ONLY === 'off') {
-    const off = await open(APP);
+    const off = await open(`${APP}/?story=0`); // (the story is on by default since 2026-11-13: off is ?story=0)
     await newSeason(off, 25);
     const z = await off.evaluate(() => ({ loaded: performance.getEntriesByType('resource').map((r) => r.name).filter((n) => /\/src\/(guiding-cast|guiding-items|story-data\/(guiding|rules-guiding|leads-guiding|drafts-a3))\.js/.test(n)), guiding: window.__game.storyGuiding ?? null }));
     // (rules-guiding and leads-guiding ride in story-data's own imports, as rules-mining does: only the runtime modules)

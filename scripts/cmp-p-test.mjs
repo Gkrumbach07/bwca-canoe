@@ -95,7 +95,7 @@ const PAGE = () => {
 
 try {
   if (!ONLY || ONLY === 'off') {
-    const off = await open(APP);
+    const off = await open(`${APP}/?story=0`); // (the story is on by default since 2026-11-13: off is ?story=0)
     await newSeason(off, 25);
     const z = await off.evaluate(() => ({ loaded: performance.getEntriesByType('resource').map((r) => r.name).filter((n) => /\/src\/(company|story-data\/company)\.js/.test(n)), c: window.__game.storyCompany ?? null }));
     result('0 flag off: company.js never fetched, no storyCompany', z.loaded.length === 0 && z.c === null, z);

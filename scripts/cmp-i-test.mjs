@@ -99,7 +99,7 @@ const reveal = async (page, choice, after = []) => {
 
 try {
   if (!ONLY || ONLY === 'off') {
-    const off = await open(APP);
+    const off = await open(`${APP}/?story=0`); // (the story is on by default since 2026-11-13: off is ?story=0)
     await newSeason(off, 38).catch(() => null);
     const z = await off.evaluate(() => ({ loaded: performance.getEntriesByType('resource').map((r) => r.name).filter((n) => /informant|story-props-i/.test(n)), i: window.__game.storyInformant ?? null }));
     const rt = z.loaded.filter((n) => /informant-cast|story-data\/informant\.js/.test(n));

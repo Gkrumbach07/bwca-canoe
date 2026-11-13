@@ -92,7 +92,7 @@ async function boot(home, doy) {
 
 try {
   if (!ONLY || ONLY === 'off') {
-    const page = await open('');
+    const page = await open('story=0'); // (the story is on by default since 2026-11-13: off is ?story=0)
     await newSeason(page, 16, 171, false);
     const r = await W(page, () => { const mods = performance.getEntriesByType('resource').map((e) => e.name).filter((n) => /\/src\//.test(n)).map((n) => n.replace(/^.*\/src\//, '').replace(/\?.*$/, '')); return { mine: mods.filter((n) => /7a|nightwatch|skywatch|minigames\/howl/.test(n)), side7a: !!window.__game.side7a }; });
     result('off: the flag off: none of 7a\'s modules fetched, nothing hung', r.mine.length === 0 && !r.side7a, r);

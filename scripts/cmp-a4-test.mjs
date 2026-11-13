@@ -104,7 +104,7 @@ const PAGE_HELPERS = () => {
 
 try {
   if (!ONLY || ONLY === 'off') {
-    const off = await open(APP);
+    const off = await open(`${APP}/?story=0`); // (the story is on by default since 2026-11-13: off is ?story=0)
     await newSeason(off, 12);
     const z = await off.evaluate(() => ({ loaded: performance.getEntriesByType('resource').map((r) => r.name).filter((n) => /\/src\/(family-cast|family-props)\.js|story-data\/family\.js/.test(n)), fam: window.__game.storyFamily ?? null }));
     result('0 flag off: family-cast.js not fetched, no storyFamily', z.loaded.length === 0 && z.fam === null, z);

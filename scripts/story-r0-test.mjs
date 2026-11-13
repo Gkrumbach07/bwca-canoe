@@ -53,7 +53,7 @@ const loaded = (page, rx) => page.evaluate((rx) => performance.getEntriesByType(
 try {
   // 1 flag off: exactly main (the v1 story, no seams, no feed, no story data loaded) ----------------
   {
-    const A = await openGame('off');
+    const A = await openGame('off', 'story=0'); // (on by default since 2026-11-13)
     await newSeason(A); await inGame(A);
     await A.evaluate(() => window.__game.step(1 / 30, 30));
     const off = await A.evaluate(() => {
@@ -122,7 +122,7 @@ try {
     // the store writes through IndexedDB a microtask later: flush it before leaving the page, as pagehide would
     await A.evaluate(async () => { const g = window.__game, s = g.story; s.flush && s.flush(); await new Promise((r) => setTimeout(r, 50)); if (g.store.flush) await g.store.flush(); await new Promise((r) => setTimeout(r, 200)); });
     // back: the same browser without the flag reads the v1 document (a rollback to main finds the season true)
-    await A.goto(`${APP}/`, { timeout: 180000 });
+    await A.goto(`${APP}/?story=0`, { timeout: 180000 });
     await A.waitForFunction(() => window.__game && window.__game.story && window.__game.title && window.__game.title.state === 'title', null, { timeout: 300000, polling: 500 });
     const back = await A.evaluate(() => { const s = window.__game.story; return { v: s.v ?? 1, nb: s.state && s.state.notebook, legacy: s.state && s.state.legacy }; });
     result('4b v2 → v1: with the flag off the same browser\'s v1 story still has the notebook found', back.v === 1 && back.nb && back.nb.found === true && back.nb.lake === 'Farm Lake', back);

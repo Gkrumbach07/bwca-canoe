@@ -191,7 +191,7 @@ async function M() {
 }
 
 async function off() {
-  const page = await open('');
+  const page = await open('story=0'); // (the story is on by default since 2026-11-13: off is ?story=0)
   await newSeason(page, 25, DOY, false);
   const r = await page.evaluate(() => { const mods = performance.getEntriesByType('resource').map((e) => e.name.split('/').pop().split('?')[0]); return { mine: mods.filter((n) => /^endgames\.js$|drafts-g\.json/.test(n)), eg: !window.__game.storyEndgames }; });
   result('off: the flag off: endgames.js never fetched, nothing hung', !r.mine.length && r.eg, r);

@@ -156,7 +156,7 @@ async function ending(E) {
 
 try {
   if (!ONLY || ONLY === 'off') {
-    const page = await open('');
+    const page = await open('story=0'); // (the story is on by default since 2026-11-13: off is ?story=0)
     await newSeason(page, HOME, DOY, false);
     const r = await page.evaluate(() => {
       const g = window.__game, mods = performance.getEntriesByType('resource').map((e) => e.name).filter((n) => /\/src\//.test(n)).map((n) => n.replace(/^.*\/src\//, '').replace(/\?.*$/, ''));

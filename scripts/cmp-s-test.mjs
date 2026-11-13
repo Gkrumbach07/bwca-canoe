@@ -56,7 +56,7 @@ async function closeTalk(page) { for (let k = 0; k < 20; k++) { const c = await 
 
 try {
   if (!ONLY || ONLY === 'off') {
-    const page = await open('');
+    const page = await open('story=0'); // (the story is on by default since 2026-11-13: off is ?story=0)
     await newSeason(page, 25, 160, false);
     const r = await page.evaluate(() => {
       const g = window.__game, mods = performance.getEntriesByType('resource').map((e) => e.name).filter((n) => /\/src\//.test(n)).map((n) => n.replace(/^.*\/src\//, '').replace(/\?.*$/, ''));

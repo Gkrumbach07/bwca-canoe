@@ -66,7 +66,7 @@ async function key(page, code, frames = 3) { await page.keyboard.press(code); aw
 
 try {
   if (!ONLY || ONLY === 'off') {
-    const page = await open('');
+    const page = await open('story=0'); // (the story is on by default since 2026-11-13: off is ?story=0)
     await newSeason(page, 51, 200, false);
     const r = await W(page, () => { const mods = performance.getEntriesByType('resource').map((e) => e.name).filter((n) => /\/src\//.test(n)).map((n) => n.replace(/^.*\/src\//, '').replace(/\?.*$/, '')); return { mine: mods.filter((n) => /7b|minigames\/dive/.test(n)), side7b: !!window.__game.side7b }; });
     result('off: the flag off: none of 7b\'s modules fetched, nothing hung', r.mine.length === 0 && !r.side7b, r);
