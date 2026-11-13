@@ -286,7 +286,8 @@ class InformantCast {
     B.onRock = (o = {}) => { try { if (prev) prev(o); } catch { /* b5's */ } if (this.revealReady() && o.denny) { B.rockHeld = true; o.denny.onTalk = () => this.talkReveal(o.denny, true); } };
   }
   rockTick() {
-    if (this.boys()) { this.hookRock(); return; }
+    const B = this.boys();
+    if (B) { this.hookRock(); if (B.rockHeld && !this.revealReady() && !(this.c.talk && this.c.talk.convo)) B.rockHeld = false; return; } // (let b5 bring him back once it's over)
     // (stream b5 not loaded: Denny on the sitting rock here, on the 14th from dusk to 23:00, while the reveal is ready)
     const p = this.c.player, R = I.PLACES.rock, want = this.rockNight() && this.revealReady() && p && Math.hypot(R.x - p.x, R.z - p.z) < 600;
     if (want && !this.rockDenny) { this.rockDenny = new FieldPerson(this.c, 'denny', { x: R.x, z: R.z, heading: 0, name: 'Denny' }); this.rockDenny.onTalk = (f) => this.talkReveal(f, true); }
