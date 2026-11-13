@@ -750,6 +750,7 @@ const condAtoms = (src) => {
   }
   return out;
 };
+const I_DO = { canary: ['f:canary.denny.*', 'f:canary.frank.*', 'f:canary.bob.*'], accuse: ['f:frank.accused'], folderAsk: ['f:frank.folder.asked'] }; // i
 const actAtoms = (list, who = null) => {
   const out = [];
   for (const a of list || []) {
@@ -759,6 +760,7 @@ const actAtoms = (list, who = null) => {
     else if (m[1] === 'und') out.push(`und:${m[2]}`);
     else if (m[1] === 'lead') out.push(`lead:${m[2].split('=')[0]}`);
     else if (m[1] === 'do') out.push(...(m[2] === 'decline' ? ['f:tauno.porch.declined1', 'f:tauno.porch.declined2'] : m[2] === 'take' ? ['f:bundle.taken', 'f:bundle.later'] : m[2] === 'shelf' ? ['f:bundle.shelf'] : m[2] === 'bottles' ? ['f:kettle.bottles'] : m[2] === 'night' ? ['f:marlys.night'] : m[2] === 'arrange' ? ['f:drift.arranged'] : []));
+    if (m[1] === 'do' && I_DO[m[2]]) out.push(...I_DO[m[2]]); // i: the informant's hooks (a lake told, Frank accused, the folder asked)
   }
   return out;
 };
