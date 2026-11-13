@@ -16,6 +16,7 @@
 // surveyLath, surveyTag, shovelBlade, twoStumps, cafeTable, urn, coolers, launch.
 import * as THREE from 'three';
 import { PropBuilder, TILE, chunkStone } from './prop-kit.js';
+import { KITS_7B } from './story-props-7b.js'; // 7b
 import { FAR_KITS } from './story-props-far.js'; // f: the far end's kits (Round 3)
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -399,6 +400,9 @@ export function cafeSpots(L) {
 // f: begin (Round 3 stream F: the far end's kits, story-props-far.js)
 for (const [k, f] of Object.entries(FAR_KITS)) if (!REGISTRY[k]) REGISTRY[k] = f;
 // f: end
+// 7b: begin (Round 7 stream 7b: S5's wreck, case and framed chart; S6's carving, blazes, pond, planks, crate: story-props-7b.js)
+for (const [k, f] of Object.entries(KITS_7B)) if (!REGISTRY[k]) REGISTRY[k] = f;
+// 7b: end
 export const KITS = Object.freeze(Object.keys(REGISTRY));
 export function kit(name) { const f = REGISTRY[name]; return f ? { build: (ctx = {}) => f({ rng: Math.random, opts: {}, ...ctx }) } : null; }
 // a seeded rng for a prop (the same stump every load)

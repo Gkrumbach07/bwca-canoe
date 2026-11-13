@@ -10,5 +10,6 @@ import { RULES_BEATS } from './rules-beats.js'; // d: the director (stream D, Ro
 import { RULES_MINING } from './rules-mining.js'; // a2: the mining years (Round 2)
 import { RULES_EPISODES } from './rules-episodes.js'; // e: every episode's steps (episodes/index.js)
 import { RULES_FAREND } from './rules-farend.js'; // f: the far end (Round 3)
+import { RULES_SIDE7B } from './rules-side7b.js'; // 7b: S5 the chart (L2D, L3D), S6 the eye for a pit (L6C)
 
-export const RULES_ALL = [...RULES_CORE, ...RULES_BOOK, ...RULES_LAYER, ...RULES_TALK, ...RULES_BEATS, ...RULES_MINING, ...RULES_EPISODES, ...RULES_FAREND];
+export const RULES_ALL = [...RULES_CORE, ...RULES_BOOK, ...RULES_LAYER, ...RULES_TALK, ...RULES_BEATS, ...RULES_MINING, ...RULES_EPISODES, ...RULES_FAREND, ...RULES_SIDE7B]; // (7b: ...RULES_SIDE7B)
