@@ -146,6 +146,10 @@ const WHERE = (key) => {
   const cafe = S.cafe ? Object.fromEntries(Object.entries(S.cafe).filter(([, q]) => q && Number.isFinite(q.x)).map(([k, q]) => [k, d(q)])) : null;
   return { key, pose: f.spec && f.spec.pose, slot: v.slot ? v.slot.id || v.slot.at : v.at || null, y: +f.y.toFixed(2), floorY: S.floorY, seats: (S.seats || []).map(d), door: d(S.door), rel, doorRel: dr, cafe };
 };
+// (the final pass) a framed shot for the contact sheet: fn(page) places the view, then the shot as C-<name>
+async function cshot(page, name, fn) {
+  try { await page.evaluate(fn); await page.evaluate(() => window.__L.step(10)); await page.waitForTimeout(500); await page.screenshot({ path: path.join(SHOTS, `C-${name}.png`) }); } catch (e) { log(`contact ${name} threw`, String(e).slice(0, 300)); }
+}
 let lookN = 0;
 async function look(page, name, { book = null } = {}) {
   const id = `${String(++lookN).padStart(2, '0')}-${name}`;
@@ -288,6 +292,7 @@ async function seasonA() {
   log('Len where', JSON.stringify(await A.evaluate(WHERE, 'cast:len:31')));
   const dl = await dotOn(A, 'cast:len:31'); log('dot on Len', JSON.stringify(dl));
   if (dl.none || !dl.verb) note('confusing', 'A2 dock', 'the dot on Len offers no verb (or Len not there)', dl);
+  await cshot(A, 'len', () => { const f = window.__t.figure('cast:len:31'); if (f) window.__L.face({ x: f.x, z: f.z }, 4.5, f.y + 1.3); });
   // Mary at the window: the dot (9–11 Tue/Fri), the café as a player sees it
   await A.evaluate((d0) => { window.__a2.at(d0, 9.6); window.__a2.inside(); window.__L.step(30); }, ctx.d0);
   log('Mary where', JSON.stringify(await A.evaluate(WHERE, 'cast:mary:31')));
@@ -339,14 +344,19 @@ async function seasonA() {
   const card = await A.evaluate(() => { const g = window.__game; return { paper: g.hud.paper, text: [...document.querySelectorAll('.tripcard, #tripcard, .record-card, [class*=tripcard]')].map((e) => e.innerText).join('\n').slice(0, 2500) }; });
   log('the trip card', JSON.stringify({ m5, m5b, card }).slice(0, 3000));
   if (m5b - m5 !== 75) note('broken', 'A5 tally', `the purse moved by $${m5b - m5} over the Kettle trip's end, not $75 ($35 Tasha + $40 Len)`, { m5, m5b });
+  await cshot(A, 'tally', () => { const g = window.__game, R = g.record, t = R && R.s && R.s.trips[R.s.trips.length - 1]; if (t) R.show(t.id); });
+  await A.evaluate(() => { const g = window.__game; if (g.record && g.record.shown) g.record.close(); window.__L.step(3); });
   await look(A, 'A5-tripcard');
   await dismissPapers(A);
   // 6 Mary's back table
   await run(a2('table'), 'A2');
+  await cshot(A, 'mary-table', () => { const M = window.__a2.M().miningCast, m = M.cafe && M.cafe.lid; if (!m) return; m.updateMatrixWorld(true); const e = m.matrixWorld.elements, w = { x: e[12], y: e[13], z: e[14] }; window.__L.face({ x: w.x, z: w.z }, 2.6, w.y + 0.2); });
   await look(A, 'A6-table');
   // 7 the porch: the test, the crew map
   await run(a2('map'), 'A2');
   await look(A, 'A7-map', { book: ['walt', 'journal'] });
+  await cshot(A, 'crewmap', () => { const j = window.__game.journal; if (!j.open) j.show('walt'); else j.setSide('walt'); window.__L.step(6); const v = document.querySelector('#journal [data-nbv="pages"]'); if (v) v.click(); window.__L.step(6); const p = document.querySelector('#journal [data-nbpage="crewmap"]') || document.querySelector('#journal [data-nbpage]'); if (p) p.click(); window.__L.step(6); });
+  await A.evaluate(() => { const j = window.__game.journal; if (j.open) j.close(); window.__L.step(3); });
   // 8 Pietro
   await run(a2('pietro'), 'A2');
   await look(A, 'A8-pietro');
