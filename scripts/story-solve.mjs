@@ -484,7 +484,8 @@ async function slice3(main, rp) {
   if (!main.ok || !rp || !rp.ok) { res('slice A3: slice 1\'s end to start from', false); return; }
   on2(); on3(); // (slice 2's world handling too: a talk's choices read in its own world; --only-a3 skips slice 2)
   const S1 = rp.S;
-  const m3 = chain([...MAIN3.map((g) => g.when), END3], S1);
+  const M3 = { max: Math.max(MAX, 30000) }; // (the arc's talks are wide: Marlys's hub alone has ten topics)
+  const m3 = chain([...MAIN3.map((g) => g.when), END3], S1, M3);
   out.plan = m3.path;
   res(`slice A3 (the guiding years) end to end from the end of slice 1: ${m3.ok ? `${m3.path.length} moves` : `stuck at '${m3.fail}' (${m3.states} states${m3.capped ? ', capped' : ''})`}`, m3.ok, { at: m3.fail || null });
   const rp3 = m3.ok ? replay(m3.path, S1) : null;
@@ -495,7 +496,7 @@ async function slice3(main, rp) {
     res(`slice A3 witness: ${g.id}${n > 0 ? ` (${n} moves; made by "${m3.path[n - 1]}")` : ''}`, n >= 0, { when: g.when });
   }
   for (const b of BRANCH3) {
-    const c = chain([...b.via, b.when], S1), ok = c.ok && replay(c.path, S1).ok;
+    const c = chain([...b.via, b.when], S1, M3), ok = c.ok && replay(c.path, S1).ok;
     out.branches.push({ id: b.id, ok, moves: c.ok ? c.path.length : null, at: c.fail || null });
     res(`slice A3 branch: ${b.id}${c.ok ? ` (${c.path.length} moves)` : ` (stuck at '${c.fail}')`}`, ok);
   }
