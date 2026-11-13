@@ -66,7 +66,7 @@ try {
     await page.evaluate(() => window.__L.at('gull.sign'));
     const r = await page.evaluate(() => { const L = window.__L, g = window.__game;
       const built = g.storyLayer.builtList().filter((b) => b.place === 'gull.sign').map((b) => b.prop);
-      const stone = L.dotOn('gull.stone', 1.4, 0.5), rod = L.dotOn('gull.rod', 1.4, 0.4);
+      const stone = L.dotOn('gull.stone', 1.4, 0.06), rod = L.dotOn('gull.rod', 1.4, 0.36);
       g.storyLayer.poll(); L.step(4);
       return { built, stone, rod, low: g.story.when('lowwater'), f: L.facts(['gull.eastbay', 'gull.dam', 'gull.stump.lowwater', 'gull.rod.seen', 'key.L4C', 'ink.farend', 'gull.stone.seen']) };
     });
@@ -116,10 +116,10 @@ try {
   {
     await page.evaluate(() => window.__L.at('waltcamp'));
     const names = await page.evaluate(() => { const L = window.__L, out = {};
-      for (const [id, dy] of [['waltcamp.cot', 0.6], ['waltcamp.boots', 0.3], ['waltcamp.stove', 0.55], ['waltcamp.shelf', 0.95], ['waltcamp.corebox', 0.6], ['waltcamp.photo', 1.2], ['waltcamp.marks', 1.3], ['waltcamp.floor', 0.25]]) out[id] = L.dotOn(id, 1.2, dy);
+      for (const [id, dy] of [['waltcamp.cot', 0.6], ['waltcamp.boots', 0.3], ['waltcamp.stove', 0.55], ['waltcamp.shelf', 0.95], ['waltcamp.corebox', 0.6], ['waltcamp.photo', 0.05], ['waltcamp.marks', 1.3], ['waltcamp.floor', 0.25]]) out[id] = L.dotOn(id, 1.2, dy);
       return out; });
     const verbs = {};
-    for (const [id, dy] of [['waltcamp.corebox', 0.6], ['waltcamp.marks', 1.3], ['waltcamp.photo', 1.2], ['waltcamp.note', 1.2]]) {
+    for (const [id, dy] of [['waltcamp.corebox', 0.6], ['waltcamp.marks', 1.3], ['waltcamp.photo', 0.05], ['waltcamp.note', 0.03]]) {
       verbs[id] = await page.evaluate(([id, dy]) => window.__L.dotOn(id, 1.2, dy), [id, dy]);
       await press(page, 'e');
     }
@@ -139,7 +139,7 @@ try {
   {
     await page.evaluate(() => window.__L.at('cellar'));
     const steps = [];
-    for (const [id, dy, want, verb] of [['cellar.pit', 0.1, 'Old pit', 'Clear the moss'], ['cellar.lid', 0.05, 'Lid', 'Lift'], ['cellar.note', -0.4, 'Note', 'Pick up'], ['cellar.can.1', -0.5, 'Can', 'Take']]) {
+    for (const [id, dy, want, verb] of [['cellar.pit', 0.1, 'Old pit', 'Clear the moss'], ['cellar.lid', 0.05, 'Lid', 'Lift'], ['cellar.note', 0.03, 'Note', 'Pick up'], ['cellar.can.1', 0.12, 'Can', 'Take']]) {
       await page.evaluate(() => { window.__game.storyLayer.poll(); window.__L.step(4); });
       const t = await page.evaluate(([id, dy]) => window.__L.dotOn(id, 1.3, dy), [id, dy]);
       steps.push({ id, t, ok: t.label === want && t.verb === verb });
