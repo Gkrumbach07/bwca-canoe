@@ -331,11 +331,18 @@ class GuidingCast {
     if (h.node === 'n0200') this.doorBang();
     if (h.node === 'n0600') { this.truckOut(); if (this.lamp.lit) s.set('gy.lamp.allnight', true, 'a3'); }
     const M = this.live.get('marlys'), D = this.c.talk;
-    if (!M || !D || !G.NIGHT.nodes[h.node].say) { this.dial(); return; }
+    if (!M || !D || !G.NIGHT.nodes[h.node].say) { if (G.NIGHT.nodes[h.node].then) s.rules.apply({ id: `a3:${h.node}`, then: G.NIGHT.nodes[h.node].then }, {}); this.dial(); return; }
     const n = this.c.npcs;
     const run = new SceneRun(this.c.topics, G.NIGHT, { who: 'marlys', args: { ...this.args(EP) }, vars: this.vars(), mark: n && n.mark ? (t) => n.mark(t) : null, hooks: this.hooks('marlys'),
-      onEnd: () => { if (s.has('door.guiding.done') || (h.node === 'n0600' && s.has('door.guiding.climax'))) this.endNight(); else setTimeout(() => this.dial(), 400); } });
-    D.open({ speaker: M.h.speaker, name: this.nameOf('marlys'), role: '', room: EP, start: () => run.node(h.node), bye: () => { if (!s.has('door.guiding.climax')) setTimeout(() => this.dial(), 400); return null; } });
+      onEnd: () => this.afterHour() });
+    D.open({ speaker: M.h.speaker, name: this.nameOf('marlys'), role: '', room: EP, start: () => run.node(h.node), bye: () => { this.afterHour(); return null; } });
+  }
+  // an hour's talk over: at six, with the night told, the night ends; else the dial again (once: onEnd and bye both call)
+  afterHour() {
+    const R = this.nightRun, s = this.story; if (!R) return;
+    if (s.has('door.guiding.climax')) { this.endNight(); return; }
+    if (R.dialAt === R.at) return; R.dialAt = R.at;
+    setTimeout(() => this.dial(), 400);
   }
   // the Rest dial with her hours as its only stops (camp.js RestDial.stopsAt)
   dial() {

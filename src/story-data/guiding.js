@@ -309,7 +309,7 @@ export const NIGHT = {
     n2340: { then: ['f:gy.night.2340'], end: true }, // (she says nothing: the truck's own)
     n0100: { say: ['31:GY-13.9', { first: [{ id: '31:GY-13.10', when: 'truckLooked' }, '31:GY-13.11'] }], then: ['f:gy.night.0100'], end: true },
     n0200: { say: ['31:GY-13.12', '31:GY-13.13'], then: ['f:gy.night.0200'], end: true },
-    n0600: { say: [{ id: '31:GY-13.14', when: '!lampLit' }, '31:GY-13.15'], then: ['f:gy.night.0600'], go: [
+    n0600: { say: [{ id: '31:GY-13.14', when: 'f:gy.lamp.out & !lampLit' }, '31:GY-13.15'], then: ['f:gy.night.0600'], go: [
       { ask: '31:GY-13.c5', to: 'six' }, { ask: '31:GY-13.c6', to: 'six' }] },
     six: { say: ['31:GY-13.six.1', '31:GY-13.six.2', '31:GY-13.six.3', '31:GY-13.six.4', '31:GY-13.six.5', '31:GY-13.six.6', '31:GY-13.16'],
       then: ['f:door.guiding.climax', 'walt:31:GY-12.c5'], go: [
