@@ -1359,6 +1359,21 @@ async function main() {
     } catch (e) { console.warn('story E: episodes', e); }
   }
   // /e
+  // 7a: begin (Round 7 stream 7a, docs/story/60-side-stories.md S2, S3, S4), only under STORY_ON, after the e: block: Duane,
+  // Elaine, Kari and Lyle at their counters; the night at two on Big Moose (nightwatch), Fourtown's lights (skywatch) and
+  // the red lens, the howl survey (bearing lines, the ring), wolves, tracks, night prints. With the flag off none of it
+  // is fetched or hung
+  if (STORY_ON && story.v === 2 && window.__game.storyEpisodes) {
+    try {
+      const [{ connect7a }, { T, SceneRun, texts }, { loadWords }] = await Promise.all([import('./feed-side7a.js'), import('./topics.js'), import('./story-data/words.js')]);
+      const st = window.__game.storyTalk || {}, sm = window.__game.storySeams || {};
+      const S7A = await connect7a({ story, layer: sm.layer || window.__game.storyLayer || null, topics: st.topics || null, texts: st.texts || texts, T, SceneRun, loadWords, talk, npcs, scene, photo, inventory, journal, hud, record, tasks, player, parties, wind, world, tiles, camera, camp, lamp, audio, day, pointer, weather, energy, bear,
+        E: window.__game.storyEpisodes, guest: () => !!(window.__game.coop && window.__game.coop.guest) });
+      window.__game.side7a = { ...S7A, on: true };
+      console.log('story 7a: S2, S3, S4');
+    } catch (e) { console.warn('story 7a', e); }
+  }
+  // 7a: end
   // gl-d: the trip-end tally and the board (the game-loop round, stream D; docs/build/game-loop-brief.md). Pay lands on
   // the trip's card as it counts up (record.js ended → tasks.settle), never at the board; no cap on notices held
   // (the owner's call 2026-11-05), each with a deadline that fits it; the new kinds (task-kinds-2.js: creel, campsite, beaver, iceout, colour,

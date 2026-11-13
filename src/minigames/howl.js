@@ -17,7 +17,7 @@ export const HOWL = {
   hours: [23, 4],       // h: a station's Howl, 23:00 to 04:00
   quiet: 3 / 60,        // h: three game minutes before the answer
   listen: 6 / 60,       // h: the answer can be marked for this long after it comes
-  hear: 4200,           // m: the pack is heard within this
+  hear: 8000,           // m: the pack is heard within this (a calm night over the lakes)
   best: 3,              // h: best near 03:00
   chance: [0.55, 0.9],  // the answer's chance, far from 03:00 → at it (in hearing)
 };

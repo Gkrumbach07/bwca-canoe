@@ -25,7 +25,7 @@ export default {
   lyle: { ep: 16, when: 'month:8 & (dow:tue | dow:wed | dow:thu) & hour:10-16' },
   pins: ['s4.kill', 's4.pups'],
   wants: [
-    { who: 'kari', print: 's4.pups', when: 'f:ep.S4.yes & !f:ep.S4.counted & !f:ep.S4.moved', say: ['S4.conv.17'], then: ['f:ep.S4.counted'] },
+    { who: 'kari', print: 's4.pups', when: 'f:ep.S4.yes & !f:ep.S4.counted & !f:ep.S4.moved', say: [], then: ['f:ep.S4.counted'], to: 'count' }, // (Kari's words with the seeded count: her scene's 'count' node)
     { who: 'kari', print: 's4.kill', when: 'f:ep.S4.yes & !f:ep.S4.kill.shown', say: [], then: ['f:ep.S4.kill.shown'] },
   ],
   steps: [
