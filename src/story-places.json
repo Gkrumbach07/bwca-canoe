@@ -1930,7 +1930,14 @@
             0,
             0
           ],
-          "show": "f:pit.lifted"
+          "show": "f:pit.lifted",
+          "dotWhen": "f:world.pit.empty",
+          "dot": [
+            {
+              "when": "true",
+              "name": "An empty pit."
+            }
+          ]
         },
         {
           "id": "cellar.can.1",

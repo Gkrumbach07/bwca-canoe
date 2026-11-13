@@ -103,7 +103,7 @@ const places = [
     props: [
       { id: 'cellar.pit', kit: 'pit', at: [0, 0], show: '!f:pit.cleared', dotWhen: 'any(key.L6*)', dot: dot('Old pit') },
       { id: 'cellar.lid', kit: 'pitLid', at: [0, 0], show: 'f:pit.cleared & !f:pit.lifted', dot: dot('Lid') },
-      { id: 'cellar.hole', kit: 'pitOpen', at: [0, 0], show: 'f:pit.lifted' },
+      { id: 'cellar.hole', kit: 'pitOpen', at: [0, 0], show: 'f:pit.lifted', dotWhen: 'f:world.pit.empty', dot: dot('An empty pit.') }, // (after the end: n writes world.pit.empty; the words a build draft, 95-drafted-lines.md f.dot.pit.empty)
       { id: 'cellar.can.1', kit: 'ammoCan', at: [-0.2, 0], lift: -0.7, show: 'f:pit.lifted & !f:pit.can.1', dot: dot('Can') },
       { id: 'cellar.can.2', kit: 'ammoCan', at: [0.2, 0.05], lift: -0.7, show: 'f:pit.lifted & !f:pit.can.2', dot: dot('Can') },
       { id: 'cellar.note', kit: 'fieldNote', at: [-0.2, 0], lift: -0.48, show: 'f:pit.lifted & !f:pit.note', dot: dot('Note') },
