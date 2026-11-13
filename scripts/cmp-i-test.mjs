@@ -66,7 +66,8 @@ const HELPERS_I = () => {
   I.at = (doy, h) => { g.day.setClock(g.day.year, doy, h); const e = g.energy; if (e) { e.value = 1; try { if (e.needs) { e.needs.food = 1; e.needs.water = 1; e.needs.warmth = 1; } } catch { /* */ } } L.step(6); g.story.update(); L.step(4); I.tick(); };
   I.paper = () => { for (let k = 0; k < 4 && g.hud.paper; k++) { try { if (g.record && typeof g.record.close === 'function') g.record.close(); } catch { /* */ } L.step(10); } };
   I.endTalk = () => { const D = g.dialogue; if (D && D.convo) D.close(false); L.step(4); };
-  I.talk = (who) => { I.paper(); I.endTalk(); const ok = I.IC().talk(who); L.step(3); return { ok, convo: !!(g.dialogue && g.dialogue.convo) }; };
+  I.why = () => ({ paper: !!(g.hud && g.hud.paper), big: !!(g.hud && g.hud.big), onFoot: !!g.player.onFoot, tp: !!g.player.teleporting, mode: g.player.mode });
+  I.talk = (who) => { I.paper(); I.endTalk(); try { if (g.journal && g.journal.close) g.journal.close(); } catch { /* */ } const IC = I.IC(), f = who === 'denny' ? (IC.denny || IC.rockDenny || IC.visitF) : null; if (f) L.standAt(f.x + 1.4, f.z + 0.4); L.step(4); const pre = I.why(); const ok = IC.talk(who); L.step(3); return { ok, convo: !!(g.dialogue && g.dialogue.convo), pre, post: I.why() }; };
   I.cabin = async () => { const c = I.IC().cabinAt(); if (!c) return null; await L.near(c.x + 6, c.z + 6); I.tick(); return c; };
   I.lake = (name) => { const L0 = g.world.lakes.find((l) => l && l.name === name); return L0 ? { lake: L0.id, name: L0.name } : null; };
   // the map's lake-pick (map-book.js pickLake: the map open, a click on a lake answers): answered as a click would
