@@ -333,7 +333,7 @@ export async function connect7b(t) {
   // --- Gull's east bay: the notch looked at with the chart in the book ----------------------------------------------------------
   const notchTick = () => {
     if (!live() || has('s5.notch') || !has('nb.page.pilotchart') || !camera || !player) return;
-    const bay = PL('gull.sign'), n = P('gull.notch'); if (!bay || !n || !near(bay, 700)) return;
+    const bay = PL('gull.sign'), n = P('gull.notch') || PL('gull.notch'); if (!bay || !n || !near(bay, 700)) return; // (f's notch: the place, its cleft prop
     // looked at: the view (the camera) or the body (the way you stand or the bow points) within 22° of it
     const f = camera.getWorldDirection(new THREE.Vector3()), dx = n.x - player.x, dz = n.z - player.z, d = Math.hypot(dx, dz) || 1;
     const cos = (f.x * dx + f.z * dz) / (Math.hypot(f.x, f.z) * d || 1), b = player.forward || { x: 0, z: 0 }, cosB = (b.x * dx + b.z * dz) / d;

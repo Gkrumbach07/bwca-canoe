@@ -127,7 +127,7 @@ try {
       const g = window.__game, L = window.__L, S = window.__s7;
       const bay = window.__e.place('gull.sign'); await window.__e.ashore('gull.sign', 3); L.step(10); g.storyLayer.poll(); L.step(10);
       const no = window.__e.prop('gull.notch') || { x: -19340, z: 26805 };
-      const yaw = Math.atan2(-(no.z - g.player.z), no.x - g.player.x); g.player.speed = 0; L.look(L.yawTo(no), 0.05); L.step(10); L.look(L.yawTo(no), 0.05); L.step(4); void yaw;
+      const yaw = Math.atan2(-(no.z - g.player.z), no.x - g.player.x); g.player.speed = 0; L.look(L.yawTo(no), 0.05); g.player.heading = L.yawTo(no); L.step(10); L.look(L.yawTo(no), 0.05); g.player.heading = L.yawTo(no); L.step(2); void yaw;
       S.d().notchTick(); L.step(4);
       const f = g.camera.getWorldDirection(new g.camera.position.constructor()), bd = (Math.atan2(f.x, -f.z) * 180 / Math.PI + 360) % 360, bn = (Math.atan2(no.x - g.player.x, -(no.z - g.player.z)) * 180 / Math.PI + 360) % 360;
       return { look: Math.round(bd), toNotch: Math.round(bn), page: g.story.has('nb.page.pilotchart'), notch: g.story.has('s5.notch'), chart: g.story.has('ep.S5.chart'), L2D: g.story.has('key.L2D'), L3D: g.story.has('key.L3D'), d: Math.round(Math.hypot(bay.x - g.player.x, bay.z - g.player.z)) };
