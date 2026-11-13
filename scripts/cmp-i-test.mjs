@@ -67,7 +67,7 @@ const HELPERS_I = () => {
   I.paper = () => { for (let k = 0; k < 4 && g.hud.paper; k++) { try { if (g.record && typeof g.record.close === 'function') g.record.close(); } catch { /* */ } L.step(10); } };
   I.endTalk = () => { const D = g.dialogue; if (D && D.convo) D.close(false); L.step(4); };
   I.why = () => ({ paper: !!(g.hud && g.hud.paper), big: !!(g.hud && g.hud.big), onFoot: !!g.player.onFoot, tp: !!g.player.teleporting, mode: g.player.mode });
-  I.talk = (who) => { I.paper(); I.endTalk(); try { if (g.journal && g.journal.close) g.journal.close(); } catch { /* */ } const IC = I.IC(), f = who === 'denny' ? (IC.denny || IC.rockDenny || IC.visitF) : null; if (f) L.standAt(f.x + 1.4, f.z + 0.4); L.step(4); const pre = I.why(); const ok = IC.talk(who); L.step(3); return { ok, convo: !!(g.dialogue && g.dialogue.convo), pre, post: I.why() }; };
+  I.talk = (who) => { I.paper(); I.endTalk(); try { if (g.journal && g.journal.close) g.journal.close(); } catch { /* */ } const IC = I.IC(), f = who === 'denny' ? (IC.denny || IC.rockDenny || IC.visitF) : null; if (f) L.standAt(f.x + 1.4, f.z + 0.4); else { const S = g.outfitter.layout(38); if (S) L.standAt(S.centre.x + 25, S.centre.z + 25); } L.step(4); const pre = I.why(); const ok = IC.talk(who); L.step(3); return { ok, convo: !!(g.dialogue && g.dialogue.convo), pre, post: I.why() }; };
   I.cabin = async () => { const c = I.IC().cabinAt(); if (!c) return null; await L.near(c.x + 6, c.z + 6); I.tick(); return c; };
   I.lake = (name) => { const L0 = g.world.lakes.find((l) => l && l.name === name); return L0 ? { lake: L0.id, name: L0.name } : null; };
   // the map's lake-pick (map-book.js pickLake: the map open, a click on a lake answers): answered as a click would
@@ -162,10 +162,10 @@ try {
     await step('A7 Frank: a lake told only to him comes back empty', async () => {
       const lk = await a.evaluate(() => window.__i.lake('Cherokee Lake') || window.__i.lake('Brule Lake'));
       await a.evaluate((d) => window.__i.at(d + 7, 7), ctx.d0);
-      await a.evaluate(() => window.__i.talk('frank')); await hear(a);
+      await a.evaluate(async () => { const g = window.__game, S = g.outfitter.layout(38); if (S) await window.__L.near(S.centre.x + 25, S.centre.z + 25); }); ctx.ft = await a.evaluate(() => window.__i.talk('frank')); await hear(a);
       const r = await say(a, 'Where are you headed next?'); await a.evaluate((v) => window.__i.pick(v), lk); const fl = await hear(a); await a.evaluate(() => window.__i.endTalk());
       const f = await a.evaluate((d) => { window.__i.at(d + 13, 10); return { ...window.__i.facts(['canary.clear.frank', 'frank.cleared']), w: window.__i.walt().includes('32:5.11.clear') }; }, ctx.d0);
-      result('A7 Frank told a lake ("Suit yourself." / "Good walleye."); five days on: "I told Frank {lake}. Nobody came." (Frank cleared)', r.ok && fl.some((t) => /Suit yourself|Good walleye/.test(t)) && f['canary.clear.frank'] === lk.name && f['frank.cleared'] && f.w, { lk, fl, f });
+      result('A7 Frank told a lake ("Suit yourself." / "Good walleye."); five days on: "I told Frank {lake}. Nobody came." (Frank cleared)', r.ok && fl.some((t) => /Suit yourself|Good walleye/.test(t)) && f['canary.clear.frank'] === lk.name && f['frank.cleared'] && f.w, { lk, fl, f, ft: ctx.ft, r });
     });
     await a.close();
   }
