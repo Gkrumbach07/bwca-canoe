@@ -300,7 +300,7 @@ export const steps = [
       const r = await page.evaluate(async () => {
         const g = window.__game, E = window.__e;
         if (g.outfitter.layout(25)) window.__t.walkOut(25); E.at(2026, 215, 11); // (3 August)
-        const flyers = E.R().flyers(25).length;
+        const flyers = E.R().flyers(25).filter((f) => f.id === 'ep:S7').length; // j1: S7's notice only (7c's M1 bear flyer is on 25's board in July)
         await E.ashore('s7.mummos', 4);
         for (let k = 0; k < 10; k++) { g.storyLayer.poll(); window.__L.step(5); await window.__L.wait(50); }
         const built = ['s7.lilacs', 's7.lilacs.green', 's7.step'].filter((id) => E.built(id));
