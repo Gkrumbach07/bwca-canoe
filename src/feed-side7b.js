@@ -282,6 +282,12 @@ export async function connect7b(t) {
     else if (over && diveOk() && canoeNear) player.prompt = { key: 'E', text: `${(player.prompt && player.prompt.text) || 'Climb into the canoe'} · Q Dive` };
     if (over && diveOk() && input && input.pressed && input.pressed('KeyQ')) startDive();
   };
+  // the case into your things once you are out of the water (a swimmer's hands have no room for it: give:item fails there)
+  const caseTick = () => {
+    if (!live() || !has('s5.case') || has('ep.S5.given') || doc().caseItem || !inventory) return;
+    if (inventory.count('mapcase', { reachable: false }) > 0) { doc().caseItem = true; dirty(); return; }
+    if (player && player.mode !== 'swim') { apply(['give:item.mapcase'], 'case.item'); if (inventory.count('mapcase', { reachable: false }) > 0) { doc().caseItem = true; dirty(); } }
+  };
   // the place door: the wreck read through calm water from the canoe (the first time it is seen)
   const seenTick = () => {
     if (!live() || has('s5.wreck.seen') || !player || player.mode !== 'paddle') return;
@@ -370,7 +376,7 @@ export async function connect7b(t) {
     try {
       if (live()) { diveTick(dt); swimTick(dt); }
       slow += dt;
-      if (slow > 0.5) { slow = 0; peopleTick(); seatWreck(); seenTick(); peteTick(); notchTick(); blazeTick(); pitTick(); if (!wall.mesh) wall.build(); }
+      if (slow > 0.5) { slow = 0; peopleTick(); seatWreck(); seenTick(); caseTick(); peteTick(); notchTick(); blazeTick(); pitTick(); if (!wall.mesh) wall.build(); }
     } catch (e) { if (!warned) { warned = true; console.warn('7b: the tick', e); } }
   };
   if (lamp && typeof lamp.update === 'function') { const u0 = lamp.update.bind(lamp); lamp.update = (dt) => { u0(dt); frame(dt); }; }

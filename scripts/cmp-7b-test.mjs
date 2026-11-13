@@ -107,12 +107,13 @@ try {
     for (let k = 0; k < 12; k++) await W(page, () => window.__L.step(30));
     await page.keyboard.up('KeyE');
     const d1 = await W(page, () => { window.__L.step(80); const g = window.__game; return { dive: !!window.__s7.d().dive(), case: g.story.has('s5.case'), ep: g.story.has('ep.S5.case'), item: g.inventory.count('mapcase', { reachable: false }), page: g.story.has('nb.page.pilotchart'), work: window.__s7.d().doc().work, mode: g.player.mode }; });
-    result('S5d Q dives again from the water; E held behind the seat: the case comes free (the map case, the chart page)', d0.on && d1.case && d1.ep && d1.item > 0 && d1.page, { d0, d1 });
+    result('S5d Q dives again from the water; E held behind the seat: the case comes free (the chart page)', d0.on && d1.case && d1.ep && d1.page, { d0, d1 });
     // E: back in the canoe (the swim's own re-entry)
     const e0 = await W(page, () => { const g = window.__game, c = g.player.carry && g.player.carry.drop; if (c) { g.player.x = c.x + 1.5; g.player.z = c.z; } window.__L.step(4); return { d: c ? 1.5 : null }; });
     await key(page, 'KeyE', 6);
-    const e1 = await W(page, () => { window.__L.step(30); return { mode: window.__game.player.mode }; });
-    result('S5e E beside the canoe: back in it (paddling)', e1.mode === 'paddle', { e0, e1 });
+    const e1 = await W(page, () => { window.__L.step(30); const g = window.__game, p = g.player, c = p.carry && p.carry.drop; const out = { mode: p.mode, prompt: p.prompt && p.prompt.text, d: c ? +Math.hypot(c.x - p.x, c.z - p.z).toFixed(2) : null };
+      if (p.mode === 'swim') { out.swimIn = p.swimIn(); window.__L.step(30); out.mode2 = p.mode; } out.item = g.inventory.count('mapcase', { reachable: false }); return out; });
+    result('S5e E beside the canoe: back in it (paddling); the map case in your things', e1.mode === 'paddle' && e1.item > 0, { e0, e1 });
     // Pete with the case: "Is that—" … "It's yours."
     await W(page, async () => { window.__e.at(2026, 202, 11); await window.__e.toStore(51); });
     await W(page, async () => { await window.__s7.staged('pete'); window.__s7.talk('pete', 51); window.__L.step(4); });
