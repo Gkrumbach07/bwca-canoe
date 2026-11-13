@@ -84,6 +84,10 @@ export const WALT_LINES = [
   { id: '30:4.9.page.4', section: 'years' },
   { id: '30:4.6/the-thursday-lunch-tier.w1', section: 'odd' },
   // /a2
+  // c: begin (co-op, Round 3: the pit with company; campaign-design §7.2. N42's line, written once by coop-story.js. A build
+  // draft quoting NB72 (docs/story/95-drafted-lines.md, stream c), drawn from `text` until the writers anchor it)
+  { id: 'c.walt.n42', section: 'farend', text: 'Not with company on the lake.' },
+  // c: end
 ];
 
 // a text id with no row: its section by its id's prefix (the longest that matches), else 'odd'. Leads are a person's or a
