@@ -146,6 +146,10 @@ export const FACTS = [
   { key: 'mg.dive.', kind: 'bool', doc: '60 S5 the dive: mg.dive.seen | case | up | brought (minigames/dive.js)' },
   { key: 'mg.pitOpen.', kind: 'bool', doc: '60 S6 the pit at Bootleg opened plank by plank: mg.pitOpen.open (minigames/dive.js pitOpen)' },
   // 7b: end
+  // b5: begin (Round 5, the boys: 32 §11 "State"; the people's own facts are under bob. frank. denny. carol. gene.)
+  { key: 'boys.', kind: 'any', doc: '32 §5.5–§5.9 the boys together: boys.met | round | round.denny | invited | permit | nicknames | visited | pan.offered | pan | bet | bet.won | bet.frank | story1998 | cup | flare.seen | flare | out15 | slide' },
+  { key: 'mg.silhouette.', kind: 'bool', doc: '32 §5.3, bible 5.2 lock 3B: the slide held up against the view, matched (minigames/silhouette.js)' },
+  // b5: end
 ];
 
 // the arcs whose yields are the big findings (§3.3 story.big), and the doors the player can be offered

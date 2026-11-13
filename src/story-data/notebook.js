@@ -101,6 +101,10 @@ export const UND = [
   // x: the back door = Pietro (30 §4.7): 10 §11.2 has no note for it; a drafted one by id (docs/story/95), read through
   // words.js where the note is drawn (noteId)
   { nb: 'NB70', when: 'f:ink.backdoor | f:knows.backdoor', note: null, noteId: 'd95.und.backdoor', words: ['back door'], nick: 'backdoor' },
+  // b5: begin (Round 5, the boys: 10 §11.2's own notes; NB55 is f's row, NB16's is the Little Sag ink's)
+  { nb: 'NB60', when: 'f:carol.paddle.shown', note: 'Frost. Gene\'s paddle\'s still there.', words: [] },
+  { nb: 'NB64', when: 'f:bob.matt98 & read:NB64', note: 'Sparky\'s boy was sick in \'98 too. Denny\'s boy.', words: ['Sparky\'s boy'] },
+  // b5: end
 ];
 // (every note is 10 §11.2's own words; the easy nicknames other than the Front Porch have no note written there yet, so
 // they underline nothing until the writers give one: a leftover for the owner, not invented here)

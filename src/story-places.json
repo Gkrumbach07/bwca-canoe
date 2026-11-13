@@ -3666,6 +3666,119 @@
         }
       ],
       "triggers": []
+    },
+    {
+      "id": "boys.c1210",
+      "name": "Little Saganaga, C1210: the boys' site, the sitting rock at the point",
+      "doc": "docs/story/32-the-boys.md §2.2, §5.9.8, §8 (b5)",
+      "b5": true,
+      "x": 15072,
+      "z": 6830,
+      "lake": "Little Saganaga Lake",
+      "shore": true,
+      "search": 60,
+      "clear": 0,
+      "props": [
+        {
+          "id": "boys.rock",
+          "kit": "swimRock",
+          "at": [
+            7,
+            -0.4
+          ],
+          "wet": "edge",
+          "show": "true",
+          "dot": []
+        },
+        {
+          "id": "boys.flare",
+          "kit": "flareCase",
+          "at": [
+            7.6,
+            1.6
+          ],
+          "show": "f:boys.flare.seen & !f:boys.flare",
+          "dot": [
+            {
+              "when": "true",
+              "name": "An old flare cartridge"
+            }
+          ]
+        },
+        {
+          "id": "boys.cup",
+          "kit": "tinCup",
+          "at": [
+            6.6,
+            1.5
+          ],
+          "show": "date:08-14..08-14 & hour:20-24",
+          "dot": []
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "boys.flare",
+          "verb": "Take",
+          "when": "!f:boys.flare",
+          "then": [
+            "f:boys.flare",
+            "give:item.flarecase"
+          ]
+        }
+      ],
+      "triggers": [
+        {
+          "on": "readHere",
+          "nb": "NB16",
+          "r": 60,
+          "when": "f:nb.found",
+          "then": [
+            "f:boys.flare.seen"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "boys.frost",
+      "name": "Frost Lake, C1125 (Gene's): Gene's paddle in the crotch of the pine above the landing",
+      "doc": "docs/story/32-the-boys.md §5.2, §8; 10 NB60 (b5)",
+      "b5": true,
+      "x": 30058,
+      "z": 10723,
+      "lake": "Frost Lake",
+      "shore": true,
+      "search": 60,
+      "clear": 0,
+      "props": [
+        {
+          "id": "boys.paddle",
+          "kit": "paddlePine",
+          "at": [
+            2.5,
+            9
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "A paddle, in the pine"
+            }
+          ]
+        }
+      ],
+      "verbs": [],
+      "triggers": [
+        {
+          "on": "readHere",
+          "nb": "NB60",
+          "r": 60,
+          "when": "f:nb.found",
+          "then": [
+            "f:boys.frost.read"
+          ]
+        }
+      ]
     }
   ],
   "portages": [
@@ -5472,6 +5585,70 @@
         "portage": 123,
         "end": 0,
         "off": 0
+      },
+      "boys.c1210": {
+        "props": {
+          "boys.rock": {
+            "x": 15102.5,
+            "z": 6837.2,
+            "heading": 2.952,
+            "sd": 0.5,
+            "y": 485.3
+          },
+          "boys.flare": {
+            "x": 15101.5,
+            "z": 6839,
+            "heading": 2.952,
+            "sd": 2.4,
+            "y": 485.3
+          },
+          "boys.cup": {
+            "x": 15102.5,
+            "z": 6839.1,
+            "heading": 2.952,
+            "sd": 2.1,
+            "y": 485.3
+          }
+        },
+        "lanes": [],
+        "x": 15109.3,
+        "z": 6838.9,
+        "n": [
+          -0.1885,
+          0.9821
+        ],
+        "u": [
+          -0.9821,
+          -0.1885
+        ],
+        "lakeId": 41,
+        "off": 38,
+        "tried": 11
+      },
+      "boys.frost": {
+        "props": {
+          "boys.paddle": {
+            "x": 30066,
+            "z": 10717.7,
+            "heading": -0.717,
+            "sd": 8,
+            "y": 542.4
+          }
+        },
+        "lanes": [],
+        "x": 30058.2,
+        "z": 10722.8,
+        "n": [
+          0.6571,
+          -0.7538
+        ],
+        "u": [
+          0.7538,
+          0.6571
+        ],
+        "lakeId": 281,
+        "off": 0,
+        "tried": 11
       }
     },
     "portages": {

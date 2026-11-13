@@ -16,6 +16,7 @@ import { RULES_GUIDING } from './rules-guiding.js'; // a3: the guiding years (Ro
 import { RULES_COMPANY } from './rules-company.js'; // p: the company and the press (Round 6)
 import { RULES_FAMILY } from './rules-family.js'; // a4: the family (Round 6)
 import { RULES_SIDE7B } from './rules-side7b.js'; // 7b: S5 the chart (L2D, L3D), S6 the eye for a pit (L6C)
+import { RULES_BOYS } from './rules-boys.js'; // b5: the boys (Round 5)
 
-export const RULES_ALL = [...RULES_CORE, ...RULES_BOOK, ...RULES_LAYER, ...RULES_TALK, ...RULES_BEATS, ...RULES_MINING, ...RULES_EPISODES, ...RULES_FAREND, ...RULES_ENDINGS, ...RULES_X, ...RULES_GUIDING, ...RULES_COMPANY, ...RULES_FAMILY, ...RULES_SIDE7B]; // (7b: ...RULES_SIDE7B)
+export const RULES_ALL = [...RULES_CORE, ...RULES_BOOK, ...RULES_LAYER, ...RULES_TALK, ...RULES_BEATS, ...RULES_MINING, ...RULES_EPISODES, ...RULES_FAREND, ...RULES_ENDINGS, ...RULES_X, ...RULES_GUIDING, ...RULES_COMPANY, ...RULES_FAMILY, ...RULES_SIDE7B, ...RULES_BOYS]; // (7b: ...RULES_SIDE7B)
 

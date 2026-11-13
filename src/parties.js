@@ -187,6 +187,14 @@ export const FIXED_PARTIES = [
   { id: 'ostbys', kind: 'pair', size: 1, members: [{ female: false, age: 'old' }], canoes: 1, date: '08-03..08-09',
     sites: [[-5951, 18815]], land: 13, leave: 10, story: true, src: 's' },
   // s: end
+  // b5: begin (Round 5, the boys: 32 §5.9.1, §11 "People and schedules"). Bob, Frank and Denny, every year from 2026: in
+  // at Sawbill EP 38 on 8 August and camped on Kelso (site 3, the site before the 473 on their route: the builders' pick),
+  // C1210 on Little Sag from the 9th (by 16:00) to the 14th, out at the Sawbill landing on the 15th by 14:00. Two canoes
+  // (an old aluminium with a scorched thwart, and a Kevlar). At C1210 the three are drawn by boys-cast.js (FieldPersons at
+  // the camp, the canoe on the bet: it hides the camp's own figures there); on Kelso the camp draws them
+  { id: 'boys.in', kind: 'boys', size: 3, members: [{ female: false, age: 'old' }, { female: false, age: 'old' }, { female: false, age: 'old' }], canoes: 2, date: '08-08..08-08', sites: [[23289, 19716]], land: 16, leave: 8, story: true, src: 'b5' },
+  { id: 'boys', kind: 'boys', size: 3, members: [{ female: false, age: 'old' }, { female: false, age: 'old' }, { female: false, age: 'old' }], canoes: 2, date: '08-09..08-14', sites: [[15082, 6845]], land: 16, leave: 9, story: true, src: 'b5' },
+  // b5: end
 ];
 const mdOf = (T) => { const d = new Date(T * 86400000); return { m: d.getUTCMonth() + 1, md: (d.getUTCMonth() + 1) * 100 + d.getUTCDate(), dow: d.getUTCDay() }; };
 export function fixedDay(e, T) {

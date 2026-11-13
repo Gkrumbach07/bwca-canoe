@@ -144,6 +144,26 @@ export const WALT_LINES = [
   { id: '33:6.13.w.1', section: 'odd' },
   { id: '33:6.10.after', section: 'odd' },
   // a4: end
+  // b5: begin (Round 5, the boys: 32 §5, §6; the lines whose words are a quote inside a block, by their anchors. The case's
+  // own lines, 32:6.x, take 32's default section (odd) and need no row; stream i adds the informant's heading)
+  { id: 'w.b5.tell1', section: 'odd', ref: '32:5.5.1.tell1' },
+  { id: 'w.b5.rings', section: 'people', ref: '32:5.6.rings' },
+  { id: 'w.b5.sparky', section: 'names', ref: '32:5.6.sparky' },
+  { id: 'w.b5.kek', section: 'people', ref: '32:5.7.kek.1' },
+  { id: 'w.b5.frankguards', section: 'people', ref: '32:5.8.frank.1' },
+  { id: 'w.b5.notfrank', section: 'odd', ref: '32:6.14', replaces: '32:6.12' },
+  { id: 'w.b5.1998', section: 'years', ref: '32:5.9.6.w.1' },
+  { id: 'w.b5.1998matt', section: 'years', ref: '32:5.9.6.w.2' },
+  { id: 'w.b5.eastbay', section: 'farend', ref: '32:5.9.6.w.3', annotates: 'w.b5.1998' },
+  { id: 'w.b5.slide', section: 'years', ref: '32:5.3.slide.2' },
+  { id: 'w.b5.match', section: 'farend', ref: 'd95.b5.slide.match' },
+  { id: 'w.b5.flare', section: 'names', ref: '32:5.9.8.flare.2' },
+  { id: 'w.b5.pan', section: 'people', ref: 'd95.b5.pan.cook' },
+  { id: '32:6.1', section: 'names' },
+  { id: '32:6.10', section: 'odd' },   // the frames (32 §6): Walt to Bob, Frank's patch, Frank in the lot
+  { id: '32:6.12', section: 'odd' },
+  { id: '32:6.13', section: 'odd' },
+  // b5: end
 ];
 
 // a text id with no row: its section by its id's prefix (the longest that matches), else 'odd'. Leads are a person's or a

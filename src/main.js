@@ -1560,6 +1560,26 @@ async function main() {
     } catch (e) { console.warn('story g: the end games', e); }
   }
   // g: end
+  // b5: begin (campaign Round 5, the boys; docs/story/32-the-boys.md), only under STORY_ON: the boys' things
+  // (boys-items.js), the people at Sawbill 38 and Frank at Farm 31, the yard, the camp at Little Sag, the laker bet, the
+  // slides, Gene's slide held up against the view (the silhouette minigame on E's registry), the fixed party (parties.js
+  // FIXED_PARTIES), Frank in the lot on a late drive. With the flag off none of it is fetched
+  if (STORY_ON && story.v === 2 && window.__game.storyTalk) {
+    try {
+      const [BI, { boysCast }, { loadWords }] = await Promise.all([import('./boys-items.js'), import('./boys-cast.js'), import('./story-data/words.js')]);
+      const { topics, cast, texts } = window.__game.storyTalk, sm = window.__game.storySeams || {}, E = window.__game.storyEpisodes || {};
+      const Wb = await loadWords(['boys', 'drafted']); if (Wb.boys) texts.add(Wb.boys); if (Wb.drafted) texts.add(Wb.drafted);
+      BI.defineBoysItems((id) => { const e = texts.entry(id); return e && typeof e.text === 'string' ? e.text : null; });
+      boysCast.attach({ story, cast, npcs, talk, topics, texts, outfitter, player, day, world, scene, tiles, rides, actors, pointer, hud, layer: sm.layer || null,
+        profile, inventory, pencil: sm.pencil || null, permits: window.__game.permits || null, fishing, photo, fires, parties, partyCamps, wind,
+        minigames: E.minigames || null, show: E.show || null });
+      const updB5 = outfitter.update.bind(outfitter);
+      outfitter.update = (dt) => { updB5(dt); try { boysCast.update(dt); } catch (e) { if (!boysCast.warned) { boysCast.warned = true; console.warn('story b5: the boys', e); } } };
+      window.__game.storyBoys = { boysCast, items: BI, on: true };
+      console.log('story b5: the boys');
+    } catch (e) { console.warn('story b5: the boys', e); }
+  }
+  // b5: end
   // gl-d: the trip-end tally and the board (the game-loop round, stream D; docs/build/game-loop-brief.md). Pay lands on
   // the trip's card as it counts up (record.js ended → tasks.settle), never at the board; no cap on notices held
   // (the owner's call 2026-11-05), each with a deadline that fits it; the new kinds (task-kinds-2.js: creel, campsite, beaver, iceout, colour,

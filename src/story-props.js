@@ -677,6 +677,47 @@ function logBox({ rng }) {
   return { geo: b.build(), dots: [{ y: h + 0.15, r: 0.45 }] };
 }
 // 7c: end
+// b5: begin (Round 5, the boys: 32 §5.2, §5.9.8, §12 #4, #6): Gene's paddle wedged blade up in the crotch of a red pine
+// above C1125's landing (silver-grey, the varnish long gone, *G.A. '87* and four notches on the grip: too small to model,
+// the camera reads them); the spent flare cartridge in the crack of Walt's rock; Walt's dented tin cup on the rock
+const COL_B = { paddle: C(0xa8a49a), paddleEnd: C(0x8c877c), flare: C(0x9a3a2e), brass: C(0xb08a48), tin: C(0x9a9890), whiskey: C(0x7a4a1c) };
+function paddlePine({ rng }) {
+  const b = new PropBuilder(), H = 16 + rng() * 2, r0 = 0.3, r1 = 0.08, fork = 2.3;
+  b.cyl(V(0, -0.2, 0), V(0, fork, 0), r0, r0 * 0.82, 10, TILE.BARK, COL.bark, { jitter: 0.015, rng });
+  // the crotch: two leaders out of the fork, the paddle's shaft dropped between them
+  for (const s of [-1, 1]) {
+    const top = V(s * 1.1, H, 0.2 * s);
+    b.cyl(V(0, fork - 0.1, 0), top, r0 * 0.6, r1, 9, TILE.BARK, (t) => COL.bark.clone().lerp(COL.barkRed, Math.min(1, t * 1.6)), { ts: [0, 0.4, 1], jitter: 0.015, rng });
+    for (let k = 0; k < 5; k++) {
+      const y = H * (0.68 + (k / 5) * 0.3), a = rng() * Math.PI * 2, L = 1.3 + rng() * 1.3, x0 = s * 1.1 * ((y - fork) / (H - fork));
+      const p1 = V(x0 + Math.cos(a) * L, y + 0.5, Math.sin(a) * L);
+      b.cyl(V(x0, y, 0), p1, 0.05, 0.02, 5, TILE.BARK, COL.bark);
+      b.box(p1.clone().add(V(0, 0.15, 0)), V(Math.cos(a), 0, Math.sin(a)), V(0, 1, 0), V(-Math.sin(a), 0, Math.cos(a)), 0.9, 0.35, 0.7, TILE.FIBRE, COL.needles);
+    }
+  }
+  // the paddle, blade up, facing the water (-z): grip down in the fork, the blade above it
+  const g = V(0, fork - 0.25, -0.12), lean = V(0.05, 1, -0.12).normalize();
+  const sh = g.clone().add(lean.clone().multiplyScalar(0.95));
+  b.cyl(g, sh, 0.017, 0.016, 6, TILE.WOOD, COL_B.paddle);
+  b.box(g.clone().add(lean.clone().multiplyScalar(-0.04)), V(1, 0, 0), lean, V(0, 0, 1), 0.06, 0.05, 0.022, TILE.WOOD, COL_B.paddleEnd); // the grip
+  const bc = sh.clone().add(lean.clone().multiplyScalar(0.3));
+  b.box(bc, V(1, 0, 0), lean, V(0, 0, 1), 0.095, 0.32, 0.009, TILE.WOOD, COL_B.paddle); // the beavertail blade
+  return { geo: b.build(), dots: [{ y: fork + 0.6, r: 0.75, part: 'paddle' }] };
+}
+function flareCase() {
+  const b = new PropBuilder();
+  b.cyl(V(0, 0.012, -0.05), V(0.01, 0.022, 0.05), 0.012, 0.012, 7, TILE.PAINT, COL_B.flare, { cap1: true, capTile: TILE.METAL, capCol: COL_B.brass });
+  return { geo: b.build(), dots: [{ y: 0.05, r: 0.35 }] };
+}
+function tinCup() {
+  const b = new PropBuilder();
+  b.cyl(V(0, 0, 0), V(0, 0.07, 0), 0.04, 0.045, 9, TILE.METAL, COL_B.tin, { cap0: true, capTile: TILE.METAL, capCol: COL_B.tin });
+  b.cyl(V(0, 0.015, 0), V(0, 0.022, 0), 0.036, 0.036, 9, TILE.PLAIN, COL_B.whiskey, { cap1: true, capTile: TILE.PLAIN, capCol: COL_B.whiskey }); // a finger of whiskey
+  const loop = []; for (let k = 0; k <= 8; k++) { const a = Math.PI * (k / 8); loop.push(V(0.045 + Math.sin(a) * 0.028, 0.055 - (1 - Math.cos(a)) * 0.0, 0).add(V(0, -Math.cos(a) * 0.02 - 0.015, 0))); }
+  b.tube(loop, 0.004, 4, TILE.METAL, COL_B.tin);
+  return { geo: b.build(), dots: [] };
+}
+// b5: end
 const REGISTRY = { stumpCut, quartzCobble, crib, landingRock, redPine, gradeMouth, slab, pole, drillRod,
   casing, coreRack, boxLid, trench, stockpile, stationStake, creekRun, beaverDam, digPit, surveyLath, surveyTag, shovelBlade, twoStumps, cafeTable, urn, coolers, launch, // (a2: the mining years' kits)
   lilacs, stoneStep, foundation, bedFrame, stoneRing, swimRock, enamelPot, sandShape, // e:
@@ -684,6 +725,7 @@ const REGISTRY = { stumpCut, quartzCobble, crib, landingRock, redPine, gradeMout
   towDock, oldFireRing, pineStub, bunkhouse, bunkDoor, bunkLamp, boathouse, // a3:
   sled, stovepipe, squareHollow, bedSpring, tobaccoTin, rustRow, beaverLodge, spinner, // s: S8
   bearClaw, bearScat, bearBarrel, logBox, // 7c:
+  paddlePine, flareCase, tinCup, // b5:
 };
 // 7a: begin (Round 7 stream 7a: S2's west site, S3's long rock and north bay, S4's kill: story-props-7a.js)
 Object.assign(REGISTRY, KITS_7A);

@@ -27,6 +27,8 @@ mergeLeads(LM);
 import * as LG from './story-data/leads-guiding.js';
 mergeLeads(LG);
 // /a3
+import * as LB from './story-data/leads-boys.js'; // b5: the boys' rings (Round 5)
+mergeLeads(LB); // b5
 export function mergeLeads(M) {
   for (const [k, v] of Object.entries(M.LAKES || {})) if (!(k in LAKES1)) LAKES1[k] = v;
   for (const [k, v] of Object.entries(M.PLACES || {})) if (!(k in PLACES)) PLACES[k] = v;
