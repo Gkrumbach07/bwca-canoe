@@ -1508,12 +1508,6 @@ async function main() {
     pause: () => renderer.setAnimationLoop(null),
     resume: () => { last = performance.now(); renderer.setAnimationLoop(tick); },
   });
-  // a test hook: the render loop held and let go (window.__game.step still runs and draws frames by hand)
-  window.__game.loop = {
-    paused: false,
-    pause() { this.paused = true; renderer.setAnimationLoop(null); },
-    resume() { this.paused = false; last = performance.now(); renderer.setAnimationLoop(tick); },
-  };
   let booted = false; // the outfitter's start panel waits until the title card is away
 
 }
