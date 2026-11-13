@@ -482,7 +482,7 @@ function on3() { R3 = true; relCache.clear(); }
 async function slice3(main, rp) {
   const out = report.sliceA3 = { witnesses: [], plan: null, branches: [], warn: [] };
   if (!main.ok || !rp || !rp.ok) { res('slice A3: slice 1\'s end to start from', false); return; }
-  on3();
+  on2(); on3(); // (slice 2's world handling too: a talk's choices read in its own world; --only-a3 skips slice 2)
   const S1 = rp.S;
   const m3 = chain([...MAIN3.map((g) => g.when), END3], S1);
   out.plan = m3.path;
