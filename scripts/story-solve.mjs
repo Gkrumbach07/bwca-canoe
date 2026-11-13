@@ -640,7 +640,7 @@ const SCENE_ENTRIES = {
   mary: { first: 'true', hub: 'f:mary.met', table: 'f:kettle.lid & !f:mary.lid.given', papers: 'f:mary.lid.given & !f:mary.table' },
   tasha: { meet: 'f:kettle.notice & !f:tasha.met', hub: 'f:tasha.met', done: 'f:kettle.fill.up & f:kettle.fill.trench & f:kettle.fill.pond & f:kettle.secchi' },
   // a3: the guiding years' scenes, where guiding.js's entries start them
-  hap: { first: '!f:hap.met', hub: 'f:hap.met', tow: 'f:hap.day & (f:gy.tow | f:gy.tow.told) & !f:hap.tow.asked', blunt2: 'f:hap.tow.blunt', kind2: 'f:hap.tow.kind', far: 'f:hap.tow.right & !f:hap.farend' },
+  hap: { first: '!f:hap.met', hub: 'f:hap.met', tow: 'f:hap.day & (f:gy.tow | f:gy.tow.told) & !f:hap.tow.asked', blunt2: 'f:hap.tow.blunt & trips.since(hap.tow.blunt)>=1', kind2: 'f:hap.tow.kind & trips.since(hap.tow.kind)>=1', far: 'f:hap.tow.right & !f:hap.farend' },
   marlys: { tent: '!f:marlys.met', intro: '!f:marlys.met', again: 'f:marlys.met', ask: 'f:gy.register & !f:marlys.night' },
   nate: { first: '!f:nate.met', again: 'f:nate.met' },
   sheila: { first: '!f:sheila.met', again: 'f:sheila.met', overdue: 'northwind2', found: 'f:sheila.overdue.found' },
