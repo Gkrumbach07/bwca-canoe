@@ -1134,7 +1134,9 @@ async function slice2(main, rp) {
     const to = chain(d.via, S1, d.block ? { block: d.block } : {});
     if (!to.ok) { res(`slice 2 re-entry: ${d.id}: the decline is reachable`, false, { at: to.fail }); out.reentry.push({ id: d.id, reached: false, at: to.fail }); continue; }
     const from = new State(to.S); if (d.held) from.r2.held = [...d.held];
-    const back = chain([...MAIN2.map((g) => g.when).filter((w) => d.end === END2 || !/mary\.|kettle\.(notice|done|bottles|fill|secchi)|tasha\.|heard\.background|kettle\.rain|ringed:kettle/.test(w)), d.end], from, d.block ? { block: d.block } : {});
+    // (final join: the way back searched with 20000 states: the waves' keeper topics, episodes and rules widen every
+    // porch visit, and "Not today." needs the ask again, "Let's go.", then the hub: 6000 ran out on the way, not the way)
+    const back = chain([...MAIN2.map((g) => g.when).filter((w) => d.end === END2 || !/mary\.|kettle\.(notice|done|bottles|fill|secchi)|tasha\.|heard\.background|kettle\.rain|ringed:kettle/.test(w)), d.end], from, { max: Math.max(MAX, 20000), ...(d.block ? { block: d.block } : {}) });
     const ok = back.ok && replay(back.path, from).ok;
     const askWaited = d.held ? (() => { const T = new State(from); return farmEntry(T.s, { porchVisit: true }) !== 'ask'; })() : null;
     out.reentry.push({ id: d.id, reached: true, to: to.path.length, back: back.ok ? back.path.length : null, at: back.fail || null, askWaited });
