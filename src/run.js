@@ -84,7 +84,7 @@ export class Run {
       g.hints.due = (id, rec) => (this.active && /^tired$|tent|camp|pitch|site|fire|tarp|^rest/i.test(String(id)) ? false : due(id, rec));
     }
     // "Tired. Rest in the tent." (energy's rest cue) is never said on the run
-    if (g.energy) { const cue = g.energy.onCue; g.energy.onCue = (id, words) => (this.active && (id === 'rest' || id === 'tired') ? true : cue ? cue(id, words) : false); }
+    if (g.energy) { const cue = g.energy.onCue; g.energy.onCue = (id, words) => { if (this.active && (id === 'rest' || id === 'tired')) { this.firstTired(); return true; } return cue ? cue(id, words) : false; }; }
     // the dusk fine skips while the run is on
     if (g.permits && typeof g.permits.checkDusk === 'function') { const cd = g.permits.checkDusk.bind(g.permits); g.permits.checkDusk = (...a) => (this.active ? false : cd(...a)); }
     // the headlamp's red lens (S3, stream 7a: item `redlens` or fact `lens.red`)
@@ -421,7 +421,7 @@ export class Run {
     if (!h) return null;
     this.tied = h; p.speed = 0;
     const s = this.story;
-    const first = !s.has('run.tieoff') && !s.has('tieoff.learned');
+    const first = !s.has('run.tieoff') && !s.has('tieoff.learned') && !s.has('run.n14');
     if (!s.has('run.tieoff')) s.set('run.tieoff', true, 'run');
     try { if (!s.has('tieoff.learned') && factRow('tieoff.learned')) s.set('tieoff.learned', true, 'run'); } catch { /* 7a's row */ }
     // the book falls open on N14 the first time (if S2 came first, it was taught there)
@@ -430,6 +430,13 @@ export class Run {
     // the Rest dial, tied off
     this.restDial();
     return h;
+  }
+  // the first time the run wants a rest: the book falls open on N14 (unless S2 or a tie-off taught it already)
+  firstTired() {
+    const s = this.story;
+    if (s.has('run.n14') || s.has('run.tieoff') || s.has('tieoff.learned')) return;
+    s.set('run.n14', true, 'run');
+    this.openN14();
   }
   openN14() {
     const b = this.g.book;
