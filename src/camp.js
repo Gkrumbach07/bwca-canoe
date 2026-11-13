@@ -52,6 +52,7 @@ import { itemDef, isBag } from './items.js';
 // the profile through camp.profileOf (main.js), trip.profile or __game.profile; the inventory (inventory.js).
 
 export const PLAYER = 'player';
+const storyAllows = (v, ctx = {}) => { try { const s = typeof window !== 'undefined' && window.__game ? window.__game.story : null; return !s || typeof s.allows !== 'function' || s.allows(v, ctx) !== false; } catch { return true; } }; // r: the run's verbs (story.allows, 50 §6.2: absent, not greyed); flag off: no allows, all true
 export const campKey = (c) => c.key || `${Math.round(c.x)}:${Math.round(c.z)}`; // (round flat: a site moved to its flat keeps its key, world.js)
 
 const SITE_R = 22;          // metres from a site's fire ring within which its prompts are the site's
@@ -607,6 +608,7 @@ export class Camp {
   }
   // Pitch from the book: the ghost follows the dot until it is placed; { ok, words }
   beginPitch(uid) {
+    if (!storyAllows('pitch', { uid })) return { ok: false, words: '' }; // r
     const tent = this.tentByUid(uid), why = this.pitchRefused(tent);
     if (why) { this.note(`No pitching here: ${why}.`, 4); return { ok: false, words: why }; }
     const p = this.player;
@@ -884,11 +886,15 @@ export class Camp {
     const rest = { verb: c.stage === 3 ? 'Rest until… (no fly)' : 'Rest until…', why: busy ? 'a moment' : null, run: () => this.restDial() };
     // (the replay: a strike let go after the fly came off left the tent at 3 with Put the fly on and Rest, and no Strike
     // anywhere, though the note says "Strike takes the rest down": half struck, Q strikes on)
-    const e = c.stage >= 4 ? rest : pitch, q = c.stage >= 4 ? strike : c.stage === 3 && !c.halfStruck ? rest : strike;
+    let e = c.stage >= 4 ? rest : pitch, q = c.stage >= 4 ? strike : c.stage === 3 && !c.halfStruck ? rest : strike;
+    if (!storyAllows('rest:tent')) { if (e === rest) e = null; if (q === rest) q = strike; } // r: no Rest in a tent on the run
+    if (!storyAllows('pitch') && e === pitch) e = null; // r
+    if (!e) { e = strike; if (q === strike) q = null; } // r: only Strike left
     return { e, q, label: `your ${lower(d ? d.name : 'tent')}`, hint: K.words[c.stage], stage: c.stage };
   }
   // the Rest-until dial: first light, 7:00, 9:00, noon, 4 pm, dusk, 10 pm, or any hour by ← →; E rests until then
   restDial() {
+    if (!storyAllows('rest:tent')) return false; // r
     const c = this.camp, d = this.day, { rise, set } = d.sunriseSunset;
     if (!c || c.stage < 3) { this.note('The tent isn’t up yet: carry on pitching it first.'); return false; }
     if (this.night || this.busy || hold.active) return false;
@@ -1211,3 +1217,4 @@ function nightLine(fc, season, fly = true) {
   if (cold) return fly ? 'A clear, cold night. Frost on the fly at dawn.' : 'A clear, cold night, the stars through the mesh. Dew on everything at dawn.';
   return fly ? 'A clear night, the stars down to the treeline. Loons out on the lake.' : 'A clear night, the stars through the mesh. Loons out on the lake.';
 }
+export { RestDial }; // r: the canoe's Rest dial, tied off (run.js)

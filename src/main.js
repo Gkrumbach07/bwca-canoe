@@ -1510,6 +1510,28 @@ async function main() {
     trip.update = (dt) => { tu(dt); try { seasonTurn.update(dt); } catch (e) { if (!seasonTurn.warnedU) { seasonTurn.warnedU = true; console.warn('seasonTurn', e); } } };
     window.__game.seasonTurn = seasonTurn;
   }
+  // r: begin — the run (story Round 3, stream R; docs/story/50-finale.md §5.3–§6.15, campaign-design §8.3–§8.5), only
+  // under STORY_ON: run.js (the run state, story.allows' rule, the scanner, the tie-off, the arrival), stealth.js (the
+  // detection table), checkpoint.js (story-cp: write from a good state, the reset behind a fade), watchers.js (the
+  // postings and the night's four), the cans and the scanner (run-items.js). Its hooks in shared modules (player.placeAt,
+  // energy.rewindTo, kv.frozenTest, trip.runHook, headlamp.setLens, story.allows in camp/nearby/inv-ui/tarp/fire) do
+  // nothing with the flag off.
+  if (STORY_ON && story.v === 2) {
+    try {
+      const [{ run }, { minigames }, { RestDial }, { isSeasonKey, save: saveRun }, W] = await Promise.all([
+        import('./run.js'), import('./minigames.js'), import('./camp.js'), import('./save.js'), import('./story-data/words.js')]);
+      await W.loadText();
+      run.attach({ story, player, canoe, chase, day, energy, inventory, trip, explored, tripStats, veil, hud, headlamp: lamp, world, tiles, actors, scene,
+        pointer, permits: window.__game.permits || null, hints, camp, minigames, seasonTurn: window.__game.seasonTurn || null, saver, mist, moon, wind, loons, outfitter,
+        kv, save: saveRun, isSeasonKey, text: (id) => W.say(id), textEntry: (id) => W.text(id), RestDial, audio, dialogue: talk,
+        get book() { return window.__game.book || null; } });
+      const updR = outfitter.update.bind(outfitter);
+      outfitter.update = (dt) => { updR(dt); try { run.update(dt); } catch (e) { if (!run.warned) { run.warned = true; console.warn('story R: the run', e); } } };
+      window.__game.storyRun = run;
+      console.log('story R: the run');
+    } catch (e) { console.warn('story R: the run', e); }
+  }
+  // r: end
 
   window.__game.siteFeature = siteFeature; // (scripts/r2-starter-routes.mjs: a site's kind of shore)
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);

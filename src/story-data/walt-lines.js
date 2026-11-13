@@ -84,6 +84,10 @@ export const WALT_LINES = [
   { id: '30:4.9.page.4', section: 'years' },
   { id: '30:4.6/the-thursday-lunch-tier.w1', section: 'odd' },
   // /a2
+  // r: begin (the run's Walt-page lines, 50 §6.15)
+  { id: 'run.walt.drybag', section: 'farend' },
+  { id: 'run.walt.grumman', section: 'farend' },
+  // r: end
 ];
 
 // a text id with no row: its section by its id's prefix (the longest that matches), else 'odd'. Leads are a person's or a
