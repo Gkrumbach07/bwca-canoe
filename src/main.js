@@ -1359,6 +1359,25 @@ async function main() {
     } catch (e) { console.warn('story E: episodes', e); }
   }
   // /e
+  // m: begin (campaign Round 4, stream m: the mechanics; docs/story/90-game-needs.md §6–7, 31 GY-11, 33 §6.7, 40 §5),
+  // only under STORY_ON: the loose hull and the drift, Swamp it / Let go, the tow line (boats.js), the motorboat actor
+  // (motorboat.js), the rescue-boat ride (rescue.js) and the drift test's night and the canoe adrift (drift-night.js).
+  // window.__game.storyMech = { boats, motorboat, rescue, night, squadNight, adrift }. With the flag off none of it is fetched
+  if (STORY_ON && story.v === 2) {
+    try {
+      const [{ boats }, { motorboat }, { rescue }, { night }] = await Promise.all([import('./boats.js'), import('./motorboat.js'), import('./rescue.js'), import('./drift-night.js')]);
+      const st = window.__game.storyTalk || {};
+      const base = { scene, world, water, wind, player, actors, pointer, day, camera, story, hud, ripples, audio, veil, outfitter, rides, profile, trip, headlamp: lamp };
+      boats.attach(base); motorboat.attach(base);
+      rescue.attach({ ...base, motorboat });
+      night.attach({ ...base, boats, motorboat, texts: st.texts || null });
+      const updM = trip.update.bind(trip);
+      trip.update = (dt) => { updM(dt); try { boats.update(dt); motorboat.update(dt); night.update(dt); } catch (e) { if (!night.warned) { night.warned = true; console.warn('story m: mechanics', e); } } };
+      window.__game.storyMech = { boats, motorboat, rescue, night, squadNight: (o) => night.squadNight(o), adrift: (o) => night.adrift(o), on: true };
+      console.log('story m: mechanics');
+    } catch (e) { console.warn('story m: mechanics', e); }
+  }
+  // m: end
   // gl-d: the trip-end tally and the board (the game-loop round, stream D; docs/build/game-loop-brief.md). Pay lands on
   // the trip's card as it counts up (record.js ended → tasks.settle), never at the board; no cap on notices held
   // (the owner's call 2026-11-05), each with a deadline that fits it; the new kinds (task-kinds-2.js: creel, campsite, beaver, iceout, colour,
