@@ -158,6 +158,7 @@ export async function connect(t) {
   // --- the loaded carry (60 S1 "The set piece") ----------------------------------------------------------------------------
   const K = { h: null };
   const probe = () => {
+    if (typeof K.probe === 'function') return K.probe(); // (a rig's stand-in walker: scripts/cmp-s-test.mjs)
     let pack = false; try { pack = !!(inventory && inventory.worn && inventory.worn('back')); } catch { pack = false; }
     return { x: player.x, z: player.z, hours: hrs(story).H, carrying: player.mode === 'carry', pack };
   };
