@@ -257,10 +257,11 @@ export async function connect(t) {
     if (key === 'ep.S8.found' && episodes && live()) { const st = episodes.st('S8'); if (st && !st.first) { st.first = 'S8.first'; episodes.stamp('S8.first'); story.dirty && story.dirty(); } }
   });
 
-  const timer = setInterval(() => {
-    try { ollieTick(); } catch (e) { if (!timer.w1) { timer.w1 = true; console.warn('sides: Ollie', e); } }
-    if ((timer.n = (timer.n || 0) + 1) % 5) return; // (Tom and the Ostbys every half second)
-    try { tomTick(); ostbyTick(); } catch (e) { if (!timer.w2) { timer.w2 = true; console.warn('sides: Tom', e); } }
+  const TK = { n: 0, w1: false, w2: false }; // (setInterval's id is a number in the browser: no properties on it)
+  setInterval(() => {
+    try { ollieTick(); } catch (e) { if (!TK.w1) { TK.w1 = true; console.warn('sides: Ollie', e); } }
+    if (++TK.n % 5) return; // (Tom and the Ostbys every half second)
+    try { tomTick(); ostbyTick(); } catch (e) { if (!TK.w2) { TK.w2 = true; console.warn('sides: Tom', e); } }
   }, TICK * 1000);
   story.on('season', () => { unstageOllie(); if (TM.f) { TM.f.remove(); TM.f = null; } if (OS.f) { OS.f.remove(); OS.f = null; } O.legs.clear(); O.paused = 0; if (K.h) { K.h.cancel(); K.h = null; } });
 
