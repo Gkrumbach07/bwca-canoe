@@ -66,9 +66,11 @@ class DriftNight {
   }
 
   // --- GY-11: the night ---------------------------------------------------------------------------------------------
+  mirror() { const s = this.g && this.g.story; return !!(s && s.mode === 'mirror'); } // (a co-op guest: the host's story is read only here)
   async squadNight({ ep = MOOSE_EP, at = 21 } = {}) {
     const g = this.g, p = g.player;
     if (!g || !p) return { ok: false, why: 'not attached' };
+    if (this.mirror()) return { ok: false, why: 'guest' };
     if (this.state && this.state.stage !== 'done') return { ok: false, why: 'busy' };
     const L = this.landing(ep);
     if (L && Math.hypot(L.x - p.x, L.z - p.z) > 450) return { ok: false, why: 'away' }; // (not at the landing: Sheila goes without you; a3 says so next time)
@@ -174,7 +176,7 @@ class DriftNight {
   }
   watchWalt() {
     const g = this.g, p = g.player, B = g.boats;
-    if (!p || !B || (this.state && this.state.stage === 'birch')) return;
+    if (!p || !B || this.mirror() || (this.state && this.state.stage === 'birch')) return;
     const towed = B.list().find((h) => h.towedBy === 'player');
     const L = this.landing(MOOSE_EP), abs = g.day ? g.day.year * 400 * 24 + g.day.doy * 24 + g.day.hours : 0;
     if (!this.walt && towed && p.mode === 'paddle' && L && Math.hypot(L.x - p.x, L.z - p.z) < 300 && this.southNight()) this.walt = { t0: abs, spare: towed, lit: false };
@@ -193,7 +195,7 @@ class DriftNight {
   // drift will ground (end): the caller stands them there (the company stream's scene) ------------------------------
   adrift({ site = null, air = 3.5 } = {}) {
     const g = this.g, p = g.player, w = g.world, d = p && p.carry && p.carry.drop;
-    if (!d || !w) return null;
+    if (!d || !w || this.mirror()) return null; // (host only: a guest's story is the host's mirror)
     let x = d.x, z = d.z;
     for (let i = 0; i < 40; i++) {
       const dir = w.deeperDir ? w.deeperDir(x, z) : { x: 0, z: 0 };

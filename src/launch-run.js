@@ -27,6 +27,7 @@ export function attachLaunch({ miningCast, motorboat, world }) {
     const want = this.live.has('brekke') && L.dockBerths && L.dockBerths[1];
     if (this.launchMesh) this.dropLaunch(); // (a2's still prop: the actor is the launch now)
     if (want) {
+      st.offN = 0;
       if (st.phase === 'tied' || st.phase === 'in') return;
       const B = L.dockBerths[1].side, from = outFrom(B, L);
       if (!from) return;
@@ -37,7 +38,8 @@ export function attachLaunch({ miningCast, motorboat, world }) {
       mb.goTo(B.x, B.z, { onEnd: () => { st.phase = 'tied'; mb.anchor(); mb.off = true; if (mb.driver) { mb.driver.remove(); mb.driver = null; } } }); // (he steps off: a2 has him at the table)
       return;
     }
-    if (st.mb && (st.phase === 'tied' || st.phase === 'in')) {
+    // (a moment without him, a2's cast restaging, is not him gone: six asks in a row, about three seconds)
+    if (st.mb && (st.phase === 'tied' || st.phase === 'in') && (st.offN = (st.offN || 0) + 1) >= 6) {
       const mb = st.mb, B = L.dockBerths && L.dockBerths[1] ? L.dockBerths[1].side : { x: mb.x, z: mb.z }, to = outFrom(B, L);
       st.phase = 'out'; st.n.out++; mb.off = false;
       if (!mb.driver && motorboat.actors) mb.driver = motorboat.actors.person({ key: 'm:launch:driver', look: LOOK, name: 'Carl Brekke' });
@@ -48,6 +50,6 @@ export function attachLaunch({ miningCast, motorboat, world }) {
   // a2's dropCafe (leaving Farm) drops its prop; the actor stays on the lake on its own clock while you are near, and goes
   // when you are far (nothing seen moves by itself out of sight)
   const dropC = miningCast.dropCafe.bind(miningCast);
-  miningCast.dropCafe = function () { dropC(); if (st.mb) { st.mb.remove(); st.mb = null; st.phase = 'none'; } };
-  return { stats: () => ({ phase: st.phase, n: st.n, at: st.mb ? { x: Math.round(st.mb.x), z: Math.round(st.mb.z), mode: st.mb.mode } : null }) };
+  miningCast.dropCafe = function () { dropC(); if (st.mb && !this.live.size) { st.mb.remove(); st.mb = null; st.phase = 'none'; } }; // (clear() unstages everyone first; a café rebuilt for a fresh layout keeps them, and the launch)
+  return { stats: () => ({ phase: st.phase, n: st.n, offN: st.offN || 0, at: st.mb ? { x: Math.round(st.mb.x), z: Math.round(st.mb.z), mode: st.mb.mode } : null }) };
 }

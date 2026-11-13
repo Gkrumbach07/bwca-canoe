@@ -203,6 +203,14 @@ class Motorboat {
     this.heading = wrapPi(h); this.x = nx; this.z = nz;
     return 'ok';
   }
+  glide(tx, tz, sp, dt) {
+    const want = Math.atan2(-(tz - this.z), tx - this.x);
+    this.heading = wrapPi(this.heading + clamp(wrapPi(want - this.heading), -1.2 * dt, 1.2 * dt));
+    this.v += (sp - this.v) * (1 - Math.exp(-dt * 1.4));
+    const f = fwd(this.heading), d = Math.hypot(tx - this.x, tz - this.z), step = Math.min(this.v * dt, d);
+    this.x += f.x * step; this.z += f.z * step;
+    return 'ok';
+  }
   sees(p) {
     const w = this.layer.g.world, dx = p.x - this.x, dz = p.z - this.z, L = Math.hypot(dx, dz), n = Math.ceil(L / 25);
     for (let i = 1; i < n; i++) { const x = this.x + (dx * i) / n, z = this.z + (dz * i) / n; if (w.isReady(x, z) && w.shoreAt(x, z) > 2) return false; }
@@ -214,7 +222,9 @@ class Motorboat {
       if (!P) { this.mode = 'idle'; } else {
         const d = Math.hypot(P[0] - this.x, P[1] - this.z), last = this.pi === this.path.length - 1;
         const sp = last ? Math.min(this.cruise, Math.max(1.2, d * 0.35)) : this.cruise;
-        const r = this.steer(P[0], P[1], sp, dt);
+        // the last stretch in to a dock or a stand-off glides straight in, the shallows under it allowed (a berth's water
+        // is thinner than the open lake's the steer keeps to)
+        const r = last && d < 45 ? this.glide(P[0], P[1], sp, dt) : this.steer(P[0], P[1], sp, dt);
         if (r === 'line') { this.mode = 'stopped'; this.emit('stopped', { why: 'line' }); }
         if (d < (last ? 3 : 14)) {
           this.pi++;

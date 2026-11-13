@@ -109,17 +109,24 @@ class Rescue {
       this.busy = false;
     }
   }
-  async evacuate(why = 'spent', { fee = 0 } = {}) {
+  // returns a boolean at once, as trip.evacuate does (season-turn.js refunds the fee on false): true when the rescue is
+  // sent; the boat comes, then trip.evacuate runs (if that then refuses, the fee goes back into your hand)
+  evacuate(why = 'spent', { fee = 0 } = {}) {
     const g = this.g, tr = g && g.trip;
-    if (!tr || this.busy || tr.evacuating || !tr.active) return false;
-    this.busy = true;
+    if (!tr || this.busy || tr.evacuating || !tr.active || tr.adventure === false) return false;
+    if (g.story && g.story.mode === 'mirror') return tr.evacuate(why, { fee }); // (a co-op guest: no boat of the host's story)
     // (on the ice no boat can come: the rescue walks in over it under the card, as before; open water, the squad's boat)
     const iced = why === 'ice' || !!(tr.state && tr.state.iced);
-    try { if (!iced) await this.come({ kind: 'squad' }); } finally { this.busy = false; }
-    const ok = tr.evacuate(why, { fee });
-    const b = this.boat; this.boat = null;
-    if (b) setTimeout(() => b.remove(), 2500); // (gone under the card's dark)
-    return ok;
+    if (iced) return tr.evacuate(why, { fee });
+    this.busy = true;
+    Promise.resolve(this.come({ kind: 'squad' })).catch(() => null).then(() => {
+      this.busy = false;
+      const ok = tr.evacuate(why, { fee });
+      if (!ok && fee > 0) { const pr = g.profile; try { if (pr && typeof pr.earn === 'function') pr.earn(fee, 'the rescue, called off'); } catch { /* the profile's */ } }
+      const b = this.boat; this.boat = null;
+      if (b) setTimeout(() => b.remove(), 2500); // (gone under the card's dark)
+    });
+    return true;
   }
 }
 
