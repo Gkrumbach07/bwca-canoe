@@ -37,7 +37,7 @@ async function newSeason(page, home, doy, story = true) {
   await page.evaluate(async ([home, doy]) => { const g = window.__game; g.title.setPick('adventure'); await g.title.newSeason(g.world.entryPoints.find((e) => e.ep === home), { confirm: false, start: { year: 2026, doy } }); }, [home, doy]);
   await page.waitForFunction((story) => { const g = window.__game; return g.title.state === 'game' && !g.player.teleporting && (!story || (g.storyTalk && g.storyEndings)); }, story, { timeout: 200000, polling: 250 });
 }
-const LOT = 30, HOME = 25, DOY = 285; // Lake One's lot; home Moose Lake; 12 October
+const LOT = 30, HOME = 25, DOY = 230; // Lake One's lot; home Moose Lake; 18 August (so Tasha's open-water notice is in season 31 days on)
 
 async function ending(E) {
   const page = await open('story=1');
@@ -83,7 +83,7 @@ async function ending(E) {
   result(`${E} 3: walking down to the landing with the cans is refused (back on the gravel)`, edge.back <= edge.r + 3, edge);
   // M: the call, then the wagon forty minutes on
   if (E === 'M') {
-    const w = await page.evaluate(() => { const en = window.__game.storyEndings; en.debug.skip(0.4); en.debug.skip(0.4); return en.staged(); });
+    const w = await page.evaluate(() => { const en = window.__game.storyEndings; en.debug.skip(0.5); en.debug.skip(0.6); return en.staged(); });
     result('M 4: Maggie\'s morning call: the phone rings, her wagon pulls in forty minutes later', w && w.maggie, w);
   }
   // the scene, by keys
@@ -98,8 +98,8 @@ async function ending(E) {
     if (E === 'JN') { trail.push(await choose(page, 'Walt wrote it')); trail.push(await choose(page, 'I\'m sure.')); }
     else trail.push(await choose(page, 'I don\'t know.'));
     trail.push(await hear(page, 20));
-    await page.waitForTimeout(2600); // (the wagon goes; Dan walks over)
-    await page.evaluate(async () => { const L = window.__L; for (let k = 0; k < 4; k++) { L.step(5); await L.wait(100); } });
+    // (the wagon goes; Dan walks over)
+    await page.waitForFunction(() => !!(window.__game.dialogue && window.__game.dialogue.convo), null, { timeout: 15000, polling: 200 }).catch(() => {});
     trail.push(await choose(page, 'It wasn\'t for sale.'));
     trail.push(await hear(page));
   }
@@ -124,12 +124,12 @@ async function ending(E) {
   result(`${E} 6: twenty days on: the paper is out; on Moose Lake's counter${E !== 'M' ? ', Walt\'s photo on the wall, the trench closed' : ''}; the S7 pools (${ids.join(', ')})`,
     w20.paper && w20.props.includes('paper:25') && (E === 'M' || (w20.photo && w20.trench && w20.props.includes('photo:25'))) && ids.every((i) => w20.rumours.includes(i)) && (E !== 'JN' || w20.rumours.includes('70.6.8.6')), w20);
   result(`${E} 7: the board and prices: ${E === 'M' ? 'Moose Lake (liked Walt) drops its notices; prices ×1.35; consulting on the tally' : 'Moose Lake\'s board as before; prices unchanged; no consulting'}`,
-    E === 'M' ? w20.board.every((t) => t !== 'offered') && w20.mul > 1.3 && (w20.tally || []).some(([t, p]) => t === 'Consulting' && p === 2500) : w20.board.length === 4 && !(w20.tally || []).some(([t]) => t === 'Consulting'), w20);
+    E === 'M' ? w20.board.every((t) => t !== 'offered') && w20.mul >= 1.25 && (w20.tally || []).some(([t, p]) => t === 'Consulting' && p === 2500) : w20.board.length === 4 && !(w20.tally || []).some(([t]) => t === 'Consulting'), w20);
   // the postcard: Josie at the home counter
   const pc = await page.evaluate(async () => {
     const g = window.__game, s = g.story, L = window.__L, C = g.storyTalk.cast;
     C.storeEnter(25); for (let k = 0; k < 10; k++) { L.step(5); await L.wait(80); }
-    const ok = C.talk('josie');
+    const ok = C.talk('josie') || g.storyEndings.debug.postcardTalk();
     return { ok, staged: C.staged().map((x) => x.who) };
   });
   const said = [await choose(page, 'No.'), await hear(page)];

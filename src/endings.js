@@ -23,6 +23,7 @@ import { trailheadAt, trailheadLayout, LOT_R } from './trailhead.js';
 import { storeLayout } from './props.js';
 import { hostOf, OUTFITTER_EPS } from './outfitters.js';
 import { FieldPerson } from './kettle.js';
+import { SPOT_OF } from './cast.js';
 import { kit, rngFor } from './story-props.js';
 import { definePage, itemDef } from './items.js';
 import { registerKind, KINDS } from './tasks.js';
@@ -103,6 +104,7 @@ class Endings {
   }
 
   // --- the run as it stands ----------------------------------------------------------------------------------------------
+  talking() { const D = this.c.talk; return !!(D && D.convo); }
   runActive() { const s = this.story; return !!(s && (s.readSensor('run.active') === true)); }
   cans() { const i = this.c.inventory; try { return i ? i.count(CANS, { reachable: false }) : 0; } catch { return 0; } }
   // after walking away unchosen: the vehicles are back at first light at any served lot, any later day (§9)
@@ -143,6 +145,8 @@ class Endings {
     if (!this.lot.maggie && this.lot.wagonAt != null && now >= this.lot.wagonAt) this.wagonIn();
     if (this.lot.danAt != null && now >= this.lot.danAt && !this.lot.danMoved) this.danToPhone();
     if (this.lot.done) return;
+    // the ending written and the lot's last scene never closed (a talk walked away from): out anyway, 20 s on
+    if (s.has('end')) { if (!this.lot.endAt) this.lot.endAt = performance.now(); else if (performance.now() - this.lot.endAt > 20000 && !this.talking()) this.finish(0); }
     // the loading party's barks, each once, as you pass
     this.partyTick(p);
     // the lot's edge: never down to the landing with the cans; away up the road is walking out unchosen (§9)
@@ -303,8 +307,9 @@ class Endings {
     }, (at) => { if (at === 'ring') this.afterDan(); });
   }
   danAside() {
-    const lot = this.lot, P = lot && lot.people.get('dan'); if (!P) return false;
+    const lot = this.lot, P = lot && lot.people.get('dan'), p = this.c.player; if (!P) return false;
     lot.danAside = true;
+    if (p && P.moveTo) { const d = norm(P.x - p.x, P.z - p.z); P.moveTo(p.x + d.x * 1.6, p.z + d.z * 1.6, Math.atan2(-d.x, -d.z)); } // (Dan walks over)
     return this.open(P, N.DAN_J, 'start', {}, () => this.finish(1500));
   }
   commit(end, { walt = 'kept', read = null } = {}) {
@@ -406,9 +411,18 @@ class Endings {
     C0.talk = (who) => (who === 'josie' && this.postcardDue() ? this.postcardTalk() || t0(who) : t0(who));
   }
   postcardTalk() {
-    const st = this.josie(), D = this.c.talk, TP = this.c.topics; if (!st || !D || !TP) return false;
+    const D = this.c.talk, TP = this.c.topics; if (!D || !TP) return false;
+    let st = this.josie(), sp = st && st.h && st.h.speaker, room = st ? st.ep : null;
+    if (!sp) {
+      // (Josie not seated: the onboarding's staffer stands there, or the cast is off this visit) she comes out to the counter
+      const C0 = this.c.cast, home = C0 && C0.home(), L = home != null ? storeLayout(home) : null, at = L && SPOT_OF(L, 'counter');
+      if (!at) return false;
+      if (this.josieF) this.josieF.remove();
+      this.josieF = new FieldPerson(this.c, 'josie', { x: at.x, z: at.z, heading: at.heading, name: 'Josie' });
+      sp = this.josieF.speaker; room = home;
+    }
     const run = new SceneRun(TP, N.JOSIE_CARD, { who: 'josie', args: {}, hooks: { card: () => this.giveCard() } });
-    return D.open({ speaker: st.h.speaker, name: 'Josie', role: '', room: st.ep, start: () => run.node('start'), bye: () => null });
+    return D.open({ speaker: sp, name: 'Josie', role: '', room, start: () => run.node('start'), bye: () => { if (this.josieF) { const f = this.josieF; this.josieF = null; setTimeout(() => f.remove(), 4000); } return null; } });
   }
   giveCard() {
     const s = this.story; if (s.has('world.postcard')) return;
@@ -533,12 +547,13 @@ class Endings {
     return {
       runStub: (on = true) => { const s = this.story; this.stub = on ? {} : null; if (on && !s.has('run.lifted')) s.set('run.lifted', 'any', 'n:stub'); return this.runActive(); },
       stage: (ep) => { const L = trailheadLayout(ep); if (!L) return false; const s = this.story, t = s.time(); this.stageLot(L, N.lotFor(s, ep, { abs: t.abs, hours: Math.max(t.hours, N.FIRST_LIGHT), served: true })); return this.staged(); },
-      skip: (h = 1) => { const d = this.c.day; if (d && d.advance) d.advance(h); this.t = TICK; this.update(0); return this.staged(); },
+      skip: (h = 1) => { const d = this.c.day; if (d && d.advance) d.advance(h); try { this.story.update(); } catch { /* the clock's */ } this.t = TICK; this.update(0); return this.staged(); },
       wagon: () => { this.wagonIn(); return this.staged(); },
       maggie: () => this.talkMaggie(), dan: () => this.talkDan(), wade: () => this.talkWade(),
       choose: (end, o = {}) => { const ok = this.commit(end === 'M' ? 'M' : 'J', { walt: end === 'JN' ? 'named' : 'kept', read: o.read || null }); if (ok) this.finish(0); return ok; },
       walkAway: () => { this.walkAway(); return this.story.get('run.out'); },
       postcard: () => (this.postcardDue() ? (this.giveCard(), true) : false),
+      postcardTalk: () => this.postcardTalk(),
       due: () => this.postcardDue(),
       props: () => [...this.props.keys()],
     };
