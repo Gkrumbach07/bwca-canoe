@@ -72,6 +72,7 @@ for (const [k, v] of Object.entries(PENCIL_SENSORS)) registerSensor(k, v);
 for (const [k, v] of Object.entries(A2_SENSORS)) registerSensor(k, v); // (join c2: the arc's flags, as mining-cast.js registers them)
 // slice 2 on (the section below turns it on): its moves, its worlds, its scenes. Off, slice 1 is searched as before
 let R2 = false;
+let R3 = false; // j1: slice 3 (Round 3's far end: the R3 keys, the pit's lift) on, after slice 2
 void TALK_SENSORS; // (topics.js registers the scenes' own condition names on import)
 const warn = console.warn; console.warn = () => {}; // (refused writes warn by design)
 process.on('exit', () => { console.warn = warn; });
@@ -150,6 +151,13 @@ class State {
     s.sensor('kettlerun', () => !!W().kettleday);
     for (const k of ['tashaHere', 'bigNew', 'belt']) s.sensor(k, () => false);
     if (R2) s.sensor('climax', (arc) => !this.r2.held.includes(String(arc)));
+    // j1: begin (slice 3's world: the far end's season sensors as farend.js has them; no friend in, no run in the search)
+    s.sensor('lowwater', () => !!W().lowwater);
+    s.sensor('iceseason', () => !!W().ice);
+    s.sensor('peers', () => 0);
+    s.sensor('coop', () => false);
+    s.sensor('run.active', () => false);
+    // j1: end
   }
   // every atom of the state (facts, notebook marks, the pencil's rings/inks/names/seen, leads), for relevance and keys
   atoms() {
@@ -273,6 +281,7 @@ function moves(S) {
     if (pl.kind === 'site' && !SLICE_STONES.has(pl.id)) continue;
     for (const v of pl.verbs || []) {
       if (!S.when(v.when)) continue;
+      if (R3 && FAR_PL.test(pl.id)) { const pr = (pl.props || []).find((q) => q.id === v.prop); if (pr && pr.show && pr.show !== 'true' && !S.when(pr.show)) continue; } // j1: the far end's props by their show
       const sets = (v.then || []).filter((a) => a.startsWith('f:')).map((a) => a.slice(2).split('=')[0]);
       if (sets.length && sets.every((k) => s.has(k))) continue;
       out.push({ id: `${v.verb} at ${v.prop}`, kind: 'look', run: (T) => T.inWorld({ at: pl.id }, () => T.s.rules.apply({ id: `layer:${pl.id}`, then: v.then }, {})) });
@@ -320,6 +329,7 @@ function moves(S) {
     }
   }
   if (R2) moves2(S, out);
+  if (R3) moves3(S, out); // j1
   return out;
 }
 
@@ -411,6 +421,22 @@ function topic(S, t, args) {
     if (t.ringFact) s.rules.apply({ id: 'topic:ring', then: [`f:${t.ringFact}=Ruth`] }, args);
   }
 }
+
+// --- j1: begin: slice 3's moves (the far end, Round 3) ------------------------------------------------------------------------
+// the pages the far end reads (NB54 the long way, NB55 the burnt point, NB61/62 the dry bag and the canoe, NB66 the paddle
+// stone), the 205/50 pair carried (the back cover's second-ink row), and the landing stood at in fall low water (the only
+// world the solver needs a season for: L4C). The places' own verbs and triggers are the generic ones above.
+const FAR_PL = /^(gull\.|pond4747\.|waltcamp$|cellar$|stash\.)/;
+const READ_NB3 = ['NB54', 'NB55', 'NB61', 'NB62', 'NB66'];
+function moves3(S, out) {
+  const s = S.s;
+  if (!s.has('nb.found')) return;
+  for (const nb of READ_NB3) if (!s.nbHas('read', nb)) out.push({ id: `read ${nb}`, kind: 'read', run: (T) => { T.s.markRead(nb, 'solve'); T.settle(); } });
+  for (const row of BACK_COVER.filter((r) => r.pair)) { const f = row.fact || `bc.${row.n}`; if (!s.has(f)) out.push({ id: `carry the ${row.n} pair (${row.pairWords})`, kind: 'carry', run: (T) => { T.s.set(f, true, 'carry'); T.settle(); } }); }
+  const gs = placeById.get('gull.sign');
+  if (gs && !s.has('gull.stump.lowwater')) out.push({ id: 'stand at gull.sign at fall low water', kind: 'visit', run: (T) => T.inWorld({ at: 'gull.sign', lowwater: true, month: 10 }, () => { for (const t of gs.triggers || []) if (t.on === 'enter' && T.when(t.when)) T.s.rules.apply({ id: 'layer:gull.sign', then: t.then || [] }, {}); }) });
+}
+// j1: end
 
 // --- relevance (a search keeps only the moves that touch what its goal depends on) -----------------------------------------
 // Atoms: f:<fact> (f:<prefix>* a family), read:/here:/und:<NB>, lead:<id>, s:ringed:<place>, s:ringon:<lake>,
@@ -590,6 +616,9 @@ async function buildSetters() {
   setter(['f:ep.S7.yes', 'f:ep.S7.found'], ['f:ep.S7.shown'], 'show:S7', 'f:ep.S7.yes & f:ep.S7.found', 1);
   setter(['f:nb.found'], ['f:mg.snag.hooked'], 'snag', 'f:nb.found', 1);
   setter(['f:mg.snag.hooked'], ['f:mg.snag.landed', 'f:mg.snag.snapped'], 'snag:fight', 'f:mg.snag.hooked', 1);
+  // j1: slice 3's own moves (moves3)
+  for (const nb of READ_NB3) setter(['f:nb.found'], [`read:${nb}`], `read:${nb}`, 'f:nb.found', 1);
+  setter(['f:nb.found'], ['f:gull.stump.lowwater', 'f:gull.rod.seen', 'f:gull.dam', 'f:gull.eastbay'], 'lowwater:gull.sign', 'f:nb.found', 1);
 }
 const famMatch = (set, atom) => {
   if (set.has(atom)) return true;
@@ -881,11 +910,67 @@ async function slice2(main, rp) {
     else if (row.articulation.length) { out.warn.push(`${L}: its Round 2 keys (${keys.join(', ')}) all pass through ${row.articulation.join(', ')}`); console.log(`WARN slice 2 lock ${L}: its Round 2 keys (${keys.join(', ')}) all pass through ${row.articulation.join(', ')} (an articulation point among them)`); }
     else say(`PASS slice 2 lock ${L}: ${keys.length} Round 2 keys, no fact on the way to all of them (${(row.common || []).length} checked)`);
   }
+  out.end = rp2 && rp2.ok ? rp2 : null; // j1: slice 3 starts here
   // the director: no beat carries a key; a climax held a trip waits (re-entry above)
   const keyed = RULES_BEATS.filter((r) => (r.then || []).some((a) => /^f:(key\.|lock|door\.|ink\.|knows\.)/.test(String(a))));
   out.director.push({ rules: RULES_BEATS.length, keyed: keyed.map((r) => r.id) });
   res(`slice 2 director: no beat rule writes a key or a story fact (${RULES_BEATS.length} rules in rules-beats.js)`, keyed.length === 0, { keyed: keyed.map((r) => r.id) });
 }
+
+// --- j1: begin: slice 3 (Round 3, join 1): the far end from where slice 2 ends ---------------------------------------------
+// campaign-design Part 4 Round 3: the keys present after Round 3 (L1 A B C · L2 A B C · L3 C · L4 B C E · L5 A C ·
+// L6 A B C), each reachable; the far end walked to the pit's lift (Eino's note: the run starts on it, run.js); then the
+// endings (story-solve-endings.mjs) are played from that very state as well as from n's stubs. L3 has one key until
+// Round 6: its articulation is a warning (the design says so).
+const MAIN3 = [
+  { id: 'the burnt point (L3C)', when: 'f:nb.burntpoint' },
+  { id: 'the 205/50 pair carried (L2B)', when: 'f:bc.205-50' },
+  { id: 'the landing at fall low water (L4C)', when: 'f:gull.stump.lowwater' },
+  { id: 'the blazes passed (L5C)', when: 'f:ev.blazes' },
+  { id: 'the camp reached by the long way (L5A; the far end inked)', when: 'f:nb.longway & f:ink.farend' },
+  { id: 'the spare paddle\'s stone with NB66 read (L4E)', when: 'f:nb.paddlestash' },
+  { id: 'the stone understood', when: 'f:knows.stonesign' },
+  { id: 'the floorboard lifted (L6A, the torn pages)', when: 'f:nb.torn' },
+  { id: 'the moss cleared', when: 'f:pit.cleared' },
+  { id: 'the lid lifted', when: 'f:pit.lifted' },
+  { id: 'Eino\'s note (the lift: the run starts)', when: 'f:pit.note' },
+  { id: 'the two cans', when: 'f:pit.can.1 & f:pit.can.2' },
+];
+const END3 = 'f:pit.note & f:pit.can.1 & f:pit.can.2';
+const R3KEYS = { L1: ['L1A', 'L1B', 'L1C'], L2: ['L2A', 'L2B', 'L2C'], L3: ['L3C'], L4: ['L4B', 'L4C', 'L4E'], L5: ['L5A', 'L5C'], L6: ['L6A', 'L6B', 'L6C'] };
+function slice3(rp2) {
+  const out = report.slice3 = { witnesses: [], plan: null, keys: {}, warn: [], ok: false };
+  if (report.slice2) delete report.slice2.end;
+  if (!rp2 || !rp2.ok) { res('slice 3: slice 2\'s end (its plan replayed) to start from', false); return null; }
+  R3 = true; relCache.clear();
+  const S2 = rp2.S;
+  const m3 = chain([...MAIN3.map((g) => g.when), END3], S2);
+  out.plan = m3.path;
+  res(`slice 3 (the far end) from the end of slice 2 to the lift: ${m3.ok ? `${m3.path.length} moves` : `stuck at '${m3.fail}' (${m3.states} states${m3.capped ? ', capped' : ''})`}`, m3.ok, { at: m3.fail || null });
+  const rp3 = m3.ok ? replay(m3.path, S2) : null;
+  res('slice 3: the plan replays from the end of slice 2, every move on offer where it is played', !!(rp3 && rp3.ok && rp3.S.when(END3)), { at: rp3 && rp3.at });
+  for (const g of MAIN3) {
+    const n = m3.ok ? firstTrue(m3.path, g.when, S2) : -1;
+    out.witnesses.push({ id: g.id, when: g.when, moves: n >= 0 ? n : null, last: n > 0 ? m3.path[n - 1] : null });
+    res(`slice 3 witness: ${g.id}${n >= 0 ? ` (${n} moves; made by "${m3.path[n - 1] || 'the start'}")` : ''}`, n >= 0, { when: g.when });
+  }
+  // the R3 keys: each reachable from the end of slice 2 on its own (its shortest route), else on the slice-3 line
+  for (const [L, keys] of Object.entries(R3KEYS)) {
+    for (const k of keys) {
+      const goal = `f:key.${k}`;
+      let n = S2.when(goal) ? 0 : -1, made = 'slice 2';
+      if (n < 0) { const c = chain([goal], S2); if (c.ok && replay(c.path, S2).ok) { n = c.path.length; made = c.path[c.path.length - 1]; } }
+      if (n < 0 && m3.ok) { n = firstTrue(m3.path, goal, S2); if (n > 0) made = m3.path[n - 1]; }
+      out.keys[k] = n >= 0 ? n : null;
+      res(`slice 3 lock ${L}: key ${k} reachable by the end of Round 3${n >= 0 ? ` (${n} moves from slice 2's end; made by "${made}")` : ''}`, n >= 0);
+    }
+    if (keys.length < 2) { out.warn.push(`${L}: one key by Round 3 (${keys.join(', ')}): its articulation is a warning until Round 6`); console.log(`WARN slice 3 lock ${L}: one key by Round 3 (${keys.join(', ')}); articulation a warning until Round 6`); }
+  }
+  out.ok = !!(rp3 && rp3.ok);
+  R3 = false; relCache.clear();
+  return out.ok ? rp3.S : null;
+}
+// j1: end
 
 // --- run ----------------------------------------------------------------------------------------------------------------------
 await buildSetters();
@@ -910,6 +995,28 @@ if (arg('plan-only2', false)) { // (join c2: slice 2's plan from where slice 1 e
   if (!c.ok) { console.log(`no plan: slice 2 stuck at '${c.fail}' (${c.states} states${c.capped ? ', capped' : ''})`); process.exit(1); }
   c.path.forEach((m, i) => console.log(`${String(i + 1).padStart(3)}. ${m}`)); process.exit(0);
 }
+// j1: begin: --plan-end J|JN|M (story-slice --plan end.J / end.M): the whole season to the chosen ending, fast (no proofs):
+// slice 1 and 2 as the solver plays them (counted), slice 3's moves to the lift (numbered), the run, the dawn lot's choices
+if (arg('plan-end', false)) {
+  const want = String(arg('plan-end')).replace(/^end\./, '');
+  const r1 = main.ok ? replay(main.path) : null; if (!r1 || !r1.ok) { console.log(`no plan: slice 1 stuck at '${main.fail}'`); process.exit(1); }
+  on2(); const c2 = chain([...MAIN2.map((g) => g.when), END2], r1.S);
+  if (!c2.ok) { console.log(`no plan: slice 2 stuck at '${c2.fail}'`); process.exit(1); }
+  report.slice2 = { end: replay(c2.path, r1.S) };
+  const S3 = slice3(report.slice2.end);
+  if (!S3) { console.log('no plan: slice 3 never reached the lift'); process.exit(1); }
+  const { solveEndings } = await import('./story-solve-endings.mjs');
+  const E = solveEndings({ from: S3.s.doc });
+  const row = E.rows.find((r) => r.paths && r.paths[want]);
+  if (!row) { console.log(`no plan: end.${want} not reachable from the real lift (${E.fails.join('; ')})`); process.exit(1); }
+  console.log(`\nend.${want}: slice 1 ${main.path.length} moves, slice 2 ${c2.path.length} moves, then:`);
+  let i = 0; for (const m of report.slice3.plan) console.log(`${String(++i).padStart(3)}. ${m}`);
+  console.log(`${String(++i).padStart(3)}. the run: the cans carried out to a served lot by first light (${row.branch})`);
+  for (const t of row.paths[want]) console.log(`${String(++i).padStart(3)}. the dawn lot: ${t}`);
+  console.log(`story-solve --plan-end ${want}: ${i} moves after slice 2`);
+  process.exit(0);
+}
+// j1: end
 res(`the slice end to end: ${main.ok ? `${main.path.length} moves` : `stuck at '${main.fail}' (${main.states} states${main.capped ? ', capped' : ''})`}`, main.ok, { at: main.fail || null });
 const rp = main.ok ? replay(main.path) : null;
 res('the plan replays on a fresh story, every move on offer where it is played', !!(rp && rp.ok && rp.S.when(END)), { at: rp && rp.at });
@@ -991,6 +1098,10 @@ if (main.ok) {
 
 // 6 slice 2 (Round 2, the join): from where slice 1 ends
 if (!arg('r1', false)) await slice2(main, rp);
+// j1: begin: slice 3 (Round 3's far end, from where slice 2 ends): the R3 keys and the pit's lift
+let S3END = null;
+if (!arg('r1', false) && !arg('r2', false)) S3END = slice3(report.slice2 && report.slice2.end);
+// j1: end
 
 // n: begin — slice 3's endings (Round 3, stream n; Part 4 Round 3): J, JN and M reachable in every branch with producers
 // by Round 3 (tauno.record ×2, the Walt page north or not, a meeting set or any served lot, Maggie met or a stranger),
@@ -998,6 +1109,14 @@ if (!arg('r1', false)) await slice2(main, rp);
 {
   const { solveEndings } = await import('./story-solve-endings.mjs');
   const E = solveEndings(); report.endings = { rows: E.rows.map(({ paths, ...r }) => r), epilogue: E.epilogue, fails: E.fails };
+  // j1: the endings again from slice 3's own end (the real far end and lift, not n's stubs): its record as slice 2 left
+  // it, north × meeting × Maggie met
+  if (S3END) {
+    const E3 = solveEndings({ from: S3END.s.doc });
+    report.endings.real = { rows: E3.rows.map(({ paths, ...r }) => r), fails: E3.fails };
+    for (const row of E3.rows) res(`endings from the real lift: ${row.branch}: J, ${row.JN === true ? 'JN, ' : ''}M reachable`, row.J && row.M && row.JN !== false);
+    for (const f of E3.fails) res(`endings from the real lift: ${f}`, false);
+  } else if (!arg('r1', false) && !arg('r2', false)) res('endings from the real lift: slice 3 reached the lift', false);
   for (const row of E.rows) res(`endings: ${row.branch}: J, ${row.JN === true ? 'JN, ' : ''}M reachable`, row.J && row.M && row.JN !== false);
   for (const f of E.fails) res(`endings: ${f}`, false);
   say(`endings: ${E.rows.length} branches, J/JN/M ${E.ok ? 'all reachable' : 'NOT all reachable'}; JN needs "went north" (by design)`);

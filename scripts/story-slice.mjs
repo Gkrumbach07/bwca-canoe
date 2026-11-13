@@ -53,6 +53,22 @@ const results = [], errors = [];
 const result = (name, pass, more = {}) => { results.push({ name, pass: !!pass, more }); log(pass ? 'PASS' : 'FAIL', name, JSON.stringify(more).slice(0, 1400)); };
 
 // --- --plan slice: the solver's plan, mapped to the slice's steps and to how this rig plays each move -------------------
+// j1: begin: --plan end.J | end.JN | end.M (no browser): the solver's whole season to that ending (story-solve.mjs --plan-end),
+// slice 3's far end to the lift move by move, the run, the dawn lot's choices. --run: the whole night on the designed
+// route in a browser (scripts/cmp-j1-test.mjs: lift the pit, the run, the dawn lot, an ending)
+if (MODE === 'plan' && /^end\.(J|JN|M)$/.test(String(arg('plan')))) {
+  const r = spawnSync(process.execPath, ['--max-old-space-size=3000', path.join(ROOT, 'scripts/story-solve.mjs'), '--plan-end', String(arg('plan'))], { encoding: 'utf8', maxBuffer: 1 << 24 });
+  const lines = (r.stdout || '').split('\n').filter((l) => /^\s*\d+\. /.test(l));
+  console.log((r.stdout || '').split('\n').filter((l) => /^(\s*\d+\. |end\.|FAIL|WARN)/.test(l)).join('\n'));
+  if (r.status !== 0 || !lines.length) { console.log(r.stderr); console.log(`story-slice --plan ${arg('plan')}: the solver found no plan`); process.exit(1); }
+  console.log(`story-slice --plan ${arg('plan')}: ${lines.length} moves after slice 2`);
+  process.exit(0);
+}
+if (argv.includes('--run')) {
+  const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts/cmp-j1-test.mjs'), ...argv.filter((a) => a !== '--run')], { stdio: 'inherit', env: process.env });
+  process.exit(r.status || 0);
+}
+// j1: end
 if (MODE === 'plan' && String(arg('plan')) === 'slice2') { // (join c2: slice 2's plan, from where slice 1's ends)
   const r = spawnSync(process.execPath, ['--max-old-space-size=3000', path.join(ROOT, 'scripts/story-solve.mjs'), '--plan-only2'], { encoding: 'utf8', maxBuffer: 1 << 24 });
   const lines = (r.stdout || '').split('\n').filter((l) => /^\s*\d+\. /.test(l)).map((l) => l.replace(/^\s*\d+\.\s*/, ''));

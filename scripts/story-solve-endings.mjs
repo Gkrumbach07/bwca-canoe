@@ -28,9 +28,11 @@ const io = () => { const m = new Map(); return { read: (ns, f = null) => (m.has(
 const profile = () => ({ seasonId: 'solve-n', started: true, onChange: () => {} });
 const ABS0 = Math.round(Date.UTC(2026, 9, 12) / 86400000); // 12 Oct 2026: a late-season run
 
+let FROM = null; // j1: a story doc to start from (story-solve's slice 3 end: the real far end and lift), else n's stubs
 function fresh(br) {
   const s = new StoryV2({ io: io() });
   s.attach({ profile: profile() });
+  if (FROM) s.setDoc(JSON.parse(JSON.stringify(FROM))); // j1
   s.clock({ abs: ABS0, hours: 6 });
   s.set('nb.found', true, 'solve');
   if (br.record) s.set('tauno.record', true, 'solve');
@@ -84,7 +86,8 @@ function walk(s, def, start, hooksFor, limit = 40) {
   return paths;
 }
 
-export function solveEndings() {
+export function solveEndings(opts = {}) {
+  FROM = opts.from || null; // j1
   const rows = [], fails = [];
   // the hooks: endings.js's, on the solver's own state
   const hooks = (S) => {
@@ -95,7 +98,8 @@ export function solveEndings() {
       turnback: () => {}, readyes: () => S.set('end.read', 'yes', 'solve'), readno: () => S.set('end.read', 'no', 'solve'), readsilent: () => S.set('end.read', 'silent', 'solve'),
     };
   };
-  for (const record of [false, true]) for (const north of [false, true]) for (const meeting of [false, true]) for (const met of [true, false]) {
+  const RECORDS = FROM ? [!!(FROM.facts && FROM.facts['tauno.record'])] : [false, true]; // j1: a real doc keeps its own record
+  for (const record of RECORDS) for (const north of [false, true]) for (const meeting of [false, true]) for (const met of [true, false]) {
     const br = { record, north, meeting, met }, name = `record=${+record} north=${+north} meeting=${meeting ? 30 : 'any'} maggie=${met ? 'met' : 'stranger'}`;
     // who is in the lot: Maggie here, or by the call, or as a stranger; Dan and Wade always
     const s0 = fresh(br), plan = N.lotFor(s0, 30, { abs: ABS0, hours: 6, served: true });
