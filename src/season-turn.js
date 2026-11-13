@@ -100,7 +100,9 @@ export class SeasonTurn {
     if (this.grouped || this.guest) return { ok: false, why: 'company', words: 'Not with company: walk out together.' };
     if (!pr || this.money < fee || !pr.spend(fee, 'a rescue off the ice')) return { ok: false, why: 'money', words: `$${fee}. You have $${this.money}.` };
     const to = typeof tr.nearestKnownOutfitter === 'function' ? tr.nearestKnownOutfitter() : null;
-    const ok = tr.evacuate('ice', { fee });
+    // w: stream m's rescue boat (STORY_ON: storyMech; on ice it draws no boat and goes straight to trip.evacuate), else the trip's own
+    const g = typeof window !== 'undefined' ? window.__game : null, M = g && g.storyMech && g.storyMech.rescue;
+    const ok = M && typeof M.evacuate === 'function' ? M.evacuate('ice', { fee }) : tr.evacuate('ice', { fee });
     if (!ok) { pr.earn ? pr.earn(fee, 'the rescue, called off') : (pr.money += fee); return { ok: false, why: 'busy', words: 'Not now.' }; }
     this.emit('rescue', { fee, abs: this.today, to: to ? to.ep : null });
     return { ok: true, words: `The rescue is coming: $${fee}.` };
