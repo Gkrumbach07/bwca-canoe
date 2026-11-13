@@ -98,9 +98,35 @@ class Endings {
     try { definePage({ id: 'column', title: 'The Northland Ledger, page 4', ref: 'paper.column.m' }); } catch { /* defined */ }
     this.wrapTalk();
     this.wrapJosie();
+    this.openCans();
     this.offs.push(s.on('store:enter', (e) => this.storeEnter(e && e.ep)));
     this.offs.push(s.on('season', () => this.unstage()));
     return this;
+  }
+
+  // --- opening the cans (50 §5.5): Open on an ammo can (r's item) puts the four papers in the book (close-ups by their
+  // anchors: cans.fieldbook, cans.report.q3, cans.ledger, cans.memo) and marks them read (cans.opened, cans.memo.read:
+  // Maggie reads the carbon aloud only to a player who never opened them). Never needed for an ending -----------------
+  openCans() {
+    const i = this.c.inventory; if (!i || typeof i.verb !== 'function' || i.nCans) return;
+    i.nCans = true;
+    const PAPERS = [['fieldbook', 'Four field books', 'cans.fieldbook'], ['report', 'The pencilled report', 'cans.report.q3'], ['ledger', 'A cash ledger', 'cans.ledger'], ['memo', 'A yellow carbon', 'cans.memo']];
+    for (const [id, title, ref] of PAPERS) { try { definePage({ id: `cans.${id}`, title, ref }); } catch { /* defined */ } }
+    const addOpen = () => { const d = itemDef(CANS); if (d && Array.isArray(d.verbs) && !d.verbs.some((v) => v.id === 'open')) d.verbs.push({ id: 'open', label: 'Open' }); else if (d && !d.verbs) d.verbs = [{ id: 'open', label: 'Open' }]; return !!d; };
+    if (!addOpen()) { let n = 0; const tm = setInterval(() => { if (addOpen() || ++n > 120) clearInterval(tm); }, 1000); } // (r's item is defined when its module loads)
+    const verb0 = i.verb.bind(i);
+    i.verb = (id, ref) => {
+      if (id !== 'open') return verb0(id, ref);
+      let r = null; try { r = i.refOf(ref); } catch { r = null; }
+      if (!r || !r.e || r.e.id !== CANS) return verb0(id, ref);
+      const s = this.story;
+      if (s.has('cans.opened')) return { enabled: false, why: 'Opened already', label: 'Open', needs: [], next: 'The papers are in your book', run: () => {} };
+      return { enabled: true, why: null, label: 'Open', needs: [], next: '', run: () => {
+        for (const [pid] of PAPERS) { try { if (!i.has(`page:cans.${pid}`)) i.give(`page:cans.${pid}`); } catch (err) { console.warn('n: the papers', err); } }
+        s.set('cans.opened', true, 'n:cans'); s.set('cans.memo.read', true, 'n:cans');
+        const h = this.c.hud; if (h) h.note(`${T('50:5.5.c1') || 'The papers'}: four field books, a pencilled report, a ledger, a yellow carbon. In your book.`, 6);
+      } };
+    };
   }
 
   // --- the run as it stands ----------------------------------------------------------------------------------------------
@@ -588,6 +614,6 @@ function norm(x, z) { const l = Math.hypot(x, z) || 1; return { x: x / l, z: z /
 function near(p, at, r) { return Math.hypot(p.x - at.x, p.z - at.z) < r; }
 function monthOf(doy) { return new Date(Date.UTC(2026, 0, doy)).getUTCMonth() + 1; }
 function nearStores(p) { const out = []; for (const ep of OUTFITTER_EPS) { const L = storeLayout(ep); if (L && L.door && Math.hypot(L.door.x - p.x, L.door.z - p.z) < NEAR_STORE) out.push(ep); } return out; }
-void LOT_R; void itemDef;
+void LOT_R;
 
 export const endings = new Endings();
