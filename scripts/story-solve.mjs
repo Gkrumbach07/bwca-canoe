@@ -464,6 +464,7 @@ const MAIN3 = [
   { id: 'the drift test arranged', when: 'f:drift.arranged' },
   { id: 'the hinge: went north', when: 'f:drift.done & f:knows.north' },
   { id: 'Marlys met', when: 'f:marlys.met' },
+  { id: 'N39 read ("asking M. for a bunk he doesn\'t need")', when: 'read:NB39' },
   { id: 'the loft asked', when: 'f:marlys.loft' },
   { id: 'the 2019 register found', when: 'f:gy.register & f:knows.message' },
   { id: 'the night asked', when: 'f:marlys.night' },
@@ -473,10 +474,10 @@ const END3 = 'f:door.guiding.done & f:hap.farend & f:knows.north & f:gy.register
 const BRANCH3 = [
   { id: 'the tow told bluntly ("It was never on the left, Hap."), the next weekend', via: ['f:hap.day', 'f:gy.tow.told', 'f:hap.tow.blunt'], when: 'f:hap.farend' },
   { id: 'the tow left to him ("Still on the left."), Nate on the rail the next weekend', via: ['f:hap.day', 'f:gy.tow.told', 'f:hap.tow.kind'], when: 'f:hap.farend' },
-  { id: 'Sheila brought in, then the statement ("Wade?")', via: ['f:gy.register', 'f:marlys.night', 'f:choice.sheila=in'], when: 'f:sheila.statement & f:knows.wade.office' },
-  { id: 'Let it lie', via: ['f:gy.register', 'f:marlys.night'], when: 'f:choice.sheila=lie & f:door.guiding.done' },
-  { id: 'the night before the drift: GY-14 tells her after', via: ['f:gy.register', 'f:marlys.night', 'f:door.guiding.done & !f:drift.done'], when: 'f:marlys.north' },
-  { id: 'the drift first: the close at six ("Then the box was the right thing.")', via: ['f:drift.done', 'f:gy.register', 'f:marlys.night'], when: 'f:marlys.north & f:door.guiding.done' },
+  { id: 'Sheila brought in, then the statement ("Wade?")', via: ['read:NB39', 'f:marlys.loft', 'f:gy.register', 'f:marlys.night', 'f:choice.sheila=in'], when: 'f:sheila.statement & f:knows.wade.office' },
+  { id: 'Let it lie', via: ['read:NB39', 'f:marlys.loft', 'f:gy.register', 'f:marlys.night'], when: 'f:choice.sheila=lie & f:door.guiding.done' },
+  { id: 'the night before the drift: GY-14 tells her after', via: ['read:NB39', 'f:marlys.loft', 'f:gy.register', 'f:marlys.night', 'f:door.guiding.done & !f:drift.done', 'f:sheila.report', 'f:drift.arranged', 'f:drift.done'], when: 'f:marlys.north' },
+  { id: 'the drift first: the close at six ("Then the box was the right thing.")', via: ['f:hap.farend', 'f:sheila.report', 'f:drift.arranged', 'f:drift.done', 'read:NB39', 'f:marlys.loft', 'f:gy.register', 'f:marlys.night'], when: 'f:marlys.north & f:door.guiding.done' },
 ];
 function on3() { R3 = true; relCache.clear(); }
 async function slice3(main, rp) {
