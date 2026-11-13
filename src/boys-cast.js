@@ -514,7 +514,15 @@ class BoysCast {
     return out;
   }
   face() { return Math.atan2(SLIDE.toward.x - SLIDE.eye.x, SLIDE.toward.z - SLIDE.eye.z); }
-  profile() { if (!this.slideProfile) this.slideProfile = this.horizon(SLIDE.eye, this.face()); return this.slideProfile; }
+  // the slide's skyline from where Gene stood (the land only). Kept once it was taken with the tiles round the eye in (the
+  // far tiles stand in further out); from elsewhere (the wall at Carol's) a fresh one, not kept
+  profile() {
+    if (this.slideProfile) return this.slideProfile;
+    const pr = this.horizon(SLIDE.eye, this.face()), T0 = this.c.tiles, p = this.c.player;
+    const ready = !T0 || typeof T0.readyAt !== 'function' || T0.readyAt(SLIDE.eye.x, SLIDE.eye.z);
+    if (pr && ready && p && Math.hypot(SLIDE.eye.x - p.x, SLIDE.eye.z - p.z) < SLIDE.near) this.slideProfile = pr;
+    return pr;
+  }
   view() {
     const ph = this.c.photo, cam = ph && ph.camera, p = this.c.player;
     if (!ph || !ph.raised || !cam) return { x: p ? p.x : 0, z: p ? p.z : 0, bearing: 0, raised: false };
@@ -527,6 +535,7 @@ class BoysCast {
     const near = Math.hypot(SLIDE.eye.x - p.x, SLIDE.eye.z - p.z) < SLIDE.near;
     if (!near) { this.slideOff(); return; }
     if (!this.mg) {
+      const T0 = this.c.tiles; if (T0 && typeof T0.readyAt === 'function' && !T0.readyAt(SLIDE.eye.x, SLIDE.eye.z)) return; // (the land round the eye in first)
       const M = this.c.minigames, target = { x: SLIDE.eye.x, z: SLIDE.eye.z, face: this.face(), d: SLIDE.d, deg: SLIDE.deg, hold: SLIDE.hold };
       const opts = { target, profile: this.profile(), horizon: (e, b) => this.horizon(e, b), view: () => (this.viewFn ? this.viewFn() : this.view()) };
       this.mg = M && typeof M.start === 'function' ? M.start('silhouette', opts) : null;
