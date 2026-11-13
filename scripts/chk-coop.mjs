@@ -66,9 +66,13 @@ try {
     try { g.outfitter.emit('store:enter', { ep: 25 }); g.outfitter.emit('walkout', { ep: 25 }); } catch { /* */ }
     g.step(1 / 30, 60);
     const book = (() => { try { return { found: g.walt.found, nb: s.state.notebook, inv: g.profile.inventory.count('waltnotebook', { reachable: false }) }; } catch (e) { return 'err:' + e.message; } })();
-    return { mode: s.mode, facts: Object.keys(s.facts()), sleep, tr, ev: [...new Set(ev)], stats: f.stats(), book, stage: s.stage, flush: s.flush(), stored: g.store.getItem('bwca-canoe:story2') };
+    return { mode: s.mode, facts: Object.keys(s.facts()), hostMirror: !!(s.doc && s.doc.hostMirror), sleep, tr, ev: [...new Set(ev)], stats: f.stats(), book, stage: s.stage, flush: s.flush(), stored: g.store.getItem('bwca-canoe:story2') };
   });
-  result('C1 the guest\'s story in the room: mirror, no facts, walt.onSleep refuses, nothing flushed', g1.mode === 'mirror' && !g1.facts.length && !g1.sleep && g1.flush === false, { pre, g1: { ...g1, stored: g1.stored && g1.stored.slice(0, 200) } });
+  // c (Round 3, Part 3 call 7): the guest's story is the host's, mirrored in (coop-story.js): none of the guest's own facts,
+  // the host's instead (hostMirror), and still nothing written
+  const hostF = await A.evaluate(() => Object.keys(window.__game.story.facts()));
+  const ownOnly = g1.facts.filter((k) => !hostF.includes(k));
+  result('C1 the guest\'s story in the room: mirror, the host\'s facts only (none of its own), walt.onSleep refuses, nothing flushed', g1.mode === 'mirror' && !g1.facts.includes('crews.seen') && !ownOnly.length && (g1.hostMirror || !hostF.length) && !g1.sleep && g1.flush === false, { pre, ownOnly, hostF: hostF.length, g1: { ...g1, stored: g1.stored && g1.stored.slice(0, 200) } });
   const diff2 = (() => { try { const a = JSON.parse(own0), b = JSON.parse(g1.stored); return Object.keys({ ...a, ...b }).filter((k) => JSON.stringify(a[k]) !== JSON.stringify(b[k])).map((k) => ({ k, a: JSON.stringify(a[k]).slice(0, 300), b: JSON.stringify(b[k]).slice(0, 300) })); } catch (e) { return String(e); } })(); // (e: what moved, when it did)
   const added = (() => { try { const a = JSON.parse(own0), b = JSON.parse(g1.stored); return { facts: Object.keys(b.facts || {}).filter((k) => !(k in (a.facts || {}))).map((k) => [k, b.facts[k]]), log: (b.log || []).slice((a.log || []).length) }; } catch (e) { return String(e); } })();
   result('C2 the guest\'s own story2 untouched while visiting', g1.stored === own0, { same: g1.stored === own0, added: g1.stored === own0 ? null : added, diff: g1.stored === own0 ? null : diff2 });
