@@ -40,7 +40,7 @@ const errors = [];
 const open = async (url) => {
   const page = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
   page.on('pageerror', (e) => { errors.push(e.message); log('pageerror', e.message); });
-  page.on('console', (m) => { const t = m.text(); if (m.type() === 'error') log('console', t.slice(0, 300)); else if (/story A3|guiding|story rule|story\.when|story scene|story\.set/.test(t)) log('console', t.slice(0, 300)); });
+  page.on('console', (m) => { const t = m.text(); if (m.type() === 'error' || m.type() === 'warning') log('console', t.slice(0, 300)); else if (/story A3|guiding|story rule|story\.when|story scene|story\.set/.test(t)) log('console', t.slice(0, 300)); });
   await page.goto(url, { timeout: 180000 });
   await page.waitForFunction(() => window.__game && window.__game.title && (!/story=1/.test(location.search) || (window.__game.storySeams && window.__game.storyTalk && window.__game.storyGuiding)) && typeof window.__game.step === 'function' && window.__game.title.state === 'title', null, { timeout: 300000, polling: 500 });
   await page.evaluate(HELPERS_T); await page.evaluate(HELPERS);
@@ -157,7 +157,10 @@ try {
     await step(a, '6 Marlys: the loft asked', async () => {
       ctx.tue = await a.evaluate((d) => { const A = window.__a3; const t = A.next(d + 1, 2); A.at(t, 10); A.inside(); return t; }, ctx.thu);
       const st = await a.evaluate(() => window.__a3.staged());
+      const pre = await a.evaluate(() => ({ met: window.__game.story.has('marlys.met'), entry: null }));
       await a.evaluate(() => window.__a3.talk('marlys'));
+      const lt = await a.evaluate(() => ({ ...window.__a3.lastTalk, now: window.__t.convo(), outOpen: !!window.__game.outfitter.open, visit: !!(window.__game.outfitter.visit && window.__game.outfitter.visit.inside) }));
+      log('marlys talk', JSON.stringify({ pre, lt }));
       const hi = await hear(a); await say(a, '\'M.\' in his notebook.'); const m = await hear(a); await say(a, 'I\'ll go up.'); await hear(a);
       const f = await a.evaluate(() => window.__a3.facts(['marlys.met', 'marlys.loft']));
       result('6 Marlys at the counter (Tuesday 10:00): "I\'m Marlys.", "\'M.\'", the register in the loft', st.some((x) => x.who === 'marlys') && f['marlys.met'] && f['marlys.loft'], { st, hi: hi.slice(0, 2), m: m.slice(0, 2), f });
