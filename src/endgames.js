@@ -251,6 +251,7 @@ class Endgames {
   jobOpen(ep) {
     const d = this.doc, j = d && d.soft[ep], Tk = this.c.tasks;
     if (!j || j.kind === 'donate' || !Tk) return false;
+    if (j.kind === 'pending') return this.today() - (j.day || 0) < 1; // (a job being written: a day at most)
     const t = Tk.ads && Tk.ads.get(j.task);
     return !!(t && (t.status === 'open' || t.status === 'done'));
   }
@@ -282,7 +283,7 @@ class Endgames {
       this.note(`Taken on: “${t.title}” · for ${this.first(ep)}`, 6);
       return this.chain(v, [this.T(`g.soft.${ep}.job`)]);
     };
-    if (job && typeof job.then === 'function') { job.then((t) => { if (t) { d.soft[ep] = { kind: t.kind, task: t.id, day: this.today() }; s.dirty(); this.note(`Taken on: “${t.title}” · for ${this.first(ep)}`, 6); } else this.donateFallback(ep); }); return this.chain(v, [this.T(`g.soft.${ep}.job`)]); }
+    if (job && typeof job.then === 'function') { d.soft[ep] = { kind: 'pending', day: this.today() }; job.then((t) => { if (t) { d.soft[ep] = { kind: t.kind, task: t.id, day: this.today() }; s.dirty(); this.note(`Taken on: “${t.title}” · for ${this.first(ep)}`, 6); } else { delete d.soft[ep]; s.dirty(); this.donateFallback(ep); } }); return this.chain(v, [this.T(`g.soft.${ep}.job`)]); }
     return fin(job);
   }
   // a board kind that writes nothing near this owner today: the ask becomes a small donation, said by note

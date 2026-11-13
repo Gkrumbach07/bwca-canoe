@@ -166,7 +166,7 @@ async function M() {
     let job = null; for (let k = 0; k < 60 && !job; k++) { job = g.tasks.active.find((x) => x.gOwner === 25) || null; if (!job) await L.wait(100); }
     return { t, job: job ? { id: job.id, kind: job.kind, status: job.status, pay: job.pay, npcName: job.npcName } : null, asked: g.story.get('owner.25.asked'), next: G.debug.choice(31), soft: G.debug.state().soft };
   });
-  result('M 2: "All right." takes on a board job as Gus\'s (open, no pay); Ruth waits her turn', r1.job && r1.job.status === 'open' && r1.job.pay === 0 && r1.job.npcName === 'Gus Lindgren' && !!r1.asked, r1);
+  result('M 2: "All right." takes on a board job as Gus\'s (open, no pay); Ruth waits her turn', r1.job && r1.job.status === 'open' && r1.job.pay === 0 && r1.job.npcName === 'Gus Lindgren' && !!r1.asked && !(r1.t.last || []).includes('Anything I can do for you?'), r1);
   const r2 = await page.evaluate(async () => {
     const g = window.__game, s = g.story, G = g.storyEndgames, sh = g.outfitter.shop, L = window.__L;
     const job = g.tasks.active.find((x) => x.gOwner === 25);
