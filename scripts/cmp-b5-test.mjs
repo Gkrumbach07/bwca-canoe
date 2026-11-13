@@ -51,6 +51,9 @@ const HELPERS_B5 = () => {
   B.outside = (ep) => { const S = B.store(ep), f = S.stepsFoot || S.door, b = S.axes.b; L.standAt(f.x + b.x * 3, f.z + b.z * 3, 0); L.step(20); };
   B.staged = () => B.C().staged();
   B.tick = (n = 4) => { for (let k = 0; k < n; k++) { B.C().t = 1; L.step(2); } };
+  // papers and the big map down before a talk (the dialogue closes under one: dialogue.js before), said what was up
+  B.clean = () => { const h = g.hud, was = { paper: h.paper || null, mode: h.mode }; try { if (g.record && typeof g.record.close === 'function') g.record.close(); } catch { /* */ } if (h.paper && typeof h.closePaper === 'function') h.closePaper(h.paper); if (h.mode === 'sheet' && typeof h.setMode === 'function') h.setMode('hidden'); if (g.outfitter && g.outfitter.open) g.outfitter.hide(); L.step(3); return was; };
+  B.talk = (fn) => { const was = B.clean(); fn(); L.step(2); const c = g.dialogue && g.dialogue.convo; return { was, open: !!c, after: { paper: g.hud.paper || null, mode: g.hud.mode, onFoot: g.player.onFoot, tp: g.player.teleporting } }; };
   B.endTalk = () => { const D = g.dialogue; if (D && D.convo) D.close(false); L.step(4); };
   B.inv = (id) => g.inventory.count(id, { reachable: false });
   B.walt = () => g.story.walt();
@@ -100,7 +103,8 @@ try {
     const st = await page.evaluate(async () => { const B = window.__b5, g = window.__game; let d = B.doy(6, 3); B.at(d, 10); await B.toStore(38); B.tick(6); return { staged: B.staged(), doy: d }; });
     const carol = st.staged.find((q) => q.who === 'carol');
     result('1a Carol at the Sawbill counter, a June morning (b5:counter)', carol && carol.at === 'b5:counter', st);
-    await page.evaluate(() => window.__game.npcs.talkTo('cast:carol:38'));
+    const t1 = await page.evaluate(() => window.__b5.talk(() => window.__game.npcs.talkTo('cast:carol:38')));
+    log('talk', JSON.stringify(t1));
     const said = await hear(3);
     const r = await picks(['You knew Walt?', 'The boys?', 'Gene?', 'I\'ll go.']);
     await hear(4); await page.evaluate(() => window.__b5.endTalk());
@@ -111,11 +115,12 @@ try {
     await page.evaluate(() => { const B = window.__b5; B.at(B.doy(6, 3), 15); B.tick(6); });
     const st = await page.evaluate(() => window.__b5.staged());
     result('2a Denny of an afternoon at the corner table (14–17)', st.some((q) => q.who === 'denny' && q.at === 'b5:corner'), st);
-    await page.evaluate(() => window.__game.npcs.talkTo('cast:denny:38'));
+    const t1 = await page.evaluate(() => window.__b5.talk(() => window.__game.npcs.talkTo('cast:denny:38')));
+    log('talk', JSON.stringify(t1));
     const said = await hear(4);
     const r = await picks(['Did Walt have a favourite spot?', 'Thanks.']);
     await hear(4); await page.evaluate(() => window.__b5.endTalk());
-    await page.evaluate(() => { const B = window.__b5; B.at(B.doy(6, 4), 15); B.tick(6); window.__game.npcs.talkTo('cast:denny:38'); });
+    await page.evaluate(() => { const B = window.__b5; B.at(B.doy(6, 4), 15); B.tick(6); B.talk(() => window.__game.npcs.talkTo('cast:denny:38')); });
     const said2 = await hear(2); await page.evaluate(() => window.__b5.endTalk());
     const f = await page.evaluate(() => ({ ...window.__b5.facts(['denny.card', 'denny.rings', 'denny.cabin', 'denny.sparky']), card: window.__b5.inv('dennycard'), walt: window.__b5.walt().filter((w) => /b5/.test(w)) }));
     result('2b his card at the first meeting, his rings and the cabin; Sparky the next afternoon, against himself', f['denny.card'] && f.card === 1 && f['denny.rings'] && f['denny.sparky'] && /Sparky/.test(said2.join(' ')), { said: said.slice(0, 2), said2: said2.slice(0, 1), r: r.ok ? 'ok' : r, f });
@@ -124,7 +129,8 @@ try {
     const st = await page.evaluate(async () => { const B = window.__b5; let d = B.doy(6, 5); while ([0, 6].includes(B.dow(d))) d++; B.at(d, 6.3); await B.toStore(31); B.at(d, 6.3); B.tick(6); return { staged: B.staged(), d }; });
     const fr = st.staged.find((q) => q.who === 'frank');
     result('3a Frank at Farm 31\'s urn at 6:18 on a weekday (b5:urn)', fr && fr.at === 'b5:urn' && fr.ep === 31, st);
-    await page.evaluate(() => window.__game.npcs.talkTo('cast:frank:31'));
+    const t1 = await page.evaluate(() => window.__b5.talk(() => window.__game.npcs.talkTo('cast:frank:31')));
+    log('talk', JSON.stringify(t1));
     const said = await hear(2);
     const r = await picks(['What\'s the shirt?', 'It\'s got the company\'s patch', 'Did Walt ever tell you where he was going?']);
     await hear(4); await page.evaluate(() => window.__b5.endTalk());
@@ -136,7 +142,8 @@ try {
     const st = await page.evaluate(async () => { const B = window.__b5; B.at(B.doy(8, 3), 10); await B.toStore(38); B.outside(38); B.tick(6); return B.staged(); });
     result('4a the yard, 3 August: Bob, Frank and Denny outside the store (b5:yard)', ['bob', 'frank', 'denny'].every((w) => st.some((q) => q.who === w && q.at === 'b5:yard')), st);
     await shot('b5-yard');
-    await page.evaluate(() => window.__b5.C().debug.yard());
+    const t1 = await page.evaluate(() => window.__b5.talk(() => window.__b5.C().debug.yard()));
+    log('talk', JSON.stringify(t1));
     const said = await hear(5);
     const r = await picks(['Fair enough.', 'Tell me about Walt.', 'Where do you go?']);
     await hear(10); await page.evaluate(() => window.__b5.endTalk());
@@ -157,7 +164,8 @@ try {
     await shot('b5-camp');
     // something shared from your pack: the rig hands you a chocolate bar if the season's food has none
     await page.evaluate(() => { const g = window.__game; if (!window.__b5.C().food()) { try { g.inventory.place('chocolate', 1, {}); } catch { /* */ } } });
-    await page.evaluate(() => window.__b5.C().debug.camp());
+    const t1 = await page.evaluate(() => window.__b5.talk(() => window.__b5.C().debug.camp()));
+    log('talk', JSON.stringify(t1));
     const said = await hear(4);
     const r = await picks(['Fair enough.', 'Tell me about the flare.']);
     await hear(10); await page.evaluate(() => window.__b5.endTalk());
@@ -165,7 +173,7 @@ try {
     result('5b "Look what the wind brought." → the round shared, the flare (the nicknames)', r.ok && f['boys.visited'] && f['boys.round'] && f['boys.nicknames'], { said: said.slice(0, 3), r: r.ok ? 'ok' : r, f });
   });
   await step('6 the bet', async () => {
-    await page.evaluate(() => { const B = window.__b5; B.at(B.doy(8, 12), 17.1); B.tick(4); window.__b5.C().debug.camp(); });
+    await page.evaluate(() => { const B = window.__b5; B.at(B.doy(8, 12), 17.1); B.tick(4); B.talk(() => window.__b5.C().debug.camp()); });
     const said = await hear(6);
     await page.evaluate(() => window.__b5.endTalk());
     await page.evaluate(async () => { const L = window.__L; for (let k = 0; k < 10; k++) { L.step(5); await L.wait(60); } window.__b5.tick(4); });
@@ -190,7 +198,8 @@ try {
       return { staged: B.staged(), want: want.map((w) => w.id), und: s.when('und:NB60') };
     });
     result('7a the print shown (the arc\'s want: "Look at this…"), Carol after close (the evening slot), NB60 understood', st.staged.some((q) => q.who === 'carol' && q.slot === 'evening') && st.want.length === 1 && st.und, st);
-    await page.evaluate(() => window.__game.npcs.talkTo('cast:carol:38'));
+    const t1 = await page.evaluate(() => window.__b5.talk(() => window.__game.npcs.talkTo('cast:carol:38')));
+    log('talk', JSON.stringify(t1));
     const r = await choose('SEPT 98');
     const said = await hear(12);
     const wall = await page.evaluate(() => { const el = document.querySelector('.b5-slide'); return el ? { label: el.dataset.label, n: el.dataset.n } : null; });

@@ -292,7 +292,7 @@ class BoysCast {
   tell98() {
     const D = this.c.talk, f = this.camp && this.camp.people.bob; if (!D || !f) return false;
     const run = new SceneRun(this.c.topics, STORY98, { who: 'boys', args: this.args(null) });
-    return D.open({ speaker: f.speaker, name: 'Bob and Frank', role: '', room: null, start: () => run.node('story98'), bye: () => null });
+    return D.open({ speaker: f.speaker, name: 'Bob and Frank', role: '', room: null, afloat: true, start: () => run.node('story98'), bye: () => null }); // (afloat: told canoe to canoe)
   }
   // --- the cup on the rock, 14 August at dusk; Denny on the rock beside it (32 §5.9.8) --------------------------------------
   cupTick(p, d) {
