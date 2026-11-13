@@ -231,13 +231,13 @@ class FamilyCast {
     const def = SCENES[who]; if (!def) return false;
     let start = null, gift = o.give ? (o.give.item ? 'pot' : 'print') : null;
     const cold = s.get('choice.aili') === 'know' && ((s.doc.ppl.aili || {}).coldSeason === this.season());
-    if (who === 'aili') { start = ailiEntry(s, this.ailiCtx({ gift })); }
+    if (who === 'aili') { if (s.has('aili.met')) this.visit(); start = ailiEntry(s, this.ailiCtx({ gift })); } // (a second day's visit counts before she opens: "Sit." on that visit)
     else if (who === 'jon') start = jonEntry(s, { coldSeason: cold, saturday: s.when('dow:sat'), saunaSaid: s.has('jon.sauna'), farSeen: !!this.farSeen, truck: this.truckNow() });
     else if (who === 'liisa') start = liisaEntry(s, { truck: this.truckNow(), monday: s.when(SCHEDULE.aili.cook), nextSeason: s.has('end') && (s.fact('end') || {}).abs != null && s.nowAbs() - s.fact('end').abs > 120 });
     else if (who === 'gord') start = gordEntry(s);
     if (!start) return false;
     st.talked = true; s.meet(who, 'a4');
-    if (who === 'aili') { this.visit(); if (start === 'sit' || start === 'coffee') this.opener = null; }
+    if (who === 'aili') this.visit();
     if (who === 'jon' && start === 'sauna') s.set('jon.sauna', true, 'a4');
     if (who === 'jon' && start === 'far') this.farSeen = false;
     if ((who === 'jon' || who === 'liisa') && start === 'truck') this.truck = null;
