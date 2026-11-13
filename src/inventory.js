@@ -62,6 +62,7 @@ import { kv } from './store.js'; // the saves' store (IndexedDB, read into memor
 import { ITEMS, itemDef, defineItem, sizeOf, fishKg, fishEat, LEGACY, STARTER_KIT, FOOD_KINDS, NEED, check, timerWords, WOOD_DRY, sealedDef } from './items.js';
 import { save } from './save.js';
 import { feet } from './units.js';
+import { STORY_ON } from './story-flag.js'; // st-b: a bound story item stays in your pockets (items.js bound), only with the story on
 
 const NS = 'inventory';
 const VERSION = 1;
@@ -141,7 +142,10 @@ export class Inventory {
   serialize() {
     // a signature item (sig:<ep>) is defined only once its store's profile is made: its definition rides in the save,
     // so it is there when the inventory restores, before any store is drawn
-    const defs = {}, keep = (id) => { if (/^sig:/.test(id) && itemDef(id)) defs[id] = itemDef(id); };
+    // chk-c2b fix: a story thing (story code defines it only under STORY_ON: Leo's lid, a book page) rides the same way,
+    // so a build with the flag off keeps it instead of dropping it at restore and writing the bag without it (the lid's
+    // fact stays set and its prop gone: Mary's back table could never be reached). Main never makes one: flag off = main
+    const defs = {}, keep = (id) => { const d = itemDef(id); if (d && (/^sig:/.test(id) || d.story || d.kind === 'page')) defs[id] = d; };
     for (const c of this.containers) for (const e of c.grid) keep(e.id);
     for (const l of this.long) keep(l.id);
     return { v: VERSION, season: this.season, n: this.n, containers: this.containers.map((c) => ({ ...c, grid: c.grid.map((e) => ({ ...e })), at: c.at ? { ...c.at } : null })), long: this.long.map((l) => ({ ...l, at: l.at ? { ...l.at } : null })), defs };
@@ -367,6 +371,7 @@ export class Inventory {
     if (d.kind === 'water') return !!(s.accepts && s.accepts.includes('water'));
     if (c.item === 'pockets' && d.w * d.h > 2) return false;
     if (d.id === 'bottle' && c.item !== 'pockets') return false;
+    if (STORY_ON && d.bound && c.item !== 'pockets' && !s.one) return false; // st-b: bound (the notebook): pockets or a hand only
     return !s.accepts || s.accepts.includes(d.kind);
   }
   sizeOfEntry(e) { return sizeOf(e.id, e.rot); }
@@ -988,6 +993,7 @@ export class Inventory {
     const c = this.cont(cId), p = this.player; if (!c) return no('gone', '');
     const e = c.grid.find((q) => q.uid === uid); if (!e || e.fixed) return no('gone', '');
     if (e.box) return this.setDown(e.uid);
+    if (STORY_ON) { const d = itemDef(e.id); if (d && d.bound) return no('bound', 'Not leaving those.'); } // st-b
     if (!p || !p.onFoot) return no('afloat', 'Not from the canoe: go ashore first.');
     const wet = this.wading(), pk = p.packs, dry = (at) => !wet || !pk || typeof pk.dryAt !== 'function' || pk.dryAt(at.x, at.z);
     let pile = this.containers.find((k) => k.item === 'pile' && k.where === 'ground' && this.dist(k.at) < 1.5 && dry(k.at));

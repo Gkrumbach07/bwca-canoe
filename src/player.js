@@ -1871,6 +1871,31 @@ export class Player {
     return true;
   }
 
+  // r: begin (the run's checkpoint, campaign-design §8.5 step 3): back where a checkpoint was written, on foot with the
+  // hull set down where it lay, or afloat in place (launch inPlace). teleport can't: it always puts you afloat 6 m off
+  // the shore. → true when placed. Only story code calls it (checkpoint.js, under STORY_ON).
+  async placeAt(pose, hull = null) {
+    const w = this.world;
+    if (!pose || !Number.isFinite(pose.x) || !Number.isFinite(pose.z)) return false;
+    this.teleporting = true;
+    try {
+      if (w.tiles) await w.tiles.ensure(pose.x, pose.z, 130);
+      this.act = null; this.seat = null; this.swim = null; this.landing = null; this.ashore = null; this.bob = null;
+      if (pose.mode === 'walk' && hull && hull.down) {
+        if (this.carry && this.carry.drop == null && this.mode === 'carry') this.canoe.pickUpHull();
+        const ok = this.standAt({ x: pose.x, z: pose.z, heading: pose.heading || 0, drop: { x: hull.x, z: hull.z, heading: hull.h || 0 } });
+        if (ok) return true;
+      }
+      if (this.carry && this.carry.drop) this.canoe.pickUpHull();
+      this.mode = 'paddle'; this.carry = null; this.x = pose.x; this.z = pose.z; this.heading = pose.heading || 0;
+      this.speed = 0; this.yawRate = 0; this.boost = 1; this.bilge = 0;
+      this.canoe.state.stroke = 0; this.canoe.state.power = 0; this.canoe.state.mode = 'paddle';
+      this.placeOnWater();
+      return true;
+    } finally { this.teleporting = false; }
+  }
+  // r: end
+
   pickUpHull() {
     this.canoe.pickUpHull();
     const c = this.carry;

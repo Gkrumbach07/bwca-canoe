@@ -89,7 +89,7 @@ export class TripSaver {
 export const SLOT_COUNT = 3;
 export const FILE_FORMAT = 'bwca-canoe-season', FILE_V = 1;
 // the player's, not a season's: the settings, the mode the title picks for a new season, the GPS bridge, a key taught
-export const GLOBAL_KEYS = new Set(['bwca-canoe:settings', 'bwca-canoe:tripMode', 'bwca-canoe-geo', 'bwca-canoe:fb5-rturn', 'bwca-canoe:visitor']); // (co-op: the visitor profile, coop.js)
+export const GLOBAL_KEYS = new Set(['bwca-canoe:settings', 'bwca-canoe:tripMode', 'bwca-canoe-geo', 'bwca-canoe:fb5-rturn', 'bwca-canoe:visitor', 'bwca-canoe:story-meta']); // (co-op: the visitor profile, coop.js; k1a: the story's meta, the player's across saves)
 const SEASON_KEY = /^bwca-canoe[:-]/;
 export const isSeasonKey = (k) => typeof k === 'string' && SEASON_KEY.test(k) && !GLOBAL_KEYS.has(k);
 const DOC = 'bwca-canoe@slots', PARKED = (n) => `bwca-canoe@slot${n}`, PACKED = 'Z1:';

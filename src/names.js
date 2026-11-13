@@ -50,7 +50,7 @@ export const names = {
     if (P) {
       const by = new Map();
       for (const r of P.rows) { by.set(`${r[0]}:${r[1]}:${r[2]}:${r[3]}`, r); by.set(`${r[2]}:${r[3]}:${r[0]}:${r[1]}`, r); }
-      for (const p of world.portages) {
+      for (const p of world.portagesPublic()) {
         if (!p.pts || p.pts.length < 2) continue;
         const a = p.pts[0], b = p.pts[p.pts.length - 1], r = by.get(`${key2(a[0], a[1])}:${key2(b[0], b[1])}`);
         if (!r) continue;
@@ -117,7 +117,7 @@ export const names = {
       consider(q, `${q.kind}:${q.name}:${q.x}`);
     }
     // the drawn portages with a name of their own, at either landing
-    for (const p of world.portages) {
+    for (const p of world.portagesPublic()) {
       if (!p.proper || !p.pts || !p.bbox) continue;
       const [x0, z0, x1, z1] = p.bbox;
       if (player.x < x0 - 200 || player.x > x1 + 200 || player.z < z0 - 200 || player.z > z1 + 200) continue;

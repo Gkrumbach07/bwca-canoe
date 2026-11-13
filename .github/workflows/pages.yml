@@ -37,6 +37,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # the story's lint (scripts/story-lint.mjs: portages, rule schema, conditions, the text extract's stamps) and the
+      # extract's full check; a failure stops the deploy
+      - name: Story lint
+        run: npm run story:lint
       - id: pages
         uses: actions/configure-pages@v5
       - name: Build

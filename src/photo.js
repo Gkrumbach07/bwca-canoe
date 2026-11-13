@@ -130,7 +130,7 @@ async function placeNotice(T, c) {
       }
     } else if (type === 'trail') {
       let cands = [];
-      w.portages.forEach((p, i) => {
+      w.portagesPublic().forEach((p, i) => {
         if (p.rods < 60 || T.used('photo', `trail:${i}`)) return;
         if (Math.hypot(p.pts[0][0] - L.x, p.pts[0][1] - L.z) > RANGE) return;
         const ha = hopsOf(p.launch[0].lake), hb = hopsOf(p.launch[1].lake);
@@ -572,6 +572,9 @@ export class PhotoCamera {
     return this.onTheGo().filter((t) => k.matches(t, look)).sort((a, b) => (b.pay || 0) - (a.pay || 0) || a.id - b.id)[0] || null;
   }
 
+  // st-l: a picture taken → fn({ rec, eye, dir, fov, camera }) → off (the story layer's photo targets)
+  onShot(fn) { (this.shotFns || (this.shotFns = new Set())).add(fn); return () => this.shotFns.delete(fn); }
+  // /st-l
   // --- the picture ---------------------------------------------------------------------------------------------
   capture() {
     const look = this.survey(), t = this.noticeFor(look), d = this.day;
@@ -603,6 +606,10 @@ export class PhotoCamera {
     }
     this.write();
     this.last = { rec, look };
+    // st-l (campaign-design §7.1): the story layer's photo targets ({ id, x, z, face, tol, silhouette }, story-layer.js)
+    // judge the picture: fn({ rec, eye, dir, fov, camera }). None is added with the flag off
+    if (this.shotFns) { this.camera.getWorldDirection(_dir); const eye = { x: this.camera.position.x, y: this.camera.position.y, z: this.camera.position.z }, dir = { x: _dir.x, y: _dir.y, z: _dir.z }; for (const fn of this.shotFns) { try { fn({ rec, eye, dir, fov: this.camera.fov, camera: this.camera }); } catch (e) { console.warn('photo.onShot', e); } } }
+    // /st-l
     return rec;
   }
   // the frame as drawn, cut to the print's 16:9 from the middle and brought down in two steps (a smooth print), with a

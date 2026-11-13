@@ -201,7 +201,7 @@ class Beavers {
       // not by a campsite, a landing or a portage
       if (w.campsites.some((p) => Math.abs(p.x - c.x) < 120 && Math.abs(p.z - c.z) < 120)) continue;
       if (w.entryPoints.some((p) => Math.abs(p.x - c.x) < 200 && Math.abs(p.z - c.z) < 200)) continue;
-      if (w.portages.some((p) => p.bbox && c.x > p.bbox[0] - 80 && c.x < p.bbox[2] + 80 && c.z > p.bbox[1] - 80 && c.z < p.bbox[3] + 80)) continue;
+      if (w.portagesPublic().some((p) => p.bbox && c.x > p.bbox[0] - 80 && c.x < p.bbox[2] + 80 && c.z > p.bbox[1] - 80 && c.z < p.bbox[3] + 80)) continue;
       // against the bank: walk in until the shore is a metre off
       let x = c.x, z = c.z;
       deeper(w, x, z, _d);

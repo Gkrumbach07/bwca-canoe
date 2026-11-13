@@ -1,0 +1,6555 @@
+{
+  "v": 1,
+  "about": "The story layer's places (docs/build/campaign-design.md §7.1; stream L, Round 1). Keyed by name and x/z, never baked: scripts/story-places.mjs finds each in the release the game runs (the shore, the campsite, the portage) and writes its `resolved` block; the runtime (story-layer.js) reads only `resolved`. A place: { id, name, x, z, lake, shore?: true (the anchor is the nearest shore of that lake; props sit at [along, in] metres from it, `in` inland), site?: v3 campsite id, trailhead?: ep (props beside that entry point's lot, placed when it is built), clear?: lawn radius (m), lanes?: [{ from: prop, toward: [x, z], len, r }], props: [{ id, kit, at, opts?, show?, visible?, dot: [{ when, name }] }], verbs: [{ prop, verb, when, then }], triggers: [{ on, r, nb?, when?, then }] }. Walt's starred sites are not here: walt-sites.js makes one place each. `portages`: the carries the story names (the back cover's 64 / 140 / 186, the 205/50 pair, NB36's P210), found by v3 id, name and x/z.",
+  "places": [
+    {
+      "id": "crews.landing",
+      "name": "The old crews' landing, Bald Eagle Lake, west shore",
+      "doc": "docs/story/20-opening.md §11.2; 03-places.md §1a; 90 §4",
+      "x": -25825,
+      "z": 29925,
+      "lake": "Bald Eagle Lake",
+      "shore": true,
+      "clear": 9,
+      "lanes": [
+        {
+          "from": "crews.pine",
+          "toward": [
+            -26950,
+            30600
+          ],
+          "len": 140,
+          "r": 2.2
+        }
+      ],
+      "props": [
+        {
+          "id": "crews.crib",
+          "kit": "crib",
+          "at": [
+            0,
+            -1.8
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Crib"
+            }
+          ],
+          "wet": true
+        },
+        {
+          "id": "crews.rock",
+          "kit": "landingRock",
+          "at": [
+            4.5,
+            -0.6
+          ],
+          "show": "true",
+          "wet": "edge"
+        },
+        {
+          "id": "crews.pine",
+          "kit": "redPine",
+          "at": [
+            4.5,
+            6.5
+          ],
+          "opts": {
+            "blaze": "orange",
+            "flag": "pink"
+          },
+          "show": "true",
+          "dot": [
+            {
+              "when": "f:tauno.orange | f:knows.orange | f:tauno.blazes",
+              "name": "Old blaze. Orange. · Pink flagging"
+            },
+            {
+              "when": "true",
+              "name": "Blaze · Pink flagging"
+            }
+          ]
+        },
+        {
+          "id": "crews.grade",
+          "kit": "gradeMouth",
+          "lane": 0,
+          "along": 7,
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Grade"
+            }
+          ]
+        },
+        {
+          "id": "crews.pine2",
+          "kit": "redPine",
+          "lane": 0,
+          "along": 55,
+          "side": 2.6,
+          "opts": {
+            "blaze": "orange"
+          },
+          "show": "true",
+          "dot": [
+            {
+              "when": "f:tauno.orange | f:knows.orange | f:tauno.blazes",
+              "name": "Old blaze. Orange."
+            },
+            {
+              "when": "true",
+              "name": "Blaze"
+            }
+          ]
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "crews.crib",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:landing.crib",
+            "f:crews.seen",
+            "walt:20:11.2.w2"
+          ]
+        },
+        {
+          "prop": "crews.grade",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:landing.grade",
+            "f:crews.seen",
+            "walt:20:11.2.w3"
+          ]
+        },
+        {
+          "prop": "crews.pine",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:landing.blaze",
+            "f:landing.pink",
+            "f:crews.seen",
+            "walt:20:11.2.w4",
+            "walt:20:11.2.w5"
+          ]
+        },
+        {
+          "prop": "crews.pine2",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:landing.blaze2"
+          ]
+        }
+      ],
+      "triggers": [
+        {
+          "on": "enter",
+          "r": 45,
+          "when": "true",
+          "then": [
+            "f:crews.stood"
+          ]
+        },
+        {
+          "on": "readHere",
+          "nb": "NB20",
+          "r": 60,
+          "when": "f:nb.found",
+          "then": [
+            "f:landing.nb20",
+            "walt:20:11.3.w2"
+          ]
+        }
+      ],
+      "search": 260,
+      "photo": [
+        {
+          "id": "crib",
+          "tol": {
+            "d": 45,
+            "deg": 180
+          },
+          "then": [
+            "f:photo.crib"
+          ],
+          "a2": "30 §4.2.1 Len's favour: the old crib"
+        }
+      ]
+    },
+    {
+      "id": "bald.c902",
+      "name": "Bald Eagle Lake, the site east of the crews' landing (C902)",
+      "doc": "docs/story/20-opening.md §11.3 (NB20 read where he wrote it)",
+      "site": "C902",
+      "lake": "Bald Eagle Lake",
+      "props": [],
+      "triggers": [
+        {
+          "on": "readHere",
+          "nb": "NB20",
+          "r": 70,
+          "when": "f:nb.found",
+          "then": [
+            "walt:20:11.3.w1"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "x.c902.stone",
+      "name": "Bald Eagle Lake, C902's landing: a white stone on a flat rock (30 §9, \"V.'s water\")",
+      "doc": "docs/story/30-mining-years.md §9 (\"A white stone on a flat rock at the landing, set long before 2018\"); unstarred as walt-sites.js keeps C902 (stream x)",
+      "x": -24773.5,
+      "z": 29969.1,
+      "lake": "Bald Eagle Lake",
+      "shore": true,
+      "search": 60,
+      "props": [
+        {
+          "id": "x.c902.rock",
+          "kit": "flatRock",
+          "at": [
+            0,
+            1.2
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Flat rock"
+            }
+          ],
+          "wet": "edge"
+        },
+        {
+          "id": "x.c902.stone",
+          "kit": "quartzCobble",
+          "at": [
+            0,
+            1.2
+          ],
+          "on": "x.c902.rock",
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "White stone"
+            }
+          ],
+          "wet": "edge"
+        }
+      ],
+      "verbs": [],
+      "triggers": []
+    },
+    {
+      "id": "ep33.crewcamp",
+      "name": "The old crew camp at the EP 33 road end: a slab and a pole",
+      "doc": "docs/story/20-opening.md §11.1 step 2; 30-mining-years.md §3",
+      "trailhead": 33,
+      "lake": "Little Gabbro Lake",
+      "props": [
+        {
+          "id": "ep33.slab",
+          "kit": "slab",
+          "at": [
+            -6,
+            4
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Slab"
+            }
+          ]
+        },
+        {
+          "id": "ep33.pole",
+          "kit": "pole",
+          "at": [
+            -9,
+            7.5
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Pole"
+            }
+          ]
+        },
+        {
+          "id": "ep33.rock",
+          "kit": "landingRock",
+          "landing": true,
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Landing rock"
+            }
+          ],
+          "a2": "30 §4.9 the landing rock, at the water"
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "ep33.slab",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:crews.slab"
+          ]
+        },
+        {
+          "prop": "ep33.pole",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:crews.pole"
+          ]
+        },
+        {
+          "prop": "ep33.rock",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:crews.landingrock"
+          ]
+        }
+      ],
+      "triggers": []
+    },
+    {
+      "id": "westpads",
+      "name": "The grade and the west pads, Bald Eagle's west side",
+      "doc": "docs/story/30-mining-years.md §3, §4.3 (a2); 90 §4",
+      "a2": true,
+      "x": -25975,
+      "z": 30075,
+      "lake": "Bald Eagle Lake",
+      "props": [
+        {
+          "id": "westpads.casing",
+          "kit": "casing",
+          "at": [
+            13,
+            -5
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Casing"
+            }
+          ]
+        },
+        {
+          "id": "westpads.rack",
+          "kit": "coreRack",
+          "at": [
+            -10,
+            5
+          ],
+          "opts": {
+            "fallen": true
+          },
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Rack"
+            }
+          ]
+        },
+        {
+          "id": "westpads.chips",
+          "kit": "gradeMouth",
+          "at": [
+            -200,
+            100
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "f:knows.pit",
+              "name": "Core chips"
+            },
+            {
+              "when": "true",
+              "name": "Gravel"
+            }
+          ]
+        },
+        {
+          "id": "westpads.casing2",
+          "kit": "casing",
+          "at": [
+            -351,
+            187
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Casing"
+            }
+          ]
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "westpads.casing",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:westpads.casing"
+          ]
+        },
+        {
+          "prop": "westpads.casing2",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:westpads.casing"
+          ]
+        }
+      ],
+      "photo": [
+        {
+          "id": "casing",
+          "tol": {
+            "d": 40,
+            "deg": 180
+          },
+          "then": [
+            "f:photo.casing"
+          ]
+        },
+        {
+          "id": "casing",
+          "x": -26326,
+          "z": 30262,
+          "tol": {
+            "d": 40,
+            "deg": 180
+          },
+          "then": [
+            "f:photo.casing"
+          ]
+        }
+      ],
+      "triggers": []
+    },
+    {
+      "id": "kettle",
+      "name": "The Kettle pad, in its hollow south-west of Bald Eagle",
+      "doc": "docs/story/30-mining-years.md §3, §4.3 (a2); provisional (owner call 11, 90 §13 check 1)",
+      "a2": true,
+      "x": -26950,
+      "z": 30600,
+      "r": 140,
+      "props": [
+        {
+          "id": "kettle.trench",
+          "kit": "trench",
+          "at": [
+            15,
+            40
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Trench"
+            }
+          ]
+        },
+        {
+          "id": "kettle.stockpile",
+          "kit": "stockpile",
+          "at": [
+            52,
+            -12
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Stockpile"
+            }
+          ]
+        },
+        {
+          "id": "kettle.rack",
+          "kit": "coreRack",
+          "at": [
+            -35,
+            10
+          ],
+          "opts": {
+            "fallen": true
+          },
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Rack"
+            }
+          ]
+        },
+        {
+          "id": "kettle.lid",
+          "kit": "boxLid",
+          "at": [
+            -33.4,
+            8.3
+          ],
+          "show": "!f:kettle.lid",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Box lid"
+            }
+          ]
+        },
+        {
+          "id": "kettle.up",
+          "kit": "stationStake",
+          "at": [
+            -6,
+            100
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Up top"
+            }
+          ]
+        },
+        {
+          "id": "kettle.trench.stake",
+          "kit": "stationStake",
+          "at": [
+            24,
+            46
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "The trench"
+            }
+          ]
+        },
+        {
+          "id": "kettle.pond",
+          "kit": "stationStake",
+          "at": [
+            66,
+            -258
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "The pond"
+            }
+          ]
+        },
+        {
+          "id": "kettle.dam",
+          "kit": "beaverDam",
+          "at": [
+            70,
+            -262
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Beaver dam"
+            }
+          ]
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "kettle.lid",
+          "verb": "Take",
+          "when": "!f:kettle.lid",
+          "then": [
+            "f:kettle.lid",
+            "give:item.leolid"
+          ]
+        },
+        {
+          "prop": "kettle.up",
+          "verb": "Fill",
+          "when": "f:kettle.bottles & !f:kettle.fill.up & !f:kettle.done",
+          "then": [
+            "f:kettle.fill.up"
+          ]
+        },
+        {
+          "prop": "kettle.trench.stake",
+          "verb": "Fill",
+          "when": "f:kettle.bottles & !f:kettle.fill.trench & !f:kettle.done",
+          "then": [
+            "f:kettle.fill.trench"
+          ]
+        },
+        {
+          "prop": "kettle.pond",
+          "verb": "Fill",
+          "when": "f:kettle.bottles & !f:kettle.fill.pond & !f:kettle.done",
+          "then": [
+            "f:kettle.fill.pond"
+          ]
+        },
+        {
+          "prop": "kettle.dam",
+          "verb": "Lower the Secchi disk",
+          "when": "f:kettle.bottles & !f:kettle.secchi & !f:kettle.done",
+          "then": [
+            "f:kettle.secchi"
+          ]
+        }
+      ],
+      "triggers": [
+        {
+          "on": "enter",
+          "r": 110,
+          "when": "true",
+          "then": [
+            "f:kettle.visited",
+            "f:westpads.seen"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pietro.dig",
+      "name": "Pietro, the north-east hill: the 2018 dig",
+      "doc": "docs/story/30-mining-years.md §4.7 (a2); 90 §4, §13 check 8",
+      "a2": true,
+      "x": -21455,
+      "z": 25235,
+      "lake": "Pietro Lake",
+      "shore": true,
+      "search": 160,
+      "clear": 4,
+      "lanes": [
+        {
+          "from": "pietro.path",
+          "toward": [
+            -21210,
+            25060
+          ],
+          "len": 262,
+          "r": 1.1
+        }
+      ],
+      "props": [
+        {
+          "id": "pietro.rock",
+          "kit": "landingRock",
+          "at": [
+            0,
+            -0.6
+          ],
+          "show": "true",
+          "wet": "edge"
+        },
+        {
+          "id": "pietro.path",
+          "kit": "gradeMouth",
+          "at": [
+            0,
+            4
+          ],
+          "show": "true",
+          "dot": []
+        },
+        {
+          "id": "pietro.dig",
+          "kit": "digPit",
+          "lane": 0,
+          "along": 258,
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Old dig"
+            }
+          ]
+        },
+        {
+          "id": "pietro.lath",
+          "kit": "surveyLath",
+          "lane": 0,
+          "along": 258,
+          "side": 0.4,
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Lath"
+            }
+          ]
+        },
+        {
+          "id": "pietro.blade",
+          "kit": "shovelBlade",
+          "lane": 0,
+          "along": 256,
+          "side": 2.3,
+          "show": "!f:pietro.blade",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Shovel blade, broken"
+            }
+          ]
+        },
+        {
+          "id": "pietro.tag",
+          "kit": "surveyTag",
+          "lane": 0,
+          "along": 261,
+          "side": -3.4,
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Tag"
+            }
+          ]
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "pietro.dig",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:pietro.dig.seen"
+          ]
+        },
+        {
+          "prop": "pietro.blade",
+          "verb": "Take",
+          "when": "!f:pietro.blade",
+          "then": [
+            "f:pietro.blade",
+            "give:item.shovelblade"
+          ]
+        }
+      ],
+      "triggers": []
+    },
+    {
+      "id": "twostump",
+      "name": "Gabbro, Two Stump: the old drill-road landing on the south shore",
+      "doc": "docs/story/30-mining-years.md §3, §4.1; 10 NB31; 90 §4 (a2)",
+      "a2": true,
+      "x": -27500,
+      "z": 27590,
+      "lake": "Gabbro Lake",
+      "shore": true,
+      "search": 220,
+      "clear": 6,
+      "props": [
+        {
+          "id": "twostump.stumps",
+          "kit": "twoStumps",
+          "at": [
+            0,
+            5
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Stumps"
+            }
+          ]
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "twostump.stumps",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:twostump.seen"
+          ]
+        }
+      ],
+      "triggers": [
+        {
+          "on": "readHere",
+          "nb": "NB31",
+          "r": 80,
+          "when": "f:nb.found",
+          "then": []
+        }
+      ]
+    },
+    {
+      "id": "s7.mummos",
+      "name": "Mummo's: the Haapala fish camp, Inlet Bay, Basswood (US shore)",
+      "doc": "docs/story/60-side-stories.md S7 (The place; checks 8 and 13: scripts/c2-episodes-data.mjs)",
+      "x": -17480,
+      "z": 3730,
+      "lake": "Basswood Lake",
+      "shore": true,
+      "clear": 7,
+      "search": 140,
+      "ep": "S7",
+      "props": [
+        {
+          "id": "s7.lilacs",
+          "kit": "lilacs",
+          "at": [
+            -6,
+            9
+          ],
+          "opts": {
+            "bloom": true
+          },
+          "show": "window:lilac",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Lilacs"
+            }
+          ]
+        },
+        {
+          "id": "s7.lilacs.green",
+          "kit": "lilacs",
+          "at": [
+            -6,
+            9
+          ],
+          "show": "!window:lilac",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Lilacs"
+            }
+          ]
+        },
+        {
+          "id": "s7.lilacs2",
+          "kit": "lilacs",
+          "at": [
+            5,
+            11
+          ],
+          "opts": {
+            "bloom": true
+          },
+          "show": "window:lilac",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Lilacs"
+            }
+          ]
+        },
+        {
+          "id": "s7.lilacs2.green",
+          "kit": "lilacs",
+          "at": [
+            5,
+            11
+          ],
+          "show": "!window:lilac",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Lilacs"
+            }
+          ]
+        },
+        {
+          "id": "s7.step",
+          "kit": "stoneStep",
+          "at": [
+            0,
+            1.2
+          ],
+          "wet": "edge",
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Stone step"
+            }
+          ]
+        },
+        {
+          "id": "s7.cobble",
+          "kit": "quartzCobble",
+          "at": [
+            0,
+            1.2
+          ],
+          "on": "s7.step",
+          "wet": "edge",
+          "show": "true"
+        },
+        {
+          "id": "s7.foundation",
+          "kit": "foundation",
+          "at": [
+            0,
+            13
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Foundation"
+            }
+          ]
+        },
+        {
+          "id": "s7.bed",
+          "kit": "bedFrame",
+          "at": [
+            9,
+            15
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Bed frame"
+            }
+          ]
+        },
+        {
+          "id": "s7.footing",
+          "kit": "stoneRing",
+          "at": [
+            -10,
+            2.2
+          ],
+          "wet": "edge",
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Footing"
+            }
+          ]
+        },
+        {
+          "id": "s7.rock",
+          "kit": "swimRock",
+          "at": [
+            -10,
+            -2.5
+          ],
+          "wet": true,
+          "show": "true",
+          "dot": [
+            {
+              "when": "here:NB35",
+              "name": "The swimming rock."
+            },
+            {
+              "when": "true",
+              "name": "Flat rock"
+            }
+          ]
+        },
+        {
+          "id": "s7.crib",
+          "kit": "crib",
+          "at": [
+            3,
+            -4
+          ],
+          "opts": {
+            "under": 1
+          },
+          "wet": true,
+          "show": "wind<3 & hour:10-15"
+        },
+        {
+          "id": "s7.crib2",
+          "kit": "crib",
+          "at": [
+            6.5,
+            -4.5
+          ],
+          "opts": {
+            "under": 1
+          },
+          "wet": true,
+          "show": "wind<3 & hour:10-15"
+        },
+        {
+          "id": "x.s7.rhubarb",
+          "kit": "rhubarb",
+          "at": [
+            -5,
+            15.5
+          ],
+          "show": "month:5-6",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Rhubarb"
+            }
+          ],
+          "x": "70 §2.3 rhubarb at an old cabin site, May–June (stream x)"
+        },
+        {
+          "id": "x.s7.rhubarb2",
+          "kit": "rhubarb",
+          "at": [
+            -3.4,
+            16.4
+          ],
+          "show": "month:5-6",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Rhubarb"
+            }
+          ]
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "s7.step",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:ep.S7.step"
+          ]
+        },
+        {
+          "prop": "s7.foundation",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:ep.S7.ashore"
+          ]
+        },
+        {
+          "prop": "s7.bed",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:ep.S7.ashore"
+          ]
+        },
+        {
+          "prop": "s7.footing",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:ep.S7.ashore"
+          ]
+        },
+        {
+          "prop": "s7.rock",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:ep.S7.rock"
+          ]
+        },
+        {
+          "prop": "x.s7.rhubarb",
+          "verb": "Look",
+          "when": "!f:ep.S7.rhubarb",
+          "then": [
+            "f:ep.S7.rhubarb",
+            "think:70.2.3.1"
+          ]
+        },
+        {
+          "prop": "x.s7.rhubarb2",
+          "verb": "Look",
+          "when": "!f:ep.S7.rhubarb",
+          "then": [
+            "f:ep.S7.rhubarb",
+            "think:70.2.3.1"
+          ]
+        }
+      ],
+      "triggers": [
+        {
+          "on": "enter",
+          "r": 80,
+          "when": "true",
+          "then": [
+            "f:ep.S7.found"
+          ]
+        },
+        {
+          "on": "readHere",
+          "nb": "NB35",
+          "r": 45,
+          "when": "f:nb.found",
+          "then": []
+        }
+      ]
+    },
+    {
+      "id": "s9.beach",
+      "name": "Alice Lake, the beach site C1690 (Site 1175): the beach rock and June's pot off it",
+      "doc": "docs/story/60-side-stories.md S9 (The place; check 10: scripts/c2-episodes-data.mjs)",
+      "x": -233.4,
+      "z": 15091.2,
+      "lake": "Alice Lake",
+      "shore": true,
+      "clear": 0,
+      "search": 40,
+      "ep": "S9",
+      "props": [
+        {
+          "id": "s9.rock",
+          "kit": "landingRock",
+          "at": [
+            1.5,
+            -0.4
+          ],
+          "wet": "edge",
+          "show": "true"
+        },
+        {
+          "id": "s9.pot",
+          "kit": "enamelPot",
+          "at": [
+            0,
+            -12
+          ],
+          "wet": true,
+          "show": "!f:ep.S9.pot"
+        },
+        {
+          "id": "s9.shape",
+          "kit": "sandShape",
+          "at": [
+            0,
+            -12
+          ],
+          "wet": true,
+          "show": "here:NB06 & wind<3 & hour:10-15 & !f:ep.S9.pot"
+        }
+      ],
+      "verbs": [],
+      "triggers": [
+        {
+          "on": "readHere",
+          "nb": "NB06",
+          "r": 30,
+          "when": "f:nb.found",
+          "then": []
+        }
+      ]
+    },
+    {
+      "id": "gull.sign",
+      "name": "Gull Lake, the east bay: the beaver dam at the creek mouth (the far end's landing)",
+      "doc": "50 §2; 03 §2 step 1; 90 §4",
+      "x": -19790,
+      "z": 26772,
+      "lake": "Gull Lake",
+      "clear": 6,
+      "r": 40,
+      "props": [
+        {
+          "id": "gull.dam",
+          "kit": "creekDam",
+          "at": [
+            -5,
+            -1
+          ],
+          "opts": {
+            "w": 14
+          },
+          "show": "true",
+          "wet": "any"
+        },
+        {
+          "id": "gull.stump",
+          "kit": "stumpCut",
+          "at": [
+            3,
+            3
+          ],
+          "show": "true",
+          "wet": "any",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Stump"
+            }
+          ]
+        },
+        {
+          "id": "gull.stone",
+          "kit": "quartzCobble",
+          "on": "gull.stump",
+          "at": [
+            3,
+            3
+          ],
+          "show": "true",
+          "wet": "any",
+          "dot": [
+            {
+              "when": "true",
+              "name": "White stone"
+            }
+          ]
+        },
+        {
+          "id": "gull.rod",
+          "kit": "rodStanding",
+          "at": [
+            1.4,
+            1.6
+          ],
+          "show": "lowwater",
+          "wet": "any",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Old pipe"
+            }
+          ]
+        },
+        {
+          "id": "gull.step",
+          "kit": "mudStep",
+          "at": [
+            2,
+            2.2
+          ],
+          "show": "lowwater",
+          "wet": "any"
+        }
+      ],
+      "verbs": [],
+      "triggers": [
+        {
+          "on": "enter",
+          "r": 700,
+          "then": [
+            "f:gull.eastbay"
+          ]
+        },
+        {
+          "on": "enter",
+          "r": 25,
+          "then": [
+            "f:gull.dam"
+          ]
+        },
+        {
+          "on": "enter",
+          "r": 25,
+          "when": "lowwater",
+          "then": [
+            "f:gull.stump.lowwater",
+            "f:gull.rod.seen"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "gull.burntpoint",
+      "name": "Gull Lake, the burnt point (the headland closing the east bay)",
+      "doc": "03 §2a; 10 NB55; lock 3 key C",
+      "x": -21250,
+      "z": 26550,
+      "lake": "Gull Lake",
+      "r": 260,
+      "props": [],
+      "verbs": [],
+      "triggers": [
+        {
+          "on": "readHere",
+          "nb": "NB55",
+          "r": 300,
+          "then": [
+            "f:nb.burntpoint"
+          ]
+        },
+        {
+          "on": "stand",
+          "s": 6,
+          "r": 260,
+          "when": "read:NB55",
+          "then": [
+            "f:nb.burntpoint"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "gull.notch",
+      "name": "The notch on the rise behind Gull's creek mouth",
+      "doc": "03 §2a; 90 §13 check 5",
+      "x": -19340,
+      "z": 26805,
+      "clear": 24,
+      "r": 30,
+      "far": 2400,
+      "props": [
+        {
+          "id": "gull.notch",
+          "kit": "notchCleft",
+          "at": [
+            0,
+            0
+          ],
+          "show": "true",
+          "opts": {
+            "gap": 7,
+            "h": 11
+          }
+        }
+      ],
+      "verbs": [],
+      "triggers": []
+    },
+    {
+      "id": "pond4747.eastbank",
+      "name": "The flowage behind Gull's dam, the east bank (pond 4747)",
+      "doc": "50 §3.1; 03 §2 step 2; lock 5 key C",
+      "x": -19768,
+      "z": 26960,
+      "r": 70,
+      "props": [
+        {
+          "id": "gull.blaze.1",
+          "kit": "burntSnag",
+          "at": [
+            -2,
+            -55
+          ],
+          "opts": {
+            "dab": true
+          },
+          "show": "true",
+          "dot": [
+            {
+              "when": "f:tauno.blazes",
+              "name": "Old blaze"
+            },
+            {
+              "when": "true",
+              "name": "Burnt pine"
+            }
+          ]
+        },
+        {
+          "id": "gull.blaze.2",
+          "kit": "burntSnag",
+          "at": [
+            1,
+            30
+          ],
+          "opts": {
+            "dab": true
+          },
+          "show": "true",
+          "dot": [
+            {
+              "when": "f:tauno.blazes",
+              "name": "Old blaze"
+            },
+            {
+              "when": "true",
+              "name": "Burnt pine"
+            }
+          ]
+        },
+        {
+          "id": "gull.blaze.3",
+          "kit": "burntSnag",
+          "at": [
+            5,
+            88
+          ],
+          "opts": {
+            "dab": true
+          },
+          "show": "true",
+          "dot": [
+            {
+              "when": "f:tauno.blazes",
+              "name": "Old blaze"
+            },
+            {
+              "when": "true",
+              "name": "Burnt pine"
+            }
+          ]
+        }
+      ],
+      "verbs": [],
+      "triggers": [
+        {
+          "on": "enter",
+          "r": 70,
+          "then": [
+            "f:ev.blazes=pond4747"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "waltcamp",
+      "name": "The knob behind Gull's flowage: Walt's camp under the cedar",
+      "doc": "50 §4; 03 §2 step 3; lock 6 key A",
+      "x": -19385,
+      "z": 27355,
+      "clear": 7,
+      "r": 40,
+      "hideFromMap": true,
+      "props": [
+        {
+          "id": "waltcamp.cabin",
+          "kit": "waltcamp",
+          "at": [
+            0,
+            0
+          ],
+          "yaw": 0.9425,
+          "show": "true",
+          "solid": true
+        },
+        {
+          "id": "waltcamp.cot",
+          "kit": "spot",
+          "at": [
+            0.18,
+            -0.84
+          ],
+          "yaw": 0.9425,
+          "show": "true",
+          "opts": {
+            "y": 0.62,
+            "r": 0.45
+          },
+          "dot": [
+            {
+              "when": "true",
+              "name": "Cot"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.boots",
+          "kit": "spot",
+          "at": [
+            -0.06,
+            -0.94
+          ],
+          "yaw": 0.9425,
+          "show": "true",
+          "opts": {
+            "y": 0.33999999999999997,
+            "r": 0.18
+          },
+          "dot": [
+            {
+              "when": "true",
+              "name": "Boots"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.stove",
+          "kit": "spot",
+          "at": [
+            1.31,
+            -0.01
+          ],
+          "yaw": 0.9425,
+          "show": "true",
+          "opts": {
+            "y": 0.57,
+            "r": 0.32
+          },
+          "dot": [
+            {
+              "when": "true",
+              "name": "Stove"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.shelf",
+          "kit": "spot",
+          "at": [
+            1.08,
+            0.7
+          ],
+          "yaw": 0.9425,
+          "show": "true",
+          "opts": {
+            "y": 0.97,
+            "r": 0.4
+          },
+          "dot": [
+            {
+              "when": "true",
+              "name": "Shelf"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.corebox",
+          "kit": "spot",
+          "at": [
+            0.97,
+            0.85
+          ],
+          "yaw": 0.9425,
+          "show": "true",
+          "opts": {
+            "y": 0.62,
+            "r": 0.2
+          },
+          "dot": [
+            {
+              "when": "true",
+              "name": "Core box"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.photo",
+          "kit": "photograph",
+          "at": [
+            0.94,
+            0.83
+          ],
+          "yaw": 0.9425,
+          "show": "!f:camp.photo",
+          "lift": 1.1500000000000001,
+          "dot": [
+            {
+              "when": "true",
+              "name": "Photograph"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.note",
+          "kit": "noteSquare",
+          "at": [
+            0.94,
+            0.83
+          ],
+          "yaw": 0.9425,
+          "show": "f:camp.photo & !f:camp.june",
+          "lift": 1.1500000000000001,
+          "dot": [
+            {
+              "when": "true",
+              "name": "Note"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.marks",
+          "kit": "spot",
+          "at": [
+            -0.9,
+            -1.17
+          ],
+          "yaw": 0.9425,
+          "show": "true",
+          "opts": {
+            "y": 1.3,
+            "r": 0.25
+          },
+          "dot": [
+            {
+              "when": "true",
+              "name": "Pencil marks"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.hatchet",
+          "kit": "spot",
+          "at": [
+            -1.02,
+            -0.98
+          ],
+          "yaw": 0.9425,
+          "show": "true",
+          "opts": {
+            "y": 1.5,
+            "r": 0.18
+          },
+          "dot": [
+            {
+              "when": "true",
+              "name": "Hatchet"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.sun",
+          "kit": "spot",
+          "at": [
+            0.77,
+            1.36
+          ],
+          "yaw": 0.9425,
+          "show": "true",
+          "opts": {
+            "y": 1.45,
+            "r": 0.22
+          },
+          "dot": [
+            {
+              "when": "true",
+              "name": "Pencil sun"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.floor",
+          "kit": "floorboard",
+          "at": [
+            0.83,
+            0.3
+          ],
+          "yaw": 0.9425,
+          "show": "!f:nb.torn",
+          "dot": [
+            {
+              "when": "true",
+              "name": "White stone"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.floor.up",
+          "kit": "floorboard",
+          "at": [
+            0.83,
+            0.3
+          ],
+          "yaw": 0.9425,
+          "show": "f:nb.torn",
+          "opts": {
+            "lifted": true
+          },
+          "dot": [
+            {
+              "when": "true",
+              "name": "White stone"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.can",
+          "kit": "coffeeCan",
+          "at": [
+            0.75,
+            0.24
+          ],
+          "yaw": 0.9425,
+          "show": "f:nb.torn",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Coffee can"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.cedar.1",
+          "kit": "cedar",
+          "at": [
+            4,
+            -5
+          ],
+          "show": "true"
+        },
+        {
+          "id": "waltcamp.cedar.2",
+          "kit": "cedar",
+          "at": [
+            7.5,
+            -1
+          ],
+          "show": "true"
+        },
+        {
+          "id": "waltcamp.cedar.3",
+          "kit": "cedar",
+          "at": [
+            2,
+            -8.5
+          ],
+          "show": "true"
+        },
+        {
+          "id": "waltcamp.cedar.4",
+          "kit": "cedar",
+          "at": [
+            8,
+            -6.5
+          ],
+          "show": "true"
+        },
+        {
+          "id": "waltcamp.cedar.5",
+          "kit": "cedar",
+          "at": [
+            5,
+            -11
+          ],
+          "show": "true"
+        },
+        {
+          "id": "waltcamp.cedar.6",
+          "kit": "cedar",
+          "at": [
+            10.5,
+            -3.5
+          ],
+          "show": "true"
+        },
+        {
+          "id": "waltcamp.cedar.7",
+          "kit": "cedar",
+          "at": [
+            12,
+            -8
+          ],
+          "show": "true"
+        },
+        {
+          "id": "waltcamp.cedar.8",
+          "kit": "cedar",
+          "at": [
+            -2.5,
+            -9
+          ],
+          "show": "true"
+        },
+        {
+          "id": "waltcamp.stump.1",
+          "kit": "oldStump",
+          "at": [
+            -21,
+            -12
+          ],
+          "show": "true",
+          "dotWhen": "f:ep.S8.done",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Cut stump"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.stump.2",
+          "kit": "oldStump",
+          "at": [
+            -27,
+            -16.5
+          ],
+          "show": "true",
+          "dotWhen": "f:ep.S8.done",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Cut stump"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.chips.1",
+          "kit": "coreChips",
+          "at": [
+            2.49,
+            1
+          ],
+          "yaw": 0.9425,
+          "show": "true",
+          "dotWhen": "f:tauno.pit",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Core chips"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.chips.2",
+          "kit": "coreChips",
+          "at": [
+            5.24,
+            3
+          ],
+          "yaw": 0.9425,
+          "show": "true",
+          "dotWhen": "f:tauno.pit",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Core chips"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.chips.3",
+          "kit": "coreChips",
+          "at": [
+            9.28,
+            5.94
+          ],
+          "yaw": 0.9425,
+          "show": "true",
+          "dotWhen": "f:tauno.pit",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Core chips"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.chips.4",
+          "kit": "coreChips",
+          "at": [
+            14.94,
+            10.05
+          ],
+          "yaw": 0.9425,
+          "show": "true",
+          "dotWhen": "f:tauno.pit",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Core chips"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.chips.5",
+          "kit": "coreChips",
+          "at": [
+            22.23,
+            15.34
+          ],
+          "yaw": 0.9425,
+          "show": "true",
+          "dotWhen": "f:tauno.pit",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Core chips"
+            }
+          ]
+        },
+        {
+          "id": "waltcamp.chips.6",
+          "kit": "coreChips",
+          "at": [
+            31.12,
+            21.81
+          ],
+          "yaw": 0.9425,
+          "show": "true",
+          "dotWhen": "f:tauno.pit",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Core chips"
+            }
+          ]
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "waltcamp.cot",
+          "verb": "Sit",
+          "when": "true",
+          "then": [
+            "f:camp.cot"
+          ]
+        },
+        {
+          "prop": "waltcamp.shelf",
+          "verb": "Look",
+          "when": "!f:camp.shelf",
+          "then": [
+            "f:camp.shelf"
+          ]
+        },
+        {
+          "prop": "waltcamp.shelf",
+          "verb": "Take",
+          "when": "f:camp.shelf & !f:camp.shelf.taken",
+          "then": [
+            "f:camp.shelf.taken",
+            "give:item.waltmatches",
+            "give:item.woolsocks",
+            "give:item.oldtin"
+          ]
+        },
+        {
+          "prop": "waltcamp.corebox",
+          "verb": "Look",
+          "when": "!f:camp.corebox",
+          "then": [
+            "f:camp.corebox"
+          ]
+        },
+        {
+          "prop": "waltcamp.photo",
+          "verb": "Pick up",
+          "when": "true",
+          "then": [
+            "f:camp.photo",
+            "give:page.flycamp"
+          ]
+        },
+        {
+          "prop": "waltcamp.note",
+          "verb": "Read",
+          "when": "true",
+          "then": [
+            "f:camp.june",
+            "give:page.junenote",
+            "walt:50:4.5.w.june"
+          ]
+        },
+        {
+          "prop": "waltcamp.marks",
+          "verb": "Look",
+          "when": "!f:camp.marks",
+          "then": [
+            "f:camp.marks",
+            "walt:50:4.6.w.marks"
+          ]
+        },
+        {
+          "prop": "waltcamp.floor",
+          "verb": "Lift",
+          "when": "f:knows.stonesign",
+          "then": [
+            "f:nb.torn",
+            "f:find.big.camp",
+            "walt:50:4.3.w.floor"
+          ]
+        }
+      ],
+      "triggers": [
+        {
+          "on": "enter",
+          "r": 14,
+          "then": [
+            "f:camp.found"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cellar",
+      "name": "The ridge above the knob: the old pit (the cellar)",
+      "doc": "50 §5; 03 §2 step 4; 90 §13 check 6",
+      "x": -18885,
+      "z": 27725,
+      "clear": 3.5,
+      "r": 30,
+      "hideFromMap": true,
+      "props": [
+        {
+          "id": "cellar.pit",
+          "kit": "pit",
+          "at": [
+            0,
+            0
+          ],
+          "show": "!f:pit.cleared",
+          "dotWhen": "any(key.L6*)",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Old pit"
+            }
+          ]
+        },
+        {
+          "id": "cellar.lid",
+          "kit": "pitLid",
+          "at": [
+            0,
+            0
+          ],
+          "show": "f:pit.cleared & !f:pit.lifted",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Lid"
+            }
+          ]
+        },
+        {
+          "id": "cellar.hole",
+          "kit": "pitOpen",
+          "at": [
+            0,
+            0
+          ],
+          "show": "f:pit.lifted",
+          "dotWhen": "f:world.pit.empty",
+          "dot": [
+            {
+              "when": "true",
+              "name": "An empty pit."
+            }
+          ]
+        },
+        {
+          "id": "cellar.can.1",
+          "kit": "ammoCan",
+          "at": [
+            -0.2,
+            0
+          ],
+          "lift": -0.7,
+          "show": "f:pit.lifted & !f:pit.can.1",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Can"
+            }
+          ]
+        },
+        {
+          "id": "cellar.can.2",
+          "kit": "ammoCan",
+          "at": [
+            0.2,
+            0.05
+          ],
+          "lift": -0.7,
+          "show": "f:pit.lifted & !f:pit.can.2",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Can"
+            }
+          ]
+        },
+        {
+          "id": "cellar.note",
+          "kit": "fieldNote",
+          "at": [
+            -0.2,
+            0
+          ],
+          "lift": -0.48,
+          "show": "f:pit.lifted & !f:pit.note",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Note"
+            }
+          ]
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "cellar.pit",
+          "verb": "Clear the moss",
+          "when": "any(key.L6*) & !iceseason & peers=0",
+          "then": [
+            "f:pit.cleared"
+          ]
+        },
+        {
+          "prop": "cellar.lid",
+          "verb": "Lift",
+          "when": "true",
+          "then": [
+            "f:pit.lifted"
+          ]
+        },
+        {
+          "prop": "cellar.note",
+          "verb": "Pick up",
+          "when": "true",
+          "then": [
+            "f:pit.note",
+            "give:page.einonote",
+            "walt:50:5.3.w.eino"
+          ]
+        },
+        {
+          "prop": "cellar.can.1",
+          "verb": "Take",
+          "when": "f:pit.note",
+          "then": [
+            "f:pit.can.1"
+          ]
+        },
+        {
+          "prop": "cellar.can.2",
+          "verb": "Take",
+          "when": "f:pit.note",
+          "then": [
+            "f:pit.can.2"
+          ]
+        }
+      ],
+      "triggers": []
+    },
+    {
+      "id": "stash.paddle",
+      "name": "Pietro Lake, the P530 landing: the spare paddle under the cedar",
+      "doc": "50 §6.9; 10 NB66; lock 4 key E",
+      "portage": "far.p530",
+      "end": [
+        -22705,
+        26855
+      ],
+      "r": 25,
+      "props": [
+        {
+          "id": "stash.paddle.cedar",
+          "kit": "cedar",
+          "at": [
+            4.5,
+            13
+          ],
+          "show": "true"
+        },
+        {
+          "id": "stash.paddle",
+          "kit": "sparePaddle",
+          "at": [
+            2.4,
+            10
+          ],
+          "show": "!f:stash.paddle",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Paddle"
+            }
+          ]
+        },
+        {
+          "id": "stash.paddle.stone",
+          "kit": "quartzCobble",
+          "at": [
+            2.8,
+            10
+          ],
+          "lift": 0.04,
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "White stone"
+            }
+          ]
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "stash.paddle",
+          "verb": "Take",
+          "when": "true",
+          "then": [
+            "f:stash.paddle",
+            "f:stash.paddle.found",
+            "give:item.sparepaddle"
+          ]
+        }
+      ],
+      "triggers": [
+        {
+          "on": "enter",
+          "r": 9,
+          "then": [
+            "f:stash.paddle.found"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "stash.drybag",
+      "name": "Camdre Lake, the top of the 121 (P24): the dry bag in the rocks",
+      "doc": "50 §6.9; 10 NB61, NB68",
+      "portage": "far.p24",
+      "end": [
+        -22275,
+        24745
+      ],
+      "r": 25,
+      "props": [
+        {
+          "id": "stash.drybag",
+          "kit": "dryBag",
+          "at": [
+            3,
+            3.5
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Dry bag"
+            }
+          ]
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "stash.drybag",
+          "verb": "Open",
+          "when": "!f:stash.drybag",
+          "then": [
+            "f:stash.drybag",
+            "give:item.scanner"
+          ]
+        }
+      ],
+      "triggers": []
+    },
+    {
+      "id": "stash.grumman",
+      "name": "Rock Island Lake, the north end of the 214 (P26): the old Grumman in the alders",
+      "doc": "50 §6.9; 10 NB62",
+      "portage": "far.p26",
+      "end": [
+        -20475,
+        22625
+      ],
+      "r": 25,
+      "props": [
+        {
+          "id": "stash.grumman",
+          "kit": "grumman",
+          "at": [
+            5,
+            3
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Canoe"
+            }
+          ]
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "stash.grumman",
+          "verb": "Get under",
+          "when": "run.active",
+          "then": [
+            "f:stash.grumman.under"
+          ]
+        }
+      ],
+      "triggers": [
+        {
+          "on": "enter",
+          "r": 10,
+          "then": [
+            "f:stash.grumman"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "s2.ridge",
+      "name": "Big Moose Lake, the west site under the ridge (C634 proposed): the snag off the point, the ridge behind",
+      "doc": "docs/story/60-side-stories.md S2 (The place; check 2)",
+      "x": -65403,
+      "z": 5075,
+      "lake": "Big Moose Lake",
+      "shore": true,
+      "clear": 0,
+      "search": 120,
+      "ep": "S2",
+      "props": [
+        {
+          "id": "s2.snag",
+          "kit": "snag",
+          "at": [
+            4,
+            -7
+          ],
+          "wet": true,
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Snag"
+            }
+          ]
+        },
+        {
+          "id": "s2.berry",
+          "kit": "serviceberry",
+          "at": [
+            26,
+            40
+          ],
+          "show": "!f:ep.S2.night",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Serviceberry"
+            }
+          ]
+        },
+        {
+          "id": "s2.berry.stripped",
+          "kit": "serviceberry",
+          "at": [
+            26,
+            40
+          ],
+          "opts": {
+            "stripped": true
+          },
+          "show": "f:ep.S2.night",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Serviceberry, stripped"
+            }
+          ]
+        },
+        {
+          "id": "s2.birches",
+          "kit": "twoBirches",
+          "at": [
+            0,
+            46
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Two birches"
+            }
+          ]
+        },
+        {
+          "id": "s2.log",
+          "kit": "hollowLog",
+          "at": [
+            -9,
+            37
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Hollow log"
+            }
+          ]
+        }
+      ],
+      "verbs": [],
+      "triggers": [
+        {
+          "on": "readHere",
+          "nb": "NB36",
+          "r": 70,
+          "when": "f:nb.found",
+          "then": []
+        },
+        {
+          "on": "enter",
+          "r": 60,
+          "when": "f:ep.S2.night",
+          "then": [
+            "f:ep.S2.back"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "s3.longrock",
+      "name": "Fourtown Lake, Walt's site C1000, the long rock: the fire ring's loose top stone",
+      "doc": "docs/story/60-side-stories.md S3 (The place; check 3)",
+      "x": -43324,
+      "z": 3061,
+      "lake": "Fourtown Lake",
+      "shore": true,
+      "clear": 0,
+      "search": 120,
+      "ep": "S3",
+      "props": [
+        {
+          "id": "s3.stone",
+          "kit": "ringStone",
+          "at": [
+            2,
+            9
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "f:ep.S3.square & !f:ep.S3.tin",
+              "name": "Loose stone"
+            },
+            {
+              "when": "true",
+              "name": "Fire ring"
+            }
+          ]
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "s3.stone",
+          "verb": "Lift",
+          "when": "f:ep.S3.square & !f:ep.S3.tin",
+          "then": [
+            "f:ep.S3.tin",
+            "give:item.redlens"
+          ]
+        }
+      ],
+      "triggers": [
+        {
+          "on": "readHere",
+          "nb": "NB26",
+          "r": 70,
+          "when": "f:nb.found",
+          "then": []
+        }
+      ]
+    },
+    {
+      "id": "s3.northbay",
+      "name": "Fourtown Lake, the north bay: rotten birch along the shore",
+      "doc": "docs/story/60-side-stories.md S3 (The place)",
+      "x": -44245,
+      "z": -485,
+      "lake": "Fourtown Lake",
+      "shore": true,
+      "clear": 0,
+      "search": 160,
+      "ep": "S3",
+      "props": [
+        {
+          "id": "s3.birchlog",
+          "kit": "rottenBirch",
+          "at": [
+            5,
+            4
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Rotten birch"
+            }
+          ]
+        }
+      ],
+      "verbs": [],
+      "triggers": []
+    },
+    {
+      "id": "s4.st1",
+      "name": "Nina Moose Lake, the north end near C649: Kari's survey station 1",
+      "doc": "docs/story/60-side-stories.md S4 (The place)",
+      "x": -64122,
+      "z": -8174,
+      "lake": "Nina Moose Lake",
+      "shore": true,
+      "clear": 0,
+      "search": 120,
+      "ep": "S4",
+      "props": [
+        {
+          "id": "s4.stake1",
+          "kit": "stationStake",
+          "at": [
+            2,
+            4
+          ],
+          "show": "f:ep.S4.yes"
+        }
+      ],
+      "verbs": [],
+      "triggers": []
+    },
+    {
+      "id": "s4.st2",
+      "name": "Lake Agnes, the inlet (the Agnes end of P484): Kari's survey station 2",
+      "doc": "docs/story/60-side-stories.md S4 (The place)",
+      "x": -64316,
+      "z": -11789,
+      "lake": "Lake Agnes",
+      "shore": true,
+      "clear": 0,
+      "search": 160,
+      "ep": "S4",
+      "props": [
+        {
+          "id": "s4.stake2",
+          "kit": "stationStake",
+          "at": [
+            2,
+            4
+          ],
+          "show": "f:ep.S4.yes"
+        }
+      ],
+      "verbs": [],
+      "triggers": []
+    },
+    {
+      "id": "s4.st3",
+      "name": "Lake Agnes, Walt's site C698 and its sand landing: Kari's survey station 3",
+      "doc": "docs/story/60-side-stories.md S4 (The place; NB12, NB44)",
+      "x": -62674,
+      "z": -14661,
+      "lake": "Lake Agnes",
+      "shore": true,
+      "clear": 0,
+      "search": 120,
+      "ep": "S4",
+      "props": [
+        {
+          "id": "s4.stake3",
+          "kit": "stationStake",
+          "at": [
+            3,
+            5
+          ],
+          "show": "f:ep.S4.yes"
+        }
+      ],
+      "verbs": [],
+      "triggers": [
+        {
+          "on": "readHere",
+          "nb": "NB44",
+          "r": 70,
+          "when": "f:nb.found",
+          "then": []
+        }
+      ]
+    },
+    {
+      "id": "s4.meadow",
+      "name": "The rendezvous meadow, an old beaver meadow inside the Weeny Lake primitive area (pma-1), west of Agnes",
+      "doc": "docs/story/60-side-stories.md S4 (The place; check 4: no PMA directly west of Agnes, so the nearest real one in the Moose River country, pma-1)",
+      "x": -68000,
+      "z": -16300,
+      "ep": "S4",
+      "props": [],
+      "verbs": [],
+      "triggers": []
+    },
+    {
+      "id": "s4.kill",
+      "name": "A kill in the Agnes pack's range (ravens over it)",
+      "doc": "docs/story/60-side-stories.md S4 (The set pieces)",
+      "x": -65300,
+      "z": -13600,
+      "ep": "S4",
+      "props": [
+        {
+          "id": "s4.bones",
+          "kit": "killBones",
+          "at": [
+            0,
+            0
+          ],
+          "show": "f:ep.S4.yes",
+          "dot": [
+            {
+              "when": "true",
+              "name": "A kill. A deer, mostly hair."
+            }
+          ]
+        }
+      ],
+      "verbs": [],
+      "triggers": []
+    },
+    {
+      "id": "gy.tow",
+      "name": "Prairie Portage, the Sucker end: the tow landing",
+      "doc": "docs/story/31-guiding-years.md GY-04, GY-05b (a3); 31 §13 check 1 (Hap's 'left' must be the wrong side)",
+      "a3": true,
+      "x": -16605,
+      "z": 4549,
+      "lake": "Sucker Lake",
+      "shore": true,
+      "clear": 4,
+      "search": 120,
+      "props": [
+        {
+          "id": "gy.towdock",
+          "kit": "towDock",
+          "at": [
+            7,
+            -0.4
+          ],
+          "wet": "edge",
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Tow landing"
+            }
+          ]
+        }
+      ],
+      "verbs": [],
+      "triggers": [
+        {
+          "on": "enter",
+          "r": 40,
+          "when": "true",
+          "then": [
+            "f:gy.tow"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "gy.prairie",
+      "name": "Prairie Portage, the Inlet Bay end (P194 walked)",
+      "doc": "31 GY-05c (a3): 'Hundred and twenty-two rods. Still.'",
+      "a3": true,
+      "x": -16720,
+      "z": 4231,
+      "lake": "Basswood Lake",
+      "shore": true,
+      "clear": 0,
+      "search": 120,
+      "props": [],
+      "verbs": [],
+      "triggers": [
+        {
+          "on": "enter",
+          "r": 45,
+          "when": "f:gy.tow",
+          "then": [
+            "f:gy.prairie"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "gy.lunch",
+      "name": "Hap's lunch rock: a flat granite point on Inlet Bay, US side (not Mummo's shore)",
+      "doc": "31 GY-04, GY-07, §9.1 (a3); 31 §13 check 2 (to confirm the bay mouth and the ridge in v9)",
+      "a3": true,
+      "x": -17850,
+      "z": 3550,
+      "lake": "Basswood Lake",
+      "shore": true,
+      "clear": 5,
+      "search": 600,
+      "props": [
+        {
+          "id": "gy.lunchrock",
+          "kit": "landingRock",
+          "at": [
+            0,
+            -0.4
+          ],
+          "wet": "edge",
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Flat rock on the point"
+            }
+          ]
+        },
+        {
+          "id": "gy.firering",
+          "kit": "oldFireRing",
+          "at": [
+            0,
+            3.2
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "f:gy.lunch",
+              "name": "Old fire ring, under the moss"
+            }
+          ]
+        },
+        {
+          "id": "gy.stub",
+          "kit": "pineStub",
+          "at": [
+            1.6,
+            4.6
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Pine stub"
+            }
+          ]
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "gy.firering",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:gy.firering"
+          ]
+        }
+      ],
+      "triggers": [
+        {
+          "on": "enter",
+          "r": 14,
+          "when": "true",
+          "then": [
+            "f:gy.lunch"
+          ]
+        }
+      ],
+      "photo": [
+        {
+          "id": "hap1986",
+          "tol": {
+            "d": 30,
+            "deg": 180
+          },
+          "when": "f:hap.day & !f:hap.photo",
+          "then": [
+            "f:gy.lunch.photo"
+          ],
+          "a3": "31 GY-07: Hap's print held against the view (a match is a match; the pine is gone)"
+        }
+      ]
+    },
+    {
+      "id": "gy.reef",
+      "name": "The reef past the second island, Inlet Bay (walleye in a south-wind drift)",
+      "doc": "31 GY-04, GY-05e (a3); 31 §13 check 2 (a real shoal from the depth data)",
+      "a3": true,
+      "x": -17150,
+      "z": 3350,
+      "lake": "Basswood Lake",
+      "clear": 0,
+      "search": 200,
+      "props": [],
+      "verbs": [],
+      "triggers": []
+    },
+    {
+      "id": "gy.mummos",
+      "name": "Mummo's from the water (Hap's 'his grandmother's old place')",
+      "doc": "31 GY-05d (a3): any visit, by water or ashore",
+      "a3": true,
+      "x": -17480,
+      "z": 3730,
+      "lake": "Basswood Lake",
+      "shore": true,
+      "clear": 0,
+      "search": 140,
+      "props": [],
+      "verbs": [],
+      "triggers": [
+        {
+          "on": "enter",
+          "r": 120,
+          "when": "true",
+          "then": [
+            "f:gy.mummos"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "s1.stuart",
+      "name": "The Stuart Portage (563 r), the road end at EP 19",
+      "doc": "docs/story/60-side-stories.md S1 (The place; 90 §13 check 1: the road end at EP 19)",
+      "x": -57783,
+      "z": -196,
+      "r": 60,
+      "ep": "S1",
+      "props": [],
+      "verbs": [],
+      "triggers": [
+        {
+          "on": "readHere",
+          "nb": "NB30",
+          "r": 150,
+          "when": "f:nb.found",
+          "then": []
+        },
+        {
+          "on": "enter",
+          "r": 60,
+          "when": "true",
+          "then": [
+            "f:ep.S1.road"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "s1.mid",
+      "name": "The Stuart Portage (563 r), the wet middle",
+      "doc": "docs/story/60-side-stories.md S1 (The place: long, wet in the middle; N12 read on the carry)",
+      "x": -57762,
+      "z": -1456,
+      "r": 150,
+      "ep": "S1",
+      "props": [],
+      "verbs": [],
+      "triggers": [
+        {
+          "on": "readHere",
+          "nb": "NB30",
+          "r": 150,
+          "when": "f:nb.found",
+          "then": []
+        }
+      ]
+    },
+    {
+      "id": "s1.river",
+      "name": "The Stuart Portage (563 r), the landing rock on the Stuart River",
+      "doc": "docs/story/60-side-stories.md S1 (The place: Ollie sits on the landing rock ten minutes each walk evening)",
+      "x": -57693,
+      "z": -2811,
+      "lake": "Stuart River",
+      "shore": true,
+      "search": 80,
+      "clear": 3,
+      "ep": "S1",
+      "props": [
+        {
+          "id": "s1.rock",
+          "kit": "landingRock",
+          "at": [
+            2.5,
+            -0.3
+          ],
+          "wet": "edge",
+          "show": "true"
+        }
+      ],
+      "verbs": [],
+      "triggers": [
+        {
+          "on": "readHere",
+          "nb": "NB30",
+          "r": 150,
+          "when": "f:nb.found",
+          "then": []
+        }
+      ]
+    },
+    {
+      "id": "s8.rock",
+      "name": "Lake Insula, \"the Kitchen\": the lunch rock on the narrows, the sled",
+      "doc": "docs/story/60-side-stories.md S8 (The place; check 9: a bare granite point on a narrows 0.5 km from C1655, scripts/cmp-s-data.mjs)",
+      "x": -6125,
+      "z": 18850,
+      "lake": "Lake Insula",
+      "shore": true,
+      "search": 150,
+      "clear": 5,
+      "ep": "S8",
+      "props": [
+        {
+          "id": "s8.lunchrock",
+          "kit": "landingRock",
+          "at": [
+            0,
+            0.4
+          ],
+          "wet": "edge",
+          "show": "true"
+        },
+        {
+          "id": "s8.sled",
+          "kit": "sled",
+          "at": [
+            0.6,
+            3.2
+          ],
+          "show": "!f:ep.S8.gone",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Old sled"
+            }
+          ]
+        },
+        {
+          "id": "s8.spinner",
+          "kit": "spinner",
+          "at": [
+            -1.2,
+            2.8
+          ],
+          "show": "here:NB37",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Spinner"
+            }
+          ]
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "s8.sled",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:ep.S8.sled"
+          ]
+        }
+      ],
+      "triggers": [
+        {
+          "on": "readHere",
+          "nb": "NB37",
+          "r": 60,
+          "when": "f:nb.found",
+          "then": []
+        },
+        {
+          "on": "enter",
+          "r": 45,
+          "when": "true",
+          "then": [
+            "f:ep.S8.rock"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "s8.creek",
+      "name": "Lake Insula, Emil's creek: the mouth straight across from the lunch rock, a beaver house",
+      "doc": "docs/story/60-side-stories.md S8 (The place: 1.1 km across on a straight line from the rock; check 9)",
+      "x": -6150,
+      "z": 19985,
+      "lake": "Lake Insula",
+      "shore": true,
+      "search": 200,
+      "clear": 3,
+      "ep": "S8",
+      "props": [
+        {
+          "id": "s8.lodge",
+          "kit": "beaverLodge",
+          "at": [
+            -7,
+            -4
+          ],
+          "wet": true,
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Beaver house"
+            }
+          ]
+        }
+      ],
+      "verbs": [],
+      "triggers": [
+        {
+          "on": "enter",
+          "r": 40,
+          "when": "true",
+          "then": [
+            "f:ep.S8.mouth"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "s8.clearing",
+      "name": "Emil's clearing: 200 m up the creek in the 2011 Pagami Creek burn, in fifteen-year jack pine",
+      "doc": "docs/story/60-side-stories.md S8 (The set piece; check 9: inside the burn, off every route; the readings are S8.the-set-piece-a.c1–c4)",
+      "x": -6150,
+      "z": 20185,
+      "r": 45,
+      "clear": 6,
+      "ep": "S8",
+      "props": [
+        {
+          "id": "s8.stump1",
+          "kit": "stumpCut",
+          "at": [
+            -9,
+            -17
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "f:ep.S8.taught",
+              "name": "Cut stump, knee high. Cut long ago, standing in snow."
+            },
+            {
+              "when": "true",
+              "name": "Stump"
+            }
+          ]
+        },
+        {
+          "id": "s8.stump2",
+          "kit": "stumpCut",
+          "at": [
+            -6,
+            -10
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "f:ep.S8.taught",
+              "name": "Cut stump, knee high. Cut long ago, standing in snow."
+            },
+            {
+              "when": "true",
+              "name": "Stump"
+            }
+          ]
+        },
+        {
+          "id": "s8.pipe",
+          "kit": "stovepipe",
+          "at": [
+            -3.5,
+            -4
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "f:ep.S8.taught",
+              "name": "Stovepipe, rusted through."
+            },
+            {
+              "when": "true",
+              "name": "Pipe"
+            }
+          ]
+        },
+        {
+          "id": "s8.hollow",
+          "kit": "squareHollow",
+          "at": [
+            0,
+            0
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "f:ep.S8.taught",
+              "name": "A square hollow. Something stood here."
+            },
+            {
+              "when": "true",
+              "name": "Hollow"
+            }
+          ]
+        },
+        {
+          "id": "s8.spring",
+          "kit": "bedSpring",
+          "at": [
+            1.2,
+            1
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "f:ep.S8.taught",
+              "name": "Bedspring"
+            },
+            {
+              "when": "true",
+              "name": "Bedspring"
+            }
+          ]
+        },
+        {
+          "id": "s8.tin",
+          "kit": "tobaccoTin",
+          "at": [
+            1.2,
+            1
+          ],
+          "on": "s8.spring",
+          "show": "!f:ep.S8.tin",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Tobacco tin"
+            }
+          ]
+        },
+        {
+          "id": "s8.row",
+          "kit": "rustRow",
+          "at": [
+            -2.6,
+            1.5
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "f:ep.S8.taught",
+              "name": "Rusted things in a row along one side."
+            },
+            {
+              "when": "true",
+              "name": "Rusty junk"
+            }
+          ]
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "s8.stump1",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:ep.S8.looked"
+          ]
+        },
+        {
+          "prop": "s8.stump2",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:ep.S8.looked"
+          ]
+        },
+        {
+          "prop": "s8.pipe",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:ep.S8.looked"
+          ]
+        },
+        {
+          "prop": "s8.hollow",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:ep.S8.looked"
+          ]
+        },
+        {
+          "prop": "s8.spring",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:ep.S8.looked"
+          ]
+        },
+        {
+          "prop": "s8.row",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:ep.S8.looked"
+          ]
+        },
+        {
+          "prop": "s8.tin",
+          "verb": "Take",
+          "when": "!f:ep.S8.tin",
+          "then": [
+            "f:ep.S8.tin",
+            "f:ep.S8.looked",
+            "give:item.ertin"
+          ]
+        }
+      ],
+      "triggers": [
+        {
+          "on": "enter",
+          "r": 22,
+          "when": "true",
+          "then": [
+            "f:ep.S8.clearing"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "kek.plane",
+      "name": "Kekekabic Lake, the north shore: the plane on the bed (60 S5)",
+      "doc": "60 S5 \"The set piece: seeing and diving\"; 03 §5",
+      "x": 2825,
+      "z": 2495,
+      "lake": "Kekekabic Lake",
+      "shore": true,
+      "clear": 0,
+      "search": 160,
+      "r": 320,
+      "ep": "S5",
+      "props": [
+        {
+          "id": "s5.wreck",
+          "kit": "wreck",
+          "at": [
+            0,
+            -26
+          ],
+          "wet": true,
+          "show": "true"
+        }
+      ],
+      "verbs": [],
+      "triggers": [
+        {
+          "on": "readHere",
+          "nb": "NB29",
+          "r": 320,
+          "when": "f:nb.found",
+          "then": [
+            "f:s5.here"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "s6.bootleg",
+      "name": "Bootleg Lake, the quiet shore: the cut line, the beaver pond and the bootleggers' pit (60 S6)",
+      "doc": "60 S6 \"The set piece\"; 03 §5",
+      "x": -73055,
+      "z": 6265,
+      "lake": "Bootleg Lake",
+      "shore": true,
+      "clear": 0,
+      "search": 220,
+      "r": 220,
+      "ep": "S6",
+      "props": [
+        {
+          "id": "s6.blaze.1",
+          "kit": "catface",
+          "at": [
+            -2,
+            28
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "f:tauno.blazes",
+              "name": "Old blaze, no paint"
+            },
+            {
+              "when": "true",
+              "name": "Old blaze"
+            }
+          ]
+        },
+        {
+          "id": "s6.blaze.2",
+          "kit": "catface",
+          "at": [
+            -4,
+            66
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "f:tauno.blazes",
+              "name": "Old blaze, no paint"
+            },
+            {
+              "when": "true",
+              "name": "Old blaze"
+            }
+          ]
+        },
+        {
+          "id": "s6.blaze.3",
+          "kit": "catface",
+          "at": [
+            -5,
+            104
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "f:tauno.blazes",
+              "name": "Old blaze, no paint"
+            },
+            {
+              "when": "true",
+              "name": "Old blaze"
+            }
+          ]
+        },
+        {
+          "id": "s6.pond",
+          "kit": "beaverPond",
+          "at": [
+            16,
+            124
+          ],
+          "show": "true"
+        },
+        {
+          "id": "s6.slump",
+          "kit": "pit",
+          "at": [
+            -6,
+            150
+          ],
+          "show": "!f:s6.moss & !f:s6.dug",
+          "dot": [
+            {
+              "when": "f:ep.S6.done | f:key.L6C",
+              "name": "A square slump. Somebody dug here and covered it."
+            },
+            {
+              "when": "f:s6.know",
+              "name": "Moss, sunk in a square"
+            },
+            {
+              "when": "true",
+              "name": "Moss"
+            }
+          ]
+        },
+        {
+          "id": "s6.plank.1",
+          "kit": "pitPlank",
+          "at": [
+            -6,
+            150
+          ],
+          "opts": {
+            "i": 1
+          },
+          "show": "f:s6.moss & !f:s6.plank.1",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Plank"
+            }
+          ]
+        },
+        {
+          "id": "s6.plank.2",
+          "kit": "pitPlank",
+          "at": [
+            -6,
+            150
+          ],
+          "opts": {
+            "i": 2
+          },
+          "show": "f:s6.moss & !f:s6.plank.2",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Plank"
+            }
+          ]
+        },
+        {
+          "id": "s6.plank.4",
+          "kit": "pitPlank",
+          "at": [
+            -6,
+            150
+          ],
+          "opts": {
+            "i": 4
+          },
+          "show": "f:s6.moss & !f:s6.plank.4",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Plank"
+            }
+          ]
+        },
+        {
+          "id": "s6.plank.5",
+          "kit": "pitPlank",
+          "at": [
+            -6,
+            150
+          ],
+          "opts": {
+            "i": 5
+          },
+          "show": "f:s6.moss & !f:s6.plank.5",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Plank"
+            }
+          ]
+        },
+        {
+          "id": "s6.tossed.1",
+          "kit": "plankTossed",
+          "at": [
+            -6,
+            150
+          ],
+          "opts": {
+            "i": 1
+          },
+          "show": "f:s6.plank.1"
+        },
+        {
+          "id": "s6.tossed.2",
+          "kit": "plankTossed",
+          "at": [
+            -6,
+            150
+          ],
+          "opts": {
+            "i": 2
+          },
+          "show": "f:s6.plank.2"
+        },
+        {
+          "id": "s6.tossed.4",
+          "kit": "plankTossed",
+          "at": [
+            -6,
+            150
+          ],
+          "opts": {
+            "i": 4
+          },
+          "show": "f:s6.plank.4"
+        },
+        {
+          "id": "s6.tossed.5",
+          "kit": "plankTossed",
+          "at": [
+            -6,
+            150
+          ],
+          "opts": {
+            "i": 5
+          },
+          "show": "f:s6.plank.5"
+        },
+        {
+          "id": "s6.crate",
+          "kit": "bootCrate",
+          "at": [
+            -6,
+            150
+          ],
+          "show": "f:s6.moss & !f:s6.ledger",
+          "dot": [
+            {
+              "when": "f:ep.S6.done",
+              "name": "Oilcloth packet"
+            },
+            {
+              "when": "true",
+              "name": "Crate"
+            }
+          ]
+        },
+        {
+          "id": "s6.crate.taken",
+          "kit": "bootCrate",
+          "at": [
+            -6,
+            150
+          ],
+          "opts": {
+            "ledger": false
+          },
+          "show": "f:s6.ledger & !f:s6.bottle",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Bottle, seal on"
+            }
+          ]
+        },
+        {
+          "id": "s6.crate.empty",
+          "kit": "bootCrate",
+          "at": [
+            -6,
+            150
+          ],
+          "opts": {
+            "ledger": false,
+            "bottle": false
+          },
+          "show": "f:s6.ledger & f:s6.bottle",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Broken glass"
+            }
+          ]
+        },
+        {
+          "id": "s6.dughole",
+          "kit": "bootCrate",
+          "at": [
+            -6,
+            150
+          ],
+          "opts": {
+            "dug": true
+          },
+          "show": "f:s6.dug & !f:s6.moss",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Somebody dug here"
+            }
+          ]
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "s6.slump",
+          "verb": "Clear the moss",
+          "when": "f:s6.know & !f:s6.dug",
+          "then": [
+            "f:s6.moss"
+          ]
+        },
+        {
+          "prop": "s6.plank.1",
+          "verb": "Pull",
+          "when": "true",
+          "then": [
+            "f:s6.plank.1"
+          ]
+        },
+        {
+          "prop": "s6.plank.2",
+          "verb": "Pull",
+          "when": "true",
+          "then": [
+            "f:s6.plank.2"
+          ]
+        },
+        {
+          "prop": "s6.plank.4",
+          "verb": "Pull",
+          "when": "true",
+          "then": [
+            "f:s6.plank.4"
+          ]
+        },
+        {
+          "prop": "s6.plank.5",
+          "verb": "Pull",
+          "when": "true",
+          "then": [
+            "f:s6.plank.5"
+          ]
+        },
+        {
+          "prop": "s6.crate",
+          "verb": "Take",
+          "when": "f:ep.S6.done | (f:s6.plank.1 & f:s6.plank.2 & f:s6.plank.4 & f:s6.plank.5)",
+          "then": [
+            "f:s6.ledger",
+            "give:page.ledger1928"
+          ]
+        },
+        {
+          "prop": "s6.crate.taken",
+          "verb": "Take",
+          "when": "true",
+          "then": [
+            "f:s6.bottle",
+            "give:item.rye1928"
+          ]
+        }
+      ],
+      "triggers": [
+        {
+          "on": "readHere",
+          "nb": "NB23",
+          "r": 220,
+          "when": "f:nb.found",
+          "then": [
+            "f:s6.here"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "s6.beatty",
+      "name": "The Beatty Portage, the Loon Lake end of the foot trail: N.N. 1928 cut in the rock (60 S6)",
+      "doc": "60 S6 \"The carving\"; 03 §5",
+      "portage": "s6.p357",
+      "end": [
+        -80368,
+        -20771
+      ],
+      "r": 25,
+      "ep": "S6",
+      "props": [
+        {
+          "id": "s6.carving",
+          "kit": "carvedRock",
+          "at": [
+            2.4,
+            -1.2
+          ],
+          "wet": "edge",
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Carved: N.N. 1928."
+            }
+          ]
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "s6.carving",
+          "verb": "Look",
+          "when": "!f:s6.carving",
+          "then": [
+            "f:s6.carving"
+          ]
+        }
+      ],
+      "triggers": []
+    },
+    {
+      "id": "boys.c1210",
+      "name": "Little Saganaga, C1210: the boys' site, the sitting rock at the point",
+      "doc": "docs/story/32-the-boys.md §2.2, §5.9.8, §8 (b5)",
+      "b5": true,
+      "x": 15072,
+      "z": 6830,
+      "lake": "Little Saganaga Lake",
+      "shore": true,
+      "search": 60,
+      "clear": 0,
+      "props": [
+        {
+          "id": "boys.rock",
+          "kit": "swimRock",
+          "at": [
+            7,
+            -0.4
+          ],
+          "wet": "edge",
+          "show": "true",
+          "dot": []
+        },
+        {
+          "id": "boys.flare",
+          "kit": "flareCase",
+          "at": [
+            7.6,
+            1.6
+          ],
+          "show": "f:boys.flare.seen & !f:boys.flare",
+          "dot": [
+            {
+              "when": "true",
+              "name": "An old flare cartridge"
+            }
+          ]
+        },
+        {
+          "id": "boys.cup",
+          "kit": "tinCup",
+          "at": [
+            6.6,
+            1.5
+          ],
+          "show": "date:08-14..08-14 & hour:20-24",
+          "dot": []
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "boys.flare",
+          "verb": "Take",
+          "when": "!f:boys.flare",
+          "then": [
+            "f:boys.flare",
+            "give:item.flarecase"
+          ]
+        }
+      ],
+      "triggers": [
+        {
+          "on": "readHere",
+          "nb": "NB16",
+          "r": 60,
+          "when": "f:nb.found",
+          "then": [
+            "f:boys.flare.seen"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "boys.frost",
+      "name": "Frost Lake, C1125 (Gene's): Gene's paddle in the crotch of the pine above the landing",
+      "doc": "docs/story/32-the-boys.md §5.2, §8; 10 NB60 (b5)",
+      "b5": true,
+      "x": 30058,
+      "z": 10723,
+      "lake": "Frost Lake",
+      "shore": true,
+      "search": 60,
+      "clear": 0,
+      "props": [
+        {
+          "id": "boys.paddle",
+          "kit": "paddlePine",
+          "at": [
+            2.5,
+            9
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "A paddle, in the pine"
+            }
+          ]
+        }
+      ],
+      "verbs": [],
+      "triggers": [
+        {
+          "on": "readHere",
+          "nb": "NB60",
+          "r": 60,
+          "when": "f:nb.found",
+          "then": [
+            "f:boys.frost.read"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "i.isabella",
+      "name": "The Isabella River below Isabella Lake, C911: Denny's \"Walt's spot\", the watchers' 2019 camp",
+      "doc": "32 §5.10; 03 §1b (C911, alt. C910); stream i",
+      "i": true,
+      "x": -12549.6,
+      "z": 30699.5,
+      "lake": "Rice Lake",
+      "shore": true,
+      "clear": 4,
+      "search": 160,
+      "props": [
+        {
+          "id": "i.flag1",
+          "kit": "surveyTag",
+          "at": [
+            -5,
+            9
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Survey flagging, pink, faded"
+            }
+          ]
+        },
+        {
+          "id": "i.flag2",
+          "kit": "surveyTag",
+          "at": [
+            4,
+            11
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Survey flagging, pink, faded"
+            }
+          ]
+        },
+        {
+          "id": "i.flag3",
+          "kit": "surveyTag",
+          "at": [
+            0,
+            15
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "Survey flagging, pink, faded"
+            }
+          ]
+        },
+        {
+          "id": "i.can",
+          "kit": "coffeeCan",
+          "at": [
+            3,
+            6
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "A coffee can"
+            }
+          ]
+        },
+        {
+          "id": "i.aerial",
+          "kit": "pole",
+          "at": [
+            -3,
+            12
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "f:isabella.aerial | f:tauno.radio | f:sheila.radio",
+              "name": "An aerial."
+            },
+            {
+              "when": "true",
+              "name": "A sapling, cut and lashed up"
+            }
+          ]
+        },
+        {
+          "id": "i.receipt",
+          "kit": "noteSquare",
+          "at": [
+            1,
+            7
+          ],
+          "show": "!f:isabella.receipt",
+          "dot": [
+            {
+              "when": "!f:isabella.receipt",
+              "name": "A receipt"
+            }
+          ]
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "i.flag1",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:isabella.flagging"
+          ]
+        },
+        {
+          "prop": "i.can",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:isabella.can"
+          ]
+        },
+        {
+          "prop": "i.aerial",
+          "verb": "Look",
+          "when": "true",
+          "then": [
+            "f:isabella.aerial"
+          ]
+        },
+        {
+          "prop": "i.receipt",
+          "verb": "Take",
+          "when": "!f:isabella.receipt",
+          "then": [
+            "f:isabella.receipt",
+            "give:item.receipt19"
+          ]
+        }
+      ],
+      "triggers": []
+    }
+  ],
+  "portages": [
+    {
+      "id": "bc.64",
+      "v3": "P289",
+      "name": "Little Trout Lake – Rum Lake",
+      "rods": 64,
+      "reach": 64,
+      "doc": "10-notebook.md NB15; 20 §2.2; 90 §13 check 3"
+    },
+    {
+      "id": "bc.140",
+      "v3": "P645",
+      "name": "Disappointment Lake – Snowbank Lake",
+      "rods": 140,
+      "reach": 25,
+      "doc": "10-notebook.md NB04; 90 §13 check 3"
+    },
+    {
+      "id": "bc.186",
+      "v3": "P188",
+      "name": "Grandpa Lake – Sea Gull Lake",
+      "rods": 185,
+      "reach": 51,
+      "doc": "10-notebook.md NB18 (the 186 he wrote; 185 drawn); 90 §13 check 3"
+    },
+    {
+      "id": "pair.205",
+      "v3": "P255",
+      "name": "Bald Eagle Lake – Gull Lake",
+      "rods": 205,
+      "doc": "the 205/50 pair (lock 2 key B); 90 §13 check 4"
+    },
+    {
+      "id": "pair.50",
+      "v3": "P256",
+      "name": "Gull Lake – Gull Lake",
+      "rods": 50,
+      "doc": "the 205/50 pair (lock 2 key B); 90 §13 check 4"
+    },
+    {
+      "id": "nb36.p210",
+      "v3": "P210",
+      "name": "Moose River – Big Moose Lake",
+      "rods": 61,
+      "ep": 8,
+      "end": "Big Moose Lake",
+      "km": [
+        2,
+        4.5
+      ],
+      "doc": "10-notebook.md NB36 (EP 8); 90 §13 check 11"
+    },
+    {
+      "id": "crews.p693",
+      "v3": "P693",
+      "rods": 6,
+      "doc": "20-opening.md §11.1: P693, 6 rods, into Bald Eagle"
+    },
+    {
+      "id": "far.p530",
+      "v3": "P530",
+      "rods": 50,
+      "name": "Pietro Lake – Gull Lake",
+      "doc": "50 §6.7 leg 2, §6.9 (the spare paddle)"
+    },
+    {
+      "id": "far.p24",
+      "v3": "P24",
+      "rods": 121,
+      "name": "Camdre Lake – Clearwater Lake",
+      "doc": "50 §6.7 leg 3, §6.9 (the dry bag)"
+    },
+    {
+      "id": "far.p26",
+      "v3": "P26",
+      "name": "Clearwater Lake – Rock Island Lake",
+      "doc": "50 §6.7 leg 5, §6.9 (the Grumman); drawn 217 rods, Walt's 214"
+    },
+    {
+      "id": "s6.p357",
+      "v3": "P357",
+      "rods": 41,
+      "name": "Beatty Portage",
+      "doc": "60 S6 \"At a glance\": the old foot trail beside the rail-cart carry (P962)"
+    }
+  ],
+  "resolved": {
+    "for": "2026-11-03T15:08:22.659Z",
+    "v": "v9",
+    "places": {
+      "crews.landing": {
+        "props": {
+          "crews.crib": {
+            "x": -25884.4,
+            "z": 30025.3,
+            "heading": -2.0837,
+            "sd": -2,
+            "y": 441.6
+          },
+          "crews.rock": {
+            "x": -25885.5,
+            "z": 30029.8,
+            "heading": -2.0837,
+            "sd": 0.1,
+            "y": 441.6
+          },
+          "crews.pine": {
+            "x": -25879.3,
+            "z": 30033.3,
+            "heading": -2.0837,
+            "sd": 6.6,
+            "y": 445.6
+          },
+          "crews.grade": {
+            "x": -25885.5,
+            "z": 30036.6,
+            "heading": 2.0576,
+            "sd": 4.5,
+            "y": 444.3
+          },
+          "crews.pine2": {
+            "x": -25929.1,
+            "z": 30056.7,
+            "heading": 2.0576,
+            "sd": 16.9,
+            "y": 445.5
+          }
+        },
+        "lanes": [
+          {
+            "a": [
+              -25879.3,
+              30033.3
+            ],
+            "b": [
+              -26003,
+              30098.8
+            ],
+            "r": 2.2,
+            "dir": [
+              -0.8838,
+              0.4678
+            ]
+          }
+        ],
+        "x": -25882.8,
+        "z": 30026.2,
+        "n": [
+          0.8713,
+          0.4907
+        ],
+        "u": [
+          -0.4907,
+          0.8713
+        ],
+        "lakeId": 77,
+        "off": 117,
+        "tried": 73
+      },
+      "bald.c902": {
+        "props": {},
+        "lanes": [],
+        "x": -24785.7,
+        "z": 29992.4,
+        "lakeId": 77,
+        "site": 1096,
+        "landing": [
+          -24773.5,
+          29969.1
+        ]
+      },
+      "x.c902.stone": {
+        "props": {
+          "x.c902.rock": {
+            "x": -24773.9,
+            "z": 29970,
+            "heading": 2.7148,
+            "sd": 1.2,
+            "y": 443.7
+          },
+          "x.c902.stone": {
+            "x": -24773.9,
+            "z": 29970,
+            "heading": 2.7148,
+            "sd": 1.2,
+            "y": 443.7
+          }
+        },
+        "lanes": [],
+        "x": -24773.4,
+        "z": 29968.9,
+        "n": [
+          -0.4139,
+          0.9103
+        ],
+        "u": [
+          -0.9103,
+          -0.4139
+        ],
+        "lakeId": 77,
+        "off": 0,
+        "tried": 11
+      },
+      "ep33.crewcamp": {
+        "props": {},
+        "lanes": [],
+        "trailhead": 33
+      },
+      "westpads": {
+        "props": {
+          "westpads.casing": {
+            "x": -25962,
+            "z": 30070,
+            "heading": -3.1416,
+            "sd": 38.9,
+            "y": 445.8
+          },
+          "westpads.rack": {
+            "x": -25985,
+            "z": 30080,
+            "heading": -3.1416,
+            "sd": 58,
+            "y": 449.2
+          },
+          "westpads.chips": {
+            "x": -26175,
+            "z": 30175,
+            "heading": -3.1416,
+            "sd": 26.9,
+            "y": 445.8
+          },
+          "westpads.casing2": {
+            "x": -26326,
+            "z": 30262,
+            "heading": -3.1416,
+            "sd": 20.3,
+            "y": 444.6
+          }
+        },
+        "lanes": [],
+        "x": -25975,
+        "z": 30075,
+        "n": [
+          0,
+          1
+        ],
+        "u": [
+          1,
+          0
+        ],
+        "lakeId": 77,
+        "off": 0,
+        "tried": 1
+      },
+      "kettle": {
+        "props": {
+          "kettle.trench": {
+            "x": -26935,
+            "z": 30640,
+            "heading": -3.1416,
+            "sd": 259,
+            "y": 444.4
+          },
+          "kettle.stockpile": {
+            "x": -26898,
+            "z": 30588,
+            "heading": -3.1416,
+            "sd": 283.8,
+            "y": 444.2
+          },
+          "kettle.rack": {
+            "x": -26985,
+            "z": 30610,
+            "heading": -3.1416,
+            "sd": 205.6,
+            "y": 444.2
+          },
+          "kettle.lid": {
+            "x": -26983.4,
+            "z": 30608.3,
+            "heading": -3.1416,
+            "sd": 207,
+            "y": 444.2
+          },
+          "kettle.up": {
+            "x": -26956,
+            "z": 30700,
+            "heading": -3.1416,
+            "sd": 244.1,
+            "y": 448
+          },
+          "kettle.trench.stake": {
+            "x": -26926,
+            "z": 30646,
+            "heading": -3.1416,
+            "sd": 268.9,
+            "y": 444.6
+          },
+          "kettle.pond": {
+            "x": -26884,
+            "z": 30342,
+            "heading": -3.1416,
+            "sd": 201.1,
+            "y": 444.1
+          },
+          "kettle.dam": {
+            "x": -26880,
+            "z": 30338,
+            "heading": -3.1416,
+            "sd": 203.4,
+            "y": 444.1
+          }
+        },
+        "lanes": [],
+        "x": -26950,
+        "z": 30600,
+        "n": [
+          0,
+          1
+        ],
+        "u": [
+          1,
+          0
+        ],
+        "lakeId": null,
+        "off": 0,
+        "tried": 1
+      },
+      "pietro.dig": {
+        "props": {
+          "pietro.rock": {
+            "x": -21454.5,
+            "z": 25220.9,
+            "heading": -0.0971,
+            "sd": -0.6,
+            "y": 459.5
+          },
+          "pietro.path": {
+            "x": -21454,
+            "z": 25216.3,
+            "heading": -0.0971,
+            "sd": 3.9,
+            "y": 461.4
+          },
+          "pietro.dig": {
+            "x": -21236.7,
+            "z": 25077.1,
+            "heading": -1.0011,
+            "sd": 128.6,
+            "y": 491.7
+          },
+          "pietro.lath": {
+            "x": -21236.5,
+            "z": 25077.5,
+            "heading": -1.0011,
+            "sd": 129,
+            "y": 491.7
+          },
+          "pietro.blade": {
+            "x": -21237.2,
+            "z": 25080.2,
+            "heading": -1.0011,
+            "sd": 131.6,
+            "y": 491.5
+          },
+          "pietro.tag": {
+            "x": -21236,
+            "z": 25072.7,
+            "heading": -1.0011,
+            "sd": 124.3,
+            "y": 491.7
+          }
+        },
+        "lanes": [
+          {
+            "a": [
+              -21454,
+              25216.3
+            ],
+            "b": [
+              -21233.4,
+              25075
+            ],
+            "r": 1.1,
+            "dir": [
+              0.8421,
+              -0.5394
+            ]
+          }
+        ],
+        "x": -21454.4,
+        "z": 25220.3,
+        "n": [
+          0.0969,
+          -0.9953
+        ],
+        "u": [
+          0.9953,
+          0.0969
+        ],
+        "lakeId": 250,
+        "off": 15,
+        "tried": 33
+      },
+      "twostump": {
+        "props": {
+          "twostump.stumps": {
+            "x": -27438,
+            "z": 27611.3,
+            "heading": 0.4707,
+            "sd": 4.1,
+            "y": 441.3
+          }
+        },
+        "lanes": [],
+        "x": -27435.7,
+        "z": 27615.8,
+        "n": [
+          -0.4535,
+          -0.8912
+        ],
+        "u": [
+          0.8912,
+          -0.4535
+        ],
+        "lakeId": 101,
+        "off": 69,
+        "tried": 24
+      },
+      "s7.mummos": {
+        "props": {
+          "s7.lilacs": {
+            "x": -17483,
+            "z": 3734.3,
+            "heading": 2.5165,
+            "sd": 7.9,
+            "y": 397.9
+          },
+          "s7.lilacs.green": {
+            "x": -17483,
+            "z": 3734.3,
+            "heading": 2.5165,
+            "sd": 7.9,
+            "y": 397.9
+          },
+          "s7.lilacs2": {
+            "x": -17493.1,
+            "z": 3729.5,
+            "heading": 2.5165,
+            "sd": 8.9,
+            "y": 397.5
+          },
+          "s7.lilacs2.green": {
+            "x": -17493.1,
+            "z": 3729.5,
+            "heading": 2.5165,
+            "sd": 8.9,
+            "y": 397.5
+          },
+          "s7.step": {
+            "x": -17483.3,
+            "z": 3724.5,
+            "heading": 2.5165,
+            "sd": 1.2,
+            "y": 397.4
+          },
+          "s7.cobble": {
+            "x": -17483.3,
+            "z": 3724.5,
+            "heading": 2.5165,
+            "sd": 1.2,
+            "y": 397.4
+          },
+          "s7.foundation": {
+            "x": -17490.2,
+            "z": 3734,
+            "heading": 2.5165,
+            "sd": 11.3,
+            "y": 398.4
+          },
+          "s7.bed": {
+            "x": -17498.7,
+            "z": 3730.4,
+            "heading": 2.5165,
+            "sd": 11.9,
+            "y": 398.4
+          },
+          "s7.footing": {
+            "x": -17475.8,
+            "z": 3731.1,
+            "heading": 2.5165,
+            "sd": 1.3,
+            "y": 397.4
+          },
+          "s7.rock": {
+            "x": -17473,
+            "z": 3727.3,
+            "heading": 2.5165,
+            "sd": -3.3,
+            "y": 395.7
+          },
+          "s7.crib": {
+            "x": -17482.7,
+            "z": 3718.5,
+            "heading": 2.5165,
+            "sd": -4,
+            "y": 395.5
+          },
+          "s7.crib2": {
+            "x": -17485.2,
+            "z": 3716,
+            "heading": 2.5165,
+            "sd": -4.8,
+            "y": 395.5
+          },
+          "x.s7.rhubarb": {
+            "x": -17487.6,
+            "z": 3739,
+            "heading": 2.5165,
+            "sd": 13.8,
+            "y": 397.9
+          },
+          "x.s7.rhubarb2": {
+            "x": -17489.4,
+            "z": 3738.8,
+            "heading": 2.5165,
+            "sd": 14.6,
+            "y": 397.9
+          }
+        },
+        "lanes": [],
+        "x": -17482.6,
+        "z": 3723.5,
+        "n": [
+          -0.5852,
+          0.8109
+        ],
+        "u": [
+          -0.8109,
+          -0.5852
+        ],
+        "lakeId": 4,
+        "off": 7,
+        "tried": 26
+      },
+      "s9.beach": {
+        "props": {
+          "s9.rock": {
+            "x": -231.7,
+            "z": 15091.4,
+            "heading": 0.3098,
+            "sd": -0.1,
+            "y": 460.8
+          },
+          "s9.pot": {
+            "x": -229.6,
+            "z": 15102.9,
+            "heading": 0.3098,
+            "sd": -10.1,
+            "y": 460.1
+          },
+          "s9.shape": {
+            "x": -229.6,
+            "z": 15102.9,
+            "heading": 0.3098,
+            "sd": -10.1,
+            "y": 460.1
+          }
+        },
+        "lanes": [],
+        "x": -233.3,
+        "z": 15091.5,
+        "n": [
+          -0.3049,
+          -0.9524
+        ],
+        "u": [
+          0.9524,
+          -0.3049
+        ],
+        "lakeId": 61,
+        "off": 0,
+        "tried": 6
+      },
+      "gull.sign": {
+        "props": {
+          "gull.dam": {
+            "x": -19795,
+            "z": 26771,
+            "heading": -3.1416,
+            "sd": -1.9,
+            "y": 460
+          },
+          "gull.stump": {
+            "x": -19787,
+            "z": 26775,
+            "heading": -3.1416,
+            "sd": 3.5,
+            "y": 461.7
+          },
+          "gull.stone": {
+            "x": -19787,
+            "z": 26775,
+            "heading": -3.1416,
+            "sd": 3.5,
+            "y": 461.7
+          },
+          "gull.rod": {
+            "x": -19788.6,
+            "z": 26773.6,
+            "heading": -3.1416,
+            "sd": 2.4,
+            "y": 461.7
+          },
+          "gull.step": {
+            "x": -19788,
+            "z": 26774.2,
+            "heading": -3.1416,
+            "sd": 2.8,
+            "y": 461.7
+          }
+        },
+        "lanes": [],
+        "x": -19790,
+        "z": 26772,
+        "n": [
+          0,
+          1
+        ],
+        "u": [
+          1,
+          0
+        ],
+        "lakeId": 186,
+        "off": 0,
+        "tried": 1
+      },
+      "gull.burntpoint": {
+        "props": {},
+        "lanes": [],
+        "x": -21250,
+        "z": 26550,
+        "n": [
+          0,
+          1
+        ],
+        "u": [
+          1,
+          0
+        ],
+        "lakeId": 186,
+        "off": 0,
+        "tried": 1
+      },
+      "gull.notch": {
+        "props": {
+          "gull.notch": {
+            "x": -19340,
+            "z": 26805,
+            "heading": -3.1416,
+            "sd": 322.4,
+            "y": 481.1
+          }
+        },
+        "lanes": [],
+        "x": -19340,
+        "z": 26805,
+        "n": [
+          0,
+          1
+        ],
+        "u": [
+          1,
+          0
+        ],
+        "lakeId": null,
+        "off": 0,
+        "tried": 1
+      },
+      "pond4747.eastbank": {
+        "props": {
+          "gull.blaze.1": {
+            "x": -19770,
+            "z": 26905,
+            "heading": -3.1416,
+            "sd": 10,
+            "y": 467.8
+          },
+          "gull.blaze.2": {
+            "x": -19767,
+            "z": 26990,
+            "heading": -3.1416,
+            "sd": 18.5,
+            "y": 465.9
+          },
+          "gull.blaze.3": {
+            "x": -19763,
+            "z": 27048,
+            "heading": -3.1416,
+            "sd": 25.8,
+            "y": 466.5
+          }
+        },
+        "lanes": [],
+        "x": -19768,
+        "z": 26960,
+        "n": [
+          0,
+          1
+        ],
+        "u": [
+          1,
+          0
+        ],
+        "lakeId": null,
+        "off": 0,
+        "tried": 1
+      },
+      "waltcamp": {
+        "props": {
+          "waltcamp.cabin": {
+            "x": -19385,
+            "z": 27355,
+            "heading": -3.1416,
+            "sd": 443.5,
+            "y": 479
+          },
+          "waltcamp.cot": {
+            "x": -19384.8,
+            "z": 27354.2,
+            "heading": -3.1416,
+            "sd": 443.2,
+            "y": 479
+          },
+          "waltcamp.boots": {
+            "x": -19385.1,
+            "z": 27354.1,
+            "heading": -3.1416,
+            "sd": 443.2,
+            "y": 479
+          },
+          "waltcamp.stove": {
+            "x": -19383.7,
+            "z": 27355,
+            "heading": -3.1416,
+            "sd": 443.1,
+            "y": 479
+          },
+          "waltcamp.shelf": {
+            "x": -19383.9,
+            "z": 27355.7,
+            "heading": -3.1416,
+            "sd": 443.1,
+            "y": 479
+          },
+          "waltcamp.corebox": {
+            "x": -19384,
+            "z": 27355.9,
+            "heading": -3.1416,
+            "sd": 443.2,
+            "y": 479
+          },
+          "waltcamp.photo": {
+            "x": -19384.1,
+            "z": 27355.8,
+            "heading": -3.1416,
+            "sd": 443.2,
+            "y": 479
+          },
+          "waltcamp.note": {
+            "x": -19384.1,
+            "z": 27355.8,
+            "heading": -3.1416,
+            "sd": 443.2,
+            "y": 479
+          },
+          "waltcamp.marks": {
+            "x": -19385.9,
+            "z": 27353.8,
+            "heading": -3.1416,
+            "sd": 442.6,
+            "y": 479
+          },
+          "waltcamp.hatchet": {
+            "x": -19386,
+            "z": 27354,
+            "heading": -3.1416,
+            "sd": 442.6,
+            "y": 479
+          },
+          "waltcamp.sun": {
+            "x": -19384.2,
+            "z": 27356.4,
+            "heading": -3.1416,
+            "sd": 443.3,
+            "y": 479
+          },
+          "waltcamp.floor": {
+            "x": -19384.2,
+            "z": 27355.3,
+            "heading": -3.1416,
+            "sd": 443.2,
+            "y": 479
+          },
+          "waltcamp.floor.up": {
+            "x": -19384.2,
+            "z": 27355.3,
+            "heading": -3.1416,
+            "sd": 443.2,
+            "y": 479
+          },
+          "waltcamp.can": {
+            "x": -19384.2,
+            "z": 27355.2,
+            "heading": -3.1416,
+            "sd": 443.2,
+            "y": 479
+          },
+          "waltcamp.cedar.1": {
+            "x": -19381,
+            "z": 27350,
+            "heading": -3.1416,
+            "sd": 441.7,
+            "y": 479
+          },
+          "waltcamp.cedar.2": {
+            "x": -19377.5,
+            "z": 27354,
+            "heading": -3.1416,
+            "sd": 441,
+            "y": 478.5
+          },
+          "waltcamp.cedar.3": {
+            "x": -19383,
+            "z": 27346.5,
+            "heading": -3.1416,
+            "sd": 441.3,
+            "y": 478.7
+          },
+          "waltcamp.cedar.4": {
+            "x": -19377,
+            "z": 27348.5,
+            "heading": -3.1416,
+            "sd": 441.4,
+            "y": 478.8
+          },
+          "waltcamp.cedar.5": {
+            "x": -19380,
+            "z": 27344,
+            "heading": -3.1416,
+            "sd": 441.3,
+            "y": 478.8
+          },
+          "waltcamp.cedar.6": {
+            "x": -19374.5,
+            "z": 27351.5,
+            "heading": -3.1416,
+            "sd": 440.4,
+            "y": 478.5
+          },
+          "waltcamp.cedar.7": {
+            "x": -19373,
+            "z": 27347,
+            "heading": -3.1416,
+            "sd": 440.2,
+            "y": 478.8
+          },
+          "waltcamp.cedar.8": {
+            "x": -19387.5,
+            "z": 27346,
+            "heading": -3.1416,
+            "sd": 439.2,
+            "y": 478.7
+          },
+          "waltcamp.stump.1": {
+            "x": -19406,
+            "z": 27343,
+            "heading": -3.1416,
+            "sd": 422.7,
+            "y": 478.4
+          },
+          "waltcamp.stump.2": {
+            "x": -19412,
+            "z": 27338.5,
+            "heading": -3.1416,
+            "sd": 415.3,
+            "y": 478
+          },
+          "waltcamp.chips.1": {
+            "x": -19382.5,
+            "z": 27356,
+            "heading": -3.1416,
+            "sd": 442.6,
+            "y": 479
+          },
+          "waltcamp.chips.2": {
+            "x": -19379.8,
+            "z": 27358,
+            "heading": -3.1416,
+            "sd": 441.4,
+            "y": 478.5
+          },
+          "waltcamp.chips.3": {
+            "x": -19375.7,
+            "z": 27360.9,
+            "heading": -3.1416,
+            "sd": 439,
+            "y": 477.8
+          },
+          "waltcamp.chips.4": {
+            "x": -19370.1,
+            "z": 27365.1,
+            "heading": -3.1416,
+            "sd": 433,
+            "y": 477.8
+          },
+          "waltcamp.chips.5": {
+            "x": -19362.8,
+            "z": 27370.3,
+            "heading": -3.1416,
+            "sd": 424.6,
+            "y": 477.3
+          },
+          "waltcamp.chips.6": {
+            "x": -19353.9,
+            "z": 27376.8,
+            "heading": -3.1416,
+            "sd": 414,
+            "y": 477
+          }
+        },
+        "lanes": [],
+        "x": -19385,
+        "z": 27355,
+        "n": [
+          0,
+          1
+        ],
+        "u": [
+          1,
+          0
+        ],
+        "lakeId": null,
+        "off": 0,
+        "tried": 1
+      },
+      "cellar": {
+        "props": {
+          "cellar.pit": {
+            "x": -18885,
+            "z": 27725,
+            "heading": -3.1416,
+            "sd": 185.4,
+            "y": 484.8
+          },
+          "cellar.lid": {
+            "x": -18885,
+            "z": 27725,
+            "heading": -3.1416,
+            "sd": 185.4,
+            "y": 484.8
+          },
+          "cellar.hole": {
+            "x": -18885,
+            "z": 27725,
+            "heading": -3.1416,
+            "sd": 185.4,
+            "y": 484.8
+          },
+          "cellar.can.1": {
+            "x": -18885.2,
+            "z": 27725,
+            "heading": -3.1416,
+            "sd": 185.4,
+            "y": 484.8
+          },
+          "cellar.can.2": {
+            "x": -18884.8,
+            "z": 27725.1,
+            "heading": -3.1416,
+            "sd": 185.5,
+            "y": 484.8
+          },
+          "cellar.note": {
+            "x": -18885.2,
+            "z": 27725,
+            "heading": -3.1416,
+            "sd": 185.4,
+            "y": 484.8
+          }
+        },
+        "lanes": [],
+        "x": -18885,
+        "z": 27725,
+        "n": [
+          0,
+          1
+        ],
+        "u": [
+          1,
+          0
+        ],
+        "lakeId": null,
+        "off": 0,
+        "tried": 1
+      },
+      "stash.paddle": {
+        "props": {
+          "stash.paddle.cedar": {
+            "x": -22709.9,
+            "z": 26904.8,
+            "heading": -2.928,
+            "sd": 5.9
+          },
+          "stash.paddle": {
+            "x": -22708.5,
+            "z": 26901.4,
+            "heading": -2.928,
+            "sd": 3.4
+          },
+          "stash.paddle.stone": {
+            "x": -22708.9,
+            "z": 26901.5,
+            "heading": -2.928,
+            "sd": 3.4
+          }
+        },
+        "lanes": [],
+        "x": -22707.7,
+        "z": 26894,
+        "n": [
+          0.2119407852136902,
+          0.9772825095963831
+        ],
+        "u": [
+          -0.9772825095963831,
+          0.2119407852136902
+        ],
+        "lakeId": 250,
+        "portage": 895,
+        "end": 0,
+        "off": 36
+      },
+      "stash.drybag": {
+        "props": {
+          "stash.drybag": {
+            "x": -22266.2,
+            "z": 24723.3,
+            "heading": -0.2963,
+            "sd": 4.1
+          }
+        },
+        "lanes": [],
+        "x": -22269.2,
+        "z": 24722.9,
+        "n": [
+          0.2919683259040944,
+          -0.9564279882295168
+        ],
+        "u": [
+          0.9564279882295168,
+          0.2919683259040944
+        ],
+        "lakeId": 1058,
+        "portage": 444,
+        "end": 0,
+        "off": 20
+      },
+      "stash.grumman": {
+        "props": {
+          "stash.grumman": {
+            "x": -20498.1,
+            "z": 22626.7,
+            "heading": 2.3182,
+            "sd": 2.8
+          }
+        },
+        "lanes": [],
+        "x": -20494.7,
+        "z": 22630.3,
+        "n": [
+          -0.7334784689195485,
+          0.6797126860898176
+        ],
+        "u": [
+          -0.6797126860898176,
+          -0.7334784689195485
+        ],
+        "lakeId": 2577,
+        "portage": 446,
+        "end": 1,
+        "off": 18
+      },
+      "s2.ridge": {
+        "props": {
+          "s2.snag": {
+            "x": -65382.2,
+            "z": 5070.8,
+            "heading": 1.4656,
+            "sd": -6.2,
+            "y": 423.3
+          },
+          "s2.berry": {
+            "x": -65426.6,
+            "z": 5043.9,
+            "heading": 1.4656,
+            "sd": 41.9,
+            "y": 428.9
+          },
+          "s2.berry.stripped": {
+            "x": -65426.6,
+            "z": 5043.9,
+            "heading": 1.4656,
+            "sd": 41.9,
+            "y": 428.9
+          },
+          "s2.birches": {
+            "x": -65435.3,
+            "z": 5069.2,
+            "heading": 1.4656,
+            "sd": 45.4,
+            "y": 428.5
+          },
+          "s2.log": {
+            "x": -65427.3,
+            "z": 5079.1,
+            "heading": 1.4656,
+            "sd": 37.3,
+            "y": 429
+          }
+        },
+        "lanes": [],
+        "x": -65389.6,
+        "z": 5074,
+        "n": [
+          -0.9945,
+          -0.105
+        ],
+        "u": [
+          0.105,
+          -0.9945
+        ],
+        "lakeId": 99,
+        "off": 13,
+        "tried": 22
+      },
+      "s3.longrock": {
+        "props": {
+          "s3.stone": {
+            "x": -43313.2,
+            "z": 3056.4,
+            "heading": 1.3033,
+            "sd": 6,
+            "y": 407.4
+          }
+        },
+        "lanes": [],
+        "x": -43305,
+        "z": 3060.7,
+        "n": [
+          -0.9644,
+          -0.2643
+        ],
+        "u": [
+          0.2643,
+          -0.9644
+        ],
+        "lakeId": 84,
+        "off": 19,
+        "tried": 29
+      },
+      "s3.northbay": {
+        "props": {
+          "s3.birchlog": {
+            "x": -44243.7,
+            "z": -493.1,
+            "heading": 0.4954,
+            "sd": 4.2,
+            "y": 408
+          }
+        },
+        "lanes": [],
+        "x": -44246.2,
+        "z": -487.2,
+        "n": [
+          -0.4754,
+          -0.8798
+        ],
+        "u": [
+          0.8798,
+          -0.4754
+        ],
+        "lakeId": 84,
+        "off": 3,
+        "tried": 43
+      },
+      "s4.st1": {
+        "props": {
+          "s4.stake1": {
+            "x": -64139.7,
+            "z": -8179.4,
+            "heading": -2.2935,
+            "sd": 3.8,
+            "y": 383.8
+          }
+        },
+        "lanes": [],
+        "x": -64141.4,
+        "z": -8183.5,
+        "n": [
+          0.75,
+          0.6614
+        ],
+        "u": [
+          -0.6614,
+          0.75
+        ],
+        "lakeId": 216,
+        "off": 22,
+        "tried": 31
+      },
+      "s4.st2": {
+        "props": {
+          "s4.stake2": {
+            "x": -64316,
+            "z": -11787.1,
+            "heading": -1.5551,
+            "sd": 3.8,
+            "y": 365.7
+          }
+        },
+        "lanes": [],
+        "x": -64320,
+        "z": -11789,
+        "n": [
+          0.9999,
+          -0.0157
+        ],
+        "u": [
+          0.0157,
+          0.9999
+        ],
+        "lakeId": 95,
+        "off": 4,
+        "tried": 53
+      },
+      "s4.st3": {
+        "props": {
+          "s4.stake3": {
+            "x": -62671.1,
+            "z": -14644.9,
+            "heading": 0.0155,
+            "sd": 4.7,
+            "y": 366.5
+          }
+        },
+        "lanes": [],
+        "x": -62674,
+        "z": -14639.9,
+        "n": [
+          -0.0155,
+          -0.9999
+        ],
+        "u": [
+          0.9999,
+          -0.0155
+        ],
+        "lakeId": 95,
+        "off": 21,
+        "tried": 24
+      },
+      "s4.meadow": {
+        "props": {},
+        "lanes": [],
+        "x": -68000,
+        "z": -16300,
+        "n": [
+          0,
+          1
+        ],
+        "u": [
+          1,
+          0
+        ],
+        "lakeId": null,
+        "off": 0,
+        "tried": 1
+      },
+      "s4.kill": {
+        "props": {
+          "s4.bones": {
+            "x": -65300,
+            "z": -13600,
+            "heading": -3.1416,
+            "sd": 405.3,
+            "y": 396.7
+          }
+        },
+        "lanes": [],
+        "x": -65300,
+        "z": -13600,
+        "n": [
+          0,
+          1
+        ],
+        "u": [
+          1,
+          0
+        ],
+        "lakeId": null,
+        "off": 0,
+        "tried": 1
+      },
+      "gy.tow": {
+        "props": {
+          "gy.towdock": {
+            "x": -16609.1,
+            "z": 4541.5,
+            "heading": 1.4172,
+            "sd": -1,
+            "y": 406.6
+          }
+        },
+        "lanes": [],
+        "x": -16610.6,
+        "z": 4548.4,
+        "n": [
+          -0.9882,
+          -0.153
+        ],
+        "u": [
+          0.153,
+          -0.9882
+        ],
+        "lakeId": 218,
+        "off": 6,
+        "tried": 43
+      },
+      "gy.prairie": {
+        "props": {},
+        "lanes": [],
+        "x": -16726,
+        "z": 4236.4,
+        "n": [
+          -0.7312,
+          0.6821
+        ],
+        "u": [
+          -0.6821,
+          -0.7312
+        ],
+        "lakeId": 4,
+        "off": 8,
+        "tried": 31
+      },
+      "gy.lunch": {
+        "props": {
+          "gy.lunchrock": {
+            "x": -17559.6,
+            "z": 3540,
+            "heading": 1.5708,
+            "sd": -0.4,
+            "y": 395.6
+          },
+          "gy.firering": {
+            "x": -17563.2,
+            "z": 3540,
+            "heading": 1.5708,
+            "sd": 3.2,
+            "y": 397.5
+          },
+          "gy.stub": {
+            "x": -17564.6,
+            "z": 3538.4,
+            "heading": 1.5708,
+            "sd": 4.6,
+            "y": 397.6
+          }
+        },
+        "lanes": [],
+        "x": -17560,
+        "z": 3540,
+        "n": [
+          -1,
+          0
+        ],
+        "u": [
+          0,
+          -1
+        ],
+        "lakeId": 4,
+        "off": 290,
+        "tried": 151
+      },
+      "gy.reef": {
+        "props": {},
+        "lanes": [],
+        "x": -17150,
+        "z": 3350,
+        "n": [
+          0,
+          1
+        ],
+        "u": [
+          1,
+          0
+        ],
+        "lakeId": 4,
+        "off": 0,
+        "tried": 1
+      },
+      "gy.mummos": {
+        "props": {},
+        "lanes": [],
+        "x": -17482.6,
+        "z": 3723.5,
+        "n": [
+          -0.5852,
+          0.8109
+        ],
+        "u": [
+          -0.8109,
+          -0.5852
+        ],
+        "lakeId": 4,
+        "off": 7,
+        "tried": 26
+      },
+      "s1.stuart": {
+        "props": {},
+        "lanes": [],
+        "x": -57783,
+        "z": -196,
+        "n": [
+          0,
+          1
+        ],
+        "u": [
+          1,
+          0
+        ],
+        "lakeId": null,
+        "off": 0,
+        "tried": 1
+      },
+      "s1.mid": {
+        "props": {},
+        "lanes": [],
+        "x": -57762,
+        "z": -1456,
+        "n": [
+          0,
+          1
+        ],
+        "u": [
+          1,
+          0
+        ],
+        "lakeId": null,
+        "off": 0,
+        "tried": 1
+      },
+      "s1.river": {
+        "props": {
+          "s1.rock": {
+            "x": -57695.7,
+            "z": -2811.6,
+            "heading": 2.4658,
+            "sd": -0.3,
+            "y": 406.5
+          }
+        },
+        "lanes": [],
+        "x": -57693.9,
+        "z": -2809.8,
+        "n": [
+          -0.6255,
+          0.7802
+        ],
+        "u": [
+          -0.7802,
+          -0.6255
+        ],
+        "lakeId": 3433,
+        "off": 2,
+        "tried": 26
+      },
+      "s8.rock": {
+        "props": {
+          "s8.lunchrock": {
+            "x": -6128.3,
+            "z": 18848.8,
+            "heading": -1.3256,
+            "sd": 0.3,
+            "y": 461.5
+          },
+          "s8.sled": {
+            "x": -6125.5,
+            "z": 18848.7,
+            "heading": -1.3256,
+            "sd": 2.6,
+            "y": 461.5
+          },
+          "s8.spinner": {
+            "x": -6126.3,
+            "z": 18847.1,
+            "heading": -1.3256,
+            "sd": 2.3,
+            "y": 461.5
+          }
+        },
+        "lanes": [],
+        "x": -6128.7,
+        "z": 18848.9,
+        "n": [
+          0.9701,
+          -0.2427
+        ],
+        "u": [
+          0.2427,
+          0.9701
+        ],
+        "lakeId": 25,
+        "off": 4,
+        "tried": 32
+      },
+      "s8.creek": {
+        "props": {
+          "s8.lodge": {
+            "x": -6153.7,
+            "z": 19970.3,
+            "heading": -2.1351,
+            "sd": -2.5,
+            "y": 459.9
+          }
+        },
+        "lanes": [],
+        "x": -6154.1,
+        "z": 19978.4,
+        "n": [
+          0.845,
+          0.5348
+        ],
+        "u": [
+          -0.5348,
+          0.845
+        ],
+        "lakeId": 25,
+        "off": 8,
+        "tried": 79
+      },
+      "s8.clearing": {
+        "props": {
+          "s8.stump1": {
+            "x": -6159,
+            "z": 20168,
+            "heading": -3.1416,
+            "sd": 94.9,
+            "y": 472.3
+          },
+          "s8.stump2": {
+            "x": -6156,
+            "z": 20175,
+            "heading": -3.1416,
+            "sd": 94.6,
+            "y": 472.5
+          },
+          "s8.pipe": {
+            "x": -6153.5,
+            "z": 20181,
+            "heading": -3.1416,
+            "sd": 95.1,
+            "y": 472.5
+          },
+          "s8.hollow": {
+            "x": -6150,
+            "z": 20185,
+            "heading": -3.1416,
+            "sd": 93.9,
+            "y": 472.3
+          },
+          "s8.spring": {
+            "x": -6148.8,
+            "z": 20186,
+            "heading": -3.1416,
+            "sd": 93.4,
+            "y": 472.3
+          },
+          "s8.tin": {
+            "x": -6148.8,
+            "z": 20186,
+            "heading": -3.1416,
+            "sd": 93.4,
+            "y": 472.3
+          },
+          "s8.row": {
+            "x": -6152.6,
+            "z": 20186.5,
+            "heading": -3.1416,
+            "sd": 96.9,
+            "y": 472.5
+          }
+        },
+        "lanes": [],
+        "x": -6150,
+        "z": 20185,
+        "n": [
+          0,
+          1
+        ],
+        "u": [
+          1,
+          0
+        ],
+        "lakeId": null,
+        "off": 0,
+        "tried": 1
+      },
+      "kek.plane": {
+        "props": {
+          "s5.wreck": {
+            "x": 2817.1,
+            "z": 2476.7,
+            "heading": -2.7217,
+            "sd": -22.1,
+            "y": 452.6
+          }
+        },
+        "lanes": [],
+        "x": 2827.7,
+        "z": 2500.4,
+        "n": [
+          0.4076,
+          0.9131
+        ],
+        "u": [
+          -0.9131,
+          0.4076
+        ],
+        "lakeId": 55,
+        "off": 6,
+        "tried": 52
+      },
+      "s6.bootleg": {
+        "props": {
+          "s6.blaze.1": {
+            "x": -73048.8,
+            "z": 6297,
+            "heading": -3.0155,
+            "sd": 27.2,
+            "y": 431.6
+          },
+          "s6.blaze.2": {
+            "x": -73042,
+            "z": 6334.5,
+            "heading": -3.0155,
+            "sd": 64.9,
+            "y": 436.4
+          },
+          "s6.blaze.3": {
+            "x": -73036.3,
+            "z": 6372,
+            "heading": -3.0155,
+            "sd": 102.6,
+            "y": 434.8
+          },
+          "s6.pond": {
+            "x": -73054.6,
+            "z": 6394.5,
+            "heading": -3.0155,
+            "sd": 124.5,
+            "y": 433.9
+          },
+          "s6.slump": {
+            "x": -73029.5,
+            "z": 6417.6,
+            "heading": -3.0155,
+            "sd": 148.6,
+            "y": 432.6
+          },
+          "s6.plank.1": {
+            "x": -73029.5,
+            "z": 6417.6,
+            "heading": -3.0155,
+            "sd": 148.6,
+            "y": 432.6
+          },
+          "s6.plank.2": {
+            "x": -73029.5,
+            "z": 6417.6,
+            "heading": -3.0155,
+            "sd": 148.6,
+            "y": 432.6
+          },
+          "s6.plank.4": {
+            "x": -73029.5,
+            "z": 6417.6,
+            "heading": -3.0155,
+            "sd": 148.6,
+            "y": 432.6
+          },
+          "s6.plank.5": {
+            "x": -73029.5,
+            "z": 6417.6,
+            "heading": -3.0155,
+            "sd": 148.6,
+            "y": 432.6
+          },
+          "s6.tossed.1": {
+            "x": -73029.5,
+            "z": 6417.6,
+            "heading": -3.0155,
+            "sd": 148.6,
+            "y": 432.6
+          },
+          "s6.tossed.2": {
+            "x": -73029.5,
+            "z": 6417.6,
+            "heading": -3.0155,
+            "sd": 148.6,
+            "y": 432.6
+          },
+          "s6.tossed.4": {
+            "x": -73029.5,
+            "z": 6417.6,
+            "heading": -3.0155,
+            "sd": 148.6,
+            "y": 432.6
+          },
+          "s6.tossed.5": {
+            "x": -73029.5,
+            "z": 6417.6,
+            "heading": -3.0155,
+            "sd": 148.6,
+            "y": 432.6
+          },
+          "s6.crate": {
+            "x": -73029.5,
+            "z": 6417.6,
+            "heading": -3.0155,
+            "sd": 148.6,
+            "y": 432.6
+          },
+          "s6.crate.taken": {
+            "x": -73029.5,
+            "z": 6417.6,
+            "heading": -3.0155,
+            "sd": 148.6,
+            "y": 432.6
+          },
+          "s6.crate.empty": {
+            "x": -73029.5,
+            "z": 6417.6,
+            "heading": -3.0155,
+            "sd": 148.6,
+            "y": 432.6
+          },
+          "s6.dughole": {
+            "x": -73029.5,
+            "z": 6417.6,
+            "heading": -3.0155,
+            "sd": 148.6,
+            "y": 432.6
+          }
+        },
+        "lanes": [],
+        "x": -73054.3,
+        "z": 6269.5,
+        "n": [
+          0.1258,
+          0.9921
+        ],
+        "u": [
+          -0.9921,
+          0.1258
+        ],
+        "lakeId": 248,
+        "off": 5,
+        "tried": 46
+      },
+      "s6.beatty": {
+        "props": {
+          "s6.carving": {
+            "x": -80365.3,
+            "z": -20772,
+            "heading": 0.7896,
+            "sd": 2.1
+          }
+        },
+        "lanes": [],
+        "x": -80369.9,
+        "z": -20773.2,
+        "n": [
+          -0.7100840331707814,
+          -0.7041169404551468
+        ],
+        "u": [
+          0.7041169404551468,
+          -0.7100840331707814
+        ],
+        "lakeId": 31,
+        "portage": 123,
+        "end": 0,
+        "off": 0
+      },
+      "boys.c1210": {
+        "props": {
+          "boys.rock": {
+            "x": 15102.5,
+            "z": 6837.2,
+            "heading": 2.952,
+            "sd": 0.5,
+            "y": 485.3
+          },
+          "boys.flare": {
+            "x": 15101.5,
+            "z": 6839,
+            "heading": 2.952,
+            "sd": 2.4,
+            "y": 485.3
+          },
+          "boys.cup": {
+            "x": 15102.5,
+            "z": 6839.1,
+            "heading": 2.952,
+            "sd": 2.1,
+            "y": 485.3
+          }
+        },
+        "lanes": [],
+        "x": 15109.3,
+        "z": 6838.9,
+        "n": [
+          -0.1885,
+          0.9821
+        ],
+        "u": [
+          -0.9821,
+          -0.1885
+        ],
+        "lakeId": 41,
+        "off": 38,
+        "tried": 11
+      },
+      "boys.frost": {
+        "props": {
+          "boys.paddle": {
+            "x": 30066,
+            "z": 10717.7,
+            "heading": -0.717,
+            "sd": 8,
+            "y": 542.4
+          }
+        },
+        "lanes": [],
+        "x": 30058.2,
+        "z": 10722.8,
+        "n": [
+          0.6571,
+          -0.7538
+        ],
+        "u": [
+          0.7538,
+          0.6571
+        ],
+        "lakeId": 281,
+        "off": 0,
+        "tried": 11
+      },
+      "i.isabella": {
+        "props": {
+          "i.flag1": {
+            "x": -12548.9,
+            "z": 30689.3,
+            "heading": -2.672,
+            "sd": 5.2,
+            "y": 464.6
+          },
+          "i.flag2": {
+            "x": -12556,
+            "z": 30695.1,
+            "heading": -2.672,
+            "sd": 8.7,
+            "y": 465.7
+          },
+          "i.flag3": {
+            "x": -12550.6,
+            "z": 30696.9,
+            "heading": -2.672,
+            "sd": 10.4,
+            "y": 465.7
+          },
+          "i.can": {
+            "x": -12557.4,
+            "z": 30690.2,
+            "heading": -2.672,
+            "sd": 4.8,
+            "y": 465.7
+          },
+          "i.aerial": {
+            "x": -12549.3,
+            "z": 30692.8,
+            "heading": -2.672,
+            "sd": 7.5,
+            "y": 464.6
+          },
+          "i.receipt": {
+            "x": -12555.1,
+            "z": 30690.2,
+            "heading": -2.672,
+            "sd": 5.7,
+            "y": 465.7
+          }
+        },
+        "lanes": [],
+        "x": -12557.4,
+        "z": 30683.5,
+        "n": [
+          0.4525,
+          0.8918
+        ],
+        "u": [
+          -0.8918,
+          0.4525
+        ],
+        "lakeId": 251,
+        "off": 18,
+        "tried": 62
+      }
+    },
+    "portages": {
+      "bc.64": {
+        "i": 691,
+        "name": "Little Trout Lake – Rum Lake",
+        "rods": 64,
+        "shown": 64,
+        "off": 0,
+        "ends": [
+          [
+            54975,
+            13905,
+            525
+          ],
+          [
+            55245,
+            14075,
+            1101
+          ]
+        ]
+      },
+      "bc.140": {
+        "i": 1000,
+        "name": "Disappointment Lake – Snowbank Lake",
+        "rods": 140,
+        "shown": 148,
+        "off": 0,
+        "ends": [
+          [
+            -12405,
+            13105,
+            93
+          ],
+          [
+            -12835,
+            12595,
+            19
+          ]
+        ]
+      },
+      "bc.186": {
+        "i": 595,
+        "name": "Grandpa Lake – Sea Gull Lake",
+        "rods": 185,
+        "shown": 185,
+        "off": 0,
+        "ends": [
+          [
+            21615,
+            -8105,
+            520
+          ],
+          [
+            22265,
+            -7395,
+            18
+          ]
+        ]
+      },
+      "pair.205": {
+        "i": 659,
+        "name": "Bald Eagle Lake – Gull Lake",
+        "rods": 205,
+        "shown": 188,
+        "off": 0,
+        "ends": [
+          [
+            -24425,
+            28715,
+            77
+          ],
+          [
+            -23535,
+            28705,
+            2778
+          ]
+        ]
+      },
+      "pair.50": {
+        "i": 660,
+        "name": "Gull Lake – Gull Lake",
+        "rods": 50,
+        "shown": 44,
+        "off": 0,
+        "ends": [
+          [
+            -23355,
+            28205,
+            2778
+          ],
+          [
+            -23225,
+            27995,
+            186
+          ]
+        ]
+      },
+      "nb36.p210": {
+        "i": 614,
+        "name": "Moose River – Big Moose Lake",
+        "rods": 61,
+        "shown": 59,
+        "off": 0,
+        "ends": [
+          [
+            -66055,
+            4265,
+            18834
+          ],
+          [
+            -65765,
+            4395,
+            99
+          ]
+        ]
+      },
+      "crews.p693": {
+        "i": 1048,
+        "name": "Gabbro Lake – Gabbro Lake",
+        "rods": 6,
+        "shown": 6,
+        "off": 0,
+        "ends": [
+          [
+            -26655,
+            28005,
+            101
+          ],
+          [
+            -26685,
+            28025,
+            101
+          ]
+        ]
+      },
+      "far.p530": {
+        "i": 895,
+        "name": "Pietro Lake – Gull Lake",
+        "rods": 50,
+        "shown": 52,
+        "off": 0,
+        "ends": [
+          [
+            -22705,
+            26855,
+            250
+          ],
+          [
+            -22755,
+            27145,
+            186
+          ]
+        ]
+      },
+      "far.p24": {
+        "i": 444,
+        "name": "Camdre Lake – Clearwater Lake",
+        "rods": 121,
+        "shown": 124,
+        "off": 0,
+        "ends": [
+          [
+            -22275,
+            24745,
+            1058
+          ],
+          [
+            -21965,
+            24185,
+            154
+          ]
+        ]
+      },
+      "far.p26": {
+        "i": 446,
+        "name": "Clearwater Lake – Rock Island Lake",
+        "rods": 217,
+        "shown": 217,
+        "off": 13,
+        "ends": [
+          [
+            -21195,
+            23415,
+            154
+          ],
+          [
+            -20475,
+            22625,
+            2577
+          ]
+        ]
+      },
+      "s6.p357": {
+        "i": 123,
+        "name": "Beatty Portage",
+        "rods": 41,
+        "shown": 41,
+        "off": 0,
+        "ends": [
+          [
+            -80365,
+            -20755,
+            31
+          ],
+          [
+            -80485,
+            -20955,
+            3
+          ]
+        ]
+      }
+    },
+    "carries": {
+      "story:gullcarry": {
+        "id": "story:gullcarry",
+        "hidden": true,
+        "rods": 160,
+        "lengthM": 805,
+        "pts": [
+          [
+            -19787,
+            26770
+          ],
+          [
+            -19784,
+            26780
+          ],
+          [
+            -19781,
+            26790
+          ],
+          [
+            -19778,
+            26800
+          ],
+          [
+            -19779.2,
+            26808.4
+          ],
+          [
+            -19780.4,
+            26816.8
+          ],
+          [
+            -19781.6,
+            26825.2
+          ],
+          [
+            -19782.8,
+            26833.6
+          ],
+          [
+            -19784,
+            26842
+          ],
+          [
+            -19784.5,
+            26851.5
+          ],
+          [
+            -19785,
+            26861
+          ],
+          [
+            -19785.5,
+            26870.5
+          ],
+          [
+            -19786,
+            26880
+          ],
+          [
+            -19782.8,
+            26888
+          ],
+          [
+            -19779.6,
+            26896
+          ],
+          [
+            -19776.4,
+            26904
+          ],
+          [
+            -19773.2,
+            26912
+          ],
+          [
+            -19770,
+            26920
+          ],
+          [
+            -19770.4,
+            26928
+          ],
+          [
+            -19770.8,
+            26936
+          ],
+          [
+            -19771.2,
+            26944
+          ],
+          [
+            -19771.6,
+            26952
+          ],
+          [
+            -19772,
+            26960
+          ],
+          [
+            -19771.4,
+            26968
+          ],
+          [
+            -19770.8,
+            26976
+          ],
+          [
+            -19770.2,
+            26984
+          ],
+          [
+            -19769.6,
+            26992
+          ],
+          [
+            -19769,
+            27000
+          ],
+          [
+            -19769.4,
+            27008
+          ],
+          [
+            -19769.8,
+            27016
+          ],
+          [
+            -19770.2,
+            27024
+          ],
+          [
+            -19770.6,
+            27032
+          ],
+          [
+            -19771,
+            27040
+          ],
+          [
+            -19775.7,
+            27048
+          ],
+          [
+            -19780.5,
+            27056
+          ],
+          [
+            -19785.2,
+            27064
+          ],
+          [
+            -19790,
+            27072
+          ],
+          [
+            -19786.5,
+            27079.5
+          ],
+          [
+            -19783,
+            27087
+          ],
+          [
+            -19779.5,
+            27094.5
+          ],
+          [
+            -19776,
+            27102
+          ],
+          [
+            -19769.3,
+            27110
+          ],
+          [
+            -19762.7,
+            27118
+          ],
+          [
+            -19756,
+            27126
+          ],
+          [
+            -19749,
+            27130.5
+          ],
+          [
+            -19742,
+            27135
+          ],
+          [
+            -19735,
+            27139.5
+          ],
+          [
+            -19728,
+            27144
+          ],
+          [
+            -19721,
+            27148.5
+          ],
+          [
+            -19714,
+            27153
+          ],
+          [
+            -19707,
+            27157.5
+          ],
+          [
+            -19700,
+            27162
+          ],
+          [
+            -19692.9,
+            27166.3
+          ],
+          [
+            -19685.7,
+            27170.6
+          ],
+          [
+            -19678.6,
+            27174.9
+          ],
+          [
+            -19671.4,
+            27179.1
+          ],
+          [
+            -19664.3,
+            27183.4
+          ],
+          [
+            -19657.1,
+            27187.7
+          ],
+          [
+            -19650,
+            27192
+          ],
+          [
+            -19642.9,
+            27196.3
+          ],
+          [
+            -19635.7,
+            27200.6
+          ],
+          [
+            -19628.6,
+            27204.9
+          ],
+          [
+            -19621.4,
+            27209.1
+          ],
+          [
+            -19614.3,
+            27213.4
+          ],
+          [
+            -19607.1,
+            27217.7
+          ],
+          [
+            -19600,
+            27222
+          ],
+          [
+            -19593.3,
+            27226.5
+          ],
+          [
+            -19586.7,
+            27231.1
+          ],
+          [
+            -19580,
+            27235.6
+          ],
+          [
+            -19573.3,
+            27240.1
+          ],
+          [
+            -19566.7,
+            27244.7
+          ],
+          [
+            -19560,
+            27249.2
+          ],
+          [
+            -19553.3,
+            27253.7
+          ],
+          [
+            -19546.7,
+            27258.3
+          ],
+          [
+            -19540,
+            27262.8
+          ],
+          [
+            -19533.3,
+            27267.3
+          ],
+          [
+            -19526.7,
+            27271.9
+          ],
+          [
+            -19520,
+            27276.4
+          ],
+          [
+            -19513.3,
+            27280.9
+          ],
+          [
+            -19506.7,
+            27285.5
+          ],
+          [
+            -19500,
+            27290
+          ],
+          [
+            -19492.9,
+            27294
+          ],
+          [
+            -19485.8,
+            27298
+          ],
+          [
+            -19478.7,
+            27302
+          ],
+          [
+            -19471.6,
+            27306
+          ],
+          [
+            -19464.5,
+            27310
+          ],
+          [
+            -19457.5,
+            27314
+          ],
+          [
+            -19450.4,
+            27318
+          ],
+          [
+            -19443.3,
+            27322
+          ],
+          [
+            -19436.2,
+            27326
+          ],
+          [
+            -19429.1,
+            27330
+          ],
+          [
+            -19422,
+            27334
+          ],
+          [
+            -19414.2,
+            27338
+          ],
+          [
+            -19406.5,
+            27342
+          ],
+          [
+            -19398.7,
+            27346
+          ],
+          [
+            -19391,
+            27350
+          ]
+        ],
+        "launch": [
+          {
+            "x": -19797,
+            "z": 26764,
+            "lake": 17792
+          },
+          {
+            "x": -19391,
+            "z": 27350,
+            "lake": 0,
+            "road": true
+          }
+        ]
+      }
+    }
+  },
+  "carries": [
+    {
+      "id": "story:gullcarry",
+      "doc": "50 §3; 03 §2; bible 6.5 3.5",
+      "hidden": true,
+      "lake": "Gull Lake",
+      "launch": [
+        -19797,
+        26764
+      ],
+      "way": [
+        [
+          -19787,
+          26770
+        ],
+        [
+          -19778,
+          26800
+        ],
+        [
+          -19784,
+          26842
+        ],
+        [
+          -19786,
+          26880
+        ],
+        [
+          -19770,
+          26920
+        ],
+        [
+          -19772,
+          26960
+        ],
+        [
+          -19769,
+          27000
+        ],
+        [
+          -19771,
+          27040
+        ],
+        [
+          -19790,
+          27072
+        ],
+        [
+          -19776,
+          27102
+        ],
+        [
+          -19756,
+          27126
+        ],
+        [
+          -19700,
+          27162
+        ],
+        [
+          -19600,
+          27222
+        ],
+        [
+          -19500,
+          27290
+        ],
+        [
+          -19422,
+          27334
+        ],
+        [
+          -19391,
+          27350
+        ]
+      ]
+    }
+  ]
+}

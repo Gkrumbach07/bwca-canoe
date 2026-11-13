@@ -20,6 +20,7 @@
 import { seasonAt } from './season.js';
 import { mosqSeason, flySeason } from './bugs.js';
 import { FORAGE, inSeason } from './forage.js';
+import { STORY_ON } from './story-flag.js'; // st-t: the cast porch rule
 
 const absDay = (year, doy) => Math.round(Date.UTC(year, 0, doy) / 86400000);
 const monthOf = (year, doy) => new Date(Date.UTC(year, 0, doy)).getUTCMonth() + 1;
@@ -62,6 +63,15 @@ export const RULES = [
   { id: 'calf', what: 'a moose calf after the calving', re: /\bcalf\b/i, need: (F) => F.doy >= 150, skip: true },
 ];
 
+// st-t: the cast porch rule (campaign-design §5.1, stream T). A named person is placed on a porch only where the store
+// has one, else at their fallback (Tauno: his truck in the lot, 20 §6.6): castPorch(store) says which. And a line that
+// names another store's porch ("I'm on the porch at Farm most mornings", "Farm's porch") is grounded by that store, not
+// by this one: the porch rule lets it pass (STORY_ON only; no line of the game's own has that shape).
+export const CAST_PORCH_RE = /\bporch at [A-Z]\w+|\b[A-Z]\w+['’]s porch\b/;
+export function castPorch(store, fallback = 'truck') { return store && store.look && store.look.porch ? 'porch' : fallback; }
+if (STORY_ON) { const R = RULES.find((r) => r.id === 'porch'); if (R) R.unless = CAST_PORCH_RE; }
+// /st-t
+
 export class Grounding {
   constructor() { this.day = null; this.weather = null; this.wind = null; this.world = null; this.cache = null; }
   attach({ day = null, weather = null, wind = null, world = null } = {}) {
@@ -91,7 +101,7 @@ export class Grounding {
       this.cache = { key, base };
     }
     const W = this.weather, state = W ? W.state : 'fair', prec = W ? W.precipitation : null;
-    const store = at.store ? { porch: !!(at.store.look && at.store.look.porch), stove: true, paddles: true, pictures: false, cafe: at.kind === 'lodge' || at.cafe === true } : null;
+    const store = at.store ? { porch: !!(at.store.look && at.store.look.porch), stove: true, paddles: true, pictures: false, cafe: at.kind === 'lodge' || at.cafe === true || !!(STORY_ON && at.store.cafe) /* a2: Farm 31's café */ } : null;
     return { ...base, hours, weather: state, wet: !!(W && W.wetness > 0.35), raining: prec === 'rain' || /rain|storm/.test(state || ''), snowing: prec === 'snow',
       wind: { now: this.wind && Number.isFinite(this.wind.speed) ? this.wind.speed : 2, today: base.windToday }, dark: !!(this.day && this.day.elevation < -4), store };
   }

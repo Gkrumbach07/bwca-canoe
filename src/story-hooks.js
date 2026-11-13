@@ -13,7 +13,12 @@
 // Saved per season (save.js `bwca-canoe:story`): { v: 1, season, legacy?, notebook: { found, abs, key, lake }, read: [],
 // flags: {} }. A new season starts it blank. A season from before this round (its profile started, no story document)
 // is marked legacy: it never saw the counter scene, and the campaign decides how it meets the notebook.
+//
+// K1a (docs/build/campaign-design.md §3.7): with STORY_ON (story-flag.js, `?story=1` on a dev server) `story` is the v2
+// state of story.js instead, with the same surface (state.notebook, state.read, state.legacy, pages(), on/emit, found,
+// read, flag), saved under `bwca-canoe:story2`. With the flag off this file is exactly what it was.
 import { save } from './save.js';
+import { STORY_ON } from './story-flag.js';
 
 const NS = 'story';
 export const blankStory = (season = null) => ({ v: 1, season, notebook: { found: false, abs: null, key: null, lake: null }, read: [], flags: {} });
@@ -88,4 +93,17 @@ export class Story {
   }
 }
 
-export const story = new Story();
+// (the R0 join: story.js and its rules are imported only under the flag, so with it off not one v2 module is fetched or
+// evaluated; the build keeps them as a chunk never loaded. c1base: no top-level await here. One made this module, and
+// main.js with it, evaluate a tick late, so key listeners other modules add as they load landed in another order: with
+// the flag off an Escape out of a talk opened the pause card (r3-journal-test 5a). So `story` is a live binding: the
+// v1 story at load with the flag off, exactly as main; under STORY_ON null until main() awaits loadStory() first thing)
+export let story = STORY_ON ? null : new Story();
+export async function loadStory() {
+  if (STORY_ON && !story) {
+    const { StoryV2 } = await import('./story.js');
+    story = new StoryV2({ io: save }); // (every stream's rules from the start: story-data/all-rules.js, so the data stamp is the same every boot)
+  }
+  return story;
+}
+export { STORY_ON };

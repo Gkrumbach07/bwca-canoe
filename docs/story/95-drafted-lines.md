@@ -1,0 +1,1568 @@
+# Drafted lines (build drafts, for the writers to replace)
+
+Every line in this file is a **build draft**: the game needed words where the writers' docs (10–70) have none, so a
+build stream wrote a stand-in in the voice of `02a-voice-journal.md` and `02b-voice-people.md`. None of it is canon.
+Writers: replace any line here by writing the real one into your own doc with the same `<!-- id: -->` anchor (or a new
+anchor, and tell the builders), then delete the draft. Nothing in the writers' files was changed to make room for these.
+
+Each entry: the anchor, the line, and where the game uses it. `story-extract.mjs` reads this file into
+`src/story-data/text/drafted.json`, like the others.
+
+---
+
+## Stream x (campaign run, chapter 2: the mining years, Rose S7, Coffee Lake S9)
+
+### Len and Mary at Farm's café
+
+<!-- id: d95.len.again -->
+```
+There they are. Sit, sit. Kim, another coffee over here.
+```
+Used: Len's opener on every talk after the first (`mining.js` LEN `again`); was a bare "…".
+
+<!-- id: d95.mary.again -->
+```
+You're in my light again. Sit. The bars are still lemon.
+```
+Used: Mary's opener on every talk after the first (`mining.js` MARY `again`); was a bare "…".
+
+<!-- id: d95.len.thanks -->
+```
+That's the crib. That's it exactly. And a casing, standing up like that. They'll go right up front at the open house. Thank you.
+```
+Used: Len, as the two pictures for his favour are handed in (`mining-cast.js` talk, 30 §4.2.1); the $40 is on the tally.
+
+<!-- id: d95.len.east.ask -->
+```
+Anything east of Bald Eagle? Gull, Pietro?
+```
+Used: the player's question for Len's "Gull" / "Pietro" / "east of Bald Eagle" topic (30 §4.2: the doc gives his
+answer, 30:4.2/len-saari-first-meeting.5, but no words for the asking). Offered once the player has a reason to name
+the east: the crew map, the far end, or Pietro's dig.
+
+<!-- id: d95.mary.saynothing -->
+```
+(Say nothing.)
+```
+Used: the third choice at Mary's back table (30 §4.4 "[Say nothing.]"); she waits, nods, and goes on to the radio.
+
+### The Walt page and the notebook
+
+<!-- id: d95.lead.pads page -->
+```
+Tauno: up the grade from the crews' landing to the west pads. The big one's in a hollow, the Kettle. Go after a rain and see if the creek still runs orange.
+```
+Used: the Walt page's Leads line for Tauno's "The pads" (`walt-lines.js` w.lead.pads; was his spoken line whole).
+
+<!-- id: d95.und.backdoor -->
+```
+Pietro. The hill E-7 was filed on.
+```
+Used: the margin note on NB70 once "the back door" is understood or inked (`notebook.js` UND, 10 §11.2's form).
+
+### Rose (S7, Mummo's)
+
+<!-- id: d95.S7.rose.again -->
+```
+There you are. Sit down, I saved you the chair. What's the lake doing?
+```
+Used: Rose's opener on every Tuesday after the first (`feed-episodes.js` ROSE_SCENE); she used to say S7.conv.1 again.
+
+<!-- id: d95.S7.pay -->
+```
+Lilacs for Rose's calendar
+```
+Used: the tally's line for Rose's $25 (or the short note when it is paid with no trip on); replaces "$25 from Rose.".
+
+<!-- id: d95.S7.page.rose -->
+```
+Rose Gornik. Tuesdays at Moose Lake, the table by the window. She wants June lilacs for the church calendar.
+```
+<!-- id: d95.S7.page.whose -->
+```
+Her family's resort was on the big part of Basswood. Bought out in '64, burned on the ice the next February.
+```
+<!-- id: d95.S7.page.where -->
+```
+Lilacs past Prairie, on the US side of the bay. An old Finn fish camp. The boys there called the old lady Mummo.
+```
+<!-- id: d95.S7.page.boys -->
+```
+The boys were Haapalas. The young one drowned. The other one guided. Walt.
+```
+<!-- id: d95.S7.page.step -->
+```
+Three flat stones up from the water to nothing. A foundation in the grass. Somebody's lilacs.
+```
+Used: the S7 page in Stories, each as it comes true (meeting Rose, "Whose places?", "Where are the lilacs?", "The two
+boys?", the stone step seen). 60 §0.3: the page lines were never written.
+
+### Coffee Lake (S9)
+
+<!-- id: d95.S9.page.hooked -->
+```
+Off the Alice beach rock, a jig dragged on the sand caught something heavy. Not a fish.
+```
+<!-- id: d95.S9.page.nb06 -->
+```
+Coffee Lake is Alice. Walt lost something off the beach rock in '88, in eight feet of water.
+```
+<!-- id: d95.S9.end -->
+```
+It came up by the bail. A blue enamel pot, a chip on the lip, full of sand.
+```
+Used: the S9 page in Stories (the hook-up, NB06 read, and its last line once the pot is up).
+
+### The Kettle notice (30 §4.3)
+
+<!-- id: d95.kettle.page.done -->
+```
+Worked the Kettle creek with Tasha. Three bottles and the disk. The water's orange-brown under a metre.
+```
+Used: the last line under the Kettle notice's words on its page in Stories (the notice taken; the day done).
+
+### The day's beat in Farm's reach (30 §9)
+
+<!-- id: d95.beat.whitestone -->
+```
+There's a white stone on a flat rock at a site on Bald Eagle. Somebody put it there. We left it.
+```
+Used: the director's fallback lore in Farm's reach, in place of 30:9.beat.2 ("a white rock on a stump"), which
+disagrees with 30 §9's own place note for C902 ("a white stone on a flat rock at the landing"). The stone is now built
+at C902's landing (`story-places.json` bald.c902), unstarred as walt-sites.js keeps it. Writers: settle which it is.
+
+---
+
+## Stream f (Round 3, the far end)
+
+- `f.dot.pit.empty`: "An empty pit." The dot on the cellar's opened hole after the ending or a walk-out from the dawn
+  lot (`cellar.hole`, `dotWhen: f:world.pit.empty`; world.pit.empty is stream n's rule n.pit). Build draft.
+
+## Stream r (the run, Round 3)
+
+| Anchor | Line (draft) | Where it is used |
+|---|---|---|
+| run.click | "Far off, down toward the bay: a radio, two clicks." | run.js `click()`: the run's first sign (50 §5.3 says it is a sound only; until the audio has a radio click, the HUD note stands in for it) |
+| run.tied.kicker | "Tied off" / "in the canoe · cold, cramped" | the Rest dial's kicker and sub tied off (minigames/tieoff.js, run.js `restDial`) |
+| run.scanner.prefix | "Scanner · {who}: {line}" | how a scanner line shows when no speaker is pinned (run.js `scanLine`); the lines themselves are 50 §6.8's |
+
+Verbatim lines used from table rows the extractor cannot anchor (no prose changed; the join or the writers may move
+them to an anchor): "Not tonight. Not where they'd look." (50 §6.2, No campsites row) in run.js `NOTE_DOWN`.
+
+## Stream n (Round 3: the endings) — build drafts, for the writers to replace
+
+| Anchor | Line | Where it is used |
+|---|---|---|
+| n.phone.dan | It rings twice. "Dan Marolt." A pause. "Stay there. Twenty minutes." | The dawn lot's permit-box phone, dialled with Dan's card (50 §9.2 says only that he arrives in twenty minutes) — endings.js `phoneLine()` |
+| n.tasha.done | Samples bottled and the Secchi read. That's the creek for this month. | Tasha's sampling notice done at the Kettle creek (50 §12.2 has the notice, not the done line) — endings.js `registerSampling()` |
+| n.paper.read | STATIONS 7 TO 12. The clipping goes in your book. / The papers existed. The clipping goes in your book. | Reading the Ledger on a counter (the headline is the paper's; the second sentence is the build's) — endings.js `readPaper()` |
+
+Also quoted in code word for word (the extract skips a speaker line with a stage direction before its colon; a writer's
+`<!-- id -->` would let them be wired by id): 50 §9.2 Dan's "Hey. You made it. That's a long night." / "Okay. I'm
+supposed to say this exactly. The number's gone up." / "I'm asking you."; 50 §9.1 Maggie's readings ("C.B.",
+"'Spoken to.'", "L.P. H.V. Two years of it.", "These are originals. …"), Dan's "...I will.", Tauno's "Well. I said if." /
+"Good. That's good.", Tom's "You told me once to leave the sled. I left it."; 50 §10's tally words (backticks).
+
+## Stream w (the winter turn, Round 3)
+
+| Anchor | Line | Where it is used |
+|---|---|---|
+| `w:frozen.card.kicker` | Frozen in | The kicker of the card when the run is caught by ice-in and the season turns by itself (season-turn.js `auto`). |
+| `w:frozen.card.text` | Frozen in. Not till the ice goes. | The card's line. **Not drafted:** the pit's own thought in `50` §5 ("15 November to ice-out"), reused here so the run's freeze-up and the pit's say the same thing. |
+| `w:frozen.card.sub` | Up at seven on {date}, {year}, the ice out, where you last stopped. | Under it: the day the player wakes (the ice-out at the run's put-in) and that the run resumes at the last checkpoint (`50` §6.14). |
+
+## Stream c (co-op mirror, Round 3)
+
+| Anchor | Line | Where it's used |
+|---|---|---|
+| `c.walt.n42` | Not with company on the lake. | The Walt page, "The far end", written once the first time a player with an L6 key points at the pit with a friend in the room (campaign-design §7.2). It quotes NB72 (N42) word for word; `src/story-data/walt-lines.js` holds it as the row's `text`. |
+| `c.coop.reading` | {host} is reading by headlamp. | The one card a guest sees on a shared night while the host's night-one cutscene plays (campaign-design §6.1); `src/coop-story.js` WORDS.reading. |
+| `c.coop.nod` | … | A story person (Tauno, the Farm people …) stood on a guest's screen, E on them: a look up, no words (as cast.js's Josie with no word). Josie says her own 70 §4.4 lines. |
+
+<!-- id: c.walt.n42 -->
+```
+Not with company on the lake.
+```
+Used: the Walt page row `c.walt.n42` (anchored at join 1 so the book reads it from drafted.json, like the others).
+
+## Stream m (mechanics, campaign Round 4)
+
+| Anchor | Line | Where it is used |
+|---|---|---|
+| `m:squad.ride` | Up Moose, Newfound and Sucker in the dark, about fifty minutes: the motor and the wake, your canoe and the squad's old aluminium spare on a line behind. At the bypass the motor stops. Two carries: your canoe, then the spare. | The squad night's ride card (src/drift-night.js squadNight, the card's sub), 31 GY-11 "The ride", folded with the bypass's two carries |
+| `m:squad.back` | Back down the chain in the dark: the motor and nothing else. | The ride back's card (drift-night.js rideBack), after 31 GY-11 "The ride back is the motor and nothing else." |
+| `m:rescue.ride` | The canoe on a line behind, {time} on the water to {place}. {fee} | The rescue-boat ride's card (src/rescue.js ride, the sub), when the caller gives no words of its own |
+| `m:rescue.kicker` | The rescue squad → {place} / The outfitter's boat → {place} | The same card's kicker |
+
+## Stream 7a (campaign run, Round 7: S2 the Squatch night, S3 Lights over Four Towns, S4 the wolves)
+
+### Big Moose: the Squatch night (S2)
+
+<!-- id: d95.7a.S2.page.duane -->
+```
+Duane, the Tattler. Weekends in the lot at Moose River North: a green pickup, a lawn chair, a plaster cast.
+```
+Used: S2's page, once Duane is met.
+
+<!-- id: d95.7a.S2.page.site -->
+```
+The west site on Big Moose, under the ridge. Two stars, a bad landing. Nobody wants it.
+```
+Used: S2's page, once Duane says where to camp.
+
+<!-- id: d95.7a.S2.page.walt -->
+```
+Walt slept out there in his canoe, tied to a snag off the point.
+```
+Used: S2's page, N14 (NB36) read at the site.
+
+<!-- id: d95.7a.S2.page.night -->
+```
+Two in the morning on Big Moose. Steps on the ridge, a knock on wood, twice. Then nothing for a minute.
+```
+Used: S2's page, after the night.
+
+<!-- id: d95.7a.S2.page.tracks -->
+```
+In the morning, up on the ridge: a moose and a calf, and the serviceberry stripped.
+```
+Used: S2's page, the ridge seen by day after the night.
+
+<!-- id: d95.7a.S2.page.frame -->
+```
+One picture from 2:04. Two birches, and something between them. Nothing there by day.
+```
+Used: S2's page, the unexplained frame taken.
+
+<!-- id: d95.7a.S2.end.solved -->
+```
+A moose in the deadfall and a bear in the berries. Duane ran it anyway.
+```
+Used: S2's last line: a moose, bear or tracks print shown to Duane.
+
+<!-- id: d95.7a.S2.end.sold -->
+```
+Sold to the Tattler.
+```
+Used: S2's last line, the frame sold (the doc's words for the print's mark, 60 S2).
+
+<!-- id: d95.7a.S2.end.kept -->
+```
+Kept the picture. Haven't shown anybody.
+```
+Used: S2's last line, the frame kept.
+
+<!-- id: d95.7a.S2.pay.20 -->
+```
+$20 from Duane.
+```
+Used: the tally, a clear print of the moose or the bear.
+
+<!-- id: d95.7a.S2.pay.10 -->
+```
+$10 from Duane.
+```
+Used: the tally, a print of the tracks only.
+
+<!-- id: d95.7a.S2.pay.200 -->
+```
+$200 from the Tattler.
+```
+Used: the tally, the frame sold.
+
+<!-- id: d95.7a.S2.wake -->
+```
+Two in the morning. You come awake. Something heavy on the ridge behind the tent.
+```
+Used: the night card at the west site (the sleep breaks at 02:00).
+
+<!-- id: d95.7a.S2.charge -->
+```
+The cow lays her ears back, stamps, and comes three strides at you. Then she's gone, crashing.
+```
+Used: the bluff charge, a note.
+
+<!-- id: d95.7a.S2.eyes -->
+```
+Two eyes in the lamp, green-gold, two metres up. Then a long face. Then they go.
+```
+Used: the lamp turned on the ridge in the night, a note.
+
+<!-- id: d95.7a.S2.cast -->
+```
+Bear. Hind foot over the front.
+```
+Used: the dot on Duane's cast once tracks are read (60 S2's own words).
+
+### Fourtown: the lights (S3)
+
+<!-- id: d95.7a.S3.page.elaine -->
+```
+Elaine Sundquist keeps the sky book at Slim. Everything's something, she says.
+```
+Used: S3's page, Elaine met.
+
+<!-- id: d95.7a.S3.page.aurora -->
+```
+Northern lights over Fourtown, low in the north. In the book.
+```
+Used: S3's page, the aurora logged.
+
+<!-- id: d95.7a.S3.page.train -->
+```
+A string of lights climbing out of the west, one after another. Satellites. In the book.
+```
+Used: S3's page, the train logged.
+
+<!-- id: d95.7a.S3.page.lantern -->
+```
+A light floating at the north end in the fog. Somebody's lantern. In the book.
+```
+Used: S3's page, the lantern logged.
+
+<!-- id: d95.7a.S3.page.foxfire -->
+```
+Foxfire off the north shore, a green chunk of birch. Elaine turned the shop lights off for it.
+```
+Used: S3's page, the foxfire logged.
+
+<!-- id: d95.7a.S3.page.square -->
+```
+Walt wrote in her book in 2012. 'Kept the red on.' She wrote 'boat?' beside it.
+```
+Used: S3's page, Walt's line in the binder found.
+
+<!-- id: d95.7a.S3.page.tin -->
+```
+Under the loose stone at the long rock: a tobacco tin. Red glass in oilcloth, three matches.
+```
+Used: S3's page, the tin lifted.
+
+<!-- id: d95.7a.S3.page.one -->
+```
+A light over the north bay. Low, steady. It drifted against the wind and went out when I showed white.
+```
+Used: S3's page, the one light seen.
+
+<!-- id: d95.7a.S3.end -->
+```
+Elaine wrote a question mark in red. Her first.
+```
+Used: S3's last line.
+
+<!-- id: d95.7a.S3.foxfire.out -->
+```
+The foxfire has gone dark.
+```
+Used: a note, the morning after a foxfire chunk is carried.
+
+### Agnes: the wolves (S4)
+
+<!-- id: d95.7a.S4.page.kari -->
+```
+Kari Vang counts wolves on Agnes. Three places, three lines, they cross where the wolves are.
+```
+Used: S4's page, Kari met.
+
+<!-- id: d95.7a.S4.page.tracks -->
+```
+Kari at the landing: front foot, toes tight, like it's going somewhere. A dog's go everywhere.
+```
+Used: S4's page, the tracks taught.
+
+<!-- id: d95.7a.S4.page.st1 -->
+```
+Nina Moose, the north end, three in the morning. They answered.
+```
+Used: S4's page, station 1 marked.
+
+<!-- id: d95.7a.S4.page.st2 -->
+```
+The Agnes inlet. They answered.
+```
+Used: S4's page, station 2 marked.
+
+<!-- id: d95.7a.S4.page.st3 -->
+```
+Walt's site on Agnes, the sand landing. They answered.
+```
+Used: S4's page, station 3 marked.
+
+<!-- id: d95.7a.S4.page.ring -->
+```
+The three lines cross west of Agnes, in the primitive area.
+```
+Used: S4's page, the ring pencilled.
+
+<!-- id: d95.7a.S4.page.kill -->
+```
+Ravens over a kill. A deer, mostly hair and bones.
+```
+Used: S4's page, a print of the kill.
+
+<!-- id: d95.7a.S4.page.count -->
+```
+The meadow from the ridge at dusk. Pups at the edge of the alders.
+```
+Used: S4's page, the pup print.
+
+<!-- id: d95.7a.S4.page.told -->
+```
+I told someone where the meadow is.
+```
+Used: S4's page, the ring given away.
+
+<!-- id: d95.7a.S4.pay.station -->
+```
+$15 from Kari, a night at a station.
+```
+Used: the tally, a station night.
+
+<!-- id: d95.7a.S4.pay.count -->
+```
+$40 from Kari, for the count.
+```
+Used: the tally, the pups counted.
+
+<!-- id: d95.7a.S4.pay.lyle -->
+```
+$60 from Lyle.
+```
+Used: the tally, the ring sold to Lyle.
+
+<!-- id: d95.7a.S4.lyle2 -->
+```
+Me again. Sixty-five for a ring on my map. Last time I'll ask.
+```
+Used: Lyle's second ask, a week on (60 S4 gives only the stage direction).
+
+<!-- id: d95.7a.S4.give -->
+```
+Show him the ring on the map.
+```
+Used: the player's choice to give Lyle the ring.
+
+<!-- id: d95.7a.S4.howl.hint -->
+```
+Wait for an answer. Face it, then {E} Mark.
+```
+Used: teaching moment after a first howl (hint, ≤ 80).
+
+<!-- id: d95.7a.tracks -->
+```
+Tracks
+```
+Used: the dot on prints before Kari teaches them.
+
+<!-- id: d95.7a.S4.answered -->
+```
+Far off, the wolves answer.
+```
+Used: a note after an answered howl, once.
+
+<!-- id: d95.7a.S4.silent -->
+```
+Nothing answers. Only the water.
+```
+Used: a note after a howl nobody answers.
+
+## a3 · The guiding years (Round 4, stream A3; `src/story-data/drafts-a3.js`)
+
+| Id | Line | Where it is used |
+|---|---|---|
+| `a3.nate.tow` | NATE: "On the right. By the start of the carry. I drive it every day. Don't tell Grandpa." | Nate's answer to "Where does the tow land at Prairie?" (31 §5.4 Gives: "the tow landing's real side (a second way to know it)"; the doc gives Rick's words for the question and none of Nate's answer), followed by his Gives line "He forgets the week. He doesn't forget a reef." |
+| `a3.tally.overdue` | "Squad, an overdue party" | The trip-end tally line for GY-10's $30 ("$30 on the trip-end screen") |
+| `a3.dot.bunk3` | "Bunk 3" | The dot on bunk 3 (GY-13: "The dot on bunk 3 offers **Take the bunk**") |
+| `a3.dot.lamp` | "Battery lamp" | The dot on the lamp on the sill (verbs "Light it" / "Put it out") |
+| `a3.dot.ladder` | "Ladder" | The boathouse ladder (GY-12: "on the left inside the door"); verb `a3.verb.ladder` "Climb up" |
+| `a3.dot.rafter` | "Initials, cut in the rafter" | The rafter by the loft window (W.H. 61, E.H. 64) |
+| `a3.dot.crew89` | "Snapshot, pinned to a beam" | The Moose Lake crew, summer 1989 |
+| `a3.dot.bolts` | "Coffee can of dock bolts" | The can marked W.H. |
+| `a3.dot.redcanoe` | "Red canoe, across the rafters" | Marlys's red canoe |
+| `a3.dot.truck` | "Pickup, idling" | GY-13 23:40, the ordinary pickup in the lot (verb "Walk up": the window's line is the doc's 31:GY-13.truck) |
+| `a3.dot.weekenders` | "Party of four" | GY-10, the overdue party |
+| (story-places.json) | "Tow landing" · "Flat rock on the point" · "Old fire ring, under the moss" · "Pine stub" | The dot names of the tow landing at P194's Sucker end and the lunch rock's props (GY-04, GY-07, §9.1) |
+| (guiding-cast.js) | "Bunkhouse registers, {year}." | A banker's box in the loft that isn't the 2020 one, looked into (the dot names each box by its year only) |
+| (guiding-cast.js) | "Old wall map" | Hog Creek's pencilled wall map (GY-18; the doc names it only in prose) |
+| (guiding.js WALLS, leads-guiding.js ASKS) | "The old guide photo?" · "Little Gabbro? Bald Eagle?" · "Hap says Insula?" · "Hap says Ottertrack?" · "The Stuart Portage?" | The player's question to a keeper where the doc gives only the keeper's answer (Farm's photo, GY-17; Gus's rings, GY-06, GY-06c, GY-09b). "Hap's day?" is the doc's own (GY-04 Gives). |
+
+## Stream s (campaign run, Round 4: S1 the man on the portage, S8 the sled on the lunch rock)
+
+60 §0.3 asks for a side story's page in the player's hand, and its last line, but writes only S1's example page (marked
+not-text) and three last lines. These are the page lines the two stories need; S1's first three follow 0.3's example.
+
+### S1 · Ollie's page (Stories, in the player's hand)
+
+<!-- id: d95.s1.page.1 -->
+```
+Ollie. Walks the Stuart Portage Tuesdays and Thursdays, in the evening. Says "Evening."
+```
+Used: S1's page from its start (`s1-ollie.js` page).
+
+<!-- id: d95.s1.page.2 -->
+```
+Rescue squad, 38 years. Squad record on the Stuart: 49 minutes, canoe and pack, one trip. 1981.
+```
+Used: S1's page once he has told you about the squad (`ollie.squad`).
+
+<!-- id: d95.s1.page.3 -->
+```
+He'll be at the road with his watch.
+```
+Used: S1's page until the first carry.
+
+<!-- id: d95.s1.page.missed -->
+```
+Over forty-nine. He said Tuesday like it was nothing.
+```
+Used: S1's page after a first carry that missed the record.
+
+<!-- id: d95.s1.page.beat -->
+```
+Road to river under forty-nine. He looked at the watch twice.
+```
+Used: S1's page once the record is beaten.
+
+<!-- id: d95.s1.page.twice -->
+```
+Carried it twice. Never under forty-nine. He seemed fine with that.
+```
+Used: S1's page after the second try without the record ("counts as done", 60 S1 Results).
+
+<!-- id: d95.s1.page.log -->
+```
+He gave me a copy of his search log. Bald Eagle, October 1977. Nine days.
+```
+Used: S1's page once conversation B gives the log.
+
+<!-- id: d95.s1.end.log -->
+```
+Still "Evening." Tuesdays and Thursdays.
+```
+Used: S1's last line when it ends (the log given). Out of his months, before that, the page shows 60's own
+"Ollie's back in June." (`side.last.1`).
+
+### S8 · the sled's page
+
+<!-- id: d95.s8.page.1 -->
+```
+A sled on the lunch rock, Insula. Ash runners, the straps rusted to lace. Two window sashes, one pane left.
+```
+Used: S8's page from its start (`s8-sled.js` page).
+
+<!-- id: d95.s8.page.rule -->
+```
+Tom's rule: over fifty years old, it stays. Under, it goes.
+```
+Used: S8's page once Tom has said why he hasn't hauled it.
+
+<!-- id: d95.s8.page.crew -->
+```
+His crew is on Insula the third week of September. If nobody tells him anything, it goes.
+```
+Used: S8's page once Tom has said when.
+
+<!-- id: d95.s8.page.emil -->
+```
+Emil. Trapped Insula from the thirties. Went back over the ice for his windows and left the sled on the rock.
+```
+Used: S8's page once Hap has told it.
+
+<!-- id: d95.s8.page.creek -->
+```
+His creek: straight across from the rock. A beaver house at the mouth.
+```
+Used: S8's page once anyone has given the creek (Hap, Vern, or Tom's files).
+
+<!-- id: d95.s8.page.snap -->
+```
+Lloyd's snapshot: Vern with a pike on the sled, 1968. Both panes in.
+```
+Used: S8's page once the Ostbys' snapshot is in the book.
+
+<!-- id: d95.s8.page.found -->
+```
+Up the creek in the young pines: cut stumps, a stovepipe, a square hollow, a bed spring.
+```
+Used: S8's page once the clearing is found.
+
+<!-- id: d95.s8.page.tin -->
+```
+A tobacco tin under the spring. E.R. 1947.
+```
+Used: S8's page once the tin is taken.
+
+<!-- id: d95.s8.end.heritage -->
+```
+The sled stays. Tom wrote it up as heritage.
+```
+Used: S8's last line when the player told Tom to leave it ("Hauled" and "without you" use 60's own "The sled went to
+the yard in town.", `side.last.2`).
+
+<!-- id: d95.s8.photo.clearing -->
+```
+the clearing up Emil's creek
+```
+Used: the camera's survey words for a print of the clearing (`s8-sled.js` photo).
+
+<!-- id: d95.s8.photo.sled -->
+```
+the sled on the lunch rock
+```
+Used: the camera's survey words for a print of the sled.
+
+## 7c · the mini-campaigns M1–M6 (Round 7)
+
+Generated by `node scripts/cmp-7c-lines.mjs` (the game reads src/story-data/text/drafts-7c.json). Voice: 02a (the page,
+the player's hand) and 02b (keepers, Tom, the guides, the soloists). M3 never names Walt, Canada, a stone or a stump.
+
+| Anchor | Who | Line (draft) | Used |
+|---|---|---|---|
+| `m1.notice.0` |  | BEAR ACTIVITY on Moose, Newfound and Sucker. / A black bear is taking food from campsites. Hang everything, every night. / Seen claw marks, scat, a barrel moved? Tell the counter. We would rather move it than lose it. / — Kawishiwi Ranger District | M1 flyer, the boards at Moose Lake 25 and Farm 31, the year its chain is Moose Lake / Newfound Lake / Sucker Lake |
+| `m1.page.chain.0` |  | A bear on Moose, Newfound and Sucker. The notice says hang everything. | M1 page, first line |
+| `m1.notice.1` |  | BEAR ACTIVITY on Newfound, Splash and Ensign. / A black bear is taking food from campsites. Hang everything, every night. / Seen claw marks, scat, a barrel moved? Tell the counter. We would rather move it than lose it. / — Kawishiwi Ranger District | M1 flyer, the boards at Moose Lake 25 and Farm 31, the year its chain is Newfound Lake / Splash Lake / Ensign Lake |
+| `m1.page.chain.1` |  | A bear on Newfound, Splash and Ensign. The notice says hang everything. | M1 page, first line |
+| `m1.notice.2` |  | BEAR ACTIVITY on Snowbank, Disappointment and Parent. / A black bear is taking food from campsites. Hang everything, every night. / Seen claw marks, scat, a barrel moved? Tell the counter. We would rather move it than lose it. / — Kawishiwi Ranger District | M1 flyer, the boards at Moose Lake 25 and Farm 31, the year its chain is Snowbank Lake / Disappointment Lake / Parent Lake |
+| `m1.page.chain.2` |  | A bear on Snowbank, Disappointment and Parent. The notice says hang everything. | M1 page, first line |
+| `m1.notice.3` |  | BEAR ACTIVITY on Fall, Newton and Basswood. / A black bear is taking food from campsites. Hang everything, every night. / Seen claw marks, scat, a barrel moved? Tell the counter. We would rather move it than lose it. / — Kawishiwi Ranger District | M1 flyer, the boards at Moose Lake 25 and Farm 31, the year its chain is Fall Lake / Newton Lake / Basswood Lake |
+| `m1.page.chain.3` |  | A bear on Fall, Newton and Basswood. The notice says hang everything. | M1 page, first line |
+| `m1.notice.4` |  | BEAR ACTIVITY on Lake One, Lake Two and Lake Three. / A black bear is taking food from campsites. Hang everything, every night. / Seen claw marks, scat, a barrel moved? Tell the counter. We would rather move it than lose it. / — Kawishiwi Ranger District | M1 flyer, the boards at Moose Lake 25 and Farm 31, the year its chain is Lake One / Lake Two / Lake Three |
+| `m1.page.chain.4` |  | A bear on Lake One, Lake Two and Lake Three. The notice says hang everything. | M1 page, first line |
+| `m1.notice.5` |  | BEAR ACTIVITY on Ensign, Vera and Knife. / A black bear is taking food from campsites. Hang everything, every night. / Seen claw marks, scat, a barrel moved? Tell the counter. We would rather move it than lose it. / — Kawishiwi Ranger District | M1 flyer, the boards at Moose Lake 25 and Farm 31, the year its chain is Ensign Lake / Vera Lake / Knife Lake |
+| `m1.page.chain.5` |  | A bear on Ensign, Vera and Knife. The notice says hang everything. | M1 page, first line |
+| `m1.bark.torn` | party | It got our food pack. We hung it, too. Not high enough, I guess. Opened it right down the seam. | M1 a party on the chain whose camp it raided (their word) |
+| `m1.rumour` | keeper | There's a bear working the sites out there. Raspberries are in, so it's fat and it's bold. | M1 the keepers' word at 25 and 31 in July–August |
+| `m1.ask.bear` |  | The bear on the notice? | M1 counter topic |
+| `m1.say.bear` | keeper | Every summer there's one. This one learned what a barrel means. The district would rather move it than shoot it, if somebody shows them where it goes. | M1 counter topic |
+| `m1.ask.site.a` |  | Tell them: up past Insula. | M1 relocation site |
+| `m1.ask.site.b` |  | Tell them: out on the Isabella. | M1 relocation site |
+| `m1.ask.site.c` |  | Tell them: the far end of Little Sag. | M1 relocation site |
+| `m1.say.site` | keeper | I'll call it in. They'll trap it where you found the sign and truck it up there. The district pays for a report like that. It'll be on your tally. | M1 after the site is picked |
+| `m1.end.relocated` |  | Trapped on the chain and moved. A tag in its ear now. The sites are quiet. | M1 end: documented and relocated |
+| `m1.end.gaveup` |  | Three camps hanging their food, and it quit the chain. Back to the raspberries. | M1 end: taught the camps |
+| `m1.end.trapped` |  | September. The rangers trapped it themselves and moved it. Nobody asked me. | M1 end without you, few camps fed it |
+| `m1.end.lost` |  | September. Too many camps fed it. They didn't move this one. | M1 end without you, four or more camps fed it |
+| `m1.page.claw` |  | Claw marks on a hung pack. Hung too low. | M1 page |
+| `m1.page.scat` |  | Scat full of raspberry seeds. Berries first, then the camps. | M1 page |
+| `m1.page.barrel` |  | A barrel dragged into the brush, lid still on. Tooth holes. | M1 page |
+| `m1.page.range` |  | It works the chain after dark. Same sites, same hours. | M1 page |
+| `m1.page.seen` |  | Saw it come in. Big, careful, in no hurry. | M1 page: the night watch |
+| `m1.page.photo` |  | A picture of it at night. Eyes in the lamp. | M1 page: a print at night |
+| `m1.page.taught` |  | Showed a camp how to hang a pack. They did it while I watched. | M1 page |
+| `m1.page.fed` |  | It got food again. Somebody else's camp. | M1 page |
+| `m1.page.fedme` |  | It got mine. Not proud of that. | M1 page |
+| `m1.teach` |  | Hang your food tonight. There's a bear on this chain. | M1 to a party on the chain (the teach choice) |
+| `m1.taught` | party | A bear? Okay. Show us the knot. | M1 the party, taught |
+| `m1.watch.come` |  | Something big in the brush. Lamp off. Wait. | M1 the night watch, the bear coming |
+| `m1.watch.gone` |  | It went back the way it came. | M1 the night watch, after |
+| `m1.dot.claw` |  | Torn pack | M1 a sign on the dot |
+| `m1.dot.scat` |  | Scat | M1 a sign on the dot |
+| `m1.dot.barrel` |  | Barrel | M1 a sign on the dot |
+| `m1.pay` |  | $40 from the district. The bear report. | M1 the tally line |
+| `m1.first` |  | First stamped: a bear's range, written down. | M1 the trip card |
+| `m2.rumour` | keeper | Fella from Crane Lake swears he heard singing on La Croix. In French. In the fog. I said that'd be the Ely High band. | M2 the keepers' word at Little Vermilion 12 and Larch Creek |
+| `m2.voices` |  | Voices in the fog. Singing. Paddles, a lot of them. | M2 fogvoices, the first time |
+| `m2.voices.near` |  | Close now. The paddles knock on the gunwales. | M2 fogvoices, near |
+| `m2.voices.gone` |  | Gone east. The fog lifts on nothing. | M2 fogvoices, after |
+| `m2.dot.box` |  | Logbook | M2 the box at each falls |
+| `m2.page.log.loon` |  | A logbook in a box at Loon Falls. Yesterday's line: "Four canoes. Bound east." | M2 the logbook read at Loon Falls |
+| `m2.page.log.curtain` |  | Curtain Falls. The box again. "Carried the falls at noon. Singing the whole way." | M2 the logbook read at Curtain Falls |
+| `m2.page.log.basswood` |  | Basswood Falls. "Lost a paddle in the white water. Did not stop." | M2 the logbook read at Basswood Falls |
+| `m2.page.log.prairie` |  | Prairie Portage, our side. "A pipe here. Then on." | M2 the logbook read at Prairie Portage |
+| `m2.page.log.knife` |  | Knife Lake. "Grand Portage in nine days." The ink still wet. | M2 the logbook read at Knife Lake |
+| `m2.page.heard` |  | Fog on La Croix at dawn. Voices. A song I didn't know. | M2 page |
+| `m2.page.close` |  | Close enough to hear the paddles knock. Never saw a canoe. | M2 page |
+| `m2.page.filled` |  | Five boxes, five lines, always the day before I got there. | M2 page |
+| `m2.keeper.passed` | keeper | Somebody at Grand Portage called. Four big canoes came in off the lake last week, singing. Nobody knew who they were. | M2 a keeper, after the fifth box |
+| `m2.end` |  | They made Grand Portage. I never caught them. | M2 end |
+| `m2.first` |  | First stamped: a logbook, filled east. | M2 the trip card |
+| `m3.hello.0` | Arvid Lund | Name's Lund. Arvid. I had the whole route planned. Knees say no. My daughter drove me up anyway. | M3 the soloist at the home dock, the year he is Arvid Lund |
+| `m3.page.who.0` |  | Lund at the dock. Retired from the Virginia plant. His daughter drove him up. | M3 page, first line |
+| `m3.hello.1` | Harold Sjoberg | Harold Sjoberg. I strung wire for the co-op thirty years. Now the doctor says no portages. My son-in-law brought me to look. | M3 the soloist at the home dock, the year he is Harold Sjoberg |
+| `m3.page.who.1` |  | Sjoberg at the dock. Thirty years a lineman for the co-op. His son-in-law brought him. | M3 page, first line |
+| `m3.hello.2` | Leonard Maki | Leonard Maki. I taught shop in Mountain Iron. I can't lift the canoe anymore. My granddaughter's in the car. | M3 the soloist at the home dock, the year he is Leonard Maki |
+| `m3.page.who.2` |  | Maki at the dock. Taught shop at Mountain Iron. His granddaughter waits in the car. | M3 page, first line |
+| `m3.hello.3` | Gene Kozlowski | Gene Kozlowski. Drove truck for the mill in Sartell. My wife sent me with a thermos and told me to sit. | M3 the soloist at the home dock, the year he is Gene Kozlowski |
+| `m3.page.who.3` |  | Kozlowski at the dock. Drove truck for the paper mill in Sartell. His wife sent him with a thermos. | M3 page, first line |
+| `m3.hello.4` | Clifford Ness | Cliff Ness. I carried mail in Two Harbors. Ankle's shot. My nephew drove up from the Cities so I could see the water. | M3 the soloist at the home dock, the year he is Clifford Ness |
+| `m3.page.who.4` |  | Ness at the dock. A mail carrier in Two Harbors. His nephew drove up from the Cities. | M3 page, first line |
+| `m3.hello.5` | Ray Bergquist | Ray Bergquist. Kept the books at a lumberyard in Cloquet. Heart, they say. My daughter-in-law drove. | M3 the soloist at the home dock, the year he is Ray Bergquist |
+| `m3.page.who.5` |  | Bergquist at the dock. Kept the books at a lumberyard in Cloquet. His daughter-in-law drove him. | M3 page, first line |
+| `m3.list.0` | soloist | Ensign, Knife, Kekekabic, Ogishkemuncie and Seagull. A picture from each. I'd like to see them one more time. | M3 his list, said |
+| `m3.page.list.0` |  | His list: Ensign, Knife, Kekekabic, Ogishkemuncie and Seagull. A picture from each. | M3 page |
+| `m3.list.1` | soloist | Lake One, Lake Two, Lake Three, Lake Insula and Alice. A picture from each. I'd like to see them one more time. | M3 his list, said |
+| `m3.page.list.1` |  | His list: Lake One, Lake Two, Lake Three, Lake Insula and Alice. A picture from each. | M3 page |
+| `m3.list.2` | soloist | Basswood, Crooked, Iron, Lac La Croix and Fourtown. A picture from each. I'd like to see them one more time. | M3 his list, said |
+| `m3.page.list.2` |  | His list: Basswood, Crooked, Iron, Lac La Croix and Fourtown. A picture from each. | M3 page |
+| `m3.list.3` | soloist | Sawbill, Alton, Kelso, Polly and Malberg. A picture from each. I'd like to see them one more time. | M3 his list, said |
+| `m3.page.list.3` |  | His list: Sawbill, Alton, Kelso, Polly and Malberg. A picture from each. | M3 page |
+| `m3.list.4` | soloist | Brule, Cherokee, Frost, Little Saganaga and Gabimichigami. A picture from each. I'd like to see them one more time. | M3 his list, said |
+| `m3.page.list.4` |  | His list: Brule, Cherokee, Frost, Little Saganaga and Gabimichigami. A picture from each. | M3 page |
+| `m3.list.5` | soloist | Snowbank, Disappointment, Ima, Thomas and Fraser. A picture from each. I'd like to see them one more time. | M3 his list, said |
+| `m3.page.list.5` |  | His list: Snowbank, Disappointment, Ima, Thomas and Fraser. A picture from each. | M3 page |
+| `m3.ask` | soloist | Would you go for me? Five places. I'll write them down. | M3 his ask |
+| `m3.c.yes` |  | I'll go. | M3 the yes |
+| `m3.c.no` |  | Not this year. | M3 the no (he asks again another day) |
+| `m3.c.show` |  | I have your pictures. | M3 back with all five |
+| `m3.wait` | soloist | Any luck? No hurry. The lakes aren't going anywhere. | M3 again, before all five |
+| `m3.back` | soloist | That's it. That's the one. You don't know. Thank you. | M3 the pictures shown |
+| `m3.page.first` |  | One picture for his list. | M3 page |
+| `m3.page.three` |  | Most of his list now. | M3 page |
+| `m3.page.all` |  | All five. He'll want to see them. | M3 page |
+| `m3.end.thanks` |  | Showed him all five at the dock. He kept looking at the last one. | M3 end |
+| `m3.end.home` |  | He went home at freeze-up. I still have the pictures I got. | M3 end without you |
+| `m3.pay` |  | $30 from the man at the dock. For the pictures. | M3 the tally line |
+| `m3.first` |  | First stamped: somebody else's trip. | M3 the trip card |
+| `m4.ask.1` | Tom | Since you're out there anyway. Somebody left a mess at a site. Pack it out? I'll put it on the board in your name. | M4 favour 1 |
+| `m4.ask.2` | Tom | You again. Good. There's a tree down across a carry. Got a saw? | M4 favour 2 |
+| `m4.ask.3` | Tom | Third time. People are going to talk. Another site needs packing out. | M4 favour 3 |
+| `m4.ask.4` | Tom | We rotate out end of the month. One last check on a chain before the ice. I trust your eyes. | M4 the fourth, October |
+| `m4.c.yes` |  | Sure. | M4 a favour taken |
+| `m4.c.no` |  | Not this time. | M4 a favour passed (asked again next meeting) |
+| `m4.busy` | Tom | Do that one first. We'll be around. | M4 a favour still open |
+| `m4.name.0` | Tom | I'm Tom, by the way. That's Kelsey. Kelsey does the actual work. | M4 the second meeting, the year the partner is Kelsey |
+| `m4.page.partner.0` |  | The rangers are Tom and Kelsey. | M4 page |
+| `m4.name.1` | Tom | I'm Tom, by the way. That's Marcus. Marcus does the actual work. | M4 the second meeting, the year the partner is Marcus |
+| `m4.page.partner.1` |  | The rangers are Tom and Marcus. | M4 page |
+| `m4.name.2` | Tom | I'm Tom, by the way. That's Jen. Jen does the actual work. | M4 the second meeting, the year the partner is Jen |
+| `m4.page.partner.2` |  | The rangers are Tom and Jen. | M4 page |
+| `m4.name.3` | Tom | I'm Tom, by the way. That's Dale. Dale does the actual work. | M4 the second meeting, the year the partner is Dale |
+| `m4.page.partner.3` |  | The rangers are Tom and Dale. | M4 page |
+| `m4.name.4` | Tom | I'm Tom, by the way. That's Priya. Priya does the actual work. | M4 the second meeting, the year the partner is Priya |
+| `m4.page.partner.4` |  | The rangers are Tom and Priya. | M4 page |
+| `m4.name.5` | Tom | I'm Tom, by the way. That's Nils. Nils does the actual work. | M4 the second meeting, the year the partner is Nils |
+| `m4.page.partner.5` |  | The rangers are Tom and Nils. | M4 page |
+| `m4.page.met1` |  | Two rangers. Asked where I came in. Asked about my food. | M4 page |
+| `m4.page.met3` |  | Tom and his partner again. A third favour. | M4 page |
+| `m4.page.three` |  | Three favours done for the district. | M4 page |
+| `m4.page.last` |  | One of their last checks before freeze-up. | M4 page |
+| `m4.end.last` |  | Did their last check. Tom said "Good camp" and meant the summer. | M4 end |
+| `m4.end.rotated` |  | The rangers rotated out for the winter. Somebody else's district till spring. | M4 end without you |
+| `m4.first` |  | First stamped: a favour for the district. | M4 the trip card |
+| `m5.say.bet.0` | Ernie | Vern says you can't do Farm, Garden and Clear and be back at this counter before the ice. I say you can. Twenty dollars says one of us is wrong. | M5 the bet, the year the route is Farm Lake / Garden Lake / Clear Lake |
+| `m5.page.bet.0` |  | Two old guides bet on me: Farm, Garden and Clear and back before the ice. | M5 page |
+| `m5.say.bet.1` | Ernie | Vern says you can't do Lake One, Lake Two, Lake Three and Lake Four and be back at this counter before the ice. I say you can. Twenty dollars says one of us is wrong. | M5 the bet, the year the route is Lake One / Lake Two / Lake Three / Lake Four |
+| `m5.page.bet.1` |  | Two old guides bet on me: Lake One, Lake Two, Lake Three and Lake Four and back before the ice. | M5 page |
+| `m5.say.bet.2` | Ernie | Vern says you can't do Perent, Isabella and Bog and be back at this counter before the ice. I say you can. Twenty dollars says one of us is wrong. | M5 the bet, the year the route is Perent Lake / Isabella Lake / Bog Lake |
+| `m5.page.bet.2` |  | Two old guides bet on me: Perent, Isabella and Bog and back before the ice. | M5 page |
+| `m5.say.bet.3` | Ernie | Vern says you can't do Perent and Isabella and be back at this counter before the ice. I say you can. Twenty dollars says one of us is wrong. | M5 the bet, the year the route is Perent Lake / Isabella Lake |
+| `m5.page.bet.3` |  | Two old guides bet on me: Perent and Isabella and back before the ice. | M5 page |
+| `m5.ask.bet` |  | What's the bet? | M5 counter topic at Farm 31 or Hog Creek 36 |
+| `m5.ask.back` |  | I made the run. | M5 back at the counter |
+| `m5.say.back` | Ernie | Well. Vern, pay up. Not you. Him. Twenty dollars and he's still not happy about it. | M5 back at the counter |
+| `m5.skim` |  | Skim ice. The paddle handle breaks it. | M5 skimice, taught once |
+| `m5.skim.through` |  | Through. It closes behind you. | M5 skimice, broken through |
+| `m5.page.skim` |  | Skim ice in the bays. Broke it with the paddle handle. Sounds like glass. | M5 page |
+| `m5.page.out` |  | Out on the run. Snow on the birch. | M5 page |
+| `m5.page.round` |  | Every lake on their route. Now back before it closes. | M5 page |
+| `m5.end.made` |  | Made it back. Ernie won. Vern says it doesn't count. | M5 end |
+| `m5.end.ice` |  | The ice won. It usually does. | M5 end without you |
+| `m5.first` |  | First stamped: the last trip of the year. | M5 the trip card |
+| `m6.ask` |  | What about a long stay? | M6 counter topic, any store |
+| `m6.say` | keeper | Thirty days in, one resupply? People do it. Pick what it's for or you'll just get tired. Lakes, fish, pictures, nights. | M6 counter topic |
+| `m6.ask.lakes` |  | Fifty lakes. | M6 the project |
+| `m6.say.lakes` | keeper | Fifty. Bring a pencil. | M6 the project |
+| `m6.page.lakes` |  | The long stay: fifty lakes in thirty days. | M6 page |
+| `m6.ask.species` |  | Every fish there is. | M6 the project |
+| `m6.say.species` | keeper | Every species. You'll want a better rod. | M6 the project |
+| `m6.page.species` |  | The long stay: every fish in the water, in thirty days. | M6 page |
+| `m6.ask.photos` |  | A photo series. | M6 the project |
+| `m6.say.photos` | keeper | Thirty pictures. Make them good ones. | M6 the project |
+| `m6.page.photos` |  | The long stay: thirty pictures in thirty days. | M6 page |
+| `m6.ask.nights` |  | Just the nights. | M6 the project |
+| `m6.say.nights` | keeper | Thirty nights. That's the whole thing, really. | M6 the project |
+| `m6.page.nights` |  | The long stay: thirty nights out. | M6 page |
+| `m6.page.half` |  | Halfway. | M6 page |
+| `m6.page.resupply` |  | Came out once for food. That's the one. | M6 page |
+| `m6.page.second` |  | Came out a second time. Doesn't matter. It's mine. | M6 page |
+| `m6.end.done` |  | Thirty days and what I said I'd do. | M6 end |
+| `m6.end.yours` |  | Thirty days. Not all of it. It's still mine. | M6 end, the days over |
+| `m6.first` |  | First stamped: a long stay. | M6 the trip card |
+
+## Stream p (Round 6: the company and the press) — build drafts, for the writers to replace
+
+The company and the press (40): the leech-order pad, the Ledger topic, Dan's junk and his card, the Kettle handout, the
+things a player can bring Maggie (40 §6.6 has her replies, not the asks). Lines the docs have in prose were anchored in 40
+(`40.w.*`, `40.brekke.again`, `40.hog.*`, `40.pad.keeper`, `40.maggie.*`, `40.stranger.dot`, `40.josie.hog`, `40.wade.josie`)
+and 30 (`30.lid.keep`), prose unchanged.
+
+<!-- id: d95.p.pad.ask -->
+```
+Leave a leech order.
+```
+Used: The counter's order pad, any outfitter (company.js PAD): the verb, 40 §6.9 names it in bold ("Leave a leech order") but gives no line.
+
+<!-- id: d95.p.pad.lakeone -->
+```
+Lake One.
+```
+Used: The pad: the place, the first of the two Maggie named (40 §6.9).
+
+<!-- id: d95.p.pad.gabbro -->
+```
+Little Gabbro.
+```
+Used: The pad: the place, the second.
+
+<!-- id: d95.p.pad.1 -->
+```
+One dozen.
+```
+Used: The pad: the number of dozens (the days from today, 40 §6.9).
+
+<!-- id: d95.p.pad.2 -->
+```
+Two dozen.
+```
+Used: The pad: the number of dozens (the days from today, 40 §6.9).
+
+<!-- id: d95.p.pad.3 -->
+```
+Three dozen.
+```
+Used: The pad: the number of dozens (the days from today, 40 §6.9).
+
+<!-- id: d95.p.pad.4 -->
+```
+Four dozen.
+```
+Used: The pad: the number of dozens (the days from today, 40 §6.9).
+
+<!-- id: d95.p.pad.5 -->
+```
+Five dozen.
+```
+Used: The pad: the number of dozens (the days from today, 40 §6.9).
+
+<!-- id: d95.p.pad.6 -->
+```
+Six dozen.
+```
+Used: The pad: the number of dozens (the days from today, 40 §6.9).
+
+<!-- id: d95.p.pad.7 -->
+```
+Seven dozen.
+```
+Used: The pad: the number of dozens (the days from today, 40 §6.9).
+
+<!-- id: d95.p.pad.8 -->
+```
+Eight dozen.
+```
+Used: The pad: the number of dozens (the days from today, 40 §6.9).
+
+<!-- id: d95.p.pad.9 -->
+```
+Nine dozen.
+```
+Used: The pad: the number of dozens (the days from today, 40 §6.9).
+
+<!-- id: d95.p.pad.slip -->
+```
+PHONE ORDER — LEECH ORDER — {n} doz — {place}
+```
+Used: The slip filled in before it is torn off (40 §6.9 "Teach once"), shown as a note; the slip's shape is item.leechslip's.
+
+<!-- id: d95.p.pad.never -->
+```
+Never mind.
+```
+Used: The pad: put the pen down.
+
+<!-- id: d95.p.ledger.ask -->
+```
+The Ledger?
+```
+Used: A keeper topic after Tauno's "Not yet." (40 §6.2 "The player's own way"): the keeper's answer is 40:6.2.8.
+
+<!-- id: d95.p.lid.sell -->
+```
+Sell it. Forty dollars.
+```
+Used: Dan sees Leo's lid (30 §4.3 "The open-house sale": Sell, $40); Keep is 30.lid.keep.
+
+<!-- id: d95.p.blade.offer -->
+```
+That a shovel blade? Somebody's, once. Twenty bucks for the wall, if you're not attached to it.
+```
+Used: Dan sees the broken shovel blade (30 §4.7, 90: Dan buys it for $20; no line in the docs).
+
+<!-- id: d95.p.blade.sell -->
+```
+Twenty. Sure.
+```
+Used: The player sells it.
+
+<!-- id: d95.p.dancard -->
+```
+Dan Marolt · Community Relations · Northmark Metals · Ely
+218-555-0144
+
+(on the back, in ballpoint) Anytime. —D.
+```
+Used: Dan's card (item dancard, 40 §3.1): the card's words are the doc's; the number is a build draft (218-555-01xx: a number set aside for fiction).
+
+<!-- id: d95.p.handout -->
+```
+NORTHMARK METALS — THE KETTLE PROJECT
+The project area, shaded, south-west of Bald Eagle. The historic Kettle pad marked.
+Twelve small numbered dots along an unnamed creek: Historic baseline stations (1976–77). Seven to twelve are below the pad.
+Legend: Background water quality: naturally mineralised
+```
+Used: The Kettle project handout Maggie gives (40 §6.3, description only; the italic words are the doc's).
+
+<!-- id: d95.p.m.register -->
+```
+The bunkhouse register. W. Helstrom, day use, parked.
+```
+Used: Maggie, 40 §6.6: the player brings the 2019 register page.
+
+<!-- id: d95.p.m.receipt -->
+```
+A fuel receipt from the camp on the Isabella.
+```
+Used: Maggie, 40 §6.6: the Isabella receipt.
+
+<!-- id: d95.p.m.guestbook -->
+```
+Aili's guest book. He signed it.
+```
+Used: Maggie, 40 §6.6: Aili's guest book.
+
+<!-- id: d95.p.m.sheila -->
+```
+Sheila's report.
+```
+Used: Maggie, 40 §6.6: Sheila's report.
+
+<!-- id: d95.p.m.ollie -->
+```
+Ollie's search log. 1977.
+```
+Used: Maggie, 40 §6.6: Ollie's log.
+
+<!-- id: d95.p.m.tasha -->
+```
+Somebody at the company flagged the stations last year.
+```
+Used: Maggie, 40 §6.6: Tasha's 2025 flag (her name never said).
+
+<!-- id: d95.p.m.tauno -->
+```
+There's a man who'll go on the record.
+```
+Used: Maggie, 40 §6.6: Tauno will go on record.
+
+<!-- id: d95.p.m.dan -->
+```
+Dan called it 'proprietary exploration data'.
+```
+Used: Maggie, 40 §6.6: the phrase from Dan.
+
+<!-- id: d95.p.m.creek -->
+```
+A picture of the orange creek.
+```
+Used: Maggie, 40 §6.6: a photo of the creek.
+
+<!-- id: d95.p.m.farend -->
+```
+I think I know where it is.
+```
+Used: Maggie, 40 §6.6: anything that places the far end.
+
+<!-- id: d95.p.m.alive -->
+```
+I think Walt's alive.
+```
+Used: Maggie, 40 §6.6: "If the player says Walt is alive".
+
+<!-- id: d95.p.wade.dot -->
+```
+Man in clean boots.
+```
+Used: The dot on Wade at the counter after N39 is read (40 §4.3, the doc's words in a stage direction).
+
+<!-- id: d95.p.cig -->
+```
+A cigarette butt, still warm. A brand band on it.
+```
+Used: The stranger's cigarette, picked up (40 §3.4; the dot's words are 40:3.4.c1).
+<!-- id: d95.p.m.wadenum -->
+```
+That number Denny gave me. It's Wade's.
+```
+Used: Maggie, 40 §6.6: Wade's number, from Denny after the reveal (her reply is 40:6.6.9).
+
+## Stream a4 (the family, campaign Round 6)
+
+Danielle's scene is re-sited on the US side (docs/story/dlc-quetico.md): the docs give her no words there, only bible
+4.10's voice. The Walt-page lines below are for "Gives" the docs describe without words.
+
+| Anchor | Line | Where it is used |
+|---|---|---|
+| `a4:danielle.1` | Morning. This is your end, so there's nothing I can sell you. I just like to see who's crossing. | Danielle's opener at the Sucker end of P194 (story-data/family.js DANIELLE meet) |
+| `a4:danielle.c1` / `.2` | What do you do here? / Count canoes. Pick up what people leave. We log what we find. We don't always know what we found. | her hub (the second half is bible 4.10's voice line) |
+| `a4:danielle.c2` / `.3` | Ever find a canoe? / Fall of 2019. The twenty-sixth of October. An aluminium canoe pulled up on our side, nobody's. We logged it. Nobody came for it. | the "went north" piece (`danielle.log`, bible 5.6 no. 3) |
+| `a4:danielle.c3` / `.4` | A white stone on a stump? / Somebody left a white stone on a stump at the Carp end. We found it the next spring when we opened up. Took it for a cairn. It's still on the pile there, your side of the line. | after the stones are known (`danielle.stone`, rings the Carp end; bible 4.10 "Gives") |
+| `a4:danielle.c4` / `.5` | Thanks. / Paddle safe. It blows on Basswood after two. | her goodbye |
+| `a4:w.jon` | Jon, her son. Guides Crane and Sand Point. Cleans fish at the motel dock at dusk. | Walt page, People: 33 §6.7 "Gives: Jon pencilled on the Walt page" |
+| `a4:w.eino` | Aili: the morning Eino went "for ducks", his shotgun was on the hooks. The night before he said Friday, a man at the paper in Duluth. Walt said leave it. | Walt page, Things that don't add up: 33 §6.5 "Eino's last morning" |
+| `a4:w.kitchen` | September 1977. Sorensen from the office, an hour in Helmi's kitchen with his hat on his knee, talking weather. | Walt page, Years: 33 §6.5 "the kitchen hour" |
+| `a4:w.guestbook` | The memorial guest book, Ely, 9 November 2019. Halfway down, careful: W. Helstrom. | Walt page: 33 §6.6 (the guest book taken) |
+| `a4:w.danielle` | Danielle, the Canadian ranger at Prairie: an aluminium canoe nobody claimed, on their side, logged 26 October 2019. | Walt page: Danielle's canoe line |
+| `a4:w.carp` | The Carp end of the portage: a clean ring on the stump, where a stone sat a long time. The ranger's cairn has a white one on top. | Walt page: the Carp end's stump and cairn both looked at |
+| `a4:dot.motel` / `a4:dot.sign` | MOTEL · BAIT · COFFEE / Back at 4 | the dot on the motel's sign; on the door Mondays 9–16 (33 §3 and §4 give the words; no anchor there) |
+| `a4:dot.carpstump` / `a4:dot.cairn` | Stump / Cairn | the Carp end's dot names |
+| `a4:jon.cold` | You went in her porch. | Jon after "I know." (33 §6.10's own words: the block already holds the Walt-page anchor, so it is carried here) |
+| `a4:say.nothing` | … | the "(say nothing)" choices of 33 §6.4 A and §6.7 |
+## Stream 7b (campaign run, Round 7: S5 the plane on the Kek, S6 the whiskey road)
+
+Build drafts. Where 60 S5/S6 has the words (its choice labels in bold, its pay in a stage direction), the draft
+copies them and says so; the rest is in the voice of 02a/02b. Pages are in the player's hand (60 §0.3).
+
+### The plane on the Kek (S5)
+
+<!-- id: d95.7b.S5.page.pete -->
+```
+Pete Haldane, at the Round Lake counter. His grandpa's plane went through the Kek ice in December 1950. Red and cream, on skis. A map case left in it.
+```
+Used: S5's page, once Pete is met.
+
+<!-- id: d95.7b.S5.page.south -->
+```
+Pete dives the south shore, near the portage. That's where his grandpa said it was.
+```
+Used: S5's page, once Pete says where.
+
+<!-- id: d95.7b.S5.page.walt -->
+```
+Walt saw red and cream in twelve feet off the north shore. A calm day, the water like glass.
+```
+Used: S5's page, N11 (NB29) read.
+
+<!-- id: d95.7b.S5.page.told -->
+```
+Told Pete: the north shore.
+```
+Used: S5's page, once the player tells Pete.
+
+<!-- id: d95.7b.S5.page.seen -->
+```
+Off the Kek's north shore, in twelve feet: a wing, red and cream, riveted. The cabin door hanging open.
+```
+Used: S5's page, the first dive (or the wreck seen from the canoe).
+
+<!-- id: d95.7b.S5.page.case -->
+```
+Behind the seat, a leather map case, swollen stiff. A chart inside, in an oilcloth sleeve. Dry.
+```
+Used: S5's page, the case brought up.
+
+<!-- id: d95.7b.S5.end.given -->
+```
+The chart's on the wall at Round Lake. The case is Pete's.
+```
+Used: S5's last line: the case given to Pete.
+
+<!-- id: d95.7b.S5.end.kept -->
+```
+The case is mine. Pete has a picture of the chart for his mother.
+```
+Used: S5's last line: the case kept (Pete photographed the chart).
+
+<!-- id: d95.7b.S5.end.keptno -->
+```
+The case is mine. Pete didn't get his picture.
+```
+Used: S5's last line: the case kept, no picture.
+
+<!-- id: d95.7b.S5.end.told -->
+```
+Pete found it, off the north shore. The chart's on the wall at Round Lake, with a card.
+```
+Used: S5's last line: Pete told, and found it.
+
+<!-- id: d95.7b.S5.c.tell -->
+```
+Tell him.
+```
+Used: Pete's scene: the choice under "An old guide saw red and cream…" (60 S5's own label, which has no anchor).
+
+<!-- id: d95.7b.S5.c.keep -->
+```
+Keep it to yourself.
+```
+Used: Pete's scene: the other choice there (60 S5's own label).
+
+<!-- id: d95.7b.S5.pay.told -->
+```
+Pete Haldane: for the north shore
+```
+Used: The tally's line for Pete's $40 ("If I find it, I owe you").
+
+<!-- id: d95.7b.S5.pay.given -->
+```
+Pete Haldane: a finder's fee
+```
+Used: The tally's line for the $60 ("finder's fee, don't argue").
+
+<!-- id: d95.7b.S5.cold -->
+```
+Cold down there. Colder than on top.
+```
+Used: A thought on the first dive, once (the cold, 60 S5 "Diving").
+
+<!-- id: d95.7b.S5.up -->
+```
+Up. The lungs decided.
+```
+Used: A thought when the breath runs out and the player is brought up.
+
+<!-- id: d95.7b.S5.card -->
+```
+Found with help from a canoeist
+```
+Used: The card under the framed chart at Round Lake when Pete was told (60 S5's stage direction, quoted).
+
+### The whiskey road (S6)
+
+<!-- id: d95.7b.S6.page.orrin -->
+```
+Orrin Gilbertson, in cabin four at Aili's motel. Collects Prohibition. Ten summers looking for the pit.
+```
+Used: S6's page, once Orrin is met.
+
+<!-- id: d95.7b.S6.page.route -->
+```
+His road: over Lac La Croix and the Beatty, Loon Lake, up the Sioux past where the road crosses, a little lake off the east side with a beaver pond at the back. Bootleg.
+```
+Used: S6's page, once Orrin tells the route.
+
+<!-- id: d95.7b.S6.page.walt -->
+```
+Walt found a tin of bottles in the rocks at Bootleg's beaver pond, and left it.
+```
+Used: S6's page, N08 (NB23) read.
+
+<!-- id: d95.7b.S6.page.carving -->
+```
+At the low end of the Beatty, cut in the rock by the water: N.N. 1928.
+```
+Used: S6's page, the carving seen.
+
+<!-- id: d95.7b.S6.page.blazes -->
+```
+Old axe blazes from Bootleg's quiet shore, straight inland past the pond. No paint on them.
+```
+Used: S6's page, the cut line followed.
+
+<!-- id: d95.7b.S6.page.pit -->
+```
+Above the pond: a pit under moss, rotten planks laid over it. A tin-lined crate, broken glass, three bottles. A pocket book in oilcloth.
+```
+Used: S6's page, the pit opened.
+
+<!-- id: d95.7b.S6.end.sold -->
+```
+Sold the book to Orrin. Two-fifty, cash.
+```
+Used: S6's last line: sold.
+
+<!-- id: d95.7b.S6.end.society -->
+```
+The book's under glass with a card.
+```
+Used: S6's last line: given to the historical society.
+
+<!-- id: d95.7b.S6.end.kept -->
+```
+The book's still in mine. Orrin went home for the winter.
+```
+Used: S6's last line: kept through freeze-up.
+
+<!-- id: d95.7b.S6.c.sell -->
+```
+Sell it to Orrin.
+```
+Used: Orrin's scene, with the ledger (60 S6's own label, no anchor).
+
+<!-- id: d95.7b.S6.c.bottle -->
+```
+There's a bottle too. The seal's on.
+```
+Used: Orrin's scene, with the full bottle on you (60 S6: "the full bottle another $40 if offered").
+
+<!-- id: d95.7b.S6.c.society -->
+```
+Give it to the historical society.
+```
+Used: René's topic at Little Vermilion 12, with the ledger (60 S6's own label).
+
+<!-- id: d95.7b.S6.pay.sell -->
+```
+Orrin Gilbertson: the runner's book
+```
+Used: The tally's line for the $250.
+
+<!-- id: d95.7b.S6.pay.bottle -->
+```
+Orrin Gilbertson: a bottle, seal on
+```
+Used: The tally's line for the $40.
+
+<!-- id: d95.7b.S6.know -->
+```
+Moss over something square. Somebody dug here.
+```
+Used: A thought the first time the slump is cleared (Clear the moss), before the eye is taught.
+## Stream g (wave 2: the end games after the endings) — build drafts, for the writers to replace
+
+Part 3 #5 (the journalist ending's secret missions: eleven owners, a month apart) and #6 (the money ending: each of the
+fourteen owners' one small ask that brings their prices back) have no lines in the docs. Every line below is a build draft
+in the keepers' manners (talk-keepers.js; 02b). Source of truth: src/story-data/endgames.js LINES (scripts/cmp-g-lines.mjs
+writes this table and src/story-data/text/drafts-g.json). Secrets: pike (Ruth Aho), laker (Arvid Strand), falls (Thea Lundeen), cave (Lise Thibodeau), cabin (Bev Kangas), canoe (Gus Lindgren), rookery (Norm Kovach), pine (René Belanger), summit (Merle Ostrom), spring (Inga Bratvold), berries (Joanne Kauppi).
+Softening: 31 donate, 25 job, 38 job, 51 fish, 64 job, 16 job, 1 donate, 6 donate, 12 job, 36 job, 40 job, 49 donate, 67 job, 69 job.
+
+| Anchor | Line | Where it is used |
+|---|---|---|
+| g.ask.secret | You wanted a word? | the player's choice in a keeper's talk (endgames.js) |
+| g.ask.go | I'll go and look. | the player's choice in a keeper's talk (endgames.js) |
+| g.ask.later | Not this year. | the player's choice in a keeper's talk (endgames.js) |
+| g.ask.soft | Anything I can do for you? | the player's choice in a keeper's talk (endgames.js) |
+| g.ask.yes | All right. | the player's choice in a keeper's talk (endgames.js) |
+| g.ask.no | Not now. | the player's choice in a keeper's talk (endgames.js) |
+| g.ask.give | Here. | the player's choice in a keeper's talk (endgames.js) |
+| g.ask.short | I haven't got it on me. | the player's choice in a keeper's talk (endgames.js) |
+| g.hook.warm | There you are. Come round the end of the counter a minute. | the keeper's bark as you come in, a secret waiting with them (by manner) |
+| g.hook.dry | You. Stay a minute when you're done. | the keeper's bark as you come in, a secret waiting with them (by manner) |
+| g.hook.gruff | Not out here. Come here. | the keeper's bark as you come in, a secret waiting with them (by manner) |
+| g.hook.old hand | Sit down a minute. I've got something for you. | the keeper's bark as you come in, a secret waiting with them (by manner) |
+| g.hook.keen | Oh good, you're here. I've been saving something. | the keeper's bark as you come in, a secret waiting with them (by manner) |
+| g.hook.precise | Have you got a minute? It's not for the board. | the keeper's bark as you come in, a secret waiting with them (by manner) |
+| g.point.warm | {name} at {store} was asking after you. Wouldn't say what for. | a keeper's bark naming another owner with a secret waiting (by manner) |
+| g.point.dry | {name} over at {store} wants you. Don't ask me. | a keeper's bark naming another owner with a secret waiting (by manner) |
+| g.point.gruff | {name} at {store}. Go see. That's all I know. | a keeper's bark naming another owner with a secret waiting (by manner) |
+| g.point.old hand | {name} at {store} has been asking. Go on over when you're that way. | a keeper's bark naming another owner with a secret waiting (by manner) |
+| g.point.keen | {name} at {store} asked if you'd been in! Something's up. | a keeper's bark naming another owner with a secret waiting (by manner) |
+| g.point.precise | {name} at {store} would like to see you. No hurry, but don't forget. | a keeper's bark naming another owner with a secret waiting (by manner) |
+| g.pike.tell.1 | There's a pike in Pipestone Bay as long as a paddle. My father hooked him in seventy-one and the line just went. | the owner tells the secret |
+| g.pike.tell.2 | Oskar saw him last June, under the weeds at the mouth. First light or last. He takes something bright. | the owner tells the secret (2) |
+| g.pike.go | Don't tell Oskar I told you. | the owner, as you say you will go |
+| g.pike.back | He's real. I had him in the canoe. | the player: the gold choice once it is found |
+| g.pike.thanks.1 | You never! How long? No, don't, I'll cry. My father would have given his boat. | the owner's thanks |
+| g.pike.thanks.2 | That's from the jar we kept for whoever got him. Fifty years in a jar. Take it. | the owner hands over the reward |
+| g.pike.page.1 | Ruth: a pike in Pipestone Bay as long as a paddle. First light or last, something bright. | the Stories page (taken on) |
+| g.pike.page.2 | Had him. At the boat he looked older than the bay. | the Stories page (found) |
+| g.pike.end | Ruth paid out the jar. | the Stories page's closing line |
+| g.pike.first | The pike in Pipestone Bay | the trip card's stamp |
+| g.laker.tell.1 | Gabimichigami's deep at the east end. Two hundred feet. There's a laker down there older than this camp. | the owner tells the secret |
+| g.laker.tell.2 | Early, in the morning, a spoon let all the way down. Slow. He'll think about it a long time. | the owner tells the secret (2) |
+| g.laker.go | Bring me word. I don't need the fish. | the owner, as you say you will go |
+| g.laker.back | The old laker. I had him up. | the player: the gold choice once it is found |
+| g.laker.thanks.1 | Well. I'll be. I had him on in sixty-eight and he took the spoon and my father's line both. | the owner's thanks |
+| g.laker.thanks.2 | That was my grandfather's spoon, the one before. It goes with whoever got him. | the owner hands over the reward |
+| g.laker.page.1 | Arvid: the old laker at the deep east end of Gabimichigami. Early, a spoon all the way down, slow. | the Stories page (taken on) |
+| g.laker.page.2 | He came up out of the dark like a log. | the Stories page (found) |
+| g.laker.end | Arvid gave me his grandfather's spoon. | the Stories page's closing line |
+| g.laker.first | The old laker of Gabimichigami | the trip card's stamp |
+| g.falls.tell.1 | Okay, so. Off the west end of Pine Lake there's a creek you'd paddle right past. | the owner tells the secret |
+| g.falls.tell.2 | Walk up it. Twenty minutes. There's a falls in there taller than the store and nobody ever goes. | the owner tells the secret (2) |
+| g.falls.go | Get a picture! I've only ever heard about it. | the owner, as you say you will go |
+| g.falls.back | I found your falls. Here's the picture. | the player: the gold choice once it is found |
+| g.falls.thanks.1 | Oh, look at that. It's real. It's going right over the till. | the owner's thanks |
+| g.falls.thanks.2 | Here. For the print. Don't argue. | the owner hands over the reward |
+| g.falls.page.1 | Thea: a creek off the west end of Pine Lake, a falls up it nobody walks to. A picture. | the Stories page (taken on) |
+| g.falls.page.2 | The falls, taller than her store. It made its own wind. | the Stories page (found) |
+| g.falls.end | Thea has the falls over her till. | the Stories page's closing line |
+| g.falls.first | The falls up from Pine Lake | the trip card's stamp |
+| g.cave.tell.1 | You know the cliffs on Winchell, the north side? My uncle swore there's a hole in the wall you can stand up in. | the owner tells the secret |
+| g.cave.tell.2 | Low, near the water, under a cedar. He said somebody left something in there a long time ago. | the owner tells the secret (2) |
+| g.cave.go | Tell me what's in it. Promise! | the owner, as you say you will go |
+| g.cave.back | There is a cave on Winchell. | the player: the gold choice once it is found |
+| g.cave.thanks.1 | There is! Oh, he'd be so smug. A kettle? A real trade kettle? | the owner's thanks |
+| g.cave.thanks.2 | No, you keep it. It came out because of you. Cook something in it for me. | the owner hands over the reward |
+| g.cave.find | A copper kettle on a ledge, green with age, the bail still on. | the note as you do the verb at the place |
+| g.cave.page.1 | Lise: a hole in the north wall of Winchell, low, under a cedar. Her uncle's story. | the Stories page (taken on) |
+| g.cave.page.2 | A copper kettle on a ledge in the dark. Somebody meant to come back for it. | the Stories page (found) |
+| g.cave.end | Lise's uncle was right. | the Stories page's closing line |
+| g.cave.first | The hole in the Winchell wall | the trip card's stamp |
+| g.cabin.tell.1 | There was a man trapped Cherokee in the thirties. Built himself a cabin in the back bays. | the owner tells the secret |
+| g.cabin.tell.2 | Roof's gone, I'd think. My mother said he left with one coat on and a trunk behind. | the owner tells the secret (2) |
+| g.cabin.go | Don't bring me the trunk. | the owner, as you say you will go |
+| g.cabin.back | I found the trapper's cabin. | the player: the gold choice once it is found |
+| g.cabin.thanks.1 | Huh. Still standing. More than I can say for some places. | the owner's thanks |
+| g.cabin.thanks.2 | Wear the coat. He'd rather it went somewhere. | the owner hands over the reward |
+| g.cabin.find | In the trunk, folded in newspaper from 1938: a red-and-black Mackinaw. | the note as you do the verb at the place |
+| g.cabin.page.1 | Bev: a trapper's cabin in the back bays of Cherokee, from the thirties. A trunk left behind. | the Stories page (taken on) |
+| g.cabin.page.2 | Four log walls and the sky. The coat in the trunk smelled of cedar. | the Stories page (found) |
+| g.cabin.end | Bev said wear the coat. | the Stories page's closing line |
+| g.cabin.first | The trapper's cabin on Cherokee | the trip card's stamp |
+| g.canoe.tell.1 | My uncle put his canoe up on Ensign in fifty-four and never came back for it. Wood and canvas. | the owner tells the secret |
+| g.canoe.tell.2 | North shore. Upside down in the brush. I looked twice. My knees don't look anymore. | the owner tells the secret (2) |
+| g.canoe.go | If it's there, bring me the plate off the deck. | the owner, as you say you will go |
+| g.canoe.back | I found your uncle's canoe. | the player: the gold choice once it is found |
+| g.canoe.thanks.1 | Huh. Seventy years under the brush. | the owner's thanks |
+| g.canoe.thanks.2 | Keep the plate. Here. Don't make it a thing. | the owner hands over the reward |
+| g.canoe.find | A brass plate on the deck, the maker's name and a number. The canvas is gone to lace. | the note as you do the verb at the place |
+| g.canoe.page.1 | Gus: his uncle's wood-and-canvas canoe, put up on Ensign's north shore in 1954. | the Stories page (taken on) |
+| g.canoe.page.2 | Under the brush, the ribs still round. I left it where it lay. | the Stories page (found) |
+| g.canoe.end | Gus said keep the plate. | the Stories page's closing line |
+| g.canoe.first | Gus's uncle's canoe | the trip card's stamp |
+| g.rookery.tell.1 | Perent. The dead pines on the east side. Herons. Thirty nests, maybe. | the owner tells the secret |
+| g.rookery.tell.2 | Spring into summer. Stay off the shore under them. Get a picture from the water. | the owner tells the secret (2) |
+| g.rookery.go | From the water. I mean it. | the owner, as you say you will go |
+| g.rookery.back | I saw the herons on Perent. | the player: the gold choice once it is found |
+| g.rookery.thanks.1 | Still there. Good. | the owner's thanks |
+| g.rookery.thanks.2 | For the print. The bird people pay me for a count; you did it. | the owner hands over the reward |
+| g.rookery.page.1 | Norm: herons in the dead pines on Perent. A picture from the water, not the shore. | the Stories page (taken on) |
+| g.rookery.page.2 | Nests like brush piles in the tops, and the birds standing on them like sentries. | the Stories page (found) |
+| g.rookery.end | Norm has his count. | the Stories page's closing line |
+| g.rookery.first | The herons on Perent | the trip card's stamp |
+| g.pine.tell.1 | Lac La Croix. Above Boulder Bay, up the hill a bit. There's a white pine the loggers missed. | the owner tells the secret |
+| g.pine.tell.2 | Biggest in the country. Walt knew it. Go put your arms round it. | the owner tells the secret (2) |
+| g.pine.go | That's all. Go. | the owner, as you say you will go |
+| g.pine.back | I found the big pine. | the player: the gold choice once it is found |
+| g.pine.thanks.1 | Couldn't reach round, could you. Nobody can. | the owner's thanks |
+| g.pine.thanks.2 | Here. Buy something that isn't from me. | the owner hands over the reward |
+| g.pine.find | Your arms go a third of the way round. The bark is warm on the sun side. | the note as you do the verb at the place |
+| g.pine.page.1 | René: a white pine the loggers missed, above Boulder Bay on Lac La Croix. Walt knew it. | the Stories page (taken on) |
+| g.pine.page.2 | My arms went a third of the way round. | the Stories page (found) |
+| g.pine.end | René said nobody can reach round. | the Stories page's closing line |
+| g.pine.first | The big pine on Lac La Croix | the trip card's stamp |
+| g.summit.tell.1 | Eagle Mountain is the highest point in the state. Two thousand three hundred and one feet. | the owner tells the secret |
+| g.summit.tell.2 | The survey crew in thirty-eight left a tin under the cairn at the top. It should still be there. | the owner tells the secret (2) |
+| g.summit.go | Put it back the way you found it. | the owner, as you say you will go |
+| g.summit.back | I found the tin on Eagle Mountain. | the player: the gold choice once it is found |
+| g.summit.thanks.1 | Good. And you put the stone back. | the owner's thanks |
+| g.summit.thanks.2 | Here. For the climb. Write your name in the book next time. | the owner hands over the reward |
+| g.summit.find | Under the top stone, a tobacco tin. A folded note inside, in pencil. You copy it into your book and put the tin back. | the note as you do the verb at the place |
+| g.summit.page.1 | Merle: a survey tin under the cairn on top of Eagle Mountain, left in 1938. | the Stories page (taken on) |
+| g.summit.page.2 | A note in pencil in a tobacco tin. I put it back. | the Stories page (found) |
+| g.summit.end | Merle said write your name next time. | the Stories page's closing line |
+| g.summit.first | The tin on Eagle Mountain | the trip card's stamp |
+| g.survey | U.S.C.&G.S. party, August 1938. Benchmark set. Clear and cold, wind NW. Eat your lunch, the view won't wait. | the page copied from the survey tin on Eagle Mountain |
+| g.spring.tell.1 | On Duncan, the north shore, there's a spring comes right out of the rock. Cold as January. | the owner tells the secret |
+| g.spring.tell.2 | Somebody hung a tin cup on a nail there before I was born. My mother drank from it. | the owner tells the secret (2) |
+| g.spring.go | Have a drink for me. | the owner, as you say you will go |
+| g.spring.back | I drank from the spring on Duncan. | the player: the gold choice once it is found |
+| g.spring.thanks.1 | Isn't it the coldest water you ever had? And the cup? | the owner's thanks |
+| g.spring.thanks.2 | You keep it with you. Hang another one there next time you go by. | the owner hands over the reward |
+| g.spring.find | A blue enamel cup on a nail in a cedar, chipped at the rim. The water aches in your teeth. | the note as you do the verb at the place |
+| g.spring.page.1 | Inga: a spring out of the rock on Duncan's north shore, a tin cup on a nail. | the Stories page (taken on) |
+| g.spring.page.2 | The coldest water I ever had. | the Stories page (found) |
+| g.spring.end | Inga says hang another cup there. | the Stories page's closing line |
+| g.spring.first | The spring on Duncan | the trip card's stamp |
+| g.berries.tell.1 | The old burn above Big Moose. Every August it's blue up there. Nobody picks it but the bears. | the owner tells the secret |
+| g.berries.tell.2 | Bring me some and I'll bake. That's the deal. | the owner tells the secret (2) |
+| g.berries.go | Make noise up there. The bears know about it too. | the owner, as you say you will go |
+| g.berries.back | I picked the burn above Big Moose. | the player: the gold choice once it is found |
+| g.berries.thanks.1 | Oh, look at those. The little wild ones. Give me an hour. | the owner's thanks |
+| g.berries.thanks.2 | There. A whole pie. Don't you share it with anybody you don't like. | the owner hands over the reward |
+| g.berries.find | Wild blueberries, small and dark, under the black snags. | the note as you do the verb at the place |
+| g.berries.page.1 | Joanne: blueberries every August on the old burn above Big Moose. Make noise. | the Stories page (taken on) |
+| g.berries.page.2 | Blue under the black snags. I ate as many as I kept. | the Stories page (found) |
+| g.berries.end | Joanne baked the pie. | the Stories page's closing line |
+| g.berries.first | The burn above Big Moose | the trip card's stamp |
+| g.cold.warm | Prices went up. I'm sorry. I'm not, really. | the money ending: an unsoftened keeper's first sight of you (by manner) |
+| g.cold.dry | Prices went up. You can afford it. | the money ending: an unsoftened keeper's first sight of you (by manner) |
+| g.cold.gruff | Prices are what they are. | the money ending: an unsoftened keeper's first sight of you (by manner) |
+| g.cold.old hand | It's the same gear. It's a different price for you. | the money ending: an unsoftened keeper's first sight of you (by manner) |
+| g.cold.keen | Um. The prices are, um. Different now. For you. | the money ending: an unsoftened keeper's first sight of you (by manner) |
+| g.cold.precise | Your prices changed. You know why. | the money ending: an unsoftened keeper's first sight of you (by manner) |
+| g.soft.31.ask | The fire department keeps a coffee can on the counter. Forty dollars wouldn't hurt you. | the owner's small ask ("Anything I can do for you?") |
+| g.soft.31.done | That'll buy a lot of hose. Your money's the same as anybody's here now. | the owner's thanks; their prices are back (owner.<ep>.softened) |
+| g.soft.25.ask | Somebody left a mess at a site out there. Go and pack it out. | the owner's small ask ("Anything I can do for you?") |
+| g.soft.25.job | Bring it all back. All of it. | the owner, as the job is taken on |
+| g.soft.25.done | Fine. We're square. Same prices as the rest. | the owner's thanks; their prices are back (owner.<ep>.softened) |
+| g.soft.38.ask | There's a site somebody's been complaining about. Go and look at it for me. Tell me straight. | the owner's small ask ("Anything I can do for you?") |
+| g.soft.38.job | Straight, I said. | the owner, as the job is taken on |
+| g.soft.38.done | Huh. Thanks. Your prices are back, since you're wondering. | the owner's thanks; their prices are back (owner.<ep>.softened) |
+| g.soft.51.ask | The kitchen wants a laker and I'm too old to go. Bring me one, cold. | the owner's small ask ("Anything I can do for you?") |
+| g.soft.51.job | Cold, mind. | the owner, as the job is taken on |
+| g.soft.51.done | That's a fish. All right. You pay what everybody pays. | the owner's thanks; their prices are back (owner.<ep>.softened) |
+| g.soft.64.ask | I'm supposed to do a loon count and I can't leave the store. Could you? Please? | the owner's small ask ("Anything I can do for you?") |
+| g.soft.64.job | You're the best. Really. | the owner, as the job is taken on |
+| g.soft.64.done | You did it! Okay. Normal prices. I never liked the other ones. | the owner's thanks; their prices are back (owner.<ep>.softened) |
+| g.soft.16.ask | I need a water reading on a lake out there. The disk is under the counter. Do it properly. | the owner's small ask ("Anything I can do for you?") |
+| g.soft.16.job | Shade side of the canoe. Write it down. | the owner, as the job is taken on |
+| g.soft.16.done | Thank you. That's clean work. Your prices are the ordinary prices again. | the owner's thanks; their prices are back (owner.<ep>.softened) |
+| g.soft.1.ask | The rescue squad's raising for a new boat. Sixty dollars. You know what a boat's for. | the owner's small ask ("Anything I can do for you?") |
+| g.soft.1.done | That's good of you. We're even, you and me. | the owner's thanks; their prices are back (owner.<ep>.softened) |
+| g.soft.6.ask | The bookmobile lost its funding. There's a jar. Twenty-five dollars, if you can. | the owner's small ask ("Anything I can do for you?") |
+| g.soft.6.done | Oh, bless you. Come here. And the prices are back where they were, for you. | the owner's thanks; their prices are back (owner.<ep>.softened) |
+| g.soft.12.ask | Go and walk a carry for me and tell me what's down on it. I don't trust the forest service's word. | the owner's small ask ("Anything I can do for you?") |
+| g.soft.12.job | Every tree. | the owner, as the job is taken on |
+| g.soft.12.done | Good. You pay what you used to. | the owner's thanks; their prices are back (owner.<ep>.softened) |
+| g.soft.36.ask | Beavers are at it again out there. Go and look at the dam and tell me how high. | the owner's small ask ("Anything I can do for you?") |
+| g.soft.36.job | Don't pull it apart. Just look. | the owner, as the job is taken on |
+| g.soft.36.done | Well. You're useful. Prices are back. | the owner's thanks; their prices are back (owner.<ep>.softened) |
+| g.soft.40.ask | There's a tree down somewhere it shouldn't be. Find it. Report it properly. | the owner's small ask ("Anything I can do for you?") |
+| g.soft.40.job | Where, how big, which way it fell. | the owner, as the job is taken on |
+| g.soft.40.done | Good report. I've put you back on the ordinary prices. | the owner's thanks; their prices are back (owner.<ep>.softened) |
+| g.soft.49.ask | The school's bus fund. There's a jar. Fifty dollars would get them a long way. | the owner's small ask ("Anything I can do for you?") |
+| g.soft.49.done | Oh, that's kind. You're family here again. Same prices as everyone. | the owner's thanks; their prices are back (owner.<ep>.softened) |
+| g.soft.67.ask | Talk to the people out there about their fish. Counts and sizes. The state wants it and I don't. | the owner's small ask ("Anything I can do for you?") |
+| g.soft.67.job | Write it down. They lie a little. | the owner, as the job is taken on |
+| g.soft.67.done | Fine. Square. Ordinary prices. | the owner's thanks; their prices are back (owner.<ep>.softened) |
+| g.soft.69.ask | Could you go and check on a site for me? It's a long way, I know. I'd owe you! | the owner's small ask ("Anything I can do for you?") |
+| g.soft.69.job | Okay, okay, thank you! | the owner, as the job is taken on |
+| g.soft.69.done | You went all that way. Okay. Normal prices. Like before. | the owner's thanks; their prices are back (owner.<ep>.softened) |
+| g.soft.short | When you've got it, then. | the owner, a donation short or declined |
+| g.soft.no | Suit yourself. | the owner, a donation short or declined |
+
+## Stream b5 (campaign run, Round 5: the boys)
+
+Where 32 has the words but they can't take an anchor (a table row, or a quote inside a paragraph whose anchor would
+renumber the `32:` ids around it), the draft is the doc's own words, copied, and marked so. Writers: anchor them in 32
+and delete the copy here.
+
+### Copied from 32 (no anchor possible without renumbering)
+
+<!-- id: d95.b5.473 -->
+```
+Four hundred seventy-three. I've measured it with my knees.
+```
+Used: Bob's bark under a canoe on the 473 on 9 August (`boys.js` CARRY_BARK; 32 §5.9.1's table, the 9 Aug row).
+
+<!-- id: d95.b5.supper -->
+```
+Come for supper if you're up that way. Bring something. Not in a can.
+```
+Used: Bob's invitation after "Where do you go?" (`boys.js` BOB hub, YARD; 32 §5.5.1, inside Bob's "Still wasn't worth it." line).
+
+<!-- id: d95.b5.names.ask -->
+```
+Walt had names for them?
+```
+Used: the player's question to Carol for the nicknames (`boys.js` CAROL hub; 32 §5.4's [Needs], "the player asks").
+
+### Drafted (the doc has no words)
+
+<!-- id: d95.b5.names.bob -->
+```
+Walt named all of us. Gene was Deacon, the one church man who wasn't. I'm Teach. It's the stove, not the school.
+```
+Used: Bob at the fire on "Tell me about the flare." (32 §5.9.3: "Bob tells Teach and Deacon"; no words given).
+
+<!-- id: d95.b5.names.frank -->
+```
+I'm Whiskey. Plastic bottle, since 1985. And that one, that's Sparky, for life.
+```
+Used: Frank, after Bob (32 §5.9.3: "Frank tells Whiskey, 'and that one, that's Sparky, for life.'": the last sentence is the doc's).
+
+<!-- id: d95.b5.round.paid -->
+```
+Coffee and bars for the table. Carol rings it up before you ask.
+```
+Used: the round bought at Carol's counter, "Fair enough." in the yard (32 §5.5.1: "the player pays at Carol's counter (a small sum from the purse)"). $6.
+
+<!-- id: d95.b5.denny.again -->
+```
+There you are! Sit, sit. You want a coffee? I'm getting one.
+```
+Used: Denny's opener on a later afternoon (32 §5.5.2 gives only the first meeting's).
+
+<!-- id: d95.b5.cup.ask -->
+```
+Whose cup?
+```
+Used: the player's question at the fire on 14 August at dusk (32 §5.9.8: "If the player asks").
+
+<!-- id: d95.b5.spoon -->
+```
+Bob hands you one of the spoons.
+```
+Used: the HUD note as the laker bet starts (32 §5.9.5: "Bob lends the player one spoon").
+
+<!-- id: d95.b5.bet.end -->
+```
+That's dark. Reel in. We'll weigh them at the fire.
+```
+Used: Bob, at dusk, as the bet ends (32 §5.9.5: "The bet runs until dusk").
+
+<!-- id: d95.b5.slide.hint -->
+```
+The slide, held up against the view.
+```
+Used: the teaching moment the first time the camera is raised near Gull's creek mouth with the slide (`minigames/silhouette.js`; hints.js once).
+
+<!-- id: d95.b5.slide.match -->
+```
+Gene's slide lines up from the water off the creek mouth: the dam, the notch, the ridge. This is where Walt stood.
+```
+Used: the Walt page when the slide is matched (lock 3 key B; 32 §5.3 "the camera's photo match places it").
+
+<!-- id: d95.b5.pan.cook -->
+```
+Walt's pan. Bob held it out; I cooked in it.
+```
+Used: the Walt page when the player has cooked in Walt's pan at C1210 (32 §5.9.4 "Gives: boys.pan"; no line).
+
+<!-- id: d95.b5.slides.wall -->
+```
+The projector hums. Carol turns the carousel to the first slide.
+```
+Used: the HUD note as the slides start after close (32 §5.3 "Staging").
+
+## Stream i (campaign run, Round 5: the informant; `src/story-data/informant.js`, `src/informant-cast.js`)
+
+32 §5.10–§5.17 are anchored in the writers' file (HTML comments only). These are the lines the game needs that 32 does
+not give as a quote the extract can reach; three of them are 32's own words, copied verbatim and marked so.
+
+<!-- id: d95.i.cabin.hello -->
+```
+There you are. Sit, sit. Radio's got the game, if you can call it a game.
+```
+Used: Denny on his porch of an evening before the reveal (`DENNY_CABIN` hello). Draft (32 §5.6 says only "Nothing else
+happens there before the reveal").
+
+<!-- id: d95.i.clear.bob -->
+```
+I told Bob {lake}. Nobody came.
+```
+Used: the Walt page when a lake told only to Bob comes back empty after five days (32 §5.11: "same for Bob").
+
+<!-- id: d95.i.lied -->
+```
+I lied about a parking lot. I'd never — Walt was —
+```
+<!-- id: d95.i.way -->
+```
+Get out of my way. I mean that kindly. Get out of my way.
+```
+Used: Frank, accused (`FRANK_NODES.accused`). **Verbatim 32 §5.14**: the lines sit in a quoted list inside a blockquote
+the extract can't reach without splitting the writers' quote; a writer's anchor there replaces these.
+
+<!-- id: d95.i.note.never -->
+```
+I'm sorry. Watch who you tell. — D.
+```
+Used: Denny's note when no lake was ever told to him. **Verbatim 32 §5.17** (the bracketed variant: the extract drops
+brackets).
+
+<!-- id: d95.i.folder -->
+```
+Six photocopies, slightly crooked. A file tab: HAAPALA, W. — open 11/17. A typed log, Oct 2018 – Oct 2019: 10/03/18 subj. in EP 30. Pietro, 2 nights (C1613). Did not proceed. … 07/28/19 per src: subj. planning Isabella R., wk of 8/5. … 10/15/19 subj. at ML bunkhouse, bunk 3. 10/17 18:20 per src: subj. in all week. 10/18 subj. missing. 10/19 canoe loc. Birch. CLOSED. An expense sheet, Helstrom Site Services: src — 1,600, every month, Nov 2017 to Oct 2019.
+```
+Used: the item *The folder (copies)*'s identity. **Verbatim 32 §5.13** (the numbered list of the six copies, joined).
+
+| Where (code) | Words | Used |
+|---|---|---|
+| informant-cast.js | "Denny's cabin" · "Minnow bucket" | the dot on the cabin's porch and the bucket (32 §5.6, §11 props) |
+| informant-cast.js | "Josie: …" | how a counter line shows when Josie isn't standing there (the line is the doc's) |
+| informant-cast.js | "A manila envelope behind the counter: KOSIR — HOLD." | the folder handed over at Farm (32 §5.13's prose, as a note) |
+| informant-cast.js | "The next morning. The store yard." | the card before Tell the boys plays away from the rock (32 §5.16.2 "At the store or cabin") |
+| story-places.json | "Survey flagging, pink, faded" · "A coffee can" · "A sapling, cut and lashed up" / "An aerial." · "A receipt" | the Isabella camp's dot names (32 §5.10's own words) |
+
+## Final join (campaign run: the seams between streams)
+
+Build drafts, for the writers to replace. Words the join needed where two streams meet and neither doc gives them.
+
+<!-- id: d95.final.gord.bootleg -->
+```
+Bootleggers ever come through here?
+```
+Used: the player's ask on Gord's hub (33 §6.13; 60 S6 "Gord", Thursdays, asked about bootleggers): his answer is 60's
+S6.conv.15. Open once S6 is heard of (s6.story) or the ledger is found.

@@ -1,0 +1,5 @@
+{
+ "note": "story-lint.mjs ratchet: raw world.portages iterations outside the allowlist that Round 1 (L, P) converts to world.portagesPublic(). Only ever shrinks.",
+ "hits": [
+ ]
+}

@@ -86,6 +86,12 @@ const packsOf = () => of(ctx.packs) || (typeof window !== 'undefined' && window.
 // [{ id: 'eat' | 'cook' | 'pitch' | 'hang' | 'hand' | 'tie' | 'use', label, where?, why? }]
 export function verbsFor(d, id = d && d.id) {
   if (!d) return [];
+  const v0 = verbsForAll(d, id); // r: the run's verbs absent (story.allows), not greyed
+  return v0.filter((v) => !v || !((v.id === 'pitch' && !storyAllows('pitch')) || (v.id === 'tarp' && !storyAllows('tarp'))));
+}
+const storyAllows = (v, ctx = {}) => { try { const s = typeof window !== 'undefined' && window.__game ? window.__game.story : null; return !s || typeof s.allows !== 'function' || s.allows(v, ctx) !== false; } catch { return true; } }; // r: the run's verbs (story.allows, 50 §6.2: absent, not greyed); flag off: no allows, all true
+function verbsForAll(d, id = d && d.id) {
+  if (!d) return [];
   if (A_ITEMS && typeof A_ITEMS.verbsOf === 'function') { try { const v = A_ITEMS.verbsOf(id); if (Array.isArray(v)) return v; } catch { /* the derivation below */ } }
   if (Array.isArray(d.verbs)) return d.verbs;
   const out = [];

@@ -939,6 +939,11 @@ export class TileManager {
     });
   }
 
+  // st-l (campaign-design §7.1): fn(tx, ty) after a fine tile is dropped (the story layer drops its props there, kept
+  // in a Map by place: the mirror-list leak's lesson) → off. readyAt(x, z): the fine tile under (x, z) is built and in
+  onEvict(fn) { (this.evictFns || (this.evictFns = new Set())).add(fn); return () => this.evictFns.delete(fn); }
+  readyAt(x, z) { const [tx, ty] = this.world.tileOf(x, z); const e = this.tiles.get(this.key(tx, ty)); return !!(e && e.state === 'ready'); }
+  // /st-l
   evict() {
     const w = this.world, [ptx, pty] = this.playerTile;
     const wanted = (e) => Math.max(Math.abs(e.tx - ptx), Math.abs(e.ty - pty)) <= NEIGHBOURHOOD;
@@ -952,6 +957,7 @@ export class TileManager {
         dropTileRoads(w, e.tx, e.ty); // (round 5)
         this.grounds.delete(e.ty * w.ntx + e.tx); e.ground = null;
         this.tiles.delete(e.key);
+        if (this.evictFns) for (const fn of this.evictFns) { try { fn(e.tx, e.ty); } catch (err) { console.warn('tiles.onEvict', err); } } // st-l
         const fc = this.farChunks.get(e.key);
         if (fc) fc.visible = true;
         this.water.invalidateAtlas(e.tx * w.tile, e.ty * w.tile, w.tile);

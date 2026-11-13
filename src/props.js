@@ -75,7 +75,8 @@ export function exclusionsFor(world) {
   const segs = [];
   // (fb3 D: the trails keep the forest off only the tread plus a hand's width, TRAIL.clear in placement.js, along the
   // line the decal is drawn on, its corners rounded as buildTrail rounds them)
-  for (const p of world.portages) { const pts = rounded(p.pts); for (let i = 1; i < pts.length; i++) segs.push([pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1], TRAIL.clear]); }
+  for (const p of world.portagesAll()) { const pts = rounded(p.pts); // (st-l: the story carry cleared too)
+    for (let i = 1; i < pts.length; i++) segs.push([pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1], TRAIL.clear]); }
   for (const c of world.campsites) segs.push([c.x, c.z, c.x, c.z, 9]);
   // round world: each site's way up from its landing and its latrine trail (world.js c.access), as lawns (the trees, brush
   // and rocks kept off, the grass let through; a lawn's line plants no tunnel either: placement.js). After the sites' own
@@ -100,6 +101,9 @@ export function exclusionsFor(world) {
   // stream E3: each road's cut through the forest (roads.js ROAD_CLEAR past its half width), a lawn: the grass through
   for (const s of roadExclusions(world)) segs.push(s);
   for (const s of cabinExclusions(world)) segs.push(s); // round 4 C: the cabins at the edge and their docks, lawns
+  // st-l: the story places' clearings (story-world.js, only under STORY_ON: world.storyClear is undefined with the flag
+  // off), lawns and segments, never a positive-radius point (site.js reads those as campsites)
+  if (world.storyClear) for (const s of world.storyClear) segs.push(s);
   return segs;
 }
 
@@ -180,7 +184,7 @@ export function* tilePropsSteps(tg, world, tx, ty) {
   const rng = mulberry32(42 + tx * 1000 + ty);
 
   const decal = new TrailDecal();
-  for (const p of world.portages) {
+  for (const p of world.portagesAll()) { // (st-l: a story carry is walked like any other: its tread too)
     const [bx0, bz0, bx1, bz1] = p.bbox;
     if (bx1 < ox - 4 || bx0 > ox + size + 4 || bz1 < oz - 4 || bz0 > oz + size + 4) continue;
     buildTrail(ctx, p, decal, pieces);
@@ -1796,7 +1800,7 @@ function flushStoreNews() {
 // The cork board inside the door: a canvas of cork with the outfitter's notices pinned on it (setStoreNotices, from the
 // board's live notices: tasks.js board(ep)), or a few scribbled papers until then.
 const BOARD_PX = [1024, 768];
-function drawBoard(cv, notices = null) {
+function drawBoard(cv, notices = null, extra = []) { // (e: extra, the story's flyers: [] with the flag off)
   const x = cv.getContext('2d'), [W, H] = BOARD_PX, r = mulberry32(5 + (notices ? notices.length : 0));
   x.fillStyle = '#a47a4e'; x.fillRect(0, 0, W, H);
   for (let i = 0; i < 2600; i++) { const v = r(); x.fillStyle = v < 0.5 ? `rgba(70,45,25,${0.12 + r() * 0.15})` : `rgba(215,175,125,${0.1 + r() * 0.12})`; x.fillRect(r() * W, r() * H, 2 + r() * 3, 2 + r() * 3); }
@@ -1832,14 +1836,36 @@ function drawBoard(cv, notices = null) {
     x.fillStyle = 'rgba(255,255,255,0.45)'; x.beginPath(); x.arc(-3, -h / 2 + 15, 4, 0, Math.PI * 2); x.fill();
     x.restore();
   });
+  // e: a story flyer (episodes.js, Round 2 stream E) pinned over the middle of the cork, smaller than a notice, beside
+  // the four pins (never one of them); none with the flag off
+  extra.slice(0, 2).forEach((t, i) => {
+    const w = 300, h = 230, px = 362 + i * 40, py = 250 + i * 30;
+    x.save(); x.translate(px + w / 2, py + h / 2); x.rotate(-0.04 + i * 0.07);
+    x.fillStyle = 'rgba(40,25,10,0.28)'; x.fillRect(-w / 2 + 6, -h / 2 + 8, w, h);
+    x.fillStyle = t.taken ? '#e6e1cf' : '#f4efe0'; x.fillRect(-w / 2, -h / 2, w, h);
+    x.fillStyle = '#2b2218'; x.textAlign = 'left'; x.textBaseline = 'top';
+    x.font = '700 24px Georgia, "Times New Roman", serif';
+    const words = `${t.title || ''} ${t.text || ''}`.split(/\s+/); let line = '', y = -h / 2 + 22, n = 0;
+    for (const wd of words) { const tryL = line ? `${line} ${wd}` : wd; if (x.measureText(tryL).width > w - 36) { x.fillText(line, -w / 2 + 18, y); y += 28; line = wd; if (++n >= 6) { line = ''; break; } x.font = 'italic 21px Georgia, "Times New Roman", serif'; } else line = tryL; }
+    if (line && n < 6) x.fillText(line, -w / 2 + 18, y);
+    if (t.sign) { x.font = '18px Georgia, "Times New Roman", serif'; x.textAlign = 'right'; x.fillText(`— ${String(t.sign).split(' (')[0]}`, w / 2 - 16, h / 2 - 34); }
+    x.fillStyle = '#7a3a8a'; x.beginPath(); x.arc(0, -h / 2 + 14, 10, 0, Math.PI * 2); x.fill();
+    x.restore();
+  });
+  // /e
 }
+// e: the story's flyers on a store's cork (feed-episodes.js sets the source; null with the flag off)
+let storeFlyers = null;
+export function setStoreFlyers(fn) { storeFlyers = typeof fn === 'function' ? fn : null; }
+// /e
 // Pin up entry point ep's notices on its store's board (tasks.js board(ep): a notice, or null for a bare pin). A notice
 // reads { title, text, sign } and `taken` when it is out with you.
 export function setStoreNotices(ep, notices) {
   const L = storeLayout(ep);
   if (!L || !L.boardCanvas) return false;
   const list = (notices || []).map((t) => (t ? { title: t.title, text: t.text, sign: t.sign, taken: !!t.status && t.status !== 'offered' } : null));
-  drawBoard(L.boardCanvas, list);
+  const extra = storeFlyers ? (() => { try { return (storeFlyers(ep) || []).map((f) => ({ ...f.paper, taken: !!f.taken })); } catch { return []; } })() : []; // e:
+  drawBoard(L.boardCanvas, list, extra);
   L.boardTex.needsUpdate = true;
   return true;
 }
@@ -2168,7 +2194,7 @@ function storeSite(ctx, F, ep, dock, pd) {
   // (cabins-2) the portage trails near the landing, as points a metre apart: no store, porch, steps or rack within
   // SITE.trail of one (none stands in a portage's way); and the dock's foot, where the way from the door goes
   const trail = [], [lx, lz] = F.W(0, 0);
-  for (const p of ctx.world.portages || []) {
+  for (const p of ctx.world.portagesPublic()) { // (st-l: never toward a story carry)
     const pts = p.pts || [];
     for (let k = 0; k + 1 < pts.length; k++) {
       const [x0, z0] = pts[k], [x1, z1] = pts[k + 1];

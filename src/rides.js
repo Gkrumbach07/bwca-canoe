@@ -123,10 +123,15 @@ export class Rides {
     const sub = this.sandbox
       ? `Sandbox: the truck is free and the road takes no time. ${lake}, entry point ${to.ep}.`
       : `${kmWords(r.km)} miles${via} to ${lake}, ${rideTime(r.hours)}: $${r.price}. The canoe rides on the roof, the packs in the back.${lateWords}`;
+    // st-t (70 §3.2, campaign-design §5.4): the drive card's road line, one of the road's texture (STORY_ON: main.js sets
+    // roadLine; with the flag off there is none and the card is as before)
+    let road = null;
+    if (typeof this.roadLine === 'function') { try { road = this.roadLine({ from: from.ep, to: to.ep, way, roads: [roadOf(from.ep), roadOf(to.ep)] }); } catch { road = null; } }
+    // /st-t
     const card = {
       kicker: `${from.name} → ${to.name} · ${isOutfitter(to.ep) ? nearWords(to.ep, this.world) || `entry point ${to.ep}` : `entry point ${to.ep}`}`, // (round 2: an outfitter is near an entry point)
       text: `“${this.keeperWords(fromP, 'goodbye')}”`,
-      sub,
+      sub: road ? `${sub} ${road}` : sub,
       fadeIn: this.sandbox ? 0.6 : 1.2, hold: this.sandbox ? 0.4 : 3.2, fadeOut: this.sandbox ? 0.8 : 1.8,
       onDark: () => this.arrive(from, to, r, toP),
     };
@@ -134,6 +139,41 @@ export class Rides {
     if (this.veil) return this.veil.card(card).then(done, done);
     return Promise.resolve(card.onDark()).then(done, done);
   }
+  // a2: riding with a person (story Round 2; 30 §4.9; 90 §3 "Riding with a person"): Tauno in the cab to the Little Gabbro
+  // road end and home again. A faded drive as take()'s, from an outfitter's landing (his porch, not the counter): the
+  // fare is the normal one by the road and he pays it (`pays`: nothing comes out of your hand; the caller puts "Gas,
+  // Tauno" on the next tally), the card says nothing but who you're with, and nothing goes wrong on the road.
+  //   rides.rideWith(toEp, { from, who, pays = true }) → false | Promise<{ ok, price, km, hours }>
+  rideWith(toEp, { from = null, who = '', pays = true } = {}) {
+    const o = this.outfitter, a = from != null ? this.landing(from) : this.here(), b = this.landing(toEp);
+    if (this.busy || !o || !a || !b || a.ep === b.ep) return false;
+    const q = quoteBetween(a, b, this.world);
+    const r = { ...q, price: this.sandbox ? 0 : q.price, lake: this.lakeOf(b) || b.place, late: false };
+    if (!pays && r.price > 0 && !this.sandbox) { const pr = this.profile; if (!pr || !pr.spend(r.price, `the drive to ${b.name}`)) return false; }
+    this.busy = true;
+    if (o.open) o.hide();
+    const toP = outfitterProfile(b.ep, this.world);
+    const card = {
+      kicker: `${a.name} → ${b.name}${who ? ` · with ${who}` : ''}`, text: '', sub: `${kmWords(r.km)} miles to ${r.lake}, ${rideTime(r.hours)}.`,
+      fadeIn: this.sandbox ? 0.6 : 1.2, hold: this.sandbox ? 0.4 : 3.2, fadeOut: this.sandbox ? 0.8 : 1.8,
+      // x: (owner 2026-11-12) a ride with a person ends a running trip: logged as came in at the far end, its card there
+      onDark: async () => { const tripOn = this.tripOn(); const ok = await this.arrive(a, b, r, toP, { with: who || 'someone' }); if (ok && tripOn) this.rideEndsTrip(b); return ok; }, // (the final pass: the lot's set-down note is not said on a ride with a person)
+    };
+    let ok = false;
+    const done = (v) => { this.busy = false; ok = v !== false; return { ok, price: r.price, km: r.km, hours: r.hours }; };
+    if (this.veil) return this.veil.card(card).then(() => done(true), () => done(false));
+    return Promise.resolve(card.onDark()).then(done, () => done(false));
+  }
+  // /a2
+  // x: begin (owner 2026-11-12: a ride with a person (Tauno) ends a running trip, with the trip card at the far end:
+  // outfitter.comeIn there, as a landing walked up to would, so the record's card and the tally follow as they always do)
+  tripOn() { const c = this.core; return !!(c && c.active && !c.sandbox); }
+  rideEndsTrip(to) {
+    const o = this.outfitter; if (!o || !to || !this.tripOn()) return false;
+    try { if (typeof o.comeIn === 'function') { o.comeIn(to); return true; } } catch (e) { console.warn('rides: the trip at the far end', e); }
+    return false;
+  }
+  // x: end
   // the clock for a drive of `hours` starting now: { night } after moving it (a late one is a bunk night: at the far
   // end, or before the truck goes)
   clock(hours, { bunkFirst = false } = {}) {
@@ -165,7 +205,7 @@ export class Rides {
     if (ok && p.chase) p.chase.snap();
     return ok || this.teleport(to.x, to.z);
   }
-  async arrive(from, to, r, toP) {
+  async arrive(from, to, r, toP, ride = null) {
     void toP;
     const o = this.outfitter, pr = this.profile, core = this.core, d = this.day;
     const ok = to.lot ? await this.toLot(to) : await this.teleport(to.x, to.z); // (round 2: a portage-first start's lot is on land)
@@ -189,7 +229,7 @@ export class Rides {
       o.lineKind = night ? 'morning' : 'welcome'; o.arrivedBy = night ? 'bunk' : 'ride';
       if (typeof o.layout === 'function' && typeof o.updateArrival === 'function') o.arrival = { why: 'ride', ep: to.ep, t: 0, pending: true };
       else o.pendingShow = true;
-    } else o.arrival = { why: 'ride', ep: to.ep, t: 0 }; // into the lot (outfitter.js updateTrailArrival)
+    } else { o.arrival = { why: 'ride', ep: to.ep, t: 0 }; if (ride && ride.with) o.arrival.with = ride.with; } // into the lot (outfitter.js updateTrailArrival; a2: `with` only from rideWith)
     if (typeof o.save === 'function') o.save();
     return true;
   }

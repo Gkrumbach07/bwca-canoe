@@ -248,6 +248,20 @@ export class Dialogue {
     const ch = (c.node.choices || [])[i]; if (!ch) return false;
     c.you = ch.text;
     let r = null;
+    // st-t (campaign-design §5.2): pick: 'lake' asks for a lake on the map first (story.ui.pickLake, the canary trap):
+    // go(answer) with { lake, name } or null; show: [{ id, label }] lists the things you could show, go(thing) for the
+    // one chosen ("Look at this"). Neither exists with the story off.
+    if (ch.pick === 'lake' && typeof this.pickLake === 'function') {
+      try { r = Promise.resolve(this.pickLake({ who: c.name, prompt: ch.prompt || null })).then((a) => (ch.go ? ch.go(a || null) : null)); } catch (e) { console.warn('dialogue: pick', e); r = null; }
+      this.showNode(r);
+      return true;
+    }
+    if (Array.isArray(ch.show)) {
+      const node = { say: c.node.say, filler: true, plain: !!c.node.plain, choices: [...ch.show.map((t) => ({ text: t.label || t.id, tag: 'show', go: () => (ch.go ? ch.go(t) : null) })), { text: 'Never mind.', go: () => ({ ...c.node }) }] };
+      this.showNode(node);
+      return true;
+    }
+    // /st-t
     try { r = ch.go ? ch.go() : null; } catch (e) { console.warn('dialogue: a choice', e); r = null; }
     if (ch.kind === 'bye' && r == null) { this.leave(); return true; }
     this.showNode(r);
@@ -291,7 +305,7 @@ export class Dialogue {
   before(dt) {
     const c = this.convo; if (!c) return;
     const p = this.player, hud = this.hud;
-    if ((hud && (hud.paper || hud.big)) || (!p.onFoot && !(c.afloat && p.mode === 'paddle')) || p.teleporting) { this.close(false); return; }
+    if (!c.wait && ((hud && (hud.paper || hud.big)) || (!p.onFoot && !(c.afloat && p.mode === 'paddle')) || p.teleporting)) { this.close(false); return; } // i: (not while a choice waits on its answer: the canary's map is a paper)
     p.input.paused = true;
     if (!p.onFoot) return; // (co-op, c.afloat: a word from the canoe; the view is left alone)
     const ch = this.chase, h = this.headOf(c.speaker, _v);

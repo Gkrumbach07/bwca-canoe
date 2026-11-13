@@ -316,7 +316,7 @@ function graphOf(world) {
   const c = cacheOf(world);
   if (c.graph) return c.graph;
   const adj = new Map(), basin = (id) => { const l = lakeRec(world, id); return l ? l.basin : -1; };
-  for (const p of world.portages || []) {
+  for (const p of (world.portagesPublic ? world.portagesPublic() : world.portages || [])) {
     if (!p.launch || p.launch.length < 2) continue;
     const a = basin(p.launch[0].lake), b = basin(p.launch[1].lake);
     if (a < 0 || b < 0 || a === b) continue;
@@ -360,7 +360,7 @@ export function placeFacts(ep, world) {
   const deep = lakes.filter((l) => l.depth >= TROUT_WATER).sort(byWay);
   let camps = 0;
   for (const s of world.campsites) if (Math.abs(s.x - e.x) < CAMP_REACH && Math.abs(s.z - e.z) < CAMP_REACH && Math.hypot(s.x - e.x, s.z - e.z) < CAMP_REACH) camps++;
-  const carries = (world.portages || []).filter((p) => p.pts && p.pts.length && Math.hypot(p.pts[0][0] - e.x, p.pts[0][1] - e.z) < 8000).sort((a, b) => b.rods - a.rods);
+  const carries = (world.portagesPublic ? world.portagesPublic() : world.portages || []).filter((p) => p.pts && p.pts.length && Math.hypot(p.pts[0][0] - e.x, p.pts[0][1] - e.z) < 8000).sort((a, b) => b.rods - a.rods);
   let near = null;
   // (the game-loop round: the nearest other outfitter, not the nearest entry point)
   for (const o of world.entryPoints) if (o.ep !== e.ep && isOutfitter(o.ep)) { const d = Math.hypot(o.x - e.x, o.z - e.z); if (!near || d < near.d) near = { ep: o.ep, name: o.name, d }; }

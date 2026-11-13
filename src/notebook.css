@@ -1,0 +1,99 @@
+/* The book's Walt side (stream B, notebook.js / casebook.js; loaded only under STORY_ON). Walt's brown record book open
+   inside the player's own: a contents strip down the left edge (a darker paper ribbon), then two ruled pages with the
+   seam between them. Three hands (10 §12.5): Walt's (his ink, blue ballpoint to mid-2018 and lead pencil after), his
+   second ink (a softer, smaller, shakier pencil: the [brackets]) and the player's own rounder pencil (the margin notes,
+   "he was here", the Walt page; the journal's own hand, Caveat). */
+#journal .side.w { grid-template-columns: 172px minmax(0, 1fr) minmax(0, 1fr); background: var(--pp-sheet);
+  box-shadow: 1.5px 1.5px 0 0 #e6dcc2, -1.5px 1.5px 0 0 #e6dcc2, 3px 3px 0 0 #b4a37f, -3px 3px 0 0 #b4a37f, 5px 5px 0 0 #ddd0b1, -5px 5px 0 0 #ddd0b1, 7px 7px 0 0 #a6936c, -7px 7px 0 0 #a6936c, 9px 9px 0 0 #6e5634, -9px 9px 0 0 #6e5634, 0 16px 22px 4px rgba(0, 0, 0, .45); }
+#journal .side.w::after { content: ''; position: absolute; left: calc(172px + (100% - 172px) / 2); top: 0; bottom: 0; width: 64px; translate: -50% 0; pointer-events: none; z-index: 3;
+  background: linear-gradient(90deg, transparent 0%, rgba(80, 50, 22, .07) 22%, rgba(70, 42, 18, .2) 40%, rgba(50, 30, 12, .38) 48.5%, rgba(48, 28, 12, .55) 50%, rgba(255, 248, 230, .18) 51%, rgba(70, 42, 18, .22) 56%, transparent 100%); }
+#journal .book-tab.w.on { background: #e7dcc0; color: var(--ink); border-color: var(--edge-deep); }
+
+/* the strip: the contents (a header a trip, a pencil dot by the unread), the nicknames, the pages */
+.nbw .nbw-strip { position: relative; min-height: 0; overflow-y: auto; padding: 26px 10px 20px 16px; background: #d9caa6; box-shadow: inset -6px 0 10px -6px rgba(60, 36, 14, .35);
+  background-image: var(--pp-grain); scrollbar-width: thin; }
+.nbw .nbw-sc { font: 700 11px/1.3 var(--sc); letter-spacing: .16em; color: var(--pp-brown); margin: 0 0 8px; }
+.nbw .nbw-c { appearance: none; position: relative; display: flex; align-items: baseline; gap: 4px; width: 100%; border: none; background: none; padding: 1px 2px 1px 12px; cursor: pointer; text-align: left;
+  font: 500 16px/1.25 var(--pencil-font); color: var(--ink-soft); border-radius: 3px; }
+.nbw .nbw-c span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nbw .nbw-c:hover { color: var(--ink); background: rgba(255, 250, 235, .35); }
+.nbw .nbw-c.on { color: var(--pp-brown-deep); background: rgba(255, 250, 235, .55); font-weight: 600; }
+.nbw .nbw-c.end { margin-top: 8px; font-style: italic; }
+.nbw .nbw-dot { position: absolute; left: 2px; top: .6em; width: 5px; height: 5px; border-radius: 50%; background: #5a5046; opacity: .75; }
+
+/* the pages */
+.nbw .nbw-page { padding: 30px 34px 22px 40px; gap: 0; }
+.nbw .nbw-page.right { padding-right: 50px; }
+.nbw .nbw-leaf { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column;
+  background-image: repeating-linear-gradient(180deg, transparent 0 27px, rgba(64, 104, 150, .13) 27px 28px); background-position: 0 6px; }
+.nbw .nbw-scroll { min-height: 0; overflow-y: auto; flex: 1; scrollbar-width: thin; }
+.nbw .nbw-hand { white-space: pre-wrap; font: 400 25px/28px "Reenie Beanie", var(--pencil-font); letter-spacing: .01em; color: #1f2c55; padding-top: 2px; }
+.nbw .nbw-e.lead .nbw-hand { color: #3c3a38; }
+.nbw .nbw-hand .ink2 { color: #77726c; font-size: 22px; opacity: .92; }
+.nbw .nbw-hand.other { color: #2c2620; font: 400 21px/28px var(--pencil-font); }
+.nbw .nbw-hand.ink { color: #1f2c55; }
+.nbw u.dec { text-decoration: underline; text-decoration-color: rgba(74, 64, 54, .55); text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
+.nbw .nbw-mine { font: 600 20px/1.15 var(--pencil-font); color: var(--pencil); }
+.nbw .nbw-margin { margin: 10px 0 0 auto; max-width: 78%; transform: rotate(-2.5deg); text-align: right; font-size: 22px; }
+.nbw .nbw-here { display: inline-block; margin: 8px 0 0 -4px; transform: rotate(-3deg); font-size: 19px; opacity: .9; }
+.nbw .nbw-here.fresh { animation: nbw-pencil 1.2s ease-out; }
+@keyframes nbw-pencil { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+.nbw .nbw-turn { position: absolute; bottom: 14px; z-index: 4; appearance: none; border: none; background: none; cursor: pointer; font: 600 30px/1 var(--pencil-font); color: var(--ink-soft); padding: 2px 8px; }
+.nbw .nbw-turn.prev { left: 12px; } .nbw .nbw-turn.next { right: 40px; }
+.nbw .nbw-turn:hover:not(:disabled) { color: var(--map-red); }
+.nbw .nbw-turn:disabled { opacity: .25; cursor: default; }
+
+/* the inside front cover: brown board, "W.H. 2010–" top right in ink, the printed line empty */
+.nbw .nbw-page.board { background: #7a5a3e radial-gradient(ellipse at 30% 20%, rgba(255, 220, 170, .12), transparent 60%); }
+.nbw .nbw-leaf.cover, .nbw .nbw-leaf.back { background: none; }
+.nbw .nbw-wh { align-self: flex-end; margin: 26px 18px 0 0; padding: 18px 22px; background: #efe5cc; font: 400 26px/1 "Reenie Beanie", var(--pencil-font); color: #1f2c55; box-shadow: 0 1px 3px rgba(0, 0, 0, .3); }
+.nbw .nbw-belongs { margin: auto 10px 40px; padding: 14px 18px; background: #efe5cc; font: italic 15px/1.4 var(--serif); color: var(--ink-soft); box-shadow: 0 1px 3px rgba(0, 0, 0, .3); }
+.nbw .nbw-belongs span { display: inline-block; width: 60%; border-bottom: 1px solid var(--ink-faint); }
+.nbw .nbw-leaf.blank { opacity: .9; }
+/* a stub: the page torn close to the spine, with a ruler (a straight edge) */
+.nbw .nbw-leaf.stub { background: none; }
+.nbw .nbw-tear { position: absolute; top: -30px; bottom: -22px; width: 22px; background: var(--pp-sheet); box-shadow: 2px 0 3px rgba(60, 36, 14, .25); }
+.nbw .nbw-page.left .nbw-tear { right: -34px; } .nbw .nbw-page.right .nbw-tear { left: -40px; }
+.nbw .nbw-leaf.stub.taped .nbw-tear { background: rgba(230, 215, 160, .8); }
+/* the back pocket and the photographs */
+.nbw .nbw-pk { display: flex; flex-wrap: wrap; gap: 12px; padding: 20px 6px; }
+.nbw .nbw-loose { position: relative; appearance: none; cursor: pointer; width: 46%; min-height: 64px; padding: 10px 12px; border: none; text-align: left; background: #f1e8d2; box-shadow: 0 2px 5px rgba(40, 24, 8, .28); font: 500 17px/1.2 var(--pencil-font); color: var(--ink-soft); transform: rotate(-1deg); }
+.nbw .nbw-loose:nth-child(2n) { transform: rotate(1.4deg); }
+.nbw .nbw-loose.photo { background: #fbf7ee; border: 6px solid #fbf7ee; outline: 1px solid rgba(0, 0, 0, .12); font: italic 14px/1.2 var(--serif); }
+.nbw .nbw-loose.on { outline: 2px solid var(--pp-brown); }
+.nbw .nbw-loose .nbw-dot { left: auto; right: 6px; top: 6px; }
+.nbw .nbw-prints { position: absolute; right: -10px; bottom: 18px; display: flex; gap: 8px; }
+.nbw .nbw-print { position: relative; appearance: none; cursor: pointer; width: 62px; height: 48px; border: 5px solid #fbf7ee; background: linear-gradient(160deg, #8a8f86, #4f5652); box-shadow: 0 2px 6px rgba(40, 24, 8, .35); transform: rotate(var(--tilt, 0deg)); }
+.nbw .nbw-print .nbw-dot { left: auto; right: -3px; top: -3px; background: #f1e8d2; box-shadow: 0 0 0 1px #5a5046; }
+.nbw .nbw-over { position: absolute; inset: 22px 46px 22px 26px; z-index: 5; display: flex; flex-direction: column; padding: 26px 24px 16px; background: #f4ecd8; box-shadow: 0 10px 30px rgba(40, 24, 8, .4); transform: rotate(.6deg); }
+.nbw .nbw-x { position: absolute; right: 8px; top: 4px; appearance: none; border: none; background: none; cursor: pointer; font: 600 26px/1 var(--pencil-font); color: var(--ink-soft); }
+.nbw .nbw-photo .pic { padding: 18px; background: linear-gradient(160deg, #9aa092, #5c625b); color: #f4efe4; font: italic 16px/1.45 var(--serif); border: 10px solid #fbf7ee; }
+.nbw .nbw-photo .cap { margin-top: 10px; font: 700 11px/1.3 var(--sc); letter-spacing: .14em; color: var(--ink-soft); }
+.nbw .nbw-photo .bk { margin-top: 6px; font: 500 20px/1.2 var(--pencil-font); color: #2c3a64; }
+.nbw .nbw-sheet { padding: 4px 2px; }
+/* the inside back cover: the column of rods, bottom left, in four inks */
+.nbw .nbw-leaf.back { justify-content: flex-end; }
+.nbw .nbw-rods { align-self: flex-start; margin: 0 0 30px 10px; padding: 14px 22px 14px 18px; background: #efe5cc; box-shadow: 0 1px 3px rgba(0, 0, 0, .3); min-width: 150px; max-width: 80%; }
+.nbw .nbw-rod { display: grid; grid-template-columns: 62px 22px auto; align-items: baseline; font: 400 24px/27px "Reenie Beanie", var(--pencil-font); }
+.nbw .nbw-rod .pair { grid-column: 3; white-space: nowrap; }
+.nbw .nbw-rod.blue .n { color: #1f2c55; } .nbw .nbw-rod.blue2 .n { color: #2f4f86; }
+.nbw .nbw-rod.hard .n { color: #57534d; } .nbw .nbw-rod.soft .n { color: #2f2b27; font-weight: 700; }
+.nbw .nbw-rod .tick { grid-column: 2; color: var(--pencil); font-size: 20px; }
+.nbw .nbw-rod .pair { font-size: 17px; }
+
+/* the Walt page (casebook.js): the player's pencil on the journal's ruling */
+.nbw .cb-page { font: 500 21px/28px var(--pencil-font); color: var(--pencil); }
+.nbw .cb-head { font: 600 40px/1 var(--pencil-font); color: var(--pp-brown-deep); margin: 0 0 10px; }
+.nbw .cb-head .cb-wh { font-size: 24px; color: var(--ink-soft); }
+.nbw .cb-sec { margin: 0 0 12px; }
+.nbw .cb-h { font: 700 11.5px/28px var(--sc); letter-spacing: .16em; color: var(--pp-brown); }
+.nbw .cb-line { padding-left: 14px; text-indent: -12px; }
+.nbw .cb-line::before { content: '– '; color: var(--ink-faint); }
+.nbw .cb-line.struck { text-decoration: line-through; text-decoration-thickness: 2px; text-decoration-color: rgba(60, 50, 40, .7); color: var(--ink-faint); }
+.nbw .cb-nick { display: block; margin: 0 0 6px; font: 500 18px/1.15 var(--pencil-font); color: var(--ink-soft); }
+.nbw .cb-nick.chip { appearance: none; cursor: grab; border: 1px dashed rgba(74, 64, 54, .55); border-radius: 12px; padding: 2px 10px 3px; background: rgba(255, 250, 235, .45); text-align: left; }
+.nbw .cb-nick.chip:hover { border-style: solid; color: var(--ink); }
+.nbw .cb-nick.matched .w { text-decoration: underline; text-decoration-color: rgba(74, 64, 54, .5); }
+.nbw .cb-nick.matched .nbw-mine { font-size: 17px; }
+.nbw .nbw-sheet.given { padding: 8px 4px; }
+@media (max-width: 900px) { #journal .side.w { grid-template-columns: 120px minmax(0, 1fr) minmax(0, 1fr); } }

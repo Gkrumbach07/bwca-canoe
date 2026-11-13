@@ -32,6 +32,7 @@ import { save } from './save.js';
 import { OWN_KIT, WALT_IDS, GUEST_KIT, LOAN, FOOD_KINDS, itemDef } from './items.js';
 import { PRI } from './dialogue.js';
 import { absDay } from './trip.js';
+import { STORY_ON } from './story-flag.js';
 
 const NS = 'onboard';
 const FOOD_DAYS = 3;                      // the food that comes with the gear: a breakfast and a supper a day
@@ -45,7 +46,11 @@ const ORDER_R3 = ['walttent', 'sleepingbag', 'pad', 'pfd', 'pot', 'clothes', 'ta
 // player's kit after the scene, with the plain things for the story's (Walt's pack, tent and stove stay the host's story)
 export const GUEST_PLAIN = { waltpack: 'pack3', walttent: 'aframe', waltstove: 'stove' };
 const plain = (id) => GUEST_PLAIN[id] || id;
-export const STAFF = ['Jess', 'Tanner', 'Marcy', 'Kyle', 'Brooke', 'Dani', 'Cody', 'Shelby', 'Megan', 'Logan', 'Paige', 'Trent']; // (never a story name: the brief's reserved names)
+// The summer help's names (never a story name: the brief's reserved names); npcs.js reserves them so no one else is given
+// one. Behind STORY_ON it is Josie at every home (Josie Hautala, docs/story/01-bible.md 4.8: "works at whichever
+// outfitter the player picks"); with the flag off, main's per-home names
+const STAFF_MAIN = ['Jess', 'Tanner', 'Marcy', 'Kyle', 'Brooke', 'Dani', 'Cody', 'Shelby', 'Megan', 'Logan', 'Paige', 'Trent'];
+export const STAFF = STORY_ON ? ['Josie'] : STAFF_MAIN;
 const ROLE = 'the summer help';
 const DOOR_LINE = 'Got a minute? Come to the counter.';
 const STAFF_LOOK = { age: 'young', shirt: 0x5f7f45, hat: null }; // (E's figure look, as it takes it; ignored without E)
@@ -120,7 +125,7 @@ export class Onboarding {
   isWaltItem(id) { return WALT_IDS.includes(String(id)); }
   permits() { const p = this.t.permits; try { return typeof p === 'function' ? p() : p || null; } catch { return null; } }
   get abs() { const d = this.t.day; return d ? absDay(d.year, d.doy) : 0; }
-  staffName(ep) { return STAFF[((Number(ep) || 0) * 7 + 3) % STAFF.length]; }
+  staffName(ep) { return STAFF[((Number(ep) || 0) * 7 + 3) % STAFF.length]; } // (Josie at every home under STORY_ON)
 
   // --- the staffer: E's figure, or a voice at the counter's end --------------------------------------------------------
   // where the staffer stands: a step along the counter from the keeper (the layout's keeper spot), else the landing
@@ -197,6 +202,10 @@ export class Onboarding {
     return s.heard ? 'Shelf in the back, whenever you want it.' : 'I’m at the counter when you’ve got a minute.';
   }
   hello(ep, landing) {
+    // st-t: P1 the counter (docs/story/20-opening.md §1.2) under STORY_ON: the keeper, Josie by the week and the bundle,
+    // taken or left on the shelf (cast.js p1, set by main.js's st-t block); with the flag off, as before
+    if (STORY_ON && typeof this.p1 === 'function') { let n = null; try { n = this.p1(ep, landing); } catch (e) { console.warn('onboarding: p1', e); } if (n) return n; }
+    // /st-t
     const take = { text: 'I’ll take it.', go: () => { this.give(); return this.after(ep, landing); } };
     const offer = () => ({ heard: this.heard(), say: 'There’s old gear in the back nobody takes. A canvas pack, a canvas tent, a stove with a dent in it. Heavy, but it all works. If you’re not going to need it, it’s yours.',
       choices: [take, { text: 'Why does nobody take it?', go: () => ({ say: 'It’s old. People want the light stuff. It’s been on that shelf since before I started here.', choices: [take, { text: 'Maybe later.', kind: 'bye', go: () => null }] }) }, { text: 'Maybe later.', kind: 'bye', go: () => null }] });
@@ -218,6 +227,7 @@ export class Onboarding {
     if (!this.state.path) return { say: 'It’s in your canoe at the dock. I put your own things in the pack, and three days of food in the barrel.', choices: [{ text: 'Thanks.', go: () => keeperNode }] };
     // r3: the loan, then only what is still missing (food, leeches): the shelves, never what it is for
     const pa = this.state.path, miss = [!pa.food ? 'No food in it, though: the provisions shelf is behind you.' : '', !pa.leeches ? 'Leeches are on the tackle shelf.' : ''].filter(Boolean).join(' ');
+    if (STORY_ON && this.state.shelf) return { say: `There’s one of our canoes at the dock for you, on loan, with a paddle, a life jacket, a barrel and a rod.${miss ? ` ${miss}` : ''}`, choices: [{ text: 'Thanks.', go: () => keeperNode }] }; // st-t: the bundle left on the shelf
     return { say: `There’s one of our canoes at the dock for you, on loan, with a paddle, a life jacket, a barrel and a rod. The old pack’s in it, your own things packed in.${miss ? ` ${miss}` : ''}`, choices: [{ text: 'Thanks.', go: () => keeperNode }] };
   }
   openCounter(landing) { if (landing && typeof this.showCounter === 'function') this.showCounter(landing); }
@@ -375,6 +385,33 @@ export class Onboarding {
     if (s && typeof s.emit === 'function') s.emit('gear:given', { items: given, ep: this.home, abs: this.abs });
     return given;
   }
+  // st-t (20 §1.2 "I'll wait for a rental."): the loan and the rest of the kit, the bundle (the old pack and tent) left
+  // on the shelf; the pot and the life jacket kept for you at the counter, your own things in the crate (no pack to put
+  // them in). Walt's dented stove and its canister stay with the bundle (takeLater): a Walt thing carried is night one,
+  // and the notebook is in his tent (chk-c1b D1: the shelf path found it through the stove). → the item ids given
+  shelf() {
+    const inv = this.t.inventory, st = this.state;
+    if (!STORY_ON || !inv || !st || st.step === 'gear' || st.done) return [];
+    const given = [];
+    for (const id of ['pot', ...(st.path ? LOAN.pack : [])]) { try { if (inv.place(id, 1, { crate: true, all: true, quiet: true })) given.push(id); } catch { /* kept nowhere */ } }
+    if (st.path) { given.push(...this.lend(inv)); st.loan = true; }
+    st.step = 'gear'; st.shelf = true; this.write();
+    this.hull();
+    if (typeof inv.write === 'function') inv.write();
+    return given;
+  }
+  // st-t (20 §9.2 R1/R1b): the bundle taken off the shelf later: the old pack into the canoe, the tent in it, your own
+  // things out of the crate into it. → the item ids given
+  takeLater() {
+    const inv = this.t.inventory, st = this.state;
+    if (!STORY_ON || !inv || !st || !st.shelf) return [];
+    const given = packGear(inv, { pack: 'waltpack', gift: ['walttent', 'waltstove', 'fuel'], order: ORDER_R3, food: 0 }); // (the stove and canister left with the bundle: shelf)
+    st.shelf = false; this.write();
+    const s = this.t.story;
+    if (s && typeof s.emit === 'function') s.emit('gear:given', { items: given, ep: this.home, abs: this.abs });
+    return given;
+  }
+  // /st-t
 }
 
 // The pack into the canoe, the gift into it (else kept for you at the outfitters), your own things out of the crate into

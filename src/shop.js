@@ -331,7 +331,11 @@ export class Shop {
   priceMul(ep) {
     const op = this.outfitterProfile(ep), m = op && Number.isFinite(op.priceMul) ? op.priceMul : 1;
     const rep = this.profile && ep != null ? this.profile.outfitter(ep).rep : 0;
-    return m * (rep >= STANDING_DEAL ? DEAL : 1);
+    // n: begin — the money ending's cold shoulder (Part 3 #6): every owner upcharges until that owner softens (endings.js;
+    // storyMul is set only under STORY_ON)
+    const up = typeof this.storyMul === 'function' ? Number(this.storyMul(ep)) || 1 : 1;
+    // n: end
+    return m * (rep >= STANDING_DEAL ? DEAL : 1) * up;
   }
   // Sandbox has no limits: the shelves are free there, as its food and its rides are
   get free() { const o = this.outfitter, t = o && o.core; return !!(t && t.sandbox); }

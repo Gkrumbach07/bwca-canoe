@@ -489,6 +489,7 @@ export class Fishing {
   stow(silent = false) {
     if (this.state === 'landed') this.release(false);
     this.rodUp = false; this.onFoot = false; this.state = 'stowed'; this.lineOut = 0; this.power = 0;
+    if (this.fish && this.fish.snag) this.fish.snag.cancel(); // e: (a snag let go: the weight stays where it lies)
     this.bite = null; this.fish = null; this.pending = null; this.castWind = null;
     this.bobber.visible = false; this.line.visible = false; this.aimRing.visible = false;
     this.chase.orbitLocked = false; this.chase.focus = null;
@@ -552,6 +553,7 @@ export class Fishing {
   }
 
   launch() {
+    this.snagCast = (this.snagCast || 0) + 1; this.snagIn = null; this.snagPass = 0; // e: (a new cast: new passes)
     const p = this.pending; this.pending = null;
     const t = this.tipWorld();
     const level = this.waterLevel(), h = Math.max(0.3, t.y - level);
@@ -808,6 +810,10 @@ export class Fishing {
     }
     // the bites
     if (this.state === 'bite') return this.updateBite(dt);
+    // e: the story's snag targets on the bed (minigames/snag.js, set by feed-episodes.js under STORY_ON: null with the
+    // flag off, so this is main's cast exactly): a lure running on the bottom over one may catch it, a pass at a time
+    if (this.snags && this.state === 'inwater' && this.snagCheck(l, def)) return;
+    // /e
     if (!l.onLand && this.sinceCast > 1.2 && this.cooldown <= 0) {
       if ((this.lureHab.t -= dt) <= 0) { this.lureHab.t = 0.5; this.lureHab.hab = this.habitatAt(l.x, l.z); }
       const hab = this.lureHab.hab;
@@ -872,6 +878,7 @@ export class Fishing {
   // The fight. Tension rises while you reel and falls when you let the fish run; the fish pulls in pulses that
   // weaken as it tires. Red for too long parts the line, slack for too long throws the hook.
   updateFight(dt) {
+    if (this.fish && this.fish.snag) return this.updateSnag(dt); // e: a dead weight on the line (no fish)
     const f = this.fish, p = this.player, w = this.world, t = this.tipWorld();
     f.t += dt;
     const reeling = this.button || this.input.held('KeyW', 'ArrowUp');
@@ -924,6 +931,64 @@ export class Fishing {
     p.prompt = { key: null, text: f.danger > 0.35 ? 'Ease off — the line is singing' : f.slack > 1 ? 'Reel! The line has gone slack' : f.run > 0 ? 'It is running — let it go' : `Reel it in · ${fmtFt(this.lineOut)}${f.t > 6 ? ` · feels like a ${sp.name.toLowerCase()}` : ''}` };
   }
 
+  // e: the snag (docs/story/60-side-stories.md S9; Round 2 stream E). this.snags = { targets() → [{ id, x, z, r, chance }],
+  // passes(target, seed) → bool, start(target, { line, snap, seed }) → handle, landed(target, handle), snapped(target) }
+  // (feed-episodes.js). A pass is a lure coming into a target's reach while it runs on the bottom; its roll is seeded by
+  // the cast and the pass. The fight is the existing one's bar (tension, danger, slack) over the handle's dead weight:
+  // no run, give and stick; the line parts in the red the same as for a fish (the lure lost: onSnap); landed, it is the
+  // story's to hand over (into the hand, not the stringer).
+  snagCheck(l, def) {
+    const S = this.snags; let T = null;
+    try { for (const t of S.targets() || []) if (Math.hypot(l.x - t.x, l.z - t.z) <= t.r) { T = t; break; } } catch (e) { console.warn('fishing: snag targets', e); return false; }
+    if (!T) { this.snagIn = null; return false; } // (out of reach: the next time in is a new pass)
+    if (this.snagIn === T.id || !S.over(T, l, def)) return false; // (this pass rolled already; or the lure is running high over it)
+    this.snagIn = T.id; this.snagPass = (this.snagPass || 0) + 1;
+    if (!S.passes(T, `${this.snagCast || 0}:${this.snagPass}`)) return false;
+    const h = S.start(T, { line: this.lineOut, snap: TUNING.snapDanger * (this.player.gear ? this.player.gear.snap : 1) * (this.kit ? this.kit.mods.snap : 1), seed: `${this.snagCast || 0}:${this.snagPass}` });
+    if (!h) return false;
+    this.fish = { snag: h, target: T, species: null, x: l.x, z: l.z, depth: l.depth, heading: 0, tension: h.tension, danger: 0, slack: 0, t: 0, run: 0, surf: 0, weight: 1, length: 0 };
+    this.state = 'fight'; this.bite = null;
+    this.bobber.visible = false;
+    if (this.audio) { this.audio.bite(0.6); this.audio.reelClick(1.6); }
+    return true;
+  }
+  updateSnag(dt) {
+    const f = this.fish, h = f.snag, p = this.player, t = this.tipWorld();
+    f.t += dt;
+    const reeling = this.button || this.input.held('KeyW', 'ArrowUp');
+    const r = h.update(dt, { reeling });
+    f.tension = h.tension; f.danger = h.danger; f.slack = 0;
+    this.lineOut = h.line;
+    // the weight comes in along the bed toward the tip, with the line
+    const dx = f.x - t.x, dz = f.z - t.z, horiz = Math.hypot(dx, dz) || 1, want = Math.max(0.5, Math.min(horiz, this.lineOut));
+    f.x = t.x + (dx / horiz) * want; f.z = t.z + (dz / horiz) * want;
+    const surf = this.surfaceAt(f.x, f.z), bed = Math.max(0.3, this.world.levelAt(f.x, f.z) - this.world.heightAt(f.x, f.z));
+    f.depth = bed - 0.1;
+    this.lure.x = f.x; this.lure.z = f.z; this.lure.y = surf - f.depth; this.lure.depth = f.depth;
+    if (this.audio && reeling && h.phase === 'give') { this.crankAcc = (this.crankAcc || 0) + dt * 6; if (this.crankAcc >= 1) { this.crankAcc -= 1; this.audio.reelClick(1.0); } }
+    if (reeling) this.crank += dt * (h.phase === 'give' ? 7 : 2);
+    if (r && r.result === 'snapped') {
+      const T = f.target; this.fish = null; this.snagIn = null;
+      for (const m of this.lureMeshes) m.visible = false;
+      this.message = { text: 'The line parted. Tying on another…', t: 3.5 };
+      if (this.audio) this.audio.snap();
+      if (this.onSnap) { this.onSnap(this.lureDef, f); if (this.message && /^The line parted and the fish kept/.test(this.message.text)) this.message = { ...this.message, text: this.message.text.replace(/^The line parted and the fish kept the [^.]*\./, 'The line parted.') }; } // (no fish kept it)
+      try { this.snags.snapped(T); } catch (e) { console.warn('fishing: snag', e); }
+      this.state = 'ready'; this.lineOut = 0; this.cooldown = 2;
+      return;
+    }
+    if (r && r.result === 'landed') {
+      const T = f.target; this.fish = null; this.snagIn = null;
+      for (const m of this.lureMeshes) m.visible = false;
+      this.splash(f.x, surf, f.z, 10, 0.7);
+      this.state = 'ready'; this.lineOut = 0; this.cooldown = 2;
+      let words = null; try { words = this.snags.landed(T, h); } catch (e) { console.warn('fishing: snag', e); }
+      if (words) this.message = { text: words, t: 4 };
+      return;
+    }
+    p.prompt = { key: null, text: f.danger > 0.35 ? 'Ease off — the line is singing' : `Reel it in · ${fmtFt(this.lineOut)}` };
+  }
+  // /e
   endFight(how) {
     const f = this.fish;
     this.fish = null;
@@ -1135,7 +1200,7 @@ export class Fishing {
     else if (s === 'flying') lm.rotation.set(0, Math.atan2(-l.vz, l.vx), Math.atan2(l.vy, Math.hypot(l.vx, l.vz)));
     else lm.rotation.set(0, this.aim, -1.2);
     // the fish on the line, seen through the water when it is near
-    if (s === 'fight') {
+    if (s === 'fight' && !this.fish.snag) { // e: (a snag shows no fish)
       const f = this.fish, m = this.fishMeshes[f.species];
       const horiz = Math.hypot(f.x - t.x, f.z - t.z);
       m.visible = horiz < 14;

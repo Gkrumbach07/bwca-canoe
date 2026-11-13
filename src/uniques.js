@@ -23,7 +23,14 @@
 //   uniques.guideSite()          { x, z, name, lake } the campsite Arvid's map pencils (near Seagull, EP 54)
 //   uniques.mapMarks()           [{ x, z, r, label, tight }] for the map's pencil (main.js adds them to tasks.hints)
 import * as THREE from 'three';
-import { itemDef, UNIQUE_IDS, ARTIFACT_IDS } from './items.js';
+import { itemDef, UNIQUE_IDS, ARTIFACT_IDS, defineItem } from './items.js'; // (e: defineItem, June's pot below)
+// e: June's pot (docs/story/60-side-stories.md S9 "What it gives"; Round 2 stream E): a unique cook pot, blue enamel with
+// a chip on the lip, that comes up on a fishing line off Alice's beach rock (story only: nothing places it with the flag
+// off). Coffee made in it comes out as two cups (feed-episodes.js, through kit.brew); nothing says so. Normal item rules:
+// it rides in a pack.
+defineItem({ id: 'junespot', name: 'Blue enamel coffee pot', short: 'Coffee pot', kind: 'container', w: 2, h: 1, kg: 0.45, price: 0, unique: true, nest: true, hand: true,
+  pot: { litres: 1, scale: 0.8 }, icon: 'pot', container: { cols: 2, rows: 1, accepts: ['meal', 'fish', 'food', 'water'] }, identity: 'Blue enamel, a chip on the lip' });
+// /e
 import { PropBuilder, propMaterial, TILE } from './prop-kit.js';
 import { save } from './save.js';
 
@@ -101,7 +108,7 @@ export class Uniques {
       let spot = null;
       if (f.kind === 'portage') {
         const cands = [];
-        for (const p of w.portages) {
+        for (const p of w.portagesPublic()) {
           if (!p.pts || p.pts.length < 2 || (p.rods || 0) < f.rods) continue;
           const m = p.pts[Math.floor(p.pts.length / 2)], d = Math.hypot(m[0] - L.x, m[1] - L.z) / 1000;
           if (d >= f.km[0] && d <= f.km[1]) cands.push({ p, d });

@@ -115,7 +115,8 @@ import { BurnNotes } from './burn-notes.js'; // the real burns
 import { Permits } from './permits.js'; // gl-a: permits
 import { EdgeWatch } from './edge.js'; // the edge round: the notice while you are out of the Boundary Waters
 import { PermitDesk } from './permit-desk.js'; // gl-a: the permit desk
-import { story } from './story-hooks.js'; // gl-c: the story's event bus and saved state
+import { story, loadStory } from './story-hooks.js'; // gl-c: the story's event bus and saved state (loadStory: the v2 story under STORY_ON)
+import { STORY_ON } from './story-flag.js'; // st-k1b: the story's dev flag (?story=1 in dev)
 import { onboarding } from './onboarding.js'; // gl-c: the home counter's first visit, the old gear
 import { starter } from './starter.js'; // the start round: each outfitter's first night out, the season's sky and its kind first days
 import { walt } from './walt.js'; // gl-c: the notebook in the old tent
@@ -128,6 +129,7 @@ const loadingEl = document.getElementById('loading'), barEl = document.getElemen
 const progress = (f, msg) => { barEl.style.width = `${Math.round(f * 100)}%`; if (msg) msgEl.textContent = msg; };
 
 async function main() {
+  if (STORY_ON) await loadStory(); // (st-k1a: the v2 story, made before anything reads `story`; a no-op with the flag off)
   const world = await World.load(progress);
   // d2 join: a season made on another map release carried to this one's lake, site and trail numbers, before anything
   // reads it (migrate.js)
@@ -956,7 +958,7 @@ async function main() {
   // co-op phase 1 (coop.js, docs/plans/coop.md): friends in their own browsers on one lake in Sandbox, drawn with the
   // actor layer, the host's clock everyone's. Their poses are set just before the actors' own update (after the camera),
   // their names placed after it. Invite friends on the pause card, Join a trip on the title (or a ?join=CODE link).
-  const coop = new Coop({ player, canoe, actors, day, title, trip, outfitter, profile, packs, hud, camera, world, saver });
+  const coop = new Coop({ player, canoe, actors, day, title, trip, outfitter, profile, packs, hud, camera, world, saver, story }); // (k1a: story, for the guest's mirror mode)
   { const upd = actors.update.bind(actors); actors.update = (dt, ...a) => { try { coop.update(dt); } catch (e) { if (!coop.warned) { coop.warned = true; console.warn('coop', e); } } upd(dt, ...a); try { coop.labels(); } catch { /* the names only */ } }; }
   coop.fromUrl();
   window.__game.coop = coop;
@@ -997,7 +999,9 @@ async function main() {
     if (!document.getElementById('names-css')) { const s = document.createElement('style'); s.id = 'names-css'; s.textContent = '#place.minor .name { font-size: 46px; } #place.minor { gap: 8px; } @media (max-width: 720px) { #place.minor .name { font-size: 32px; } }'; document.head.appendChild(s); }
     const showP = hud.showPlace.bind(hud);
     hud.showPlace = (kicker, name, sub, seconds, minor = false) => { names.minorShown = !!minor; if (hud.el && hud.el.place) hud.el.place.classList.toggle('minor', !!minor); showP(kicker, name, sub, seconds); };
-    const portageAt = () => { let best = null, bd = 40; for (const p of world.portages) for (const l of p.launch || []) { const d = Math.hypot(l.x - player.x, l.z - player.z); if (d < bd) { bd = d; best = p; } } return best; };
+    // st-l: portagesPublic (no story carry)
+    const portageAt = () => { let best = null, bd = 40; for (const p of world.portagesPublic()) for (const l of p.launch || []) { const d = Math.hypot(l.x - player.x, l.z - player.z); if (d < bd) { bd = d; best = p; } } return best; };
+    // /st-l
     const updP = player.update.bind(player);
     player.update = (dt) => {
       updP(dt);
@@ -1175,7 +1179,7 @@ async function main() {
   // then the keeper's first permit (stream A's permits.grant, when there) and the counter. The first night in the old
   // tent finds the notebook (walt.js, story-hooks.js); its Read is a paper of the story's pages. Old seasons are legacy.
   {
-    story.attach({ profile });
+    story.attach({ profile, day, trip }); // (k1a: the v2 story stamps facts by the clock and the trip; v1 reads only profile)
     onboarding.attach({ outfitter, profile, inventory, talk, hud, day, story, npcs, sheets, player, permits: () => (window.__game && window.__game.permits) || null });
     walt.attach({ trip, camp, inventory, hud, veil, day, story, world, player });
     const showC = outfitter.show.bind(outfitter);
@@ -1194,7 +1198,405 @@ async function main() {
     const dueC = hints.due.bind(hints);
     hints.due = (id, rec) => (waltM.has(id) ? waltM.get(id).due(rec) : dueC(id, rec)); // "The notebook: I, right-click it, Read."
     Object.assign(window.__game, { story, onboarding, walt });
+    // st-k1a: the v2 story (STORY_ON only): the clock and the trip for its stamps, the tick each game quarter-hour
+    if (STORY_ON && story.v === 2) {
+      Object.assign(story.ctx, { day, trip });
+      const updS = outfitter.update.bind(outfitter);
+      outfitter.update = (dt) => { updS(dt); story.update(); };
+    }
   }
+  // st-k1b: the story's seams and feed (docs/build/campaign-design.md Part 4 Round 0, K1b), only under STORY_ON
+  // (?story=1 in dev): story-seams.js (and through it story-ui, story-allows, pencil, story-layer) is loaded here, so with
+  // the flag off not one of them is fetched, nothing is hung on the story and no listener is added anywhere (the game
+  // equals main). The stub interfaces (story.ui.pickLake, story.allows, pencil, layer) do nothing yet; the feed
+  // (story-feed.js) is the only place the story listens to the game
+  if (STORY_ON) {
+    try {
+      const { installSeams, startFeed } = await import('./story-seams.js');
+      const seams = installSeams(story);
+      window.__game.storySeams = { ...seams, on: true, feed: null };
+      // st-l: the story layer (story-layer.js): its places' props by the tiles, the dot's names and verbs, the triggers
+      // every 0.5 s, the photo targets; World.load made their clearings (story-world.js)
+      seams.layer.attach({ story, world, tiles, scene, player, pointer, photo, guest: () => !!(window.__game.coop && window.__game.coop.guest) });
+      window.__game.storyLayer = seams.layer;
+      // /st-l
+      startFeed({ story, mods: { trip, outfitter, world, inventory /* st-b: feed-book.js */ }, guest: () => !!(window.__game.coop && window.__game.coop.guest) })
+        .then((feed) => { window.__game.storySeams.feed = feed; console.log(`story K1b: the feed started (${feed.names().join(', ')})`); })
+        .catch((e) => console.warn('story K1b: the feed', e));
+    } catch (e) { console.warn('story K1b: the seams', e); }
+  }
+  // st-p: the story's pencil and leads (story Round 1, stream P; campaign-design §4), only under STORY_ON (with the flag
+  // off neither module is fetched and the map is main's): pencil.js on the story (rings with their voices, nicknames,
+  // the inking), leads.js (born, followed, closed), the map's pencil and lake-pick modes (map-book.js attachPencil),
+  // story.ui.pickLake, and two TEACH moments: the pencil's gesture (an unmatched nickname and the map side open, 20 §7.2)
+  // and the first lead ever (§4)
+  if (STORY_ON && story.v === 2) {
+    try {
+      const [{ pencil }, { leads }] = await Promise.all([import('./pencil.js'), import('./leads.js')]);
+      const seams = window.__game.storySeams || {};
+      journal.map.attachPencil({ pencil, leads, story, layer: seams.layer || null, player });
+      leads.attach({ story, pencil, hud });
+      if (story.ui && typeof story.ui.provide === 'function') story.ui.provide('pickLake', (o) => journal.map.pickLake(o));
+      // ("Tauno's door" names him: on the cold path the moment waits for his name, said at the turn: chk-c1a 3)
+      let firstLead = 0, leadWaits = false;
+      leads.on('first', () => { if (story.has('knows.tauno')) firstLead = performance.now(); else leadWaits = true; });
+      story.on('fact', ({ key }) => { if (leadWaits && key === 'knows.tauno') { leadWaits = false; firstLead = performance.now(); } });
+      const pm = new Map([
+        ['pencil', { id: 'pencil', prio: 1, recur: 'once', text: 'Drag a name from his page onto a lake to pencil it in.', // (20:7.2.w1)
+          due: () => journal.open && journal.side === 'map' && pencil.unmatched().some((n) => !n.matched) }],
+        ['firstlead', { id: 'firstlead', prio: 1, recur: 'once', text: 'Tauno’s door, in your book.', // (campaign-design §4)
+          due: () => firstLead > 0 && performance.now() - firstLead < 120000 }],
+      ]);
+      for (const m of pm.values()) if (!MOMENTS.some((q) => q.id === m.id)) { const { due, ...rest } = m; void due; MOMENTS.push(rest); }
+      const dueSP = hints.due.bind(hints);
+      hints.due = (id, rec) => (pm.has(id) ? pm.get(id).due(rec) : dueSP(id, rec));
+      Object.assign(window.__game, { pencil, leads });
+      if (window.__game.storySeams) Object.assign(window.__game.storySeams, { pencil, leads });
+    } catch (e) { console.warn('story P: the pencil', e); }
+  }
+  // st-b: the book's Walt side (docs/build/campaign-design.md §6, Round 1 stream B; notebook.js, casebook.js), only under
+  // STORY_ON: the notebook reader, the Walt page and pages given as the book's fourth side (journal.addSide), the back
+  // cover ticked from the story's carries, the book's rules and its two moments (waltpage, readhere). walt.js's Read opens
+  // it (walt.t.book). With the flag off nothing here is fetched or hung
+  if (STORY_ON && story.v === 2) {
+    try {
+      const { installBook } = await import('./notebook.js');
+      const sm = window.__game.storySeams || {};
+      const book = await installBook({ story, journal, hud, player, inventory, world, layer: sm.layer, pencil: sm.pencil, veil, outfitter, tasks });
+      walt.t.book = book;
+      for (const m of book.moments) if (!MOMENTS.some((q) => q.id === m.id)) { const { due, ...rest } = m; void due; MOMENTS.push(rest); }
+      const bookM = new Map(book.moments.map((m) => [m.id, m]));
+      const dueB = hints.due.bind(hints);
+      hints.due = (id, rec) => (bookM.has(id) ? bookM.get(id).due(rec) : dueB(id, rec));
+      window.__game.book = book;
+    } catch (e) { console.warn('story B: the book', e); }
+  }
+  // /st-b
+  // st-t: Talk & cast (docs/build/campaign-design.md Part 4 Round 1, stream T), only under STORY_ON: the words by id
+  // (topics.js texts, the extract's words: story-data/words.js), story topics on the keepers under "Ask about…" (npcs.addTalkSource) and
+  // the return's one in gold (extraChoices), the cast by their schedules (cast.js: Tauno at the porch foot on a walkout,
+  // his Farm seat, Josie at the home counter), P1 at the counter (onboarding.p1), the push budget (beats.js), the
+  // ambient pools (ambient.js: one story line in four at most), the drive card's road line, the lake picker for a
+  // choice (dialogue.js pick), and the feed's talk adapter. With the flag off none of it is loaded.
+  if (STORY_ON && story.v === 2) {
+    try {
+      const [{ topics, texts }, { cast }, { beats }, { ambient }, A1, { RULES_TALK }, { connect }, { loadWords }] = await Promise.all([
+        import('./topics.js'), import('./cast.js'), import('./beats.js'), import('./ambient.js'), import('./story-data/topics-act1.js'),
+        import('./story-data/rules-talk.js'), import('./feed-talk.js'), import('./story-data/words.js')]);
+      const W = await loadWords(['opening', 'world', 'mining']), w70 = { default: W.world };
+      texts.add(W.opening); texts.add(W.world); texts.add(W.mining); texts.add(A1.TEXT); // (A1.TEXT: the doc's prose lines with no anchor yet, 20 §5.2 W.H.) // (mining: Tauno's seat reads Two Stump and V.'s water, 30 §4.1)
+      // x: begin (the build's drafted lines, docs/story/95-drafted-lines.md: the writers' gaps until they write them)
+      try { const Wx = await loadWords(['drafted']); if (Wx.drafted) texts.add(Wx.drafted); } catch (e) { console.warn('story: the drafted lines', e); }
+      // x: end
+      const seams = window.__game.storySeams || {};
+      beats.attach(story);
+      void RULES_TALK; // (st-t: in the story from its construction, story-data/all-rules.js; never added after attach (chk-coop C2). cast.js still plays t.armed on its own store:enter, guarded by the fact)
+      ambient.use(w70.default).attach({ story, grounded: (t) => npcs.grounded(t) });
+      topics.use({ keeper: A1.KEEPER_TOPICS, floor: A1.FLOOR }).attach({ story, npcs, talk, pencil: seams.pencil || null, outfitter, world, day, profile, hud, beats, ambient });
+      cast.attach({ story, npcs, talk, topics, beats, outfitter, profile, day, world, player, hud, onboarding, inventory, ambient, ridesTruck: truck,
+        truck: () => new Truck({ world, scene, groundAt: (x, z) => tiles.groundAt(x, z), player }) });
+      npcs.addTalkSource((v) => topics.items(v));
+      npcs.extraChoices = npcs.extraChoices || [];
+      npcs.extraChoices.unshift((v) => topics.top(v));
+      const wk = () => `${day.year}:${Math.floor(day.doy / 7)}`;
+      npcs.addPool('word', (c) => { const l = ambient.pick('rumour', { seed: `${c.ep}:${wk()}`, ep: c.ep }); return l ? { id: l.id, text: l.text } : null; });
+      npcs.addPool('remark', (c) => { const l = ambient.pick('bark', { ep: c.ep }); return l ? { id: l.id, text: l.text } : null; });
+      { const kByeT = npcs.kBye.bind(npcs); npcs.kBye = (v, op) => { cast.josieClose(v); return kByeT(v, op); }; }
+      // 20 §5.2 the return's opener: the keeper's hello, the first time inside after night one, is the manner's line (said as
+      // the doc's words: not weighed against the weather as a hello is, it asks after a night already had)
+      { const kST = npcs.keeperSays.bind(npcs); npcs.keeperSays = (ep, words, moment = 'hello') => {
+        const r = moment !== 'goodbye' ? cast.returnHello(ep) : null; if (!r) return kST(ep, words, moment);
+        const own = Object.prototype.hasOwnProperty.call(npcs, 'grounded'), g = npcs.grounded; npcs.grounded = () => true;
+        try { return kST(ep, r, 'return'); } finally { if (own) npcs.grounded = g; else delete npcs.grounded; }
+      }; }
+      talk.pickLake = (o) => (story.ui && typeof story.ui.pickLake === 'function' ? story.ui.pickLake(o) : Promise.resolve(null));
+      rides.roadLine = ({ from, to, way = [], roads = [] }) => ambient.roadLine({ roads, towns: way, eps: [from, to], seed: `${from}:${to}:${day.year}:${day.doy}` });
+      onboarding.p1 = (ep, landing) => cast.p1(ep, landing);
+      connect({ npcs, topics });
+      const updT = outfitter.update.bind(outfitter);
+      outfitter.update = (dt) => { updT(dt); try { cast.update(dt); } catch (e) { if (!cast.warned) { cast.warned = true; console.warn('story T: cast', e); } } };
+      window.__game.storyTalk = { topics, cast, beats, ambient, texts, on: true };
+      console.log('story T: talk & cast');
+    } catch (e) { console.warn('story T: talk & cast', e); }
+  }
+  // /st-t
+  // a2: the mining years (story Round 2, stream A2; docs/story/30-mining-years.md), only under STORY_ON: the arc's things
+  // (mining-items.js), its favours (task-kinds-mining.js), the Kettle day (kettle.js: Tasha, the stations, the creek),
+  // the Farm people, the café and Tauno's ride (mining-cast.js; cast.js hands it his Farm porch after the turn), the
+  // give:item.* is E's handler (its e: block below, the join), and story.debug.fixture('turn') (the end of chapter 1's slice). With
+  // the flag off none of it is fetched
+  if (STORY_ON && story.v === 2 && window.__game.storyTalk) {
+    try {
+      const [MI, { attachMiningTasks }, { kettle }, { miningCast }, { installTurnFixture }] = await Promise.all([
+        import('./mining-items.js'), import('./task-kinds-mining.js'), import('./kettle.js'), import('./mining-cast.js'), import('./story-data/fixtures-a2.js')]);
+      const { topics, cast, texts } = window.__game.storyTalk, sm = window.__game.storySeams || {};
+      const { loadWords } = await import('./story-data/words.js');
+      const Wm = await loadWords(['mining']); texts.add(Wm.mining); // (already in from st-t: adding again keeps the first)
+      MI.defineMiningItems((id) => { const e = texts.entry(id); return e && typeof e.text === 'string' ? e.text : null; });
+      const mtasks = attachMiningTasks({ tasks, layer: sm.layer || null, story, hud });
+      const common = { story, layer: sm.layer || null, scene, actors, pointer, talk, topics, inventory, hud, world, tiles, player, mtasks };
+      kettle.attach(common);
+      miningCast.attach({ ...common, cast, npcs, outfitter, day, rides, profile, pencil: sm.pencil || null, kettle });
+      cast.c.mining = miningCast; // (not cast.attach again: that would hang its story handlers a second time)
+      installTurnFixture(story, { profile, day });
+      const updA2 = outfitter.update.bind(outfitter);
+      outfitter.update = (dt) => { updA2(dt); try { kettle.update(dt); miningCast.update(dt); } catch (e) { if (!miningCast.warned) { miningCast.warned = true; console.warn('story A2: the mining years', e); } } };
+      window.__game.storyMining = { kettle, miningCast, mtasks, items: MI, on: true };
+      console.log('story A2: the mining years');
+    } catch (e) { console.warn('story A2: the mining years', e); }
+  }
+  // /a2
+  // f: begin (story Round 3, stream F; docs/story/50-finale.md §2–§5, §6.9), only under STORY_ON: the far end's glue
+  // (farend.js): the dot's quiet facts, the camp's walls, the hidden carry pencilled as walked, the cellar → the run, the
+  // stashes. The places are story-places.json's (the layer). With the flag off none of it is fetched
+  if (STORY_ON && story.v === 2) {
+    try {
+      const { connect } = await import('./farend.js');
+      const sm = window.__game.storySeams || {};
+      const far = await connect({ story, layer: sm.layer || window.__game.storyLayer, pencil: sm.pencil || null, inventory, hud, player, pointer, tiles, world,
+        guest: () => !!(window.__game.coop && window.__game.coop.guest) });
+      window.__game.storyFar = far;
+      console.log('story F: the far end');
+    } catch (e) { console.warn('story F: the far end', e); }
+  }
+  // f: end
+  // a3: the guiding years (story Round 4, stream A3; docs/story/31-guiding-years.md), only under STORY_ON: Marlys, Hap,
+  // Nate, Sheila and Rick at Moose Lake 25, the bunkhouse and the boathouse loft, bunk 3's night (camp.js RestDial
+  // stopsAt), the squad's night (stream m's storyMech.squadNight), the pages (guiding-items.js). With the flag off none
+  // of it is fetched
+  if (STORY_ON && story.v === 2 && window.__game.storyTalk) {
+    try {
+      const [{ guidingCast }, { loadWords }] = await Promise.all([import('./guiding-cast.js'), import('./story-data/words.js')]);
+      const { topics, cast, texts } = window.__game.storyTalk, sm = window.__game.storySeams || {};
+      const Wg = await loadWords(['guiding']); texts.add(Wg.guiding);
+      guidingCast.attach({ story, cast, npcs, talk, topics, outfitter, player, day, world, scene, tiles, actors, pointer, hud, layer: sm.layer || null, inventory, pencil: sm.pencil || null, camp, energy, fishing, wind, veil, profile, record });
+      const updA3 = outfitter.update.bind(outfitter);
+      outfitter.update = (dt) => { updA3(dt); try { guidingCast.update(dt); } catch (e) { if (!guidingCast.warned) { guidingCast.warned = true; console.warn('story A3: the guiding years', e); } } };
+      window.__game.storyGuiding = { guidingCast, on: true };
+      console.log('story A3: the guiding years');
+    } catch (e) { console.warn('story A3: the guiding years', e); }
+  }
+  // /a3
+  // i: begin (campaign stream i, Round 5: the informant; docs/story/32-the-boys.md §5.10–§5.17), only under STORY_ON: Denny's
+  // cabin and Denny on its porch, the canary (the lake pick, Denny's rings, the watchers at the ringed site, the word at the
+  // counter), the counter lines, the reveal and its three choices, the note (informant-cast.js). With the flag off none of
+  // it is fetched
+  if (STORY_ON && story.v === 2 && window.__game.storyTalk) {
+    try {
+      const [{ informantCast }, { loadWords }] = await Promise.all([import('./informant-cast.js'), import('./story-data/words.js')]);
+      const { topics, cast, texts } = window.__game.storyTalk, sm = window.__game.storySeams || {};
+      const Wi = await loadWords(['boys', 'drafted']); texts.add(Wi.boys); texts.add(Wi.drafted);
+      informantCast.attach({ story, talk, topics, npcs, cast, player, day, world, scene, tiles, actors, pointer, hud, veil, inventory, pencil: sm.pencil || null, profile });
+      const updI = outfitter.update.bind(outfitter);
+      outfitter.update = (dt) => { updI(dt); try { informantCast.update(dt); } catch (e) { if (!informantCast.warned) { informantCast.warned = true; console.warn('story i: the informant', e); } } };
+      window.__game.storyInformant = { informantCast, on: true };
+      console.log('story i: the informant');
+    } catch (e) { console.warn('story i: the informant', e); }
+  }
+  // i: end
+  // e: the episodes (docs/build/campaign-design.md §10, Part 4 Round 2 stream E), only under STORY_ON: the one runner
+  // (episodes.js) with S7 and S9 (and A2's arc at the join), the flyers on the boards (outside the count), the snag on
+  // June's pot (fishing.snags), Rose at Moose Lake 25's window, "Look at this" (show.js), the Stories side of the book,
+  // the families at C1690 and C593 (parties.pinnedFn). With the flag off none of it is fetched or hung
+  if (STORY_ON && story.v === 2) {
+    try {
+      const [{ connect }, { T, SceneRun, texts }, { loadWords }] = await Promise.all([import('./feed-episodes.js'), import('./topics.js'), import('./story-data/words.js')]);
+      const st = window.__game.storyTalk || {};
+      const sm = window.__game.storySeams || {};
+      const E = await connect({ story, layer: sm.layer || window.__game.storyLayer || null, topics: st.topics || null, texts: st.texts || texts, T, SceneRun, loadWords, talk, npcs, scene, fishing, photo, inventory, kit, journal, hud, record, tasks, profile, day, pointer, player, outfitter, parties, wind, world,
+        guest: () => !!(window.__game.coop && window.__game.coop.guest) });
+      window.__game.storyEpisodes = { ...E, on: true };
+      console.log('story E: episodes');
+    } catch (e) { console.warn('story E: episodes', e); }
+  }
+  // /e
+  // n: the endings (story Round 3, stream n; campaign-design §9, Part 3 #5-#6; 50 §7-§12), only under STORY_ON: the dawn
+  // lot (endings.js: the vehicles, Maggie, Dan, Wade, the phone, the bench, the edge; the come-out held for the choice),
+  // the consulting fee on the tally, the postcard, the people's first lines after the paper, the board by ending and
+  // Tasha's sampling, the upcharge, the props by ending. With the flag off none of it is fetched
+  if (STORY_ON && story.v === 2 && window.__game.storyTalk) {
+    try {
+      const [{ endings }, { loadWords }] = await Promise.all([import('./endings.js'), import('./story-data/words.js')]);
+      const { topics, cast, texts, beats } = window.__game.storyTalk;
+      const Wn = await loadWords(['finale', 'company']); texts.add(Wn.finale); texts.add(Wn.company);
+      endings.attach({ story, talk, topics, npcs, cast, outfitter, player, day, world, scene, tiles, actors, pointer, hud, inventory, profile, tasks, camp, beats });
+      const updN = outfitter.update.bind(outfitter);
+      outfitter.update = (dt) => { updN(dt); try { endings.update(dt); } catch (e) { if (!endings.warnedU) { endings.warnedU = true; console.warn('story n: the endings', e); } } };
+      window.__game.storyEndings = endings;
+      console.log('story n: the endings');
+    } catch (e) { console.warn('story n: the endings', e); }
+  }
+  // /n
+  // c: begin (co-op and the story, Round 3 stream C; campaign-design §11, Part 3 calls 1 and 7), only under STORY_ON: the
+  // host's story mirrored to a guest, read-only (the notebook, the Walt page, the stones, the story's people where the host's
+  // stand), host-only topics and pushes, a guest's deeds credited to the host, story items the host's, the pit with no verb
+  // while a friend is in (and N42), no joins while the run is on, the shared night waiting on night one (coop-story.js)
+  if (STORY_ON && story.v === 2 && window.__game.coop) {
+    try {
+      const [{ CoopStory }, { minigames }] = await Promise.all([import('./coop-story.js'), import('./minigames.js')]);
+      const sm = window.__game.storySeams || {}, st = window.__game.storyTalk || {};
+      const cs = new CoopStory(window.__game.coop, { story, layer: sm.layer || window.__game.storyLayer || null, npcs, walt, camp, hud, inventory, minigames, ambient: st.ambient || null, book: window.__game.book || null });
+      const feedNow = () => { const f = (window.__game.storySeams || {}).feed; if (f) { cs.useFeed(f); return true; } return false; };
+      if (!feedNow()) { const iv = setInterval(() => { if (feedNow()) clearInterval(iv); }, 500); setTimeout(() => clearInterval(iv), 60000); }
+      window.__game.coopStory = cs;
+    } catch (e) { console.warn('story C: co-op', e); }
+  }
+  // c: end
+  // m: begin (campaign Round 4, stream m: the mechanics; docs/story/90-game-needs.md §6–7, 31 GY-11, 33 §6.7, 40 §5),
+  // only under STORY_ON: the loose hull and the drift, Swamp it / Let go, the tow line (boats.js), the motorboat actor
+  // (motorboat.js), the rescue-boat ride (rescue.js) and the drift test's night and the canoe adrift (drift-night.js).
+  // window.__game.storyMech = { boats, motorboat, rescue, night, squadNight, adrift }. With the flag off none of it is fetched
+  if (STORY_ON && story.v === 2) {
+    try {
+      const [{ boats }, { motorboat }, { rescue }, { night }] = await Promise.all([import('./boats.js'), import('./motorboat.js'), import('./rescue.js'), import('./drift-night.js')]);
+      const st = window.__game.storyTalk || {};
+      const base = { scene, world, water, wind, player, actors, pointer, day, camera, story, hud, ripples, audio, veil, outfitter, rides, profile, trip, headlamp: lamp };
+      boats.attach(base); motorboat.attach(base);
+      rescue.attach({ ...base, motorboat });
+      night.attach({ ...base, boats, motorboat, texts: st.texts || null });
+      const updM = trip.update.bind(trip);
+      trip.update = (dt) => { updM(dt); try { boats.update(dt); motorboat.update(dt); night.update(dt); } catch (e) { if (!night.warned) { night.warned = true; console.warn('story m: mechanics', e); } } };
+      // Brekke's launch at Farm on Thursdays, moving (a2's still prop until now: mining-cast.js launch(L) asks the actor)
+      const sm2 = window.__game.storyMining, { attachLaunch } = await import('./launch-run.js');
+      const launch = sm2 && sm2.miningCast ? attachLaunch({ miningCast: sm2.miningCast, motorboat, world }) : null;
+      window.__game.storyMech = { boats, motorboat, rescue, night, launch, squadNight: (o) => night.squadNight(o), adrift: (o) => night.adrift(o), on: true };
+      console.log('story m: mechanics');
+    } catch (e) { console.warn('story m: mechanics', e); }
+  }
+  // m: end
+  // 7a: begin (Round 7 stream 7a, docs/story/60-side-stories.md S2, S3, S4), only under STORY_ON, after the e: block: Duane,
+  // Elaine, Kari and Lyle at their counters; the night at two on Big Moose (nightwatch), Fourtown's lights (skywatch) and
+  // the red lens, the howl survey (bearing lines, the ring), wolves, tracks, night prints. With the flag off none of it
+  // is fetched or hung
+  if (STORY_ON && story.v === 2 && window.__game.storyEpisodes) {
+    try {
+      const [{ connect7a }, { T, SceneRun, texts }, { loadWords }] = await Promise.all([import('./feed-side7a.js'), import('./topics.js'), import('./story-data/words.js')]);
+      const st = window.__game.storyTalk || {}, sm = window.__game.storySeams || {};
+      const S7A = await connect7a({ story, layer: sm.layer || window.__game.storyLayer || null, topics: st.topics || null, texts: st.texts || texts, T, SceneRun, loadWords, talk, npcs, scene, photo, inventory, journal, hud, record, tasks, player, parties, wind, world, tiles, camera, camp, lamp, audio, day, pointer, weather, energy, bear,
+        E: window.__game.storyEpisodes, guest: () => !!(window.__game.coop && window.__game.coop.guest) });
+      window.__game.side7a = { ...S7A, on: true };
+      console.log('story 7a: S2, S3, S4');
+    } catch (e) { console.warn('story 7a', e); }
+  }
+  // 7a: end
+  // s: S1 and S8 (campaign stream S, Round 4; docs/story/60-side-stories.md), only under STORY_ON and after E's runner:
+  // Ollie on the Stuart Portage and the loaded carry (minigames/timed-carry.js), Tom Becker's ranger crew and the Ostbys
+  // (parties.js FIXED_PARTIES), the keepers' topics, the sled and the clearing (story-places.json s1.*, s8.*). With the
+  // flag off none of it is fetched
+  if (STORY_ON && story.v === 2 && window.__game.storyEpisodes) {
+    try {
+      const [{ connect: connectSides }, { T, SceneRun, texts }, { loadWords }] = await Promise.all([import('./feed-sides.js'), import('./topics.js'), import('./story-data/words.js')]);
+      const st = window.__game.storyTalk || {}, sm = window.__game.storySeams || {}, E = window.__game.storyEpisodes;
+      const S = await connectSides({ story, layer: sm.layer || window.__game.storyLayer || null, topics: st.topics || null, texts: st.texts || texts, T, SceneRun, loadWords, talk, npcs, actors, tiles, pointer, player, inventory, hud, world, parties, trip,
+        episodes: E.episodes, minigames: E.minigames, guest: () => !!(window.__game.coop && window.__game.coop.guest) });
+      window.__game.storySides = { ...S, on: true };
+      console.log('story S: sides S1, S8');
+    } catch (e) { console.warn('story S: sides', e); }
+  }
+  // /s
+  // 7c: begin (the mini-campaigns M1–M6 on E's runner: feed-minis.js; only under STORY_ON, after E's connect)
+  if (STORY_ON && story.v === 2 && window.__game.storyEpisodes) {
+    try {
+      const [{ connect: connectMinis }, { T, texts }] = await Promise.all([import('./feed-minis.js'), import('./topics.js')]);
+      const st = window.__game.storyTalk || {}, sm = window.__game.storySeams || {}, E = window.__game.storyEpisodes;
+      const M = await connectMinis({ story, episodes: E.episodes, minigames: E.minigames, layer: sm.layer || window.__game.storyLayer || null, topics: st.topics || null, texts: st.texts || texts, T,
+        talk, npcs, scene, photo, tasks, record, profile, day, player, parties, world, hud, trip, camp, bear, lamp, mist, canoe, partyCamps,
+        guest: () => !!(window.__game.coop && window.__game.coop.guest) });
+      window.__game.storyMinis = { ...M, on: true };
+      console.log('story 7c: the mini-campaigns');
+    } catch (e) { console.warn('story 7c: the mini-campaigns', e); }
+  }
+  // 7c: end
+  // p: begin (campaign Round 6, stream p: the company and the press; docs/story/40-company-and-press.md, 30 §4.6, §4.8),
+  // only under STORY_ON: Tauno's call and the fallback callers, the midpoint's three scenes (the camp search, Wade at the
+  // counter, Josie's leech order), Maggie at Hog Creek and the leech-order pad (story.doc.meeting), Dan at the counters (his
+  // card, junk and Leo's lid, the $1,000 offer, "they'd find a number"), Wade at the put-in, the stranger at the far
+  // landing, the watchers' postings drawn as sightings, tier 4's truck, the canoe adrift, Maggie's Little Gabbro note,
+  // Brekke's one conversation on a Thursday. window.__game.storyCompany. With the flag off none of it is fetched
+  if (STORY_ON && story.v === 2 && window.__game.storyTalk) {
+    try {
+      const [{ company }, { watchers }, { loadWords }] = await Promise.all([import('./company.js'), import('./watchers.js'), import('./story-data/words.js')]);
+      const st = window.__game.storyTalk, sm = window.__game.storySeams || {};
+      const Wp = await loadWords(['company', 'mining', 'drafted']); st.texts.add(Wp.company); st.texts.add(Wp.mining); st.texts.add(Wp.drafted);
+      company.attach({ story, talk, topics: st.topics, npcs, cast: st.cast, outfitter, player, day, world, scene, tiles, actors, pointer, hud, inventory, profile, camp, trip,
+        pencil: sm.pencil || null, mining: (window.__game.storyMining || {}).miningCast || null, mech: window.__game.storyMech || null, watchers, wind, texts: st.texts });
+      const updP = outfitter.update.bind(outfitter);
+      outfitter.update = (dt) => { updP(dt); try { company.update(dt); } catch (e) { if (!company.warnedU) { company.warnedU = true; console.warn('story p: the company', e); } } };
+      window.__game.storyCompany = company;
+      console.log('story p: the company and the press');
+    } catch (e) { console.warn('story p: the company', e); }
+  }
+  // p: end
+  // a4: begin (campaign Round 6, stream a4: the family; docs/story/33-family.md), only under STORY_ON: Aili's motel beside
+  // the Little Vermilion store and Aili by her calendar, Jon (the dock, the Sand Point chase on stream m's motorboat), Liisa
+  // and the can, the back porch's climax, Gord on Thursdays, Danielle and the Carp end re-sited on the US side
+  // (docs/story/dlc-quetico.md); family-cast.js. With the flag off none of it is fetched
+  if (STORY_ON && story.v === 2 && window.__game.storyTalk) {
+    try {
+      const [{ familyCast }, { loadWords }] = await Promise.all([import('./family-cast.js'), import('./story-data/words.js')]);
+      const { topics, cast, texts } = window.__game.storyTalk, sm = window.__game.storySeams || {}, mech = window.__game.storyMech || {};
+      const Wf = await loadWords(['family']); texts.add(Wf.family);
+      familyCast.attach({ story, cast, npcs, talk, topics, outfitter, player, day, world, scene, tiles, actors, pointer, hud, layer: sm.layer || null, profile, inventory, pencil: sm.pencil || null, motorboat: mech.motorboat || null, photo, veil, texts, trip, wind });
+      const updA4 = outfitter.update.bind(outfitter);
+      outfitter.update = (dt) => { updA4(dt); try { familyCast.update(dt); } catch (e) { if (!familyCast.warnedU) { familyCast.warnedU = true; console.warn('story a4: the family', e); } } };
+      window.__game.storyFamily = { familyCast, on: true };
+      console.log('story a4: the family');
+    } catch (e) { console.warn('story a4: the family', e); }
+  }
+  // a4: end
+  // 7b: begin (Round 7 stream 7b, docs/story/60-side-stories.md S5, S6), only under STORY_ON, after the e: block: Pete at
+  // Round Lake 51 and the plane on the Kek (the dive, the case, the chart on the wall, the notch from Gull's east bay:
+  // lock 2 key D, lock 3 key D), Orrin at Little Vermilion 12 and the whiskey road (the Beatty's carving, the cut line,
+  // the pit opened plank by plank: lock 6 key C), René's and Leon's words. With the flag off none of it is fetched or hung
+  if (STORY_ON && story.v === 2 && window.__game.storyEpisodes) {
+    try {
+      const [{ connect7b }, { T, SceneRun, texts }, { loadWords }] = await Promise.all([import('./feed-side7b.js'), import('./topics.js'), import('./story-data/words.js')]);
+      const st = window.__game.storyTalk || {}, sm = window.__game.storySeams || {};
+      const S7B = await connect7b({ story, layer: sm.layer || window.__game.storyLayer || null, topics: st.topics || null, texts: st.texts || texts, T, SceneRun, loadWords, talk, npcs, scene, inventory, hud, record, player, wind, world, tiles, camera, lamp, audio, day, pointer, weather, energy, input,
+        E: window.__game.storyEpisodes, guest: () => !!(window.__game.coop && window.__game.coop.guest) });
+      window.__game.side7b = { ...S7B, on: true };
+      console.log('story 7b: S5, S6');
+    } catch (e) { console.warn('story 7b', e); }
+  }
+  // 7b: end
+  // g: begin — the end games after the endings (story wave 2, stream g; campaign-design Part 3 #5-#6), only under
+  // STORY_ON: the owners' secret missions after the journalist ending (the keepers' talk, the giant fish's bite rule, the
+  // finds at real places, the photos) and, after the money ending, each owner's one small ask that brings their prices
+  // back (owner.<ep>.softened, read by n's shop.storyMul). With the flag off none of it is fetched
+  if (STORY_ON && story.v === 2 && window.__game.storyTalk) {
+    try {
+      const { endgames } = await import('./endgames.js');
+      const { topics, texts } = window.__game.storyTalk;
+      const E = window.__game.storyEpisodes || {};
+      endgames.attach({ story, npcs, topics, texts, tasks, profile, inventory, fishing, photo, pointer, scene, tiles, world, hud, kit, day, outfitter, player, episodes: E.episodes || null,
+        guest: () => !!(window.__game.coop && window.__game.coop.guest) });
+      const updG = outfitter.update.bind(outfitter);
+      outfitter.update = (dt) => { updG(dt); try { endgames.update(dt); } catch (e) { if (!endgames.warnedU) { endgames.warnedU = true; console.warn('story g: the end games', e); } } };
+      window.__game.storyEndgames = endgames;
+      console.log('story g: the end games');
+    } catch (e) { console.warn('story g: the end games', e); }
+  }
+  // g: end
+  // b5: begin (campaign Round 5, the boys; docs/story/32-the-boys.md), only under STORY_ON: the boys' things
+  // (boys-items.js), the people at Sawbill 38 and Frank at Farm 31, the yard, the camp at Little Sag, the laker bet, the
+  // slides, Gene's slide held up against the view (the silhouette minigame on E's registry), the fixed party (parties.js
+  // FIXED_PARTIES), Frank in the lot on a late drive. With the flag off none of it is fetched
+  if (STORY_ON && story.v === 2 && window.__game.storyTalk) {
+    try {
+      const [BI, { boysCast }, { loadWords }] = await Promise.all([import('./boys-items.js'), import('./boys-cast.js'), import('./story-data/words.js')]);
+      const { topics, cast, texts } = window.__game.storyTalk, sm = window.__game.storySeams || {}, E = window.__game.storyEpisodes || {};
+      const Wb = await loadWords(['boys', 'drafted']); if (Wb.boys) texts.add(Wb.boys); if (Wb.drafted) texts.add(Wb.drafted);
+      BI.defineBoysItems((id) => { const e = texts.entry(id); return e && typeof e.text === 'string' ? e.text : null; });
+      boysCast.attach({ story, cast, npcs, talk, topics, texts, outfitter, player, day, world, scene, tiles, rides, actors, pointer, hud, layer: sm.layer || null,
+        profile, inventory, pencil: sm.pencil || null, permits: window.__game.permits || null, fishing, photo, fires, parties, partyCamps, wind,
+        minigames: E.minigames || null, show: E.show || null });
+      const updB5 = outfitter.update.bind(outfitter);
+      outfitter.update = (dt) => { updB5(dt); try { boysCast.update(dt); } catch (e) { if (!boysCast.warned) { boysCast.warned = true; console.warn('story b5: the boys', e); } } };
+      window.__game.storyBoys = { boysCast, items: BI, on: true };
+      console.log('story b5: the boys');
+    } catch (e) { console.warn('story b5: the boys', e); }
+  }
+  // b5: end
   // gl-d: the trip-end tally and the board (the game-loop round, stream D; docs/build/game-loop-brief.md). Pay lands on
   // the trip's card as it counts up (record.js ended → tasks.settle), never at the board; no cap on notices held
   // (the owner's call 2026-11-05), each with a deadline that fits it; the new kinds (task-kinds-2.js: creel, campsite, beaver, iceout, colour,
@@ -1346,6 +1748,28 @@ async function main() {
     trip.update = (dt) => { tu(dt); try { seasonTurn.update(dt); } catch (e) { if (!seasonTurn.warnedU) { seasonTurn.warnedU = true; console.warn('seasonTurn', e); } } };
     window.__game.seasonTurn = seasonTurn;
   }
+  // r: begin — the run (story Round 3, stream R; docs/story/50-finale.md §5.3–§6.15, campaign-design §8.3–§8.5), only
+  // under STORY_ON: run.js (the run state, story.allows' rule, the scanner, the tie-off, the arrival), stealth.js (the
+  // detection table), checkpoint.js (story-cp: write from a good state, the reset behind a fade), watchers.js (the
+  // postings and the night's four), the cans and the scanner (run-items.js). Its hooks in shared modules (player.placeAt,
+  // energy.rewindTo, kv.frozenTest, trip.runHook, headlamp.setLens, story.allows in camp/nearby/inv-ui/tarp/fire) do
+  // nothing with the flag off.
+  if (STORY_ON && story.v === 2) {
+    try {
+      const [{ run }, { minigames }, { RestDial }, { isSeasonKey, save: saveRun }, W] = await Promise.all([
+        import('./run.js'), import('./minigames.js'), import('./camp.js'), import('./save.js'), import('./story-data/words.js')]);
+      await W.loadText();
+      run.attach({ story, player, canoe, chase, day, energy, inventory, trip, explored, tripStats, veil, hud, headlamp: lamp, world, tiles, actors, scene,
+        pointer, permits: window.__game.permits || null, hints, camp, minigames, seasonTurn: window.__game.seasonTurn || null, saver, mist, moon, wind, loons, outfitter,
+        kv, save: saveRun, isSeasonKey, text: (id) => W.say(id), textEntry: (id) => W.text(id), RestDial, audio, dialogue: talk,
+        get book() { return window.__game.book || null; } });
+      const updR = outfitter.update.bind(outfitter);
+      outfitter.update = (dt) => { updR(dt); try { run.update(dt); } catch (e) { if (!run.warned) { run.warned = true; console.warn('story R: the run', e); } } };
+      window.__game.storyRun = run;
+      console.log('story R: the run');
+    } catch (e) { console.warn('story R: the run', e); }
+  }
+  // r: end
 
   window.__game.siteFeature = siteFeature; // (scripts/r2-starter-routes.mjs: a site's kind of shore)
   console.log(`BWCA Canoe ready: ${world.meta.grid.ntx * world.meta.grid.nty} tiles in the index, ${world.portages.length} portages, ${world.campsites.length} campsites, ${world.entryPoints.length} entry points`);

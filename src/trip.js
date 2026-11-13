@@ -34,7 +34,7 @@
 //   trip.state.since { year, doy, hours }, trip.state.from (the push-off's entry point), trip.state.packs { count, canoe, foodDays }, trip.log(kind, data),
 //   trip.on(kind, fn) → off, trip.start(f), trip.comeIn(ep), trip.takeBack(), trip.evacuate(why),
 //   trip.nearestKnownOutfitter(x, z), trip.state.permit, trip.state.dayUse, trip.permits (permits.js, set by main.js)
-//   kinds: 'start' (the season's first push-off: the needs fresh, main.js) 'leave' (a later one) 'lake' 'portage'
+//   kinds: 'start' (the season's first push-off: the needs fresh, main.js) 'leave' (a later one) 'lake' 'portage' ({ name, rods }, and i under STORY_ON)
 //   'camp' 'sleep' 'capsize' 'offsite' 'bunk' 'ride' 'known' 'evac' 'exit' 'permit' (bought, granted or used) 'fine'
 //   'skip' (the bunkhouse until a permit's day)
 import { kv } from './store.js'; // the saves' store (IndexedDB, read into memory before the boot)
@@ -42,6 +42,7 @@ import { save } from './save.js';
 import { plural } from './hud.js';
 import { clockOf } from './pace.js';
 import { nearWords } from './outfitters.js'; // round 2: an outfitter is near an entry point, not one by number
+import { STORY_ON } from './story-flag.js'; // (story K1b: the portage log's index, behind the flag)
 
 const DOC_KEY = 'bwca-canoe-trip';  // the outfitter's document
 const BOOK = 'logbook';             // save.js namespace
@@ -266,6 +267,7 @@ export class Trip {
   // fee (the late season's rescue off the ice, season-turn.js): already paid, said in the card
   evacuate(why = 'food', { fee = 0 } = {}) {
     if (!this.adventure || !this.active || this.evacuating) return false;
+    if (this.runHook && !fee && this.runHook('evac', why)) return true; // r: the run resets to its checkpoint instead (STORY_ON only: run.js sets runHook)
     this.evacuating = true;
     const o = this.outfitter, w = this.world;
     const to = this.nearestKnownOutfitter();
@@ -297,6 +299,7 @@ export class Trip {
 
   // --- a capsize: the cost in Adventure ------------------------------------------------------------------
   capsize() {
+    if (this.runHook && this.runHook('capsize')) return; // r: a swamping on the run resets to the checkpoint (run.js, STORY_ON)
     this.log('capsize');
     if (!this.adventure) return;
     const cold = (this.day.season && this.day.season.waterTemp != null ? this.day.season.waterTemp : 15) < 12, en = this.energy;
@@ -361,7 +364,9 @@ export class Trip {
       if (st.carried) this.lastTrail = st.carried;
       if (st.portages > this.lastPortages && this.lastTrail) {
         const t = this.lastTrail, l = t.def && t.def.launch[0]; // by place: several trails share a name ("Kawishiwi River – Kawishiwi River")
-        this.log('portage', { name: t.name, rods: t.rods });
+        // (story K1b, under STORY_ON: the index into world.portages too, since names repeat; the back cover's rods key on
+        // it. -1 for a trail not in world.portages. With the flag off the entry is main's)
+        this.log('portage', STORY_ON ? { i: t.def ? w.portages.indexOf(t.def) : -1, name: t.name, rods: t.rods } : { name: t.name, rods: t.rods });
         this.seen('portages', l ? `${Math.round(l.x)}:${Math.round(l.z)}` : t.name);
       }
       this.lastPortages = st.portages;

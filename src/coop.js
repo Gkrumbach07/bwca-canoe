@@ -25,7 +25,7 @@
 //          (pace.js CLOCK) and nothing a player does skips it: a guest's Sandbox clock keys are locked, and in a room
 //          the pause card no longer stops the clock (title.js open).
 //
-//   const coop = new Coop({ player, canoe, actors, day, title, trip, outfitter, profile, packs, hud, camera, world })
+//   const coop = new Coop({ player, canoe, actors, day, title, trip, outfitter, profile, packs, hud, camera, world, story })
 //   coop.update(dt)   every frame, before the actors' own update (main.js wraps actors.update)
 //   coop.invite({ name, shirt }) → Promise<code> · coop.join(code, { name, shirt }) → Promise · coop.leave()
 //   coop.role ('host' | 'guest' | null) · coop.code · coop.live · coop.stats() (for the console and the tests)
@@ -360,6 +360,7 @@ export class Coop {
   async enterAsGuest(w) {
     const g = this.g, { title, trip, outfitter, player, day } = g;
     kv.freeze((k) => k !== VISITOR_KEY);
+    if (g.story && typeof g.story.setMode === 'function') g.story.setMode('mirror'); // k1a: a guest's own story never moves (Part 3 call 7; v2 only)
     const host = (w.peers || []).find((p) => p.host);
     this.hostName = host ? host.name : 'your friend';
     this.visitor.visit = { code: this.code, host: host ? clean(host.name) : '', at: Date.now() }; writeVisitor(this.visitor); // (phase 3: Rejoin)
@@ -524,6 +525,8 @@ export class Coop {
     let hours = c.hours + (running ? lag * hps : 0), doy = c.doy, year = c.year;
     if (hours >= 24) { hours -= 24; doy++; }
     const sameDay = year === day.year && doy === day.doy;
+    // the host turned the year (season-turn.js follow): the guest's own winter card, the clock taken in its dark
+    if (!force && !sameDay && this.role === 'guest') { const ST = this.g.seasonTurn || (typeof window !== 'undefined' && window.__game ? window.__game.seasonTurn : null); if (ST && typeof ST.follow === 'function' && ST.follow({ year, doy, hours })) return; }
     const diffH = sameDay ? hours - day.hours : Infinity;
     this.clockErr = sameDay && hps > 0 ? diffH / hps : null; // in real seconds: + the guest is behind
     if (force || !sameDay || Math.abs(diffH) / Math.max(hps, 1e-9) > QUIET_S) {

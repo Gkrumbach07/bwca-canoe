@@ -376,7 +376,7 @@ registerKind('survey', {
   make(T, c) {
     const w = T.world, L = c.landing, [h0, h1] = BAND_HOPS.survey[c.band];
     let cands = [];
-    w.portages.forEach((p, i) => {
+    w.portagesPublic().forEach((p, i) => {
       if (p.rods < 15 || T.used('survey', i)) return;
       const d = Math.hypot(p.pts[0][0] - L.x, p.pts[0][1] - L.z);
       if (d > rangeOf(c.band)) return;
@@ -456,7 +456,7 @@ export class Tasks {
   held() { return this.active; }
   daysFor(t) { return KIND_DAYS[t && t.kind] ?? DAYS_ELSE; }
   // the last day a notice may be done on (its taken day + its kind's days)
-  dueOf(t) { if (!t) return null; if (!Number.isFinite(t.due)) t.due = (Number.isFinite(t.taken) ? t.taken : this.today()) + this.daysFor(t); return t.due; }
+  dueOf(t) { if (!t || t.noDue) return null; if (!Number.isFinite(t.due)) t.due = (Number.isFinite(t.taken) ? t.taken : this.today()) + this.daysFor(t); return t.due; }
   daysLeft(t) { const d = this.dueOf(t); return d == null ? null : d - this.today(); }
   // a co-op guest mirrors the host's notices: the host keeps their deadlines and their pay
   get mirror() { const g = typeof window !== 'undefined' ? window.__game : null, c = g && g.coopTrip; return !!(c && c.mirroring); }
@@ -467,7 +467,7 @@ export class Tasks {
     const gone = [];
     for (const t of this.active) {
       if (t.status !== 'open') continue;
-      if (this.dueOf(t) >= today) continue;
+      const due = this.dueOf(t); if (due == null || due >= today) continue; // (chk-c2a: a favour asked in talk with no deadline, t.noDue, never expires)
       gone.push(t);
     }
     for (const t of gone) {
@@ -624,7 +624,7 @@ export class Tasks {
     if (this._graph) return this._graph;
     const adj = new Map();
     const add = (a, b, i, end) => { if (!adj.has(a)) adj.set(a, []); adj.get(a).push({ to: b, portage: i, end }); };
-    this.world.portages.forEach((p, i) => {
+    this.world.portagesPublic().forEach((p, i) => {
       const a = this.basinOf(p.launch[0].lake), b = this.basinOf(p.launch[1].lake);
       if (a < 0 || b < 0) return;
       add(a, b, i, 0); add(b, a, i, 1);
@@ -791,8 +791,23 @@ export class Tasks {
       this.changed();
     }
     if (b.pending.length && !this.filling.has(ep)) this.write(ep);
-    return b.slots.map((id) => (id == null ? null : this.ads.get(id) || null));
+    return this.boardFilter(b.slots.map((id) => (id == null ? null : this.ads.get(id) || null)), ep); // (e: boardFilter, a pass-through)
   }
+  // e: Round 2 stream E (docs/build/campaign-design.md §10.2 "Doors"). The board's two story hooks, both inert with the
+  // flag off (nothing sets them):
+  //   flyerHook  { flyers(ep) → [{ id, paper, taken }], take(id) → bool } (episodes.js, through feed-episodes.js): a story
+  //              flyer pinned as paper beside the four pins, NEVER in the board's count (SLOTS), with no deadline, never
+  //              paid at the tally (it is not a notice: nothing of it is in this.ads or this.active), up until its window
+  //              closes; "Take it on" is flyer:<id> (act)
+  //   boardFilterFn (slots, ep) → slots: Round 3's N (the notices a story state keeps off a board); a pass-through until
+  flyers(ep) { const H = this.flyerHook; if (!H || typeof H.flyers !== 'function') return []; try { return H.flyers(ep) || []; } catch (e) { console.warn('the board: flyers', e); return []; } }
+  boardFilter(slots, ep) { const F = this.boardFilterFn; if (typeof F !== 'function') return slots; try { return F(slots, ep) || slots; } catch (e) { console.warn('the board: filter', e); return slots; } }
+  flyerPin(f, where, ep) {
+    if (f.taken) return `<article class="pin torn flyer" data-flyer="${esc(f.id)}"><i class="tack" aria-hidden="true"></i><i class="scrap" style="--scrap:${SCRAP[flyerStyle(f.paper)] || SCRAP.notice}" aria-hidden="true"></i><p>Torn off.</p></article>`;
+    return `<article class="pin flyer" data-flyer="${esc(f.id)}"><i class="tack" aria-hidden="true"></i>${flyerHtml(f.paper, { where, ep })}
+      <div class="pin-foot"><span class="pin-band"></span><button type="button" class="stamp" data-act="task" data-id="flyer:${esc(f.id)}">Take it on</button></div></article>`;
+  }
+  // /e
   // the day's change on one board: which pin gets a new notice
   changeOne(b) {
     let i = b.slots.findIndex((id, k) => id == null && !b.pending.includes(k));
@@ -1013,6 +1028,7 @@ export class Tasks {
   act(spec, ep) {
     const [verb, id] = String(spec).split(':');
     let r;
+    if (verb === 'flyer') { const H = this.flyerHook; r = H && typeof H.take === 'function' ? H.take(String(spec).slice(6)) : false; this.boardChanged(); return r; } // e:
     if (verb === 'take') r = this.take(id);
     else if (verb === 'drop') r = this.drop(id);
     else if (verb === 'claim') r = this.claim(id, ep);
@@ -1126,14 +1142,16 @@ export class Tasks {
     const onPins = new Set(slots.filter(Boolean).map((t) => t.id));
     // the pile: every notice on the go that this counter pays, torn off its pins or asked of you here in person
     // (npcs.js: theirs to pay, or this counter's); the finished ones on top, then the oldest taken first
-    const pile = this.active.filter((t) => t.from === ep)
+    const pile = this.active.filter((t) => t.from === ep && !(KINDS[t.kind] && KINDS[t.kind].story)) // (the story's favours asked in talk: the journal's only)
       .sort((a, b) => (a.status === 'done' ? 0 : 1) - (b.status === 'done' ? 0 : 1) || (a.taken || 0) - (b.taken || 0) || a.id - b.id);
     const ready = pile.filter((t) => t.status === 'done'), offered = slots.filter((t) => t && t.status === 'offered').length;
     const full = slots.every((t) => t && t.status !== 'offered'); // (every pin a torn scrap of yours: nothing new goes up until one is paid, the playthrough)
     const sum = offered ? `${word(offered)} on offer · a new notice each morning` : writing ? 'the keeper is pinning up notices' : full ? 'every notice taken · new ones once these are paid' : 'a new notice each morning';
     const pileSum = pile.length ? [pile.length - ready.length ? `${word(pile.length - ready.length)} on the go` : '', ready.length ? `${word(ready.length)} done` : ''].filter(Boolean).join(' · ') : '';
     // (gl-d: no Claim all: a notice done is paid when you come in, on the trip's tally)
-    const pins = slots.map((t, i) => this.notice(t, i, ep, writing, where)).join('');
+    // (e: a story flyer: outside the count. The final pass: one up goes first, above the fold, a torn one after the pins)
+    const fl = this.flyers(ep), flyer = (f) => this.flyerPin(f, where, ep);
+    const pins = fl.filter((f) => !f.taken).map(flyer).join('') + slots.map((t, i) => this.notice(t, i, ep, writing, where)).join('') + fl.filter((f) => f.taken).map(flyer).join('');
     const cards = pile.map((t, i) => this.pileCard(t, i, ep, where, onPins.has(t.id))).join('');
     return `<section class="board cork two" aria-label="The board">
       <div class="bd-cork"><div class="top"><h3 id="board-h">The board</h3><span class="sum">${sum}</span></div>

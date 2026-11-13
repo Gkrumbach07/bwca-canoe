@@ -349,10 +349,12 @@ and one truck draw call while it is in view. Load cost: two small tables in `src
   1.5 km circles) do not warn: that is where trips start. Past that band, the warning.
 - **The roads go in** (option B: the last stretch of real OSM roads as ribbons with the truck).
 - **The map past the edge is only slightly faded,** never so faded you can't read it; roads and town names on it.
-- The other calls take the recommendation unless they would restrict movement: Quetico is **open, with the same
-  persistent kind of notice** when you cross without a Quetico permit (camping there without one is a ticket, as the
-  ticket design). Lots joined by the road corridor; trailhead lots at the real road end; Trout Lake stays a boat-in
-  lodge; Bog Lake and Moose River North stores move to their road ends; campsites past the band dropped from maps and
+- **Quetico is DLC for now (owner, 2026-11-08):** it is out of bounds like every other area past the edge: you can
+  cross into it, and the same persistent "You have left the Boundary Waters" notice shows until you are back. No
+  Quetico permit, no Quetico ticket, no Quetico campsites in the base game.
+- The other calls take the recommendation unless they would restrict movement: lots joined by the road corridor;
+  trailhead lots at the real road end; Trout Lake stays a boat-in lodge; Bog Lake and Moose River North stores move to
+  their road ends; campsites past the band dropped from maps and
   parties; a few cabins at the edge.
 
 ## Owner calls
@@ -391,6 +393,9 @@ and one truck draw call while it is in view. Load cost: two small tables in `src
 - Not in this proposal: the starting-weather and starter-route ideas in the same message (their own streams).
 
 ## As built: streams E1 + E2 (2026-11-08, branch claude/edge-roads)
+
+*(The Quetico permit, ticket and own notice below were superseded by the owner's later call the same day: Quetico is
+DLC, out of bounds like any land past the edge; `edge.js` remapQuetico reads its cells as out.)*
 
 - **The table.** `scripts/edge-osm.mjs` (OSM roads and towns from the Geofabrik extracts, Quetico relation 14520069 from
   Overpass, into `data-cache/edge`) and `scripts/edge.mjs` (run on a host: it reads the release's tiles for the water)

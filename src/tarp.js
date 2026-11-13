@@ -489,6 +489,7 @@ export class Tarp {
   // no checklist (the spot says what is missing once the ghost is out)
   verb(c, e) {
     const label = 'Pitch the tarp', none = () => {};
+    if (typeof window !== 'undefined' && window.__game && window.__game.story && typeof window.__game.story.allows === 'function' && window.__game.story.allows('tarp') === false) return { enabled: false, hidden: true, label, why: null, needs: [], next: null, run: none }; // r: no tarp on the run
     if (!e || e.id !== 'tarp') return { enabled: false, label, why: 'Not a tarp', needs: [], next: null, run: none };
     const stop = this.blocked(e.uid);
     if (stop) return { enabled: false, label, why: stop, needs: [], next: stop === 'Not in the outfitter’s yard' ? 'Pitch it at a campsite or a landing out on the lakes' : null, run: none };

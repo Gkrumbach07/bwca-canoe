@@ -148,6 +148,7 @@ export class Outfitter {
     this.keeperVoice = true;         // the header speaks in the keeper's own words (stream C's fallback steps aside)
     this.people = null;              // hubs 3C: npcs.js, the people in the store; a visitor you face takes E from the hotspot (people.claimsE)
     if (trip) trip.outfitter = this;
+    this.handlers = new Map();       // story K1b: on('store:enter' | 'walkout', fn) → off (story-feed's outfitter adapter)
     // the game-loop round: the landings are the outfitters' only (fourteen); every entry point is an entry, the others
     // trailheads (a lot, a permit box, the sign: trailhead.js), each with the outfitter that serves it (host)
     this.entries = world.entryPoints.map((ep) => {
@@ -415,6 +416,7 @@ export class Outfitter {
     this.setDown(T, e);
     if (a.why === 'ride' && this.truck) this.truck.leave(e.ep); // stream E3: the truck in the lot, then off down the road (truck.js)
     // (round 2: a portage-first start: the canoe off the roof in the lot, the carry from its edge; a boat drop at a portage)
+    if (a.with) return; // (a2: a ride with a person, rides.rideWith: their scene says the rest, not the truck's note)
     const o = T.open, carry = o ? `the ${o.posted || o.rods}-rod portage` : 'the portage', far = o && o.i != null && this.world.portages[o.i] ? this.world.portages[o.i].launch[o.end] : null, toLake = far ? this.world.lakeName(far.lake) : null;
     if (a.why === 'ride' && T.water && T.water.dry && T.drop === 'boat') this.hud.note(`The outfitter's boat leaves you at the start of ${carry}${toLake ? ` to ${toLake}` : ''}. The canoe is on the shore: Q on it to shoulder it.`, 7);
     else if (a.why === 'ride' && T.water && T.water.dry) this.hud.note(`The truck leaves you in the lot at ${e.name}: the canoe off the roof. ${carry[0].toUpperCase() + carry.slice(1)}${toLake ? ` to ${toLake}` : ''} starts at the sign.`, 7);
@@ -453,7 +455,16 @@ export class Outfitter {
     const inside = !!L.inside(p.x, p.z);
     if (inside !== v.inside) { v.inside = inside; if (inside) this.enterStore(v); else this.leaveStore(v); }
   }
+  // story K1b: listeners for the store's door. 'store:enter' { ep } over the threshold, 'walkout' { ep } back out of it
+  // (Tauno's trigger). Fired on every co-op client; story-feed drops them on a guest
+  on(kind, fn) {
+    if (!this.handlers.has(kind)) this.handlers.set(kind, new Set());
+    this.handlers.get(kind).add(fn);
+    return () => this.handlers.get(kind).delete(fn);
+  }
+  emit(kind, data = {}) { for (const fn of this.handlers.get(kind) || []) { try { fn(data, this); } catch (e) { console.warn('outfitter.on', kind, e); } } }
   enterStore(v) {
+    this.emit('store:enter', { ep: v.ep });
     const ch = this.player.chase;
     if (ch && ch.mode !== 'first' && !ch.roomAware) { v.switched = true; ch.setMode('first'); }
     const d = this.day, today = `${d.year}-${d.doy}`;
@@ -474,6 +485,7 @@ export class Outfitter {
     }
   }
   leaveStore(v) {
+    this.emit('walkout', { ep: v.ep });
     const ch = this.player.chase;
     if (v.switched && ch && ch.mode === 'first') ch.setMode('third');
     v.switched = false;
@@ -499,6 +511,10 @@ export class Outfitter {
       // dock or a trailhead's landing it is only your port
       const h = this.entryHere(p.x, p.z);
       if (h) {
+        // n: begin — the dawn lot (story Round 3, endings.js): while the run's lot is staged (or the cans are on you), the
+        // come-out waits for the choice; endings.js comes in here itself after it. Nothing sets storyHold with the flag off
+        if (t.active && h.out && typeof this.storyHold === 'function' && this.storyHold(h.e.ep)) { this.port = h.e; this.portWalked = walking; return; }
+        // n: end
         if (t.active && h.out) { if (t.away || h.e.ep !== t.ep) this.comeIn(h.e); else this.takeBack(h.e); }
         this.port = h.e;
       }

@@ -706,6 +706,10 @@ class Boat {
     R.rotation.set(0, this.heading, 0); R.rotateZ(-this.pitch); R.rotateX(this.roll);
     // co-op phase 3: a friend's capsized canoe, upside down and low in the water beside them (canoe.js poseSwim's hull)
     if (this.over) { R.position.y -= FLOAT_OFFSET + 0.25; R.rotateX(Math.PI); }
+    // m: begin (a swamped loose hull, boats.js: low in the water with a list; unset on every other boat)
+    if (this.sink) R.position.y -= this.sink;
+    if (this.list) R.rotateX(this.list);
+    // m: end
     R.updateMatrix();
   }
   // the crew's pose (each drawn one): kneeling at their seats, the stroke from poses.js on the boat's phase, the stern
@@ -999,7 +1003,7 @@ export class Actors {
       return { key: b.key, from: path[0].map(Math.round), to: path[1].map(Math.round), m: Math.round(Math.hypot(path[1][0] - path[0][0], path[1][1] - path[0][1])) };
     });
     // the carry: from the Lake One end; the canoes first, the packs a little behind
-    const q = (w.portages || []).find((t) => /^Lake One\s*[–-]\s*Kawishiwi River$/.test(t.name || ''));
+    const q = w.portagesPublic().find((t) => /^Lake One\s*[–-]\s*Kawishiwi River$/.test(t.name || ''));
     if (q) {
       let pts = trailOf(q);
       const l1 = q.launch.find((l) => /lake one/i.test(w.lakeName ? w.lakeName(l.lake) || '' : '')) || q.launch[0];
