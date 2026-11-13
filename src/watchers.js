@@ -266,6 +266,7 @@ export class Watchers {
     const y = (this.c.world && this.c.world.levelAt ? this.c.world.levelAt(w.x, w.z, 12) : 0) + (w.foot ? 1.5 : 0.9);
     const L = w.coneLen || 150, R = Math.tan(w.coneHalf || 0.22) * L;
     m.position.set(w.x, y, w.z); m.scale.set(L, R, R); m.rotation.set(0, -w.cone, -0.03);
+    if (m.material.uniforms && m.material.uniforms.uWater) m.material.uniforms.uWater.value = y - (w.foot ? 1.5 : 0.9); // (ux: the water under the lamp)
     m.userData.dot.position.set(w.x, y, w.z);
   }
   undraw(w) {
@@ -280,24 +281,28 @@ export class Watchers {
 // fainter far from the eye and faint when you look straight down it from inside.
 function beamMaterial() {
   return new THREE.ShaderMaterial({
-    uniforms: { uColor: { value: new THREE.Color(0xfff2d8) }, uLevel: { value: 0.11 } },
+    uniforms: { uColor: { value: new THREE.Color(0xfff2d8) }, uLevel: { value: 0.2 }, uWater: { value: 0 } },
     vertexShader: `
-      varying float vAlong; varying vec3 vN; varying vec3 vV; varying float vDist;
+      varying float vAlong; varying vec3 vN; varying vec3 vV; varying float vDist; varying float vY;
       void main() {
         vAlong = position.x; // 0 at the lamp, 1 at the far end (the cone's geometry, before its scale)
-        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vec4 wp = modelMatrix * vec4(position, 1.0); vY = wp.y;
         vN = normalize(mat3(modelMatrix) * normal);
         vec3 toEye = cameraPosition - wp.xyz; vDist = length(toEye); vV = toEye / max(vDist, 1e-3);
         gl_Position = projectionMatrix * viewMatrix * wp;
       }`,
     fragmentShader: `
-      uniform vec3 uColor; uniform float uLevel;
-      varying float vAlong; varying vec3 vN; varying vec3 vV; varying float vDist;
+      uniform vec3 uColor; uniform float uLevel; uniform float uWater;
+      varying float vAlong; varying vec3 vN; varying vec3 vV; varying float vDist; varying float vY;
       void main() {
-        float along = pow(clamp(1.0 - vAlong, 0.0, 1.0), 2.2) * smoothstep(0.0, 0.03, vAlong);
-        float side = pow(abs(dot(normalize(vN), normalize(vV))), 1.6);
+        float along = pow(clamp(1.0 - vAlong, 0.0, 1.0), 1.6) * smoothstep(0.0, 0.03, vAlong);
+        float side = pow(abs(dot(normalize(vN), normalize(vV))), 0.9);
         float far = 1.0 - smoothstep(80.0, 600.0, vDist);
-        float a = uLevel * along * side * (0.35 + 0.65 * far);
+        // no hard line where the cone runs under the water: it thins out over the last couple of metres above it; and
+        // the faces right by you (the beam swept over you) fade, so it is a glow round you, not a sheet over the view
+        float water = smoothstep(uWater + 0.05, uWater + 2.2, vY);
+        float near = smoothstep(2.0, 22.0, vDist);
+        float a = uLevel * along * side * water * near * (0.35 + 0.65 * far);
         gl_FragColor = vec4(uColor * a, 1.0);
       }`,
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
