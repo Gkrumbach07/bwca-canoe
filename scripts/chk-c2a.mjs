@@ -147,8 +147,8 @@ const WHERE = (key) => {
   return { key, pose: f.spec && f.spec.pose, slot: v.slot ? v.slot.id || v.slot.at : v.at || null, y: +f.y.toFixed(2), floorY: S.floorY, seats: (S.seats || []).map(d), door: d(S.door), rel, doorRel: dr, cafe };
 };
 // (the final pass) a framed shot for the contact sheet: fn(page) places the view, then the shot as C-<name>
-async function cshot(page, name, fn) {
-  try { await page.evaluate(fn); await page.evaluate(() => window.__L.step(10)); await page.waitForTimeout(500); await page.screenshot({ path: path.join(SHOTS, `C-${name}.png`) }); } catch (e) { log(`contact ${name} threw`, String(e).slice(0, 300)); }
+async function cshot(page, name, fn, wait = 500) {
+  try { await page.evaluate(fn); await page.evaluate(() => window.__L.step(10)); await page.waitForTimeout(wait); await page.screenshot({ path: path.join(SHOTS, `C-${name}.png`) }); } catch (e) { log(`contact ${name} threw`, String(e).slice(0, 300)); }
 }
 let lookN = 0;
 async function look(page, name, { book = null } = {}) {
@@ -344,7 +344,7 @@ async function seasonA() {
   const card = await A.evaluate(() => { const g = window.__game; return { paper: g.hud.paper, text: [...document.querySelectorAll('.tripcard, #tripcard, .record-card, [class*=tripcard]')].map((e) => e.innerText).join('\n').slice(0, 2500) }; });
   log('the trip card', JSON.stringify({ m5, m5b, card }).slice(0, 3000));
   if (m5b - m5 !== 75) note('broken', 'A5 tally', `the purse moved by $${m5b - m5} over the Kettle trip's end, not $75 ($35 Tasha + $40 Len)`, { m5, m5b });
-  await cshot(A, 'tally', () => { const g = window.__game, R = g.record, t = R && R.s && R.s.trips[R.s.trips.length - 1]; if (t) R.show(t.id); });
+  await cshot(A, 'tally', () => { const g = window.__game, R = g.record, t = R && R.s && R.s.trips[R.s.trips.length - 1]; if (t) R.show(t.id); }, 5000); // (the tally's lines come in one by one)
   await A.evaluate(() => { const g = window.__game; if (g.record && g.record.shown) g.record.close(); window.__L.step(3); });
   await look(A, 'A5-tripcard');
   await dismissPapers(A);

@@ -275,9 +275,9 @@ export const steps = [
     // (the final pass: the contact sheet's Tasha at the tailgate, framed from 6 m in a light rain; only with a shots dir;
     // the weather released and the stand put back before the talk)
     if (shots && tasha) {
-      await page.evaluate(({ x, z }) => { const g = window.__game, L = window.__L, f = window.__a2.M().kettle.tasha(); try { g.weather.set('light-rain'); } catch { /* */ } L.standAt(x + 6, z + 2, Math.atan2(-(z - (z + 2)), x - (x + 6))); L.aim({ x, z }, f.groundY() + 1.2); L.step(20); }, tasha);
+      await page.evaluate(({ x, z }) => { const g = window.__game, L = window.__L, f = window.__a2.M().kettle.tasha(); try { g.weather.set('light-rain'); } catch { /* */ } if (g.chase) g.chase.setMode('first'); L.standAt(x + 6, z + 2, Math.atan2(-(z - (z + 2)), x - (x + 6))); L.aim({ x, z }, f.groundY() + 1.2); L.step(20); }, tasha);
       await shot(page, shots, 'C-kettle-tasha');
-      await page.evaluate(({ x, z }) => { const g = window.__game, L = window.__L, f = window.__a2.M().kettle.tasha(); try { g.weather.release(); } catch { /* */ } L.standAt(x + 1.8, z, Math.atan2(0, -1)); L.aim({ x, z }, f.groundY() + 1.4); L.step(6); }, tasha);
+      await page.evaluate(({ x, z }) => { const g = window.__game, L = window.__L, f = window.__a2.M().kettle.tasha(); try { g.weather.release(); } catch { /* */ } if (g.chase) g.chase.setMode('third'); L.standAt(x + 1.8, z, Math.atan2(0, -1)); L.aim({ x, z }, f.groundY() + 1.4); L.step(6); }, tasha);
     }
     if (tasha && tasha.target && tasha.target.ref === 'field:tasha') await press(page, 'e'); else await page.evaluate(() => { const f = window.__a2.M().kettle.tasha(); if (f) f.onTalk(f); });
     await page.waitForTimeout(100);
@@ -469,8 +469,9 @@ steps.push(
     const tf = await page.evaluate(async () => { const L = window.__L, M = window.__a2.M().miningCast; for (let k = 0; k < 200 && !(M.slab && M.slab.tauno); k++) { L.step(10); window.__game.storyLayer.poll(); await L.wait(100); } return M.slab && M.slab.tauno ? { x: M.slab.tauno.x, z: M.slab.tauno.z, tasha: !!M.slab.tasha } : null; });
     if (!tf && LOG) LOG(`  slab: nobody placed ${JSON.stringify(await page.evaluate(() => { const g = window.__game, l = g.storyLayer, pl = l.place('ep33.crewcamp'), q = l.prop('ep33.slab'), M = window.__a2.M().miningCast; return { slab: M.slab ? Object.keys(M.slab) : null, pl: pl ? [pl.x, pl.z] : null, prop: q ? [q.prop.x, q.prop.z] : null, at: [Math.round(g.player.x), Math.round(g.player.z)], on: M.on, warned: !!M.warned, last: g.rides.last && g.rides.last.to }; }))}`);
     if (shots && tf) { // (the final pass: the contact sheet's slab, Tauno by it, from 7 m)
-      await page.evaluate(({ x, z }) => { const L = window.__L, g = window.__game; L.standAt(x + 6, z + 3.5, 0); L.aim({ x, z }, g.tiles.groundAt(x, z) + 1.0); L.step(10); }, tf);
+      await page.evaluate(({ x, z }) => { const L = window.__L, g = window.__game; if (g.chase) g.chase.setMode('first'); L.standAt(x + 6, z + 3.5, 0); L.aim({ x, z }, g.tiles.groundAt(x, z) + 1.0); L.step(10); }, tf);
       await shot(page, shots, 'C-slab');
+      await page.evaluate(() => { const g = window.__game; if (g.chase) g.chase.setMode('third'); window.__L.step(4); });
     }
     const talkT = async () => { await dismiss(page); await page.evaluate(() => { const f = window.__a2.M().miningCast.slab.tauno; window.__L.standAt(f.x + 1.6, f.z, Math.PI); window.__L.step(4); f.onTalk(f); }); await page.waitForTimeout(100); return page.evaluate(() => window.__t.convo()); };
     let waited = null;
