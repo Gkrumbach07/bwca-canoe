@@ -569,20 +569,22 @@ export async function connect7a(t) {
   };
 
   // --- the tick ------------------------------------------------------------------------------------------------------------
-  let lastT = performance.now(), slow = 0, warned = false;
-  const frame = () => {
-    const now = performance.now(), dt = Math.min(0.1, (now - lastT) / 1000); lastT = now;
+  // (the game's own frame, through the lamp's update, which main.js runs every frame and __game.step runs too: the
+  // rigs' stepped frames move the night as the live loop does)
+  let slow = 0, warned = false;
+  const frame = (dt0) => {
+    const dt = Math.min(0.1, Number.isFinite(dt0) ? dt0 : 1 / 60);
     try {
       if (live()) { nightTick(dt); skyTick(dt); howlTick(dt); tieTick(); meadowTick(); }
       D.update(dt);
       slow += dt;
       if (slow > 0.5) { slow = 0; peopleTick(); lensTick(); killTick(); lanternTick(); beachTick(); ridgeKeep(); }
     } catch (e) { if (!warned) { warned = true; console.warn('7a: the tick', e); } }
-    requestAnimationFrame(frame);
   };
   // the ridge's tracks stay for the season after the night (built again near it)
   const ridgeKeep = () => { const pl = PL('s2.ridge'); if (pl && doc().ridgeTracks === dateNow().year && near(pl, 300) && !D.trackSets.has('s2.moose') && !nw) layRidgeTracks(); };
-  requestAnimationFrame(frame);
+  if (lamp && typeof lamp.update === 'function') { const u0 = lamp.update.bind(lamp); lamp.update = (dt) => { u0(dt); frame(dt); }; }
+  else { let lastT = performance.now(); const raf = () => { const now = performance.now(); frame((now - lastT) / 1000); lastT = now; requestAnimationFrame(raf); }; requestAnimationFrame(raf); }
   story.on('season', () => { for (const w of Object.keys(PEOPLE)) unstage(w); nw = null; hw = null; tied = null; for (const id of [...D.trackSets.keys()]) D.dropTracks(id); });
 
   return { draw: D, tracks: { lay: (id, kind, x, z, heading, n, words) => { const s = D.tracks(id, kind, x, z, heading, n); if (s && words) s.words = words; return !!s; }, drop: (id) => D.dropTracks(id), words: (kind) => trackWords({ kind }) },
