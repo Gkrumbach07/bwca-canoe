@@ -29,7 +29,7 @@ const log = (...a) => console.log(new Date().toISOString().slice(11, 23), ...a);
 const results = [], errors = [];
 const result = (name, pass, more = {}) => { results.push({ name, pass: !!pass, more }); log(pass ? 'PASS' : 'FAIL', name, JSON.stringify(more).slice(0, 1400)); };
 const shot = async (page, name) => { try { await page.screenshot({ path: `${OUT}/${name}.png` }); } catch { /* a nicety */ } };
-const press = async (page, key) => { await page.keyboard.press(key); await page.evaluate(() => window.__L.step(3)); };
+const press = async (page, key) => { await page.keyboard.press(key); await page.evaluate(() => { window.__L.step(3); window.__L.pin = null; }); };
 
 let browser;
 try {
@@ -48,10 +48,29 @@ try {
   // night one (B's cutscene calls story.found)
   await page.evaluate(async () => { const g = window.__game; g.story.found({ abs: 20640, key: 2, lake: 'Lake One' }); await window.__L.wait(100); window.__L.step(6); });
   await page.evaluate(() => { const L = window.__L, g = window.__game;
+    if (!g.pointer.__fpin) { const u = g.pointer.update.bind(g.pointer); g.pointer.update = (...a) => { if (L.pin) { g.pointer.setTarget(L.pin); return; } return u(...a); }; g.pointer.__fpin = true; }
     L.facts = (ks) => ks.filter((k) => g.story.has(k));
     L.walt = (ks) => ks.filter((k) => g.story.walt().includes(k));
     L.at = async (id) => { const q = g.storyLayer.place(id); await L.near(q.x, q.z); for (let k = 0; k < 6; k++) { L.step(4); g.storyLayer.poll(); await L.wait(40); } return q; };
-    L.dotOn = (id, d = 1.6, dy = 0.4) => { const t = L.faceTo(id, d, dy); return t ? { label: t.label, verb: t.verb, ref: t.ref } : { none: true, face: L.lastFace }; };
+    // the dot on a prop: stand d m off it on dry ground, the eye's ray at its own dot sphere through the layer's provider
+    // (the chase camera sits 6–8 m back and the far end's things are small: a cot in a 2.4 × 3 m cabin), and that
+    // target is the pointer's for the real E that follows (pointer.before acts on it). dy is unused (the dot's own height)
+    L.dotOn = (id, d = 1.2) => {
+      const l = g.storyLayer, q = l.prop(id); if (!q) return { none: 'no prop' };
+      const m = l.built.get(q.place.id), b = m && m.get(id); if (!b) return { none: 'not built', state: l.state() };
+      if (!b.dots.length) return { none: 'no dot' };
+      const w = g.world; let at = null;
+      for (let k = 0; k < 16 && !at; k++) { const a = (k / 16) * Math.PI * 2, x = q.prop.x + Math.cos(a) * d, z = q.prop.z + Math.sin(a) * d; if (!w.isWater(x, z)) at = { x, z }; }
+      if (!at) at = { x: q.prop.x + d, z: q.prop.z };
+      L.standAt(at.x, at.z, L.yawTo(q.prop)); L.step(2);
+      const P = g.player, dot = b.dots.reduce((a, c) => (c.r > a.r ? c : a)), ty = b.y + dot.y, ey = (P.foot ? P.foot.y : P.groundAt(P.x, P.z)) + 1.6;
+      const R = g.pointer.ray; R.origin.set(P.x, ey, P.z); R.direction.set(q.prop.x - P.x, ty - ey, q.prop.z - P.z).normalize();
+      const n = g.pointer.near; n.x = P.x; n.z = P.z; n.y = P.altitude;
+      const list = (l.targets(R, n) || []).sort((a, c) => a.miss - c.miss || a.dist - c.dist), hit = list[0];
+      if (!hit) return { none: 'no target', d: +Math.hypot(P.x - q.prop.x, P.z - q.prop.z).toFixed(2) };
+      g.pointer.setTarget(hit.target); L.pin = hit.target; // (held through the real E that follows: the page's own frames would re-aim it at the chase camera's ray)
+      return { label: hit.target.label, verb: hit.target.e ? hit.target.e.verb : null, ref: hit.target.ref };
+    };
   });
 
   // 1 ---------------------------------------------------------------------------------------------------------------------
@@ -138,6 +157,8 @@ try {
   // 6 the cellar ----------------------------------------------------------------------------------------------------------
   {
     await page.evaluate(() => window.__L.at('cellar'));
+    const dbg = await page.evaluate(() => { const g = window.__game, l = g.storyLayer, pl = l.place('cellar'); let err = null; try { l.buildPlace(pl); } catch (e) { err = String(e.stack || e).slice(0, 500); } return { err, ready: g.tiles.readyAt(pl.x, pl.z), built: l.builtList().filter((b) => b.place === 'cellar').map((b) => b.prop), shows: pl.props.map((pr) => [pr.id, l.shows(pr), Number.isFinite(pr.x)]), d: Math.round(Math.hypot(g.player.x - pl.x, g.player.z - pl.z)) }; });
+    log('cellar', JSON.stringify(dbg));
     const steps = [];
     for (const [id, dy, want, verb] of [['cellar.pit', 0.1, 'Old pit', 'Clear the moss'], ['cellar.lid', 0.05, 'Lid', 'Lift'], ['cellar.note', 0.03, 'Note', 'Pick up'], ['cellar.can.1', 0.12, 'Can', 'Take']]) {
       await page.evaluate(() => { window.__game.storyLayer.poll(); window.__L.step(4); });
