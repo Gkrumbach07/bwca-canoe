@@ -324,6 +324,8 @@ export async function connect(t) {
     if (!hit || has(`ep.${r.id}.shot.${hit.i}`)) return;
     apply([`f:ep.${r.id}.shot.${hit.i}`], `m3.shot.${hit.i}`);
     if (pr) episodes.print(pr.id, [`m3.${r.id}.${hit.i}`]);
+    // a lake of his list the world doesn't name (or names otherwise): counted with the next of his you get (never stuck)
+    for (const q of S.route) if (!lakeIds(q.lake).length && !has(`ep.${r.id}.shot.${q.i}`)) apply([`f:ep.${r.id}.shot.${q.i}`], `m3.shot.${q.i}`);
   });
 
   // ========================================================================================================================

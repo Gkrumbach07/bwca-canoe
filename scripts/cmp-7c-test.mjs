@@ -185,7 +185,7 @@ try {
     result('M3a: the soloist at the home dock; his hello, his ask, "I\'ll go." → the yes, his list said', a.staged && a.yes && !!a.list, a);
     const b = await page.evaluate(async () => {
       const g = window.__game, M = window.__m, D = M.D(), S = D.solo().S, out = [];
-      for (const q of S.route) { const on = await M.onLake(q.lake); const id = on ? M.shot(0.5) : null; out.push({ lake: q.lake, on: on && on.lake, id, shot: g.story.has(`ep.M3_0.shot.${q.i}`) }); }
+      for (const q of S.route) { const on = await M.onLake(q.lake); const id = on && on.lake ? M.shot(0.5) : null; out.push({ lake: q.lake, on: on && (on.lake || on), id, shot: g.story.has(`ep.M3_0.shot.${q.i}`) }); }
       return { out, all: g.story.has('ep.M3_0.all') };
     });
     result('M3b: a print on each of his five lakes → all five', b.all, b);
