@@ -212,11 +212,14 @@ try {
     const md = await W(page, async () => {
       const g = window.__game, E = window.__e, L = window.__L, S = window.__s7;
       if (!g.story.has('ep.S4.ring')) g.story.rules.apply({ id: 'rig:ring', then: ['f:ep.S4.st1', 'f:ep.S4.st2', 'f:ep.S4.st3'] }, {});
-      E.at(2026, 226, 19.5); const m = E.place('s4.meadow'); await L.near(m.x + 420, m.z); L.step(10);
-      const drawn = g.side7a.draw.root.children.filter((c) => /wolf|pup/.test(c.name) && c.visible).length;
+      E.at(2026, 226, 19.5); const m = E.place('s4.meadow');
+      let px = m.x + 420, pz = m.z; for (let k = 0; k < 12 && g.world.isWater(px, pz); k++) { px += 30; pz += (k % 2 ? 40 : -40); }
+      await L.near(px, pz); L.standAt(g.player.x, g.player.z, Math.atan2(-(m.z - 8 - g.player.z), m.x + 22 - g.player.x)); L.step(10);
+      const diag = { at: [Math.round(g.player.x), Math.round(g.player.z)], m: [m.x, m.z], d: Math.round(Math.hypot(m.x - g.player.x, m.z - g.player.z)), month: g.story.date().month, doc: { ...S.d().doc() } };
+      const drawn = g.side7a.draw.root.children.filter((c) => /7a (wolf|pup)$/.test(c.name) && c.visible).length;
       const shot = await S.shot({ x: m.x + 22, z: m.z - 8 }, 0);
       const said = S.show('kari', { kind: 'print', id: shot && shot.id, matches: shot ? shot.matches : [] });
-      return { drawn, shot, said, pups: S.d().doc().pups, counted: g.story.has('ep.S4.counted'), owed: S.owed() };
+      return { diag, drawn, shot, said, pups: S.d().doc().pups, counted: g.story.has('ep.S4.counted'), owed: S.owed() };
     });
     result('S4c August: the meadow from 400 m: wolves and pups drawn; the print; Kari counts them ($40 owed)', md.drawn >= 4 && md.shot && md.shot.matches.includes('s4.pups') && md.counted && md.owed.includes(40), md);
     const end = await W(page, async () => {
