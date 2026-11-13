@@ -84,7 +84,7 @@ export const MARLYS = {
       { ask: '31:GY-02.c6', once: 'sister', say: ['31:GY-02.5'] },
       { ask: '31:GY-02.c7', when: '(tier>=1 | f:wade.seen) & !f:marlys.said.asked2', say: [{ first: [{ id: '31:GY-02.7', when: 'f:door.guiding.climax' }, '31:GY-02.6'] }], then: [{ when: 'f:door.guiding.climax', then: ['f:marlys.said.asked2'] }] },
       // GY-14: the drift test told to her after the night (the less common order)
-      { ask: '31:GY-14.c1', once: 'birch', when: 'f:door.guiding.done & north & !f:marlys.north', to: 'birch' }] },
+      { ask: '31:GY-14.c1', once: 'birch', when: 'f:door.guiding.done & f:knows.north & !f:marlys.north', to: 'birch' }] },
     birch: { go: [{ ask: '31:GY-14.c2', say: ['31:GY-14.1'], then: ['f:marlys.north'], end: true }] },
     // GY-12 the loft's favour
     loft: { say: ['31:GY-12.1'], then: ['f:marlys.loft'], go: [
@@ -279,7 +279,7 @@ export const RICK = {
       { ask: '31:GY-08.c4', say: [{ hook: 'rule' }] },
       { ask: '31:GY-08.c5', once: 'mine', say: ['31:GY-08.10'] },
       // the canoe: only once the Walt page says "went north" (so it never counts toward it)
-      { ask: '31:GY-08.c6', once: 'canoe', when: 'north & !f:rick.canoe', say: ['31:GY-08.11'], to: 'canoe' }] },
+      { ask: '31:GY-08.c6', once: 'canoe', when: 'f:knows.north & !f:rick.canoe', say: ['31:GY-08.11'], to: 'canoe' }] },
     canoe: { go: [
       { ask: '31:GY-08.canoe.1', say: ['31:GY-08.canoe.3', '31:GY-08.canoe.4', '31:GY-08.canoe.5', '31:GY-08.canoe.6', '31:GY-08.canoe.7'], then: ['f:rick.canoe', 'walt:31:GY-08.canoe.8'], end: true },
       { ask: '31:GY-08.canoe.2', say: ['31:GY-08.canoe.3', '31:GY-08.canoe.4', '31:GY-08.canoe.5', '31:GY-08.canoe.6', '31:GY-08.canoe.7'], then: ['f:rick.canoe', 'walt:31:GY-08.canoe.8'], end: true }] },

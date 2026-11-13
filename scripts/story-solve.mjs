@@ -1045,6 +1045,8 @@ if (arg('plan-only2', false)) { // (join c2: slice 2's plan from where slice 1 e
 res(`the slice end to end: ${main.ok ? `${main.path.length} moves` : `stuck at '${main.fail}' (${main.states} states${main.capped ? ', capped' : ''})`}`, main.ok, { at: main.fail || null });
 const rp = main.ok ? replay(main.path) : null;
 res('the plan replays on a fresh story, every move on offer where it is played', !!(rp && rp.ok && rp.S.when(END)), { at: rp && rp.at });
+// a3: --only-a3: slice 1's plan, then slice A3 alone (a stream's quick check; the join runs everything)
+if (arg('only-a3', false)) { await slice3(main, rp); console.log(`story-solve --only-a3: ${report.fail.length ? `${report.fail.length} FAIL` : 'all pass'}`); for (const f of report.fail) console.log('FAIL', f.name, f.at || ''); process.exit(report.fail.length ? 1 : 0); }
 for (const g of SLICE) {
   let path = null, n = -1;
   if (!g.branch && main.ok) { n = firstTrue(main.path, g.when); path = n >= 0 ? main.path.slice(0, n) : null; }
