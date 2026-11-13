@@ -167,6 +167,46 @@ function fillAt(doy) {
   return f * (1 - seasonAt(doy).ice);
 }
 
+// s: fixed named parties (campaign stream S, Round 4; 90 §8 "Fixed named parties"): data entries, one code path
+// (Parties.fixedOn below). A fixed party camps at its own site on its own days, pinned the way stream E's families are
+// (campsAt holds the site), and only while the story says so: `parties.fixedLive` (a function, set by the story's feed
+// under STORY_ON; null with the flag off, so the schedule is main's exactly). Streams 7c and b5 add entries here, each in
+// its own marked block inside the array; nobody adds a second code path. An entry:
+//   { id, kind, size, members: [{ female, age }], canoes, months: [a, b] | date: 'MM-DD..MM-DD', dows?: [0..6] (Sunday 0),
+//     sites: [[x, z], …] (the nearest campsite to each; with `rota` [[dows…], …] the k-th site on the k-th set of days),
+//     every?: n (one day in n, by the season's seed), land?: h, leave?: h, story: true }
+// The party object carries `fixed: <entry id>` (7c matches on it) and an id 'fixed-<entry id>-<abs day>'.
+export const FIXED_PARTIES = [
+  // s: begin
+  // Tom Becker's ranger crew (60 S8, bible 4.9; 70 §7.2): Lake One Monday to Wednesday, Insula Thursday to Saturday,
+  // June to September; Tom is drawn by feed-sides.js (a FieldPerson at the landing), so the camp draws his partner
+  { id: 'tom', kind: 'ranger', size: 1, members: [{ female: true, age: 'adult' }], canoes: 1, months: [6, 9],
+    sites: [[-19905, 18875], [-5511, 19236]], rota: [[1, 2, 3], [4, 5, 6]], land: 15, leave: 8.5, story: true, src: 's' },
+  // the Ostby brothers, Vern and Lloyd of Grand Rapids, on Insula every August since 1968, by the lunch rock (60 S8);
+  // Vern is drawn by feed-sides.js (their talk), the camp draws Lloyd
+  { id: 'ostbys', kind: 'pair', size: 1, members: [{ female: false, age: 'old' }], canoes: 1, date: '08-03..08-09',
+    sites: [[-5951, 18815]], land: 13, leave: 10, story: true, src: 's' },
+  // s: end
+  // b5: begin (Round 5, the boys: 32 §5.9.1, §11 "People and schedules"). Bob, Frank and Denny, every year from 2026: in
+  // at Sawbill EP 38 on 8 August and camped on Kelso (site 3, the site before the 473 on their route: the builders' pick),
+  // C1210 on Little Sag from the 9th (by 16:00) to the 14th, out at the Sawbill landing on the 15th by 14:00. Two canoes
+  // (an old aluminium with a scorched thwart, and a Kevlar). At C1210 the three are drawn by boys-cast.js (FieldPersons at
+  // the camp, the canoe on the bet: it hides the camp's own figures there); on Kelso the camp draws them
+  { id: 'boys.in', kind: 'boys', size: 3, members: [{ female: false, age: 'old' }, { female: false, age: 'old' }, { female: false, age: 'old' }], canoes: 2, date: '08-08..08-08', sites: [[23289, 19716]], land: 16, leave: 8, story: true, src: 'b5' },
+  { id: 'boys', kind: 'boys', size: 3, members: [{ female: false, age: 'old' }, { female: false, age: 'old' }, { female: false, age: 'old' }], canoes: 2, date: '08-09..08-14', sites: [[15082, 6845]], land: 16, leave: 9, story: true, src: 'b5' },
+  // b5: end
+];
+const mdOf = (T) => { const d = new Date(T * 86400000); return { m: d.getUTCMonth() + 1, md: (d.getUTCMonth() + 1) * 100 + d.getUTCDate(), dow: d.getUTCDay() }; };
+export function fixedDay(e, T) {
+  const { m, md, dow } = mdOf(T);
+  if (e.months && !(m >= e.months[0] && m <= e.months[1])) return -1;
+  if (e.date) { const [a, b] = e.date.split('..').map((x) => { const [mm, dd] = x.split('-').map(Number); return mm * 100 + dd; }); if (!(a <= b ? md >= a && md <= b : md >= a || md <= b)) return -1; }
+  if (e.dows && !e.dows.includes(dow)) return -1;
+  if (e.rota) { const k = e.rota.findIndex((ds) => ds.includes(dow)); return k; }
+  return 0;
+}
+// s: end
+
 export class Parties {
   constructor({ world, profile = null, day = null }) {
     this.world = world; this.profile = profile; this.day = day;
@@ -455,13 +495,40 @@ export class Parties {
     this.blocks.set(key, blk);
     return blk;
   }
+  // s: the fixed parties' pinned stays for day T (camped the night of T-1 or T): [{ stay, party, i }] (FIXED_PARTIES)
+  fixedOn(T) {
+    let live = false; try { live = typeof this.fixedLive === 'function' ? !!this.fixedLive() : !!this.fixedLive; } catch { live = false; }
+    if (!live) return [];
+    const w = this.world, out = [], cache = this.fixedCache || (this.fixedCache = new Map());
+    const seed = (this.shared && this.shared.seed) || (this.profile && this.profile.seed) || 0;
+    for (const e of FIXED_PARTIES) for (const d of [T - 1, T]) {
+      const k = fixedDay(e, d); if (k < 0) continue;
+      if (e.every > 1 && hashStr(`${e.id}:${seed}:${d}`) % e.every) continue;
+      const key = `${e.id}:${d}:${k}`;
+      let v = cache.get(key);
+      if (!v) {
+        const at = e.sites[Math.min(k, e.sites.length - 1)]; let i = -1, bd = 400;
+        (w.campsites || []).forEach((c, j) => { const dd = Math.hypot(c.x - at[0], c.z - at[1]); if (dd < bd) { bd = dd; i = j; } });
+        if (i < 0) continue;
+        const id = `fixed-${e.id}-${d}`;
+        const party = { id, holder: `${PARTY}${id}`, fixed: e.id, ep: 25, day: d, slot: 98, kind: e.kind, size: e.size, members: e.members, canoes: e.canoes || 1, tents: 1, nights: 1, stays: [], putIn: 9, look: (hashStr(e.id) % 1000) / 1000, story: true };
+        const stay = { id: `${id}/0`, party, basin: -1, start: d, end: d + 1, land: e.land ?? 15, leave: e.leave ?? 9, in: null, out: null, seed: hashStr(id), oi: 0, viaIn: [] };
+        party.stays = [stay]; party.exit = d + 1; party.viaOut = [];
+        v = { stay, party, i }; cache.set(key, v); if (cache.size > 60) cache.delete(cache.keys().next().value);
+      }
+      out.push(v);
+    }
+    return out;
+  }
+  // /s
   // the stays at a site at (abs day, hour of the day): [{ stay, party, i, site, key }]
   campsAt(T, h) {
     const blk = this.block(T), w = this.world, out = [];
     // e: the story's pinned stays (Round 2 stream E: the family at C593 and C1690 on some days, 60 S7/S9): pinnedFn(T)
     // → [{ stay, party, i }] (feed-episodes.js under STORY_ON; null with the flag off, so this is the schedule exactly).
     // A pinned stay holds its site: a scheduled one there that night camps nowhere
-    const pin = this.pinnedFn ? (() => { try { return this.pinnedFn(T) || []; } catch { return []; } })() : null;
+    let pin = this.pinnedFn ? (() => { try { return this.pinnedFn(T) || []; } catch { return []; } })() : null;
+    if (this.fixedLive) { const fx = this.fixedOn(T); if (fx.length) pin = [...(pin || []), ...fx]; } // s: the fixed parties
     const held = pin && pin.length ? new Set(pin.map((q) => q.i)) : null;
     // /e
     for (const s of blk.stays) {

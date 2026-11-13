@@ -25,7 +25,7 @@
 //   bob.trust · bob.eastbay + frank.eastbay (L3A: the 1998 story) · bob.rochester · bob.walt2019 · frank.patch ·
 //   frank.kek · frank.lot · frank.cleared · denny.card · denny.rings · denny.sparky · denny.tell1 · denny.cabin ·
 //   denny.toldBook · case.denny.nicknames=soft · case.denny.rochester=hard (the informant's pieces: stream i reads them)
-export const B5_SENSORS = { carolNear: 'flag', bobNear: 'flag', dennyNear: 'flag', frankNear: 'flag', withFood: 'flag', betDay: 'flag', lastNight: 'flag', evening: 'flag' };
+export const B5_SENSORS = { slidesToday: 'flag', carolNear: 'flag', bobNear: 'flag', dennyNear: 'flag', frankNear: 'flag', withFood: 'flag', betDay: 'flag', lastNight: 'flag', evening: 'flag' };
 
 // --- where and when (32 §11 "People and schedules") ---------------------------------------------------------------------
 export const SAWBILL = 38, FARM = 31;
@@ -80,8 +80,10 @@ export const CAROL = {
       { ask: '32:5.1.c1', once: 'walt', say: ['32:5.1.4'], to: 'knew' },
       { ask: '32:5.1.c4', once: 'like', say: ['32:5.1.7'] },
       { ask: '32:5.1.c7', once: 'spot', say: ['32:5.1.11'] },
+      // the favour stays open ("That's a long way."): "I'll go." whenever you're back
+      { ask: '32:5.1.c5', when: 'f:carol.favour.asked & !f:carol.favour', say: ['32:5.1.9'], then: ['f:carol.favour', 'ring:boys.frost'] },
       // 5.4: the nicknames, the slides seen and a later visit; or asked after reading N04 (NB16)
-      { ask: 'd95.b5.names.ask', once: 'names', when: '(f:carol.slides.done & !f:carol.slides.today) | read:NB16', say: ['32:5.4.1'], then: ['f:boys.nicknames', 'f:case.denny.nicknames=soft'] }] },
+      { ask: 'd95.b5.names.ask', once: 'names', when: '(f:carol.slides.done & !slidesToday) | read:NB16', say: ['32:5.4.1'], then: ['f:boys.nicknames', 'f:case.denny.nicknames=soft'] }] },
     knew: { hub: 'hub', go: [
       { ask: '32:5.1.c2', once: 'boys', say: ['32:5.1.5'], then: ['ring:farm31', 'ring:boys.c1210'] },
       { ask: '32:5.1.c3', once: 'gene', say: ['32:5.1.6'], to: 'favour' }] },
@@ -94,7 +96,7 @@ export const CAROL = {
 // ctx: { visits: talks before today's, gene: "Gene?" heard }
 export function carolEntry(s) {
   if (!s.has('door.boys.open')) return 'hello';
-  if (s.has('carol.favour.asked') && !s.has('carol.favour') && !s.has('carol.favour.today')) return 'again';
+  if (s.has('carol.favour.asked') && !s.has('carol.favour') && !s.has('carol.favour.again')) return 'again';
   return 'hub';
 }
 // Carol's close (32 §5.1) and the print she wants (the arc's want: show.js, arc-boys.js `wants`)
@@ -110,7 +112,7 @@ export const SLIDES = { take: '32:5.3.sept.4', close: '32:5.3.close', book: '32:
 export const BOB = {
   id: 'bob', who: 'bob',
   nodes: {
-    first: { say: ['32:5.5.2.bob'], then: ['f:boys.met'], to: 'hub' },
+    first: { say: ['32:5.5.2.bob'], then: ['f:bob.met'], to: 'hub' },
     again: { say: ['32:5.8.1'], to: 'hub' },
     // 5.9.7 the 1998 story off the trip: before two, Denny not in, Frank at the table (Bob's trust)
     off98: { say: ['32:5.9.7.1'], to: 'story98' },
@@ -136,7 +138,7 @@ export const BOB = {
 };
 // ctx: { frankHere, dennyHere }
 export function bobEntry(s, ctx = {}) {
-  if (!s.has('bob.said.first') && !s.has('boys.met')) return 'first';
+  if (!s.has('bob.met')) return 'first';
   if (ctx.frankHere && !ctx.dennyHere && s.has('bob.trust') && !s.has('boys.story1998')) return 'off98';
   return 'again';
 }
@@ -146,7 +148,7 @@ export const DENNY = {
   id: 'denny', who: 'denny',
   nodes: {
     // the first meeting: the hello, then his card (32 §5.6 "first or second meeting")
-    first: { say: ['32:5.5.2.denny.1', '32:5.6.2'], then: ['f:boys.met', 'f:denny.card', 'give:item.dennycard'], to: 'hub' },
+    first: { say: ['32:5.5.2.denny.1', '32:5.6.2'], then: ['f:denny.met', 'f:denny.card', 'give:item.dennycard'], to: 'hub' },
     // the second meeting, before anything else: Sparky, against himself (32 §5.6, once)
     sparky: { say: ['32:5.6.3'], then: ['f:denny.sparky', 'f:case.denny.nicknames=soft'], to: 'hub' },
     // after the slides: "Go easy on Carol" (32 §5.6: the only time he tries to keep the player from something)
@@ -177,7 +179,7 @@ export function dennyEntry(s, ctx = {}) {
 export const FRANK = {
   id: 'frank', who: 'frank',
   nodes: {
-    hello: { say: [{ first: [{ id: '32:5.7.4', when: 'f:boys.met' }, '32:5.7.3'] }], to: 'hub' },
+    hello: { say: [{ first: [{ id: '32:5.7.4', when: 'f:bob.met | f:denny.met | f:boys.met' }, '32:5.7.3'] }], then: ['f:frank.met'], to: 'hub' },
     hub: { go: [
       { ask: '32:5.7.c1', once: 'who', say: ['32:5.7.5'] },
       { ask: '32:5.7.c2', once: 'shirt', say: ['32:5.7.6'], to: 'shirt' },
@@ -208,10 +210,9 @@ const GROUP_TOPICS = [
   { ask: '32:5.5.1.c8', once: 'book', when: 'f:nb.found', say: [B('32:5.5.1.29', 'Denny'), B('32:5.5.1.30', 'Bob'), B('32:5.5.1.31', 'Denny')], then: ['f:denny.toldBook'] },
 ];
 export const YARD = {
-  id: 'yard', who: 'bob',
+  id: 'yard', who: 'boys',
   nodes: {
-    open: { say: [B('32:5.5.1.1', 'Bob'), B('32:5.5.1.2', 'Denny'), B('32:5.5.1.3', 'Frank')], then: ['f:boys.met'], to: 'start' },
-    start: { go: [] }, // (replaced at run: the rule if the round isn't bought, else the hub; boys-cast.js yardStart)
+    open: { say: [B('32:5.5.1.1', 'Bob'), B('32:5.5.1.2', 'Denny'), B('32:5.5.1.3', 'Frank')], then: ['f:boys.met', 'f:bob.met', 'f:frank.met', 'f:denny.met'], to: 'rule' }, // (boys-cast.js: to the hub once the round is bought)
     ...RULE,
     hub: { go: GROUP_TOPICS },
     // 5.9.1 the permit is Denny's gift: the first time he hears the player wants to come
@@ -223,12 +224,11 @@ export function yardEntry(s) { return s.has('boys.met') ? (s.has('boys.round') ?
 
 // --- 5.9.2–5.9.4 / 5.9.8 at their camp, C1210 -------------------------------------------------------------------------------
 export const CAMP = {
-  id: 'camp', who: 'bob',
+  id: 'camp', who: 'boys',
   nodes: {
     // first visit (if they haven't met, this is their first meeting: 5.5.1's opener adapted, 32 §5.9.2)
-    open: { say: [B('32:5.9.2.1', 'Frank'), B('32:5.9.2.2', 'Bob')], then: ['f:boys.met', 'f:boys.visited'], to: 'start' },
-    again: { say: [B('32:5.9.2.2', 'Bob')], to: 'start' },
-    start: { go: [] }, // (boys-cast.js: the round at camp if not bought, else the fire's topics)
+    open: { say: [B('32:5.9.2.1', 'Frank'), B('32:5.9.2.2', 'Bob')], then: ['f:boys.met', 'f:bob.met', 'f:frank.met', 'f:denny.met', 'f:boys.visited'], to: 'round' }, // (boys-cast.js: campStart's node)
+    again: { say: [B('32:5.9.2.2', 'Bob')], to: 'fire' },
     // the round at camp: something shared from your pack (bars, chocolate, sausage, a fish or fruit all count)
     round: { say: [B('32:5.9.2.3', 'Bob')], go: [
       { ask: '32:5.5.1.c1', when: 'withFood', then: ['do:share'], to: 'fire' },
@@ -248,7 +248,7 @@ export const CAMP = {
         { id: '32:5.5.1.13', by: 'Bob', when: '!f:denny.tell1' }, { id: '32:5.5.1.14', by: 'Denny', when: '!f:denny.tell1' }, { id: '32:5.5.1.15', by: 'Bob', when: '!f:denny.tell1' }], then: ['f:denny.tell1'] },
       { ask: '32:5.9.3.c4', once: 'radio', say: [B('32:5.9.3.11', 'Denny'), B('32:5.9.3.12', 'Bob'), B('32:5.9.3.13', 'Denny'), B('32:5.9.3.14', 'Frank'), B('32:5.9.3.15', 'Denny')] },
       // (5.5.1's group topics that haven't been had at the store: the boys met first at camp)
-      ...GROUP_TOPICS.filter((t) => t.once !== 'where').map((t) => ({ ...t, once: `y.${t.once}` })),
+      ...GROUP_TOPICS.filter((t) => t.once !== 'where'),
       { ask: 'd95.b5.cup.ask', once: 'cup', when: 'lastNight & evening', say: [B('32:5.9.8.1', 'Bob'), B('32:5.9.8.2', 'Frank'), B('32:5.9.8.3', 'Bob')], then: ['f:boys.cup'] }] },
   },
 };
@@ -275,7 +275,7 @@ export function campStart(s, ctx = {}) {
 
 // --- 5.9.6 the 1998 story on the water (during the bet: the two canoes side by side over the hole) --------------------------
 export const STORY98 = {
-  id: 'story98', who: 'bob',
+  id: 'story98', who: 'boys',
   nodes: { story98: BOB.nodes.story98 },
 };
 

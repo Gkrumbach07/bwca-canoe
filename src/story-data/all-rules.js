@@ -9,5 +9,6 @@ import { RULES_TALK } from './rules-talk.js';
 import { RULES_BEATS } from './rules-beats.js'; // d: the director (stream D, Round 2)
 import { RULES_MINING } from './rules-mining.js'; // a2: the mining years (Round 2)
 import { RULES_EPISODES } from './rules-episodes.js'; // e: every episode's steps (episodes/index.js)
+import { RULES_BOYS } from './rules-boys.js'; // b5: the boys (Round 5)
 
-export const RULES_ALL = [...RULES_CORE, ...RULES_BOOK, ...RULES_LAYER, ...RULES_TALK, ...RULES_BEATS, ...RULES_MINING, ...RULES_EPISODES];
+export const RULES_ALL = [...RULES_CORE, ...RULES_BOOK, ...RULES_LAYER, ...RULES_TALK, ...RULES_BEATS, ...RULES_MINING, ...RULES_EPISODES, ...RULES_BOYS]; // (b5: + RULES_BOYS)

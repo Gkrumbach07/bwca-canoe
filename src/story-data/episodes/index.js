@@ -4,5 +4,6 @@
 import S7 from './s7-mummos.js';
 import S9 from './s9-coffee.js';
 import mining from './arc-mining.js'; // a2: the mining years' arc (the join)
+import boys from './arc-boys.js'; // b5: the boys' arc (Round 5)
 
-export const EPISODES = [S7, S9, mining];
+export const EPISODES = [S7, S9, mining, boys]; // (b5: + boys)

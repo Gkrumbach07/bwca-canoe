@@ -98,6 +98,10 @@ export const FACTS = [
   { key: 'rose.', kind: 'any', doc: '60 S7 Rose Gornik: her scene (rose.said.<choice>)' },
   { key: 'mg.snag.', kind: 'bool', doc: '§10 the snag minigame: mg.snag.hooked | landed | snapped (minigames/snag.js through episodes)' },
   // /e
+  // b5: begin (Round 5, the boys: 32 §11 "State"; the people's own facts are under bob. frank. denny. carol. gene.)
+  { key: 'boys.', kind: 'any', doc: '32 §5.5–§5.9 the boys together: boys.met | round | round.denny | invited | permit | nicknames | visited | pan.offered | pan | bet | bet.won | bet.frank | story1998 | cup | flare.seen | flare | out15 | slide' },
+  { key: 'mg.silhouette.', kind: 'bool', doc: '32 §5.3, bible 5.2 lock 3B: the slide held up against the view, matched (minigames/silhouette.js)' },
+  // b5: end
 ];
 
 // the arcs whose yields are the big findings (§3.3 story.big), and the doors the player can be offered

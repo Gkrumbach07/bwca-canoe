@@ -487,7 +487,7 @@ if (!dataFiles.length) {
 // every line id resolves in the extract, every condition passes checkCond (the scene's own context names: topics.js
 // TALK_SENSORS), every fact a scene or topic writes is declared, every walt: id is a Walt-page line
 {
-  const files = ['porch-act1.js', 'topics-act1.js', 'cast.js', 'mining.js' /* a2: the mining years' scenes */].filter((f) => existsSync(path.join(DATA, f)));
+  const files = ['porch-act1.js', 'topics-act1.js', 'cast.js', 'mining.js' /* a2: the mining years' scenes */, 'boys.js' /* b5: the boys' scenes */].filter((f) => existsSync(path.join(DATA, f)));
   if (!files.length || !existsSync(path.join(SRC, 'topics.js'))) result('talk: the Act I scenes and topics', null, { why: 'no stream T data yet' });
   else {
     const errs = [];
@@ -506,6 +506,7 @@ if (!dataFiles.length) {
     }
     for (const c of new Set(conds)) {
       let extra = []; try { extra = Object.keys((await import(pathToFileURL(path.join(DATA, 'mining.js')).href)).A2_SENSORS || {}); } catch { extra = []; } // (a2: the arc's own scene flags)
+      try { extra.push(...Object.keys((await import(pathToFileURL(path.join(DATA, 'boys.js')).href)).B5_SENSORS || {})); } catch { /* b5: the boys' scene flags */ }
       const words = [...Object.keys(tp.TALK_SENSORS), ...extra].join('|');
       const r = checkCond(c.replace(new RegExp(`(^|[\\s!(&|])(?:${words})(?=$|[\\s)&|])`, 'g'), '$1f:nb.found'), `talk '${c}'`); // (the scene's own flags: true or false, either can hold)
       errs.push(...(Array.isArray(r) ? r : r.errs));
@@ -586,7 +587,7 @@ if (!dataFiles.length) {
     for (const [who, R] of Object.entries(cast.CAST || {})) for (const w of R.where || []) {
       const stages = !!(w.scene || w.bark);
       if (!stages) continue;
-      const pull = /^(porch|counter|a2):/.test(w.at || '') && !w.push; // (a seat or a counter: the player walks to it; join c2: A2's Farm seats a2:dock/window/corner/store are the same)
+      const pull = /^(porch|counter|a2|b5):/.test(w.at || '') && !w.push; // (b5: the boys' seats and counter, the Sawbill yard: the player walks to them) // (a seat or a counter: the player walks to it; join c2: A2's Farm seats a2:dock/window/corner/store are the same)
       if (w.push || pull || ENG.test(` ${w.when || ''}`)) continue;
       PE.push(`cast ${who}.${w.id} (at ${w.at}): stages ${w.scene || w.bark} with no push and no engagement atom`);
     }

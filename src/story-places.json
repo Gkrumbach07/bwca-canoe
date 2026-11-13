@@ -1070,6 +1070,119 @@
           "then": []
         }
       ]
+    },
+    {
+      "id": "boys.c1210",
+      "name": "Little Saganaga, C1210: the boys' site, the sitting rock at the point",
+      "doc": "docs/story/32-the-boys.md §2.2, §5.9.8, §8 (b5)",
+      "b5": true,
+      "x": 15072,
+      "z": 6830,
+      "lake": "Little Saganaga Lake",
+      "shore": true,
+      "search": 60,
+      "clear": 0,
+      "props": [
+        {
+          "id": "boys.rock",
+          "kit": "swimRock",
+          "at": [
+            7,
+            -0.4
+          ],
+          "wet": "edge",
+          "show": "true",
+          "dot": []
+        },
+        {
+          "id": "boys.flare",
+          "kit": "flareCase",
+          "at": [
+            7.4,
+            0.2
+          ],
+          "show": "f:boys.flare.seen & !f:boys.flare",
+          "dot": [
+            {
+              "when": "true",
+              "name": "An old flare cartridge"
+            }
+          ]
+        },
+        {
+          "id": "boys.cup",
+          "kit": "tinCup",
+          "at": [
+            6.6,
+            -0.1
+          ],
+          "show": "date:08-14..08-14 & hour:20-24",
+          "dot": []
+        }
+      ],
+      "verbs": [
+        {
+          "prop": "boys.flare",
+          "verb": "Take",
+          "when": "!f:boys.flare",
+          "then": [
+            "f:boys.flare",
+            "give:item.flarecase"
+          ]
+        }
+      ],
+      "triggers": [
+        {
+          "on": "readHere",
+          "nb": "NB16",
+          "r": 60,
+          "when": "f:nb.found",
+          "then": [
+            "f:boys.flare.seen"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "boys.frost",
+      "name": "Frost Lake, C1125 (Gene's): Gene's paddle in the crotch of the pine above the landing",
+      "doc": "docs/story/32-the-boys.md §5.2, §8; 10 NB60 (b5)",
+      "b5": true,
+      "x": 30058,
+      "z": 10723,
+      "lake": "Frost Lake",
+      "shore": true,
+      "search": 60,
+      "clear": 0,
+      "props": [
+        {
+          "id": "boys.paddle",
+          "kit": "paddlePine",
+          "at": [
+            2.5,
+            9
+          ],
+          "show": "true",
+          "dot": [
+            {
+              "when": "true",
+              "name": "A paddle, in the pine"
+            }
+          ]
+        }
+      ],
+      "verbs": [],
+      "triggers": [
+        {
+          "on": "readHere",
+          "nb": "NB60",
+          "r": 60,
+          "when": "f:nb.found",
+          "then": [
+            "f:boys.frost.read"
+          ]
+        }
+      ]
     }
   ],
   "portages": [

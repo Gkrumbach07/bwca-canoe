@@ -81,4 +81,46 @@ export const CAST = {
     ],
   },
   // /a2
+  // b5: begin (Round 5, the boys; docs/story/32-the-boys.md §3, §11 "People and schedules"). Their `where` is read by
+  // boys-cast.js (not cast.js's walkout or seats): at 'b5:counter' (the Sawbill 38 counter's end), 'b5:window' /
+  // 'b5:corner' (the two tables by the counter: story-props.js cafeSpots), 'b5:urn' (Farm 31's coffee urn), 'b5:yard'
+  // (the Sawbill store's yard, 1–7 August), 'field' (the party's camp and the water: boys-cast.js). Scenes: story-data/boys.js
+  carol: {
+    name: 'Carol Arola', first: 'Carol', known: 'door.boys.open', unknown: 'A woman at the counter', role: '',
+    look: { age: 'old', female: true, shirt: 0x8a5a4a, pants: 0x3e3a36, hat: null, hair: 0xc8c2ba, hatChance: 0 },
+    where: [
+      { id: 'evening', at: 'b5:counter', when: 'f:carol.slides.invited & date:05-15..10-15 & hour:15-21', scene: 'b5:slides' },
+      { id: 'counter', at: 'b5:counter', when: 'date:05-15..10-15 & hour:7-15', scene: 'b5:carol' },
+    ],
+  },
+  bob: {
+    name: 'Bob Tervo', first: 'Bob', known: 'bob.met', unknown: 'An old man with a clipboard', role: '',
+    look: { age: 'old', shirt: 0x5a6a4a, pants: 0x4a4438, hat: 0x6a5a3a, hair: 0xb0aca6, hatChance: 0.8 },
+    where: [
+      { id: 'out15', at: 'b5:window', when: 'date:08-15..08-15 & hour:15-18', scene: 'b5:bob' },
+      { id: 'yard', at: 'b5:yard', when: 'date:08-01..08-07 & hour:9-18', scene: 'b5:yard' },
+      { id: 'store', at: 'b5:window', when: 'month:6-10 & dow:tue|sat & hour:9-14 & !date:08-01..08-15', scene: 'b5:bob' },
+    ],
+  },
+  frank: {
+    name: 'Frank Kosir', first: 'Frank', known: 'frank.met', unknown: 'A man in a grey work shirt', role: '',
+    // a grey work shirt with the new sign's patch on the pocket, a key ring on his belt (32 §5.7)
+    look: { age: 'old', shirt: 0x6e7072, pants: 0x34363a, hat: 0x2e3238, hair: 0x9a948c, hatChance: 0.5 },
+    where: [
+      { id: 'out15', at: 'b5:window', when: 'date:08-15..08-15 & hour:15-18', scene: 'b5:frank' },
+      { id: 'yard', at: 'b5:yard', when: 'date:08-01..08-07 & hour:9-18', scene: 'b5:yard' },
+      { id: 'farm', at: 'b5:urn', when: 'month:6-10 & dow:mon|tue|wed|thu|fri & hour:6-7 & !date:08-01..08-15', scene: 'b5:frank' },
+      { id: 'tuesday', at: 'b5:window', when: 'month:6-10 & dow:tue & hour:9-14 & met:frank>=2 & !date:08-01..08-15', scene: 'b5:bob' },
+    ],
+  },
+  denny: {
+    name: 'Dennis Rask', first: 'Denny', known: 'denny.met', unknown: 'A friendly old man', role: '',
+    look: { age: 'old', shirt: 0x7a8aa0, pants: 0x4a4a50, hat: 0x8a2a2a, hair: 0xd0ccc4, hatChance: 0.6 },
+    where: [
+      { id: 'out15', at: 'b5:corner', when: 'date:08-15..08-15 & hour:15-18', scene: 'b5:denny' },
+      { id: 'yard', at: 'b5:yard', when: 'date:08-01..08-07 & hour:9-18', scene: 'b5:yard' },
+      { id: 'store', at: 'b5:corner', when: 'month:6-10 & hour:14-17 & !date:08-01..08-15', scene: 'b5:denny' },
+    ],
+  },
+  // b5: end
 };
