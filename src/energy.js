@@ -710,6 +710,25 @@ export class Energy {
     this.wokeAt = this.now;
   }
   bunk() { this.sleep(1); }
+  // w: begin
+  // The winter turn's wake (season-turn.js turnTo / auto; campaign-design §3.9, Part 3 #3): a winter in town, however far
+  // the clock jumped. The jump is no time lived (lastNow moves with it, so no needs fall over the months and the hours
+  // awake don't read as months awake), the bar full, up just now, a hot breakfast eaten when `fed`, the stomach settled,
+  // the needs full, the bottle full of drinkable water, the clothes dry.
+  wakeFresh({ fed = true } = {}) {
+    const now = this.now;
+    this.lastNow = now; this.lastHours = this.day.hours;
+    this.value = 1; this.warned = false; this.warnTimer = 0; this.spentAt = null; this.winded = false;
+    this.awakeSince = now; this.wokeAt = now;
+    this.fedUntil = fed ? now + FED_HOURS : -1;
+    this.lastMealAbs = fed ? now : -1e9; this.lastMealKind = fed ? 'hot' : null; this.lastMealAuto = false;
+    this.upsetAt = this.upsetUntil = -1e9; this.upsetSaid = true;
+    this.dryUntil = -1e9; this.wetSetH = Math.max(this.wetSetH || 0, WET_SET_AIR_H);
+    this.fresh(); // rest0 1, the needs 1, the bottle drinkable, the notes and the run-out hours cleared
+    for (const k of NEED_KEYS) if (k in this.out) this.out[k] = 0;
+    return this;
+  }
+  // w: end
   // an effort paid at once (a capsize, a walk back fetched)
   spend(amount) { this.value = clamp(this.value - amount, 0, 1); }
 

@@ -255,6 +255,9 @@ function moves(S) {
   if (s.when('(f:bundle.taken | f:bundle.later) & !f:nb.found')) out.push({ id: 'night with the bundle', kind: 'night', run: (T) => { T.s.found({ abs: 20600, key: 1, lake: 'Lake One' }); for (const n of CUT_NICKS) T.P.seeNick(n); T.settle(); } });
   // a trip passes (the re-hooks wait in trips; join c2: a climax the director held goes the trip after)
   if (S.trips < (R2 ? 12 : 5)) out.push({ id: 'a trip', kind: 'trip', run: (T) => { T.trips++; T.r2.held = []; T.settle(); } });
+  // w: begin (the winter turn: next year's permit at the desk, or the run frozen in; feed-season.js writes year.turned.<y>)
+  if (s.has('nb.found') && !s.keys('year.turned.').length) out.push({ id: 'the winter turn', kind: 'turn', run: (T) => { T.s.set('year.turned.2027', true, 'solve'); T.settle(); } });
+  // w: end
   if (s.has('nb.found')) {
     for (const nb of R2 ? [...READ_NB, ...READ_NB2] : READ_NB) if (!s.nbHas('read', nb)) out.push({ id: `read ${nb}`, kind: 'read', run: (T) => { T.s.markRead(nb, 'solve'); T.settle(); } });
     for (const pl of PLACES_L) {
@@ -575,6 +578,7 @@ async function buildSetters() {
   for (const row of BACK_COVER) setter(['f:nb.found'], [`f:bc.${row.n.replace('/', '-')}`, ...(row.nb ? [`here:${row.nb}`] : [])], `carry:${row.n}`, 'f:nb.found', 1);
   setter(['f:bundle.taken', 'f:bundle.later'], ['f:nb.found', ...CUT_NICKS.map((n) => `s:nickseen:${n}`)], 'night', 'f:bundle.taken | f:bundle.later', 1);
   setter([], ['s:trips'], 'trip', 'true', 1);
+  setter(['f:nb.found'], ['f:year.turned.*'], 'turn', 'f:nb.found', 1); // w: the winter turn (season-turn.js, feed-season.js)
   // join c2: slice 2's scenes and moves (moves2)
   sceneSetters('farm', FARM_SC, 'tauno'); sceneSetters('slab', SLAB, 'tauno'); sceneSetters('len', LEN, 'len'); sceneSetters('mary', MARY, 'mary'); sceneSetters('tasha', TASHA, 'tasha');
   for (const nb of READ_NB2) setter(['f:nb.found'], [`read:${nb}`], `read:${nb}`, 'f:nb.found', 1);
