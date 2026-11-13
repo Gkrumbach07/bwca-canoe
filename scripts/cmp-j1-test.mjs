@@ -47,7 +47,15 @@ try {
     s.doc.meeting = { ep: 30, firstDawn: s.time().abs + 1 };
     g.trip.start({ ep: 31, foodDays: 3, canoe: 'aluminium' });
     if (!g.pointer.__jpin) { const u = g.pointer.update.bind(g.pointer); g.pointer.update = (...a) => { if (L.pin) { g.pointer.setTarget(L.pin); return; } return u(...a); }; g.pointer.__jpin = true; }
-    L.at = async (id) => { const q = g.storyLayer.place(id); await L.near(q.x, q.z); for (let k = 0; k < 6; k++) { L.step(4); g.storyLayer.poll(); await L.wait(40); } try { g.storyLayer.buildPlace(q); } catch { /* built */ } return q; };
+    // to a place inland (the cellar's ridge: a teleport lands at the nearest shore, 600 m off at the camp), stood on it, its
+    // tiles in and the layer's build done (cmp-f-test built it by hand the same way)
+    L.at = async (id) => {
+      const q = g.storyLayer.place(id), l = g.storyLayer; await L.near(q.x, q.z);
+      const w = g.world; let at = null; for (let r = 3; r < 30 && !at; r += 3) for (let k = 0; k < 12 && !at; k++) { const x = q.x + Math.cos(k / 2) * r, z = q.z + Math.sin(k / 2) * r; if (!w.isWater(x, z)) at = { x, z }; }
+      if (at) L.standAt(at.x, at.z, 0);
+      for (let k = 0; k < 80 && !(g.tiles.readyAt(q.x, q.z) && l.built.get(q.id)); k++) { L.step(4); l.poll(); if (g.tiles.readyAt(q.x, q.z)) { try { l.buildPlace(q); } catch { /* not yet */ } } await L.wait(60); }
+      return q;
+    };
     // the dot on a prop by the eye's ray through the layer's own provider (cmp-f-test's L.dotOn), held through the real E
     L.dotOn = (id, d = 1.3) => {
       const l = g.storyLayer, q = l.prop(id); if (!q) return { none: 'no prop' };
@@ -94,6 +102,7 @@ try {
   // 3 the night down the designed route -----------------------------------------------------------------------------------
   const r3 = await page.evaluate(async () => {
     const g = window.__game, L = window.__L, R = g.storyRun, s = g.story;
+    if (!R.route) return { legs: [], none: 'no route (the run never started)', active: R.active };
     const legs = R.route.legs, out = [], doy0 = g.day.doy, year = g.day.year;
     const t0 = 20, span = 9.4; // 20:00 → ~05:25
     for (let i = 0; i < legs.length; i++) {
