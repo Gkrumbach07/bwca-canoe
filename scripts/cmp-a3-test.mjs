@@ -72,7 +72,8 @@ const HELPERS_A3 = () => {
   A.inside = () => { const S = A.store(); L.standAt(S.centre.x, S.centre.z); L.step(20); return !!(g.outfitter.visit && g.outfitter.visit.inside); };
   A.dock = () => { const S = A.store(); L.standAt(S.dockFoot.x, S.dockFoot.z, 0); L.step(30); };
   A.staged = () => A.GC().staged();
-  A.talk = (who) => { L.step(20); const ok = A.GC().talk(who); L.step(3); return ok; };
+  // (the keeper's hello as you come in can take the talk a moment later: let it pass, close it, then talk)
+  A.talk = (who) => { L.step(90); A.endTalk(); const ok = A.GC().talk(who); L.step(3); A.lastTalk = { who, ok, convo: !!(g.dialogue && g.dialogue.convo) }; return ok; };
   A.endTalk = () => { const D = g.dialogue; if (D && D.convo) D.close(false); L.step(4); };
   A.facts = (ks) => Object.fromEntries(ks.map((k) => [k, g.story.has(k) ? g.story.get(k) : false]));
   A.inv = (id) => g.inventory.count(id, { reachable: false });
