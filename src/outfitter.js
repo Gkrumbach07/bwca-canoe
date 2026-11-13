@@ -511,6 +511,10 @@ export class Outfitter {
       // dock or a trailhead's landing it is only your port
       const h = this.entryHere(p.x, p.z);
       if (h) {
+        // n: begin — the dawn lot (story Round 3, endings.js): while the run's lot is staged (or the cans are on you), the
+        // come-out waits for the choice; endings.js comes in here itself after it. Nothing sets storyHold with the flag off
+        if (t.active && h.out && typeof this.storyHold === 'function' && this.storyHold(h.e.ep)) { this.port = h.e; this.portWalked = walking; return; }
+        // n: end
         if (t.active && h.out) { if (t.away || h.e.ep !== t.ep) this.comeIn(h.e); else this.takeBack(h.e); }
         this.port = h.e;
       }

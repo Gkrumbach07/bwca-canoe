@@ -82,3 +82,7 @@ export const CAST = {
   },
   // /a2
 };
+// n: begin — the endings (story Round 3, stream n; 50 §9.1 "the last Thursday", §12.1): in the journalist ending, after the
+// last Thursday the launch never comes to Farm again and Len eats alone
+for (const w of CAST.brekke.where) w.when = `(${w.when}) & !f:world.lastThursday`;
+// n: end

@@ -902,6 +902,7 @@ bench, the outhouse, the trail down to the landing.
   sixties and his grown son, a late trip, cold hands, a lot of stuff.
 
 The loading party's barks (each once):
+<!-- list: 50.lot.party -->
 - Son: "Dad, it's twenty-eight degrees."
 - Father: "It'll warm up. It always warms up."
 - Son: "Is that guy's truck been running all night?"
@@ -993,6 +994,7 @@ it.
 
 **Who else.** One line each, as conditions allow, before she goes:
 
+<!-- list: 50.who -->
 - *Tauno asked to go on record:* "Tauno Kangas called me on Sunday. He says if it comes to it, it's come to it. I'm
   going to drive up to Farm."
 - *Sheila brought in:* "Sheila Novak left a message. She says 'page two'. I'll call her back."
@@ -1280,6 +1282,7 @@ the people remember. Nothing in the endings ends the loop.
 
 ### 12.2 The board
 
+<!-- id: 50.notice.tasha q each -->
 - **Journalist:** a new task kind at Farm, **"Sampling with Tasha's crew"**: Secchi and water samples on the Kettle
   creek for the honest baseline, pays well, recurring each month of open water (bible 7.1). Tasha's notice text:
   "Need a careful paddler for creek samples, Kettle drainage. Bring waders. Tasha (Northmark field)."
@@ -1293,31 +1296,42 @@ Each line is the person's first line the next time the player meets them after t
 back to their ordinary topics, coloured by the ending.
 
 **Tauno Kangas**
+<!-- id: 50.after.tauno.jr q each -->
 - *Journalist, on record:* quoted by name; he says Eino's name at the café; he sits on Farm's porch with nothing to
   watch for. "I said his name at the café this morning. Out loud. Nobody fell over." If Maggie showed him the core
   piece: "She showed me a piece of rock in a sock. Kettle core, off the pad, '76. You can see the sulfide in it. He
   kept a piece of the creek's trouble in his sock drawer, near enough."
+<!-- id: 50.after.tauno.j q each -->
 - *Journalist, not on record:* "A former crewman. That's me. Good. That's good."
+<!-- id: 50.after.tauno.m q each -->
 - *Money:* the porch is empty. Asked at Farm's counter: "Tauno? He doesn't come up here any more."
 
 **Aili Niemi**
+<!-- id: 50.after.aili.j q each -->
 - *Journalist, Walt kept:* she has the player in for coffee, for good. If they told her "I know", she pours the second
   cup without a word. (If June's pot was given to her in S9, she pours from it.) "Sit. There's bars."
+<!-- id: 50.after.aili.jn q each -->
 - *Journalist, Walt named:* "You knew. And you said it anyway." Her trust is gone for good; the motel counter is
   coffee for customers and nothing else.
+<!-- id: 50.after.aili.m q each -->
 - *Money:* "We've said what we have to say." For good.
+<!-- id: 50.after.aili.note q each -->
 - **Eino's note** (journalist, kept): a topic, once: **"I found this on top of them."** She reads it for
   a long time. "'Bring the good coffee.'" *(A beat.)* "He never once brought the good coffee." She gives it back. She
   never confirms anything about Walt. (Journalist, named; and money: she won't take it in her hand: "Put that away.")
+<!-- id: 50.after.aili.postcard q each -->
 - **The postcard:** never shown to her by the game; a player who tries gets: "Don't. Whatever it is. Don't show me."
 
 **Liisa Niemi**
+<!-- id: 50.after.liisa.j q each -->
 - *Journalist:* shows the newest Christmas card, in December, if the player is in Little Vermilion's store then, or the
   next season: "Grandma got her card. Same drawing. She put it on the fridge this year. She never does that."
 - *Money:* no longer shows the new card.
 
 **Jon Niemi**
+<!-- id: 50.after.jon.j q each -->
 - *Journalist, kept:* "My mother's had a better year. I don't know what you did. Don't tell me." *(He means it.)*
+<!-- id: 50.after.jon.jn q each -->
 - *Journalist, named:* "Stay off my lake."
 - *Money:* nods on the dock, nothing.
 
@@ -1331,47 +1345,64 @@ his state). Their first lines, quoted from it:
 
 **Denny Rask** (where the player's reveal choice left him; bible 7.1). On the August trip his lines are 32 §10's;
 these are for meeting him anywhere else.
+<!-- id: 50.after.denny.turned q each -->
 - *Turned:* journalist: he sends a card to the home counter: "Thank you. I'm sorry. Both. — D." Money: "Two of a kind,
   you and me." and he avoids the player after.
+<!-- id: 50.after.denny.told q each -->
 - *Told on:* not on the August trip; at Baker's café alone in the mornings in October. "Bob doesn't call."
+<!-- id: 50.after.denny.left q each -->
 - *Left:* journalist: "I read it. The paper. I read it in the car three times." Money: avoids the player.
+<!-- id: 50.after.denny.never q each -->
 - *Never revealed:* journalist: "Somebody talked, back then. I always thought somebody talked." (The third tell, if it
   hadn't come; otherwise silence.) Money: "Huh. Well. Good for you, I guess."
 
 **Marlys Lind**
+<!-- id: 50.after.marlys.j q each -->
 - *Journalist:* hangs Walt's photo on the store wall. "He paid in quarters. I put a quarter in the frame."
+<!-- id: 50.after.marlys.m q each -->
 - *Money:* "I don't remember much about that week." *(The old line, back.)*
 
 **Sheila Novak**
+<!-- id: 50.after.sheila.jin q each -->
 - *Journalist, brought in:* "Somebody read page two."
+<!-- id: 50.after.sheila.j q each -->
 - *Journalist, not brought in:* "Saw the paper. Two pages for a man. Now it's a front page."
 - *Money:* nothing new.
 
 **Mary Pelto**
+<!-- id: 50.after.mary.j q each -->
 - *Journalist:* "Leo's name isn't in it. Thank you. I typed four hundred words a day for that office. I read that one
   twice."
 - *Money:* she stops coming to the café on Tuesdays.
 
 **Len Saari**
+<!-- id: 50.after.len.j q each -->
 - *Journalist:* alone at the Thursday table. "Carl's not well. That's what they say."
+<!-- id: 50.after.len.m q each -->
 - *Money:* "You're the one with the old gear. Small town." *(Pleasant, as always.)*
 
 **Tasha Strand**
+<!-- id: 50.after.tasha.j q each -->
 - *Journalist:* "I'm running the new sampling. Stations seven to twelve, every month, for two years. Honestly." (and the
   board task)
+<!-- id: 50.after.tasha.m q each -->
 - *Money:* "My numbers are in a drawer. They're using his." (bible 7.2)
 
 **Dan Marolt**
+<!-- id: 50.after.dan.j q each -->
 - *Journalist:* stays on. If the player said "Ask Carl" at the dawn lot: "I asked Carl. He said it was old paper. I
   read the paper. It's not that old." Otherwise: "I still go to work. I just read the memos now." ("Now it's a fair
   fight." is Frank's line, not Dan's.)
+<!-- id: 50.after.dan.m q each -->
 - *Money:* promoted. "They never told me what was in those cans. I never asked. I think about that." (bible 7.2)
 
 **Wade Helstrom**
 - *Journalist:* gone; his truck is never seen again.
+<!-- id: 50.after.wade.m q each -->
 - *Money:* at a counter now and then, buying bait. "Morning." Nothing else, ever.
 
 **Maggie Tomczak**
+<!-- id: 50.after.maggie.j q each -->
 - *Journalist:* sends a clipping to the home counter, and turns up once a season (May) at Hog Creek, "fishing" badly.
   "I still can't fish. Nobody's going to put that in a paper."
 - *Money:* if the player talks to her again: "I hope it was a lot." (The consulting fees stop with this line.) After

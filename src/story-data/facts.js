@@ -98,6 +98,10 @@ export const FACTS = [
   { key: 'rose.', kind: 'any', doc: '60 S7 Rose Gornik: her scene (rose.said.<choice>)' },
   { key: 'mg.snag.', kind: 'bool', doc: '§10 the snag minigame: mg.snag.hooked | landed | snapped (minigames/snag.js through episodes)' },
   // /e
+  // n: the endings (story Round 3, stream n; campaign-design §9, Part 3 #5-#6; 50 §7-§12; story-data/endings.js)
+  { key: 'end.', kind: 'any', doc: '§9 the ending\'s own facts: end.J (journalist: J and JN) · end.JN · end.M · end.walt (named|kept) · end.read (Brekke\'s question) · end.lot (ep)', world: true },
+  { key: 'phone.', kind: 'any', doc: '50 §9.2 the permit-box phone: phone.dan (the number on Dan\'s card dialled)' },
+  // /n
 ];
 
 // the arcs whose yields are the big findings (§3.3 story.big), and the doors the player can be offered

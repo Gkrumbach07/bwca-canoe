@@ -988,6 +988,17 @@ if (main.ok) {
 // 6 slice 2 (Round 2, the join): from where slice 1 ends
 if (!arg('r1', false)) await slice2(main, rp);
 
+// n: begin — slice 3's endings (Round 3, stream n; Part 4 Round 3): J, JN and M reachable in every branch with producers
+// by Round 3 (tauno.record ×2, the Walt page north or not, a meeting set or any served lot, Maggie met or a stranger),
+// the epilogue's dated facts on the clock, walking out unchosen (scripts/story-solve-endings.mjs)
+{
+  const { solveEndings } = await import('./story-solve-endings.mjs');
+  const E = solveEndings(); report.endings = { rows: E.rows.map(({ paths, ...r }) => r), epilogue: E.epilogue, fails: E.fails };
+  for (const row of E.rows) res(`endings: ${row.branch}: J, ${row.JN === true ? 'JN, ' : ''}M reachable`, row.J && row.M && row.JN !== false);
+  for (const f of E.fails) res(`endings: ${f}`, false);
+  say(`endings: ${E.rows.length} branches, J/JN/M ${E.ok ? 'all reachable' : 'NOT all reachable'}; JN needs "went north" (by design)`);
+}
+// n: end
 report.ms = Date.now() - t0;
 if (PLAN && report.plan) { console.log('\nThe slice, as the solver plays it:'); report.plan.forEach((m, i) => console.log(`${String(i + 1).padStart(3)}. ${m}`)); }
 if (PLAN && report.slice2 && report.slice2.plan) { console.log('\nSlice 2, as the solver plays it (from the end of slice 1):'); report.slice2.plan.forEach((m, i) => console.log(`${String(i + 1).padStart(3)}. ${m}`)); }
