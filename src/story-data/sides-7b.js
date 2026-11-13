@@ -26,9 +26,10 @@ export const PETE = { id: 'pete', who: 'pete', nodes: {
       { ask: 'S5.conv.c5', once: 'north', when: '(read:NB29 | f:asked.walt.7b.kekwhere) & !f:s5.pete.found & !f:ep.S5.case', to: 'tell' },
     ] },
   tell: { go: [
-    { ask: 'd95.7b.S5.c.tell', say: ['S5.conv.8', 'S5.conv.9'], then: ['f:ep.S5.told', 'do:yes'], to: 'open' },
-    { ask: 'd95.7b.S5.c.keep', then: ['do:yes'], to: 'open' },
+    { ask: 'd95.7b.S5.c.tell', say: ['S5.conv.8', 'S5.conv.9'], then: ['f:ep.S5.told', 'do:yes'], to: 'more' },
+    { ask: 'd95.7b.S5.c.keep', then: ['do:yes'], to: 'more' },
   ] },
+  more: { go: [], hub: 'open' },
   photo: { go: [
     { ask: 'S5.conv.c8', say: ['S5.conv.16'], then: ['f:ep.S5.photo', 'f:ep.S5.kept'], end: true },
     { ask: 'S5.conv.c9', say: ['S5.conv.17'], then: ['f:ep.S5.kept'], end: true },
@@ -51,9 +52,10 @@ export const ORRIN = { id: 'orrin', who: 'orrin', nodes: {
     ] },
   // "You know what they call that lake now?": the ring on Bootleg either way
   name: { go: [
-    { ask: 'S6.conv.c3', say: ['S6.conv.5'], then: ['f:s6.route', 'do:ring', 'do:yes'], to: 'open' },
-    { ask: 'S6.conv.c4', say: ['S6.conv.6'], then: ['f:s6.route', 'do:ring', 'do:yes'], to: 'open' },
+    { ask: 'S6.conv.c3', say: ['S6.conv.5'], then: ['f:s6.route', 'do:ring', 'do:yes'], to: 'more' },
+    { ask: 'S6.conv.c4', say: ['S6.conv.6'], then: ['f:s6.route', 'do:ring', 'do:yes'], to: 'more' },
   ] },
+  more: { go: [], hub: 'open' },
 } };
 
 // keeper topics (topics.js add: the shape of topics-act1.js)
