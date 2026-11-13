@@ -93,7 +93,7 @@ export class Stealth {
     // the player's own light is seen at its figure from anywhere; a dark player only in a watcher's cone, or by a
     // watcher sitting dark (One, lamp off, the eyes used to the night), and never past the figure
     const lit = sig.lamp !== 'off' && !sig.day;
-    const inCone = w.light && w.cone ? coneHas(w, sig.x, sig.z) : false;
+    const inCone = w.light && Number.isFinite(w.cone) ? coneHas(w, sig.x, sig.z) : false;
     const sees = d <= R && (lit || sig.day || inCone || !w.light) && !w.blind && (w.los == null || w.los);
     if (sees) {
       s.held += dt; s.lastSight = now; s.last = { x: sig.x, z: sig.z };
